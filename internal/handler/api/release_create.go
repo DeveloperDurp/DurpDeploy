@@ -18,7 +18,6 @@ import (
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:

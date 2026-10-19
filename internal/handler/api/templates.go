@@ -43,7 +43,6 @@ type stepTemplateRequest struct {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -103,7 +102,6 @@ func (h *StepTemplateHandler) ListTemplates(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -140,7 +138,6 @@ func (h *StepTemplateHandler) TemplatesPicker(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -246,7 +243,6 @@ func (h *StepTemplateHandler) CreateTemplate(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -298,7 +294,6 @@ func (h *StepTemplateHandler) GetTemplate(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -409,8 +404,6 @@ func (h *StepTemplateHandler) UpdateTemplate(
 //
 // Delete a step template.
 //
-//	Schemes: http, https
-//
 //	Security:
 //	  bearer:
 //
@@ -445,7 +438,6 @@ func (h *StepTemplateHandler) DeleteTemplate(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:

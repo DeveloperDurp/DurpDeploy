@@ -45,10 +45,12 @@ const swaggerUITemplate = `<!DOCTYPE html>
     </style>
   </head>
   <body>
+    <p style="padding: 0 1rem">API target: <code id="api-target"></code></p>
     <div id="swagger-ui"></div>
     <script src="{{ .AssetsURL }}"></script>
     {{ if .SwaggerPresetURL }}<script src="{{ .SwaggerPresetURL }}"></script>{{ end }}
     <script>
+      document.getElementById('api-target').textContent = location.origin + '/api/v1';
       // requestInterceptor: the spec declares the bearer token as an
       // apiKey in the Authorization header. Users paste the raw token
       // (e.g. "ddp_pat_…") into the Authorize dialog; we prepend
@@ -81,8 +83,8 @@ const swaggerUITemplate = `<!DOCTYPE html>
 // UI serves the swagger-ui HTML page.
 func (h *SwaggerHandler) UI(w http.ResponseWriter, r *http.Request) {
 	docui.SwaggerUI(nil,
-		docui.WithUIBasePath("/api/swagger"),
-		docui.WithUIPath("index.html"),
+		docui.WithUIBasePath("/"),
+		docui.WithUIPath(r.URL.Path),
 		docui.WithSpecURL("/api/swagger/spec"),
 		docui.WithUITitle("DurpDeploy API"),
 		docui.WithUITemplate(swaggerUITemplate),

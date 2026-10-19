@@ -50,7 +50,6 @@ type reorderStepsRequest struct {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -117,7 +116,6 @@ func (h *StepHandler) ListSteps(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -247,7 +245,6 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -307,7 +304,6 @@ func (h *StepHandler) GetStep(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -450,8 +446,6 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 //
 // Delete a project step.
 //
-//	Schemes: http, https
-//
 //	Security:
 //	  bearer:
 //
@@ -506,7 +500,6 @@ func (h *StepHandler) DeleteStep(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:

@@ -5,17 +5,12 @@
   "produces": [
     "application/json"
   ],
-  "schemes": [
-    "http",
-    "https"
-  ],
   "swagger": "2.0",
   "info": {
-    "description": "JSON request bodies are limited to 4 MiB of encoded bytes and must contain\nexactly one object matching the endpoint schema. Unknown fields, null, and\ntrailing data return 400. Oversized bodies return 413 before mutation.\nControl actions accept an empty body or an empty JSON object.\n\nPermission order: viewer \u003c deployer \u003c maintainer \u003c admin.\nDeployers can start existing releases, retry, re-run, and cancel deployments.\nMaintainers can author content and execute runbooks within admin boundaries.\nProject membership and token ceilings also limit each operation.\nExplicit-role tokens cannot manage API tokens.",
+    "description": "JSON request bodies are limited to 4 MiB of encoded bytes and must contain\nexactly one object matching the endpoint schema. Unknown fields, null, and\ntrailing data return 400. Oversized bodies return 413 before mutation.\nControl actions accept an empty body or an empty JSON object.\n\nPermission order: viewer \u003c deployer \u003c maintainer \u003c admin.\nDeployers can start existing releases, retry, re-run, and cancel deployments.\nMaintainers can author content and execute runbooks within admin boundaries.\nProject membership and token ceilings also limit each operation.\nExplicit-role tokens cannot manage API tokens.\n\nRequests use the host, port, and scheme that serve this specification.",
     "title": "durpdeploy REST API.",
     "version": "1.0.0"
   },
-  "host": "localhost:8080",
   "basePath": "/api/v1",
   "paths": {
     "/admin/agents": {
@@ -859,10 +854,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "admin"
         ],
@@ -934,10 +925,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "admin"
         ],
@@ -981,10 +968,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "admin"
         ],
@@ -1025,10 +1008,6 @@
     },
     "/admin/maintenance": {
       "post": {
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "admin"
         ],
@@ -1084,10 +1063,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "admin"
         ],
@@ -1129,10 +1104,6 @@
       "get": {
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "admin"
@@ -1176,10 +1147,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "admin"
@@ -1235,10 +1202,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "admin"
         ],
@@ -1281,10 +1244,6 @@
       "get": {
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "admin-tokens"
@@ -1349,10 +1308,6 @@
     },
     "/admin/tokens/{id}": {
       "delete": {
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "admin-tokens"
         ],
@@ -1424,10 +1379,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "admin-users"
         ],
@@ -1487,10 +1438,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "admin-users"
@@ -1570,10 +1517,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "admin-users"
         ],
@@ -1646,10 +1589,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "admin-users"
@@ -1739,10 +1678,6 @@
         ]
       },
       "delete": {
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "admin-users"
         ],
@@ -1808,10 +1743,6 @@
       "get": {
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "deployments"
@@ -1902,10 +1833,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "deployments"
         ],
@@ -1969,10 +1896,6 @@
     },
     "/deployments/{id}/approve": {
       "post": {
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "deployments"
         ],
@@ -2320,10 +2243,6 @@
     },
     "/deployments/{id}/cancel": {
       "post": {
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "deployments"
         ],
@@ -2390,10 +2309,6 @@
         "produces": [
           "text/event-stream"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "deployments"
         ],
@@ -2447,10 +2362,6 @@
       "get": {
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "deployments"
@@ -2519,10 +2430,6 @@
       "get": {
         "produces": [
           "text/plain"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "logs"
@@ -2647,10 +2554,6 @@
           "text/event-stream",
           "application/x-ndjson"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "logs"
         ],
@@ -2734,10 +2637,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "logs"
         ],
@@ -2804,10 +2703,6 @@
     },
     "/deployments/{id}/redeploy": {
       "post": {
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "deployments"
         ],
@@ -2877,10 +2772,6 @@
     "/deployments/{id}/retry": {
       "post": {
         "description": "Recheck lifecycle promotion and approval gates before retrying.",
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "deployments"
         ],
@@ -3174,10 +3065,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "deployments"
         ],
@@ -3300,10 +3187,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "environments"
         ],
@@ -3357,10 +3240,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "environments"
@@ -3440,10 +3319,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "environments"
         ],
@@ -3510,10 +3385,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "environments"
@@ -3604,10 +3475,6 @@
       },
       "delete": {
         "description": "Delete an environment.",
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "environments"
         ],
@@ -3709,10 +3576,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "lifecycles"
         ],
@@ -3766,10 +3629,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "lifecycles"
@@ -3836,10 +3695,6 @@
       "get": {
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "lifecycles"
@@ -3966,10 +3821,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "lifecycles"
         ],
@@ -4053,10 +3904,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "lifecycles"
@@ -4142,10 +3989,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "lifecycles"
         ],
@@ -4223,10 +4066,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "lifecycles"
@@ -4315,10 +4154,6 @@
     },
     "/lifecycles/{id}/stages/{stageId}/delete": {
       "post": {
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "lifecycles"
         ],
@@ -4791,10 +4626,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "projects"
         ],
@@ -4848,10 +4679,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "projects"
@@ -4925,10 +4752,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "projects"
         ],
@@ -4995,10 +4818,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "projects"
@@ -5082,10 +4901,6 @@
         ]
       },
       "delete": {
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "projects"
         ],
@@ -5151,10 +4966,6 @@
       "get": {
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "deployments"
@@ -5265,10 +5076,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "deployments"
         ],
@@ -5356,10 +5163,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "members"
         ],
@@ -5434,10 +5237,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "members"
@@ -5529,10 +5328,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "members"
         ],
@@ -5618,10 +5413,6 @@
         ]
       },
       "delete": {
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "members"
         ],
@@ -5697,10 +5488,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "projects"
         ],
@@ -5767,10 +5554,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "projects"
@@ -6116,10 +5899,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "releases"
         ],
@@ -6194,10 +5973,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "releases"
@@ -6286,10 +6061,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "releases"
         ],
@@ -6355,10 +6126,6 @@
       },
       "delete": {
         "description": "Active or unconfirmed deployments prevent deletion.",
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "releases"
         ],
@@ -6480,10 +6247,6 @@
       "post": {
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "releases"
@@ -7580,10 +7343,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "schedules"
         ],
@@ -7658,10 +7417,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "schedules"
@@ -7750,10 +7505,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "schedules"
         ],
@@ -7829,10 +7580,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "schedules"
@@ -7925,10 +7672,6 @@
         ]
       },
       "delete": {
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "schedules"
         ],
@@ -7997,10 +7740,6 @@
       "post": {
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "schedules"
@@ -8083,10 +7822,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "steps"
         ],
@@ -8155,10 +7890,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "steps"
@@ -8232,10 +7963,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "steps"
         ],
@@ -8304,10 +8031,6 @@
       "get": {
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "steps"
@@ -8384,10 +8107,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "steps"
@@ -8468,10 +8187,6 @@
         ]
       },
       "delete": {
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "steps"
         ],
@@ -8541,10 +8256,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "templates"
         ],
@@ -8598,10 +8309,6 @@
       "get": {
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "variables"
@@ -8684,10 +8391,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "variables"
@@ -8835,10 +8538,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "variables"
         ],
@@ -8914,10 +8613,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "variables"
@@ -9004,10 +8699,6 @@
         ]
       },
       "delete": {
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "variables"
         ],
@@ -9087,10 +8778,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "templates"
         ],
@@ -9144,10 +8831,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "templates"
@@ -9215,10 +8898,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "templates"
         ],
@@ -9285,10 +8964,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "templates"
@@ -9366,10 +9041,6 @@
         ]
       },
       "delete": {
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "templates"
         ],
@@ -9429,10 +9100,6 @@
       "get": {
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "templates"
@@ -9494,10 +9161,6 @@
         "produces": [
           "application/json"
         ],
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "tokens"
         ],
@@ -9558,10 +9221,6 @@
         ],
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "tokens"
@@ -9626,10 +9285,6 @@
     },
     "/tokens/{id}": {
       "delete": {
-        "schemes": [
-          "http",
-          "https"
-        ],
         "tags": [
           "tokens"
         ],
@@ -9770,10 +9425,6 @@
       "get": {
         "produces": [
           "application/json"
-        ],
-        "schemes": [
-          "http",
-          "https"
         ],
         "tags": [
           "users"

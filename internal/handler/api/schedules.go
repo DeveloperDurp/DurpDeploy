@@ -47,7 +47,6 @@ type scheduledDeploymentRequest struct {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -125,7 +124,6 @@ func (h *ScheduleHandler) ListSchedules(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -260,7 +258,6 @@ func (h *ScheduleHandler) CreateSchedule(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -316,7 +313,6 @@ func (h *ScheduleHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -462,8 +458,6 @@ func (h *ScheduleHandler) UpdateSchedule(
 //
 // Delete a scheduled deployment.
 //
-//	Schemes: http, https
-//
 //	Security:
 //	  bearer:
 //
@@ -520,7 +514,6 @@ func (h *ScheduleHandler) DeleteSchedule(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:

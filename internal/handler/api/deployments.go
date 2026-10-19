@@ -52,7 +52,6 @@ func deploymentIDFromRequest(r *http.Request) (int64, error) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -179,7 +178,6 @@ func (h *DeploymentHandler) CreateDeployment(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -204,7 +202,6 @@ func (h *DeploymentHandler) CreateDeployment(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -366,7 +363,6 @@ func (h *DeploymentHandler) ListDeployments(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -421,7 +417,6 @@ func (h *DeploymentHandler) GetDeployment(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -477,8 +472,6 @@ func (h *DeploymentHandler) GetDeploymentStatus(
 
 // ApproveDeployment approves a deployment pending approval.
 // swagger:route POST /deployments/{id}/approve deployments approveDeployment
-//
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -555,8 +548,6 @@ func (h *DeploymentHandler) ApproveDeployment(
 
 // RedeployDeployment creates a new deployment from a terminal one.
 // swagger:route POST /deployments/{id}/redeploy deployments redeployDeployment
-//
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -679,8 +670,6 @@ func (h *DeploymentHandler) RedeployDeployment(
 //
 // Cancel a running deployment.
 //
-//	Schemes: http, https
-//
 //	Security:
 //	  bearer:
 //
@@ -791,8 +780,6 @@ func (h *DeploymentHandler) CancelDeployment(
 //
 // Retry a failed or cancelled deployment.
 // Recheck lifecycle promotion and approval gates before retrying.
-//
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -939,7 +926,6 @@ func (h *DeploymentHandler) startLocalDeployment(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -977,7 +963,6 @@ func (h *DeploymentHandler) ListDeploymentLogs(
 //	Produces:
 //	- text/event-stream
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:

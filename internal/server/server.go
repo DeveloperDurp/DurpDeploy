@@ -957,11 +957,7 @@ func newRouter(
 	r.Get("/api/swagger", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/api/swagger/index.html", http.StatusFound)
 	})
-	r.Get("/api/swagger/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		swaggerH.UI(w, r)
-	})
+	r.Get("/api/swagger/", swaggerH.UI)
 
 	return r
 }

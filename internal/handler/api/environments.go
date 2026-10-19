@@ -81,7 +81,6 @@ func (req environmentRequest) verification(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -144,7 +143,6 @@ func (h *EnvironmentHandler) ListEnvironments(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -226,7 +224,6 @@ func (h *EnvironmentHandler) CreateEnvironment(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -279,7 +276,6 @@ func (h *EnvironmentHandler) GetEnvironment(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -384,8 +380,6 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 // Global admin only; deletion also removes scoped shared variables.
 //
 // Delete an environment.
-//
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:

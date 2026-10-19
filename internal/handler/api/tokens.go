@@ -141,7 +141,6 @@ func apiTokenFromAdminUserPaginatedRow(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -239,7 +238,6 @@ func (h *APITokenHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -305,8 +303,6 @@ func (h *APITokenHandler) ListTokens(w http.ResponseWriter, r *http.Request) {
 //
 // Revoke the authenticated user's API token.
 //
-//	Schemes: http, https
-//
 //	Security:
 //	  bearer:
 //
@@ -354,7 +350,6 @@ func (h *APITokenHandler) RevokeToken(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -473,8 +468,6 @@ func (h *APITokenHandler) ListAllTokens(
 // swagger:route DELETE /admin/tokens/{id} admin-tokens revokeAnyToken
 //
 // Revoke any API token by ID (admin only).
-//
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:

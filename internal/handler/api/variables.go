@@ -100,7 +100,6 @@ func toVariableResponse(v db.Variable) variableResponse {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -209,7 +208,6 @@ func (h *VariableHandler) ListVariables(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -291,7 +289,6 @@ func (h *VariableHandler) CreateVariable(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -349,7 +346,6 @@ func (h *VariableHandler) GetVariable(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:

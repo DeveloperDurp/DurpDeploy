@@ -46,7 +46,6 @@ type userResponse struct {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -111,7 +110,6 @@ func (h *UserHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -183,7 +181,6 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -236,7 +233,6 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -315,8 +311,6 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 //
 // Delete a user.
 //
-//	Schemes: http, https
-//
 //	Security:
 //	  bearer:
 //
@@ -361,7 +355,6 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:

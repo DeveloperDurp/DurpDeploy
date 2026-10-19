@@ -35,7 +35,6 @@ func NewAdminHandler(repo *repository.Repository) *AdminHandler {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -105,7 +104,6 @@ func (h *AdminHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -138,7 +136,6 @@ func (h *AdminHandler) ListNotifications(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -200,7 +197,6 @@ func newNotificationSettingsResponse(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -294,7 +290,6 @@ func (h *AdminHandler) UpdateNotificationSettings(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -342,8 +337,6 @@ func countRows(ctx context.Context, db *sql.DB, table string) (int64, error) {
 //
 // Run maintenance tasks.
 //
-//	Schemes: http, https
-//
 //	Security:
 //	  bearer:
 //
@@ -365,7 +358,6 @@ func (h *AdminHandler) Maintenance(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:

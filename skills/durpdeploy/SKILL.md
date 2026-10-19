@@ -17,6 +17,8 @@ against environments. It exposes three surfaces an agent may use:
 
 The endpoint reference is the Swagger UI at `/api/swagger/`
 (no auth) on a running server. Use it alongside this workflow guide.
+Swagger requests use the current instance's host, port, and scheme.
+Check **API target** before you authorize a token.
 
 ## Base URL
 

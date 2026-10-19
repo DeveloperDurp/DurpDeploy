@@ -35,6 +35,29 @@ Submit a forged configuration request through the browser or API.
 Expect a browser HTMX toast, a native browser `403`, or an API JSON `403`.
 Read [roles](roles.md) for membership ceilings and upgrade behavior.
 
+## Swagger request target
+
+Open `/api/swagger/` through the instance's HTTPS proxy on a non-default port.
+Before authorization, confirm that **API target** shows the current HTTPS origin and `/api/v1`.
+Expand `GET /healthz` in Swagger.
+Select **Try it out** and **Execute**.
+Expect status `200` and `{"ok":true}` from the current instance.
+Confirm that **Request URL** uses the proxy's HTTPS host and port.
+
+Repeat through the direct HTTP listener.
+Confirm that the request uses its HTTP host and port.
+Before authorization, execute `GET /projects` and expect `401`.
+Authorize a valid token and repeat the request.
+Expect the token's permitted projects.
+Clear authorization after the check.
+
+Run the focused API and browser regressions:
+
+```bash
+bash scripts/go_test.sh -count=1 -run '^TestSwaggerInstanceAPIE2E$' ./internal/handler/api
+bash scripts/go_test.sh -tags=e2e,packagebrowser -count=1 -run '^TestSwaggerInstanceBrowserE2E$' ./internal/handler/api
+```
+
 ## Project saves after permission changes
 
 Use a project Maintainer and an administrator in separate browser sessions.

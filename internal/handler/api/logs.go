@@ -39,7 +39,6 @@ func NewLogHandler(
 //	- text/event-stream
 //	- application/x-ndjson
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -97,7 +96,6 @@ func (h *LogHandler) streamDeploymentLogs(
 //	Produces:
 //	- text/plain
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -205,7 +203,6 @@ func (h *LogHandler) exportDeploymentLogs(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:

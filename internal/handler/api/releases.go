@@ -47,7 +47,6 @@ type releaseVariableJSON struct {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -116,7 +115,6 @@ func (h *ReleaseHandler) ListReleases(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -193,8 +191,6 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 // Delete a release, its schedules, and completed deployment history.
 // Active or unconfirmed deployments prevent deletion.
 //
-// Schemes: http, https
-//
 // Security:
 //
 //	bearer:
@@ -243,7 +239,6 @@ func (h *ReleaseHandler) DeleteRelease(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:

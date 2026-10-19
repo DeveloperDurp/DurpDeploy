@@ -26,7 +26,6 @@ func NewDatabaseSecurityHandler(dsn string) *DatabaseSecurityHandler {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:

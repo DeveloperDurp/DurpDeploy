@@ -36,7 +36,6 @@ type projectMemberRequest struct {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -108,7 +107,6 @@ func (h *MemberHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -210,8 +208,6 @@ func (h *MemberHandler) AddMember(w http.ResponseWriter, r *http.Request) {
 //
 // Remove a member from a project.
 //
-//	Schemes: http, https
-//
 //	Security:
 //	  bearer:
 //
@@ -267,7 +263,6 @@ func (h *MemberHandler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:

@@ -10,8 +10,6 @@ import (
 //
 // Delete a project variable.
 //
-//	Schemes: http, https
-//
 //	Security:
 //	  bearer:
 //

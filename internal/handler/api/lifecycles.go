@@ -96,7 +96,6 @@ func toLifecycleData(lc db.Lifecycle) lifecycleData {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -158,7 +157,6 @@ func (h *LifecycleHandler) ListLifecycles(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -218,7 +216,6 @@ func (h *LifecycleHandler) CreateLifecycle(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -279,7 +276,6 @@ func (h *LifecycleHandler) GetLifecycle(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -360,7 +356,6 @@ func (h *LifecycleHandler) SaveLifecycle(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -446,7 +441,6 @@ func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -576,7 +570,6 @@ func (h *LifecycleHandler) ReorderStages(
 //	Produces:
 //	- application/json
 //
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:
@@ -647,8 +640,6 @@ func (h *LifecycleHandler) UpdateStage(w http.ResponseWriter, r *http.Request) {
 // swagger:route POST /lifecycles/{id}/stages/{stageId}/delete lifecycles deleteLifecycleStage
 //
 // Delete a lifecycle stage. Global admin only.
-//
-//	Schemes: http, https
 //
 //	Security:
 //	  bearer:

@@ -11,10 +11,10 @@
 // Project membership and token ceilings also limit each operation.
 // Explicit-role tokens cannot manage API tokens.
 //
-//	Schemes: http, https
+// Requests use the host, port, and scheme that serve this specification.
+//
 //	BasePath: /api/v1
 //	Version: 1.0.0
-//	Host: localhost:8080
 //
 //	Consumes:
 //	- application/json
