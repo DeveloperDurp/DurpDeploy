@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"durpdeploy/internal/db"
 	eventbus "durpdeploy/internal/events"
@@ -49,7 +48,7 @@ func (h *AdminHandler) AuditLog(w http.ResponseWriter, r *http.Request) {
 	params := db.ListAuditLogEntriesParams{
 		PageLimit: 1000,
 	}
-	if v := strings.TrimSpace(r.URL.Query().Get("user")); v != "" {
+	if v := r.URL.Query().Get("user"); v != "" {
 		params.FUser = sql.NullString{String: v, Valid: true}
 	}
 

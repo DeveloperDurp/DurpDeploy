@@ -45,7 +45,7 @@ templ AuditLogPage(entries []repository.AuditLogEntry, currentPath string, curre
 				<p class="text-gray-400">No audit entries match the filter.</p>
 			</div>
 		} else {
-			<div class="hidden lg:block">
+			<div class="hidden lg:block" data-audit-desktop>
 				<table class="table table-zebra table-fixed w-full" data-audit-table>
 					<thead>
 						<tr>

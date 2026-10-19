@@ -30,7 +30,7 @@ func (h *AdminHandler) ListAudit(w http.ResponseWriter, r *http.Request) {
 	params := db.ListAuditLogEntriesParams{
 		PageLimit: 200,
 	}
-	if v := strings.TrimSpace(r.URL.Query().Get("user")); v != "" {
+	if v := r.URL.Query().Get("user"); v != "" {
 		params.FUser = sql.NullString{String: v, Valid: true}
 	}
 

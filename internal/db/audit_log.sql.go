@@ -67,8 +67,8 @@ LEFT JOIN projects project ON audit_log.entity_type = 'project' AND project.id =
 LEFT JOIN environments environment ON audit_log.entity_type = 'environment' AND environment.id = audit_log.entity_id
 LEFT JOIN lifecycles lifecycle ON audit_log.entity_type = 'lifecycle' AND lifecycle.id = audit_log.entity_id
 LEFT JOIN step_templates template ON audit_log.entity_type = 'template' AND template.id = audit_log.entity_id
-LEFT JOIN deployments deployment ON audit_log.entity_type = 'deployment' AND deployment.id = audit_log.entity_id AND deployment.kind = 'deployment'
-LEFT JOIN releases release ON audit_log.entity_type = 'release' AND release.id = audit_log.entity_id AND release.kind = 'deployment'
+LEFT JOIN deployments deployment ON audit_log.entity_type = 'deployment' AND deployment.id = audit_log.entity_id AND deployment.kind = audit_log.entity_type
+LEFT JOIN releases release ON audit_log.entity_type = 'release' AND release.id = audit_log.entity_id AND release.kind <> 'runbook'
 LEFT JOIN runbooks runbook ON audit_log.entity_type = 'runbook' AND runbook.id = audit_log.entity_id AND runbook.deleted_at IS NULL
 WHERE (CAST(?1 AS INTEGER) IS NULL OR audit_log.user_id = CAST(?1 AS INTEGER))
   AND (CAST(?2 AS TEXT) IS NULL
@@ -96,6 +96,7 @@ type ListAuditLogEntriesRow struct {
 	TargetProjectID int64    `json:"target_project_id"`
 }
 
+// Release and deployment kinds are constrained to deployment or runbook.
 func (q *Queries) ListAuditLogEntries(ctx context.Context, arg ListAuditLogEntriesParams) ([]ListAuditLogEntriesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listAuditLogEntries,
 		arg.FUserID,

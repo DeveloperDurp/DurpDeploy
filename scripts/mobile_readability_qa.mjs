@@ -244,7 +244,7 @@ const allTargets = [
     disclosureRowName: /hostile\.audit/,
     disclosureContent: "audit-token",
     roles: ["admin"],
-		desktopTable: "#form-container > table",
+		desktopTable: "[data-audit-desktop]",
 		mobileRecord: "[data-mobile-audit-list]",
 		mobileUntilWidth: 1024,
   },

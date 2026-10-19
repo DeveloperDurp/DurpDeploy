@@ -144,4 +144,47 @@ func checkAuditIdentityTargets(t *testing.T, repo *Repository, actorID int64) {
 	if err != nil || len(rows) != 1 || rows[0].TargetURL != "" {
 		t.Fatalf("deleted runbook target rows=%v error=%v", rows, err)
 	}
+	checkAuditRunbookSnapshotTargets(t, repo, deployment.ID)
+}
+
+func checkAuditRunbookSnapshotTargets(
+	t *testing.T, repo *Repository, deploymentID int64,
+) {
+	t.Helper()
+	if _, err := repo.DB.ExecContext(t.Context(),
+		"UPDATE releases SET kind='runbook' WHERE id=1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.DB.ExecContext(t.Context(),
+		"UPDATE deployments SET kind='runbook' WHERE id=?", deploymentID); err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []struct {
+		kind string
+		id   int64
+	}{{"release", 1}, {"deployment", deploymentID}} {
+		if _, err := repo.Queries.CreateAuditLog(t.Context(), db.CreateAuditLogParams{
+			Action: "snapshot_check", EntityType: target.kind,
+			EntityID: sql.NullInt64{Int64: target.id, Valid: true},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows, err := repo.ListAuditLogEntries(
+		t.Context(),
+		db.ListAuditLogEntriesParams{
+			FAction: sql.NullString{
+				String: "snapshot_check",
+				Valid:  true,
+			}, PageLimit: 2,
+		},
+	)
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("runbook snapshots rows=%v error=%v", rows, err)
+	}
+	for _, row := range rows {
+		if row.TargetURL != "" || !row.EntityID.Valid {
+			t.Fatalf("runbook snapshot linked a deployment page: %+v", row)
+		}
+	}
 }

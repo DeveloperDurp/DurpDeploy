@@ -20,16 +20,28 @@ type auditIdentityFixture struct {
 	token, session string
 }
 
-func newAuditIdentityFixture(t *testing.T) auditIdentityFixture {
+func newAuditIdentityFixture(
+	t *testing.T,
+	names ...string,
+) auditIdentityFixture {
 	t.Helper()
 	f := auditIdentityFixture{permissionFixture: newPermissionFixture(t)}
-	f.actor = seedAPIUser(t, f.h.repo, "operator@audit.test", "admin")
-	f.actor.Name = "Audit Operator <Élodie> 100%"
-	if err := f.h.repo.Queries.UpdateUser(t.Context(), db.UpdateUserParams{
-		ID: f.actor.ID, Name: f.actor.Name, Role: "admin",
-	}); err != nil {
+	setup := seedAPIUser(t, f.h.repo, "setup@audit.test", "admin")
+	_, setupToken := seedAPIToken(t, f.h.repo, setup.ID)
+	name := " Audit Operator <Élodie> 100% "
+	if len(names) != 0 {
+		name = names[0]
+	}
+	body, err := json.Marshal(map[string]string{
+		"email": "operator@audit.test", "name": name, "role": "admin",
+		"password": "Fixture-password-123!",
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
+	f.actor = &db.User{}
+	decodeStepLogTest(t, f.request(t, "POST", "/api/v1/admin/users",
+		string(body), setupToken, "", false, 201), f.actor)
 	f.target = seedAPIUser(t, f.h.repo, "target@audit.test", "viewer")
 	_, f.token = seedAPIToken(t, f.h.repo, f.actor.ID)
 	f.session = memberRoleSession(t, f.h, f.actor.ID)
@@ -60,6 +72,23 @@ func TestAuditIdentitiesAPIWebE2E(t *testing.T) {
 	checkAuditIdentityPermissions(t, f)
 	checkAuditIdentityMissingActor(t, f)
 	checkAuditAmbiguousTargets(t)
+	checkAuditWhitespaceOnlyName(t)
+}
+
+func checkAuditWhitespaceOnlyName(t *testing.T) {
+	t.Helper()
+	f := newAuditIdentityFixture(t, " ")
+	entries := f.entries(t, "user=%20")
+	if len(entries) != 1 || entries[0].UserID.Int64 != f.actor.ID ||
+		entries[0].ActorName != " " {
+		t.Fatalf("whitespace-only name disabled the filter: %+v", entries)
+	}
+	page := f.request(t, "GET", "/admin/audit?user=%20", "", "",
+		f.session, false, 200)
+	if !strings.Contains(string(page), f.actor.Email) ||
+		strings.Contains(string(page), "setup@audit.test") {
+		t.Fatal("web whitespace-only name filter returned another actor")
+	}
 }
 
 func checkAuditIdentityFilter(
