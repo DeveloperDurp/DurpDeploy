@@ -99,7 +99,10 @@ func (r *Repository) prepareAgentPairing(
 						ID:       tuple.ExpectedAgentID,
 					},
 				)
-				if err != nil || changed != 1 {
+				if err != nil {
+					return err
+				}
+				if changed != 1 {
 					return ErrPairingTupleConflict
 				}
 				if err := clearAgentCapabilities(
@@ -130,11 +133,17 @@ func (r *Repository) prepareAgentPairing(
 					ctx,
 					candidate.AgentID,
 				)
-				if err != nil || deleted != 1 {
+				if err != nil {
+					return err
+				}
+				if deleted != 1 {
 					return ErrPairingTupleConflict
 				}
 				deleted, err = q.DeletePendingAgent(ctx, candidate.AgentID)
-				if err != nil || deleted != 1 {
+				if err != nil {
+					return err
+				}
+				if deleted != 1 {
 					return ErrPairingTupleConflict
 				}
 			} else if !samePairingTuple(
