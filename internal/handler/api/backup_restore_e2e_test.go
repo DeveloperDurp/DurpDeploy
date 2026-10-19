@@ -101,7 +101,7 @@ printf 'restore-execution-ok\n'
 	f.api.api(t, "POST", f.api.base()+"/steps", map[string]any{
 		"name": "Recovered secret", "script_body": script,
 		"interpreter": "bash", "execution_target": "local",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 		"variable_names":  []string{"RESTORE_SECRET"},
 	}, 201)
 	var release db.Release

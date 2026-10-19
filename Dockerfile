@@ -1,11 +1,11 @@
-# syntax=docker/dockerfile:1
+# syntax=harbor.durp.info/dockerhub/docker/dockerfile:1
 # Multi-stage build for durpdeploy.
 # Builder generates templ files, bundles CSS/JS, and compiles a static Go binary.
 # Runtime is a minimal Alpine image with a non-root application user and the
 # Docker and Podman clients used by the embedded agent.
 
 # Stage 1: builder
-FROM golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0 AS builder
+FROM harbor.durp.info/dockerhub/library/golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0 AS builder
 
 # Install build tooling (npm for Tailwind/esbuild, make for the Makefile, git
 # and ca-certificates for Go module proxy / npm registry HTTPS fetches).
@@ -47,7 +47,7 @@ RUN make templ-generate tailwind-build js-build swagger-ui-copy && \
     /out/durpdeploy version
 
 # Stage 2: runtime
-FROM alpine:3.20
+FROM harbor.durp.info/dockerhub/library/alpine:3.20
 
 ARG BUILD_VERSION=dev
 ARG BUILD_COMMIT=unknown

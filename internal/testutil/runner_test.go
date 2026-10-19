@@ -71,7 +71,7 @@ func TestGoTestRunnerTimeoutFixture(t *testing.T) {
 	container, err := testcontainers.GenericContainer(t.Context(),
 		testcontainers.GenericContainerRequest{
 			ContainerRequest: testcontainers.ContainerRequest{
-				Image: "postgres:16-alpine",
+				Image: "harbor.durp.info/dockerhub/library/postgres:16-alpine",
 				Env: map[string]string{
 					"POSTGRES_PASSWORD": "fixture-only",
 				},

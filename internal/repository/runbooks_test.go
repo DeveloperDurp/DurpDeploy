@@ -50,7 +50,7 @@ func TestRunbookExecutionKeepsVersionedEnvironmentSecret(t *testing.T) {
 	book, first, err := repo.SaveRunbook(ctx, repository.RunbookSave{
 		ProjectID: project.ID,
 		Name:      "maintenance",
-		StepsJSON: `[{"name":"check","script_body":"true","container_image":"alpine:3.20"}]`,
+		StepsJSON: `[{"name":"check","script_body":"true","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -65,7 +65,7 @@ func TestRunbookExecutionKeepsVersionedEnvironmentSecret(t *testing.T) {
 	_, second, err := repo.SaveRunbook(ctx, repository.RunbookSave{
 		ProjectID: project.ID,
 		RunbookID: book.ID,
-		StepsJSON: `[{"name":"check","script_body":"true","container_image":"alpine:3.20"}]`,
+		StepsJSON: `[{"name":"check","script_body":"true","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)

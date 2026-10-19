@@ -273,7 +273,7 @@ func TestHomeRunningPollBrowserE2E(t *testing.T) {
 })()`)
 	f.api(t, "POST", f.base()+"/steps", map[string]any{
 		"name": "Refresh check", "script_body": "sleep 8",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	var release db.Release
 	decodeStepLogTest(

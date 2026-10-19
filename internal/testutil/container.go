@@ -12,6 +12,7 @@ import (
 
 // CleanupContainer must be called before checking a container's startup error:
 // Testcontainers can return both a container and an error. Nil handles are safe.
+// Cleanup discards disposable fixtures without waiting for graceful shutdown.
 func CleanupContainer(t testing.TB, container testcontainers.Container) {
 	t.Helper()
 	if container == nil {
@@ -24,7 +25,8 @@ func CleanupContainer(t testing.TB, container testcontainers.Container) {
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		if err := container.Terminate(ctx); err != nil &&
+		if err := container.Terminate(ctx,
+			testcontainers.StopTimeout(0)); err != nil &&
 			!errdefs.IsNotFound(err) {
 			t.Errorf("remove test container: %v", err)
 		}

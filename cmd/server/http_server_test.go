@@ -60,6 +60,9 @@ func TestHTTPServerTerminatesStalledInput(t *testing.T) {
 				srv.Config.ReadTimeout = 200 * time.Millisecond
 				srv.Config.IdleTimeout = 100 * time.Millisecond
 				if encrypted {
+					// TLS handshakes share the server's read deadlines.
+					srv.Config.ReadHeaderTimeout = time.Second
+					srv.Config.ReadTimeout = 2 * time.Second
 					srv.StartTLS()
 				} else {
 					srv.Start()
@@ -85,7 +88,7 @@ func TestHTTPServerTerminatesStalledInput(t *testing.T) {
 				defer testutil.Close(t, conn)
 				require.NoError(
 					t,
-					conn.SetDeadline(time.Now().Add(2*time.Second)),
+					conn.SetDeadline(time.Now().Add(5*time.Second)),
 				)
 				reader := bufio.NewReader(conn)
 				// When: the client stalls in one connection phase.

@@ -29,7 +29,7 @@ func TestCreateReleaseSnapshotFreezesContainerMetadata(t *testing.T) {
 		db.CreateStepParams{
 			ProjectID: project.ID, Name: "deploy", ScriptBody: "echo hi",
 			Interpreter:    "bash",
-			ContainerImage: "alpine:3.20",
+			ContainerImage: "harbor.durp.info/dockerhub/library/alpine:3.20",
 			VariableNames:  `["APP_ENV","DEBUG"]`,
 		},
 		"local", nil,
@@ -64,9 +64,9 @@ func TestCreateReleaseSnapshotFreezesContainerMetadata(t *testing.T) {
 	if len(snapshots) != 2 {
 		t.Fatalf("snapshots = %+v", snapshots)
 	}
-	if snapshots[0].ContainerImage != "alpine:3.20" {
+	if snapshots[0].ContainerImage != "harbor.durp.info/dockerhub/library/alpine:3.20" {
 		t.Fatalf(
-			"snapshot image = %q, want alpine:3.20",
+			"snapshot image = %q, want harbor.durp.info/dockerhub/library/alpine:3.20",
 			snapshots[0].ContainerImage,
 		)
 	}
@@ -91,7 +91,7 @@ func TestCreateReleaseSnapshotFreezesContainerMetadata(t *testing.T) {
 		ID: step.ID, Name: step.Name, ScriptBody: step.ScriptBody,
 		SortOrder: step.SortOrder, TimeoutSeconds: step.TimeoutSeconds,
 		MaxRetries: step.MaxRetries, Interpreter: step.Interpreter,
-		ContainerImage: "busybox:1.36", VariableNames: step.VariableNames,
+		ContainerImage: "harbor.durp.info/dockerhub/library/busybox:1.36", VariableNames: step.VariableNames,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -102,9 +102,9 @@ func TestCreateReleaseSnapshotFreezesContainerMetadata(t *testing.T) {
 	if err := json.Unmarshal([]byte(frozen.StepsJson), &snapshots); err != nil {
 		t.Fatal(err)
 	}
-	if snapshots[0].ContainerImage != "alpine:3.20" {
+	if snapshots[0].ContainerImage != "harbor.durp.info/dockerhub/library/alpine:3.20" {
 		t.Fatalf(
-			"release image = %q, want frozen alpine:3.20",
+			"release image = %q, want frozen harbor.durp.info/dockerhub/library/alpine:3.20",
 			snapshots[0].ContainerImage,
 		)
 	}

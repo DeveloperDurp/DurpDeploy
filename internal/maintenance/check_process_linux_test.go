@@ -41,7 +41,7 @@ func TestRunCheckCleansOrphanedOutput(t *testing.T) {
 			deadline := time.Now().Add(time.Second)
 			for time.Now().Before(deadline) {
 				state, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
-				if os.IsNotExist(err) ||
+				if os.IsNotExist(err) || errors.Is(err, syscall.ESRCH) ||
 					strings.Contains(string(state), ") Z ") {
 					return
 				}

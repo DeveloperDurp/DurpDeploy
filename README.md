@@ -91,6 +91,7 @@ are host-only. Preserve paired state when upgrading.
 | Review generated plans | [Artifact approval](docs/artifact-approval.md) |
 | Understand security boundaries | [Security](docs/security.md) and [attack drill](docs/attack-drill.md) |
 | Reproduce CI security gates | [Security scanning](docs/security-scanning.md) |
+| Configure GitLab pipelines and runners | [GitLab CI](docs/gitlab-ci.md) |
 | Build and test | [Development](docs/development.md), [manual E2E](docs/manual-e2e.md), [mobile CI](docs/mobile-browser-ci.md) |
 | Change the UI | [Design system](DESIGN.md) |
 

@@ -34,7 +34,7 @@ func TestArtifactGateEnvironmentQueueE2E(t *testing.T) {
 			f.api(t, "POST", f.base()+"/steps", map[string]string{
 				"name":            "Following work",
 				"script_body":     "echo queued-after-gate",
-				"container_image": "docker.io/library/bash:5.2",
+				"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 			}, 201)
 			next := verificationDeploy(
 				t,

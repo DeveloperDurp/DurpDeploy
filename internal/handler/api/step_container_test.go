@@ -41,7 +41,7 @@ func TestSteps_LocalStepRoundTrip(t *testing.T) {
 		token,
 		createStepBody(
 			"local",
-			"alpine:3.20",
+			"harbor.durp.info/dockerhub/library/alpine:3.20",
 			[]string{"DEPLOY_ENV", "api_key"},
 		),
 	)
@@ -49,7 +49,7 @@ func TestSteps_LocalStepRoundTrip(t *testing.T) {
 	assertStepContainerFields(
 		t,
 		rec.Body.String(),
-		"alpine:3.20",
+		"harbor.durp.info/dockerhub/library/alpine:3.20",
 		"DEPLOY_ENV",
 		"api_key",
 	)
@@ -59,7 +59,7 @@ func TestSteps_LocalStepRoundTrip(t *testing.T) {
 	assertStepContainerFields(
 		t,
 		rec.Body.String(),
-		"alpine:3.20",
+		"harbor.durp.info/dockerhub/library/alpine:3.20",
 		"DEPLOY_ENV",
 		"api_key",
 	)
@@ -75,7 +75,11 @@ func TestSteps_ServerTargetRejected(t *testing.T) {
 		"POST",
 		fmt.Sprintf("/api/v1/projects/%d/steps", project.ID),
 		token,
-		createStepBody("server", "alpine:3.20", nil),
+		createStepBody(
+			"server",
+			"harbor.durp.info/dockerhub/library/alpine:3.20",
+			nil,
+		),
 	)
 	h.assertStatus(t, rec, 400)
 }
@@ -155,7 +159,11 @@ func TestSteps_AgentStepRejectsContainerImage(t *testing.T) {
 		"POST",
 		fmt.Sprintf("/api/v1/projects/%d/steps", project.ID),
 		token,
-		createStepBody("agent", "alpine:3.20", nil),
+		createStepBody(
+			"agent",
+			"harbor.durp.info/dockerhub/library/alpine:3.20",
+			nil,
+		),
 	)
 	h.assertStatus(t, rec, 400)
 }
@@ -174,7 +182,7 @@ func TestSteps_VariableNamesValidation(t *testing.T) {
 			name: "duplicate names rejected",
 			body: createStepBody(
 				"local",
-				"alpine:3.20",
+				"harbor.durp.info/dockerhub/library/alpine:3.20",
 				[]string{"ALPHA", "ALPHA"},
 			),
 		},
@@ -182,7 +190,7 @@ func TestSteps_VariableNamesValidation(t *testing.T) {
 			name: "non identifier rejected",
 			body: createStepBody(
 				"local",
-				"alpine:3.20",
+				"harbor.durp.info/dockerhub/library/alpine:3.20",
 				[]string{"9BAD"},
 			),
 		},
@@ -190,7 +198,7 @@ func TestSteps_VariableNamesValidation(t *testing.T) {
 			name: "space in name rejected",
 			body: createStepBody(
 				"local",
-				"alpine:3.20",
+				"harbor.durp.info/dockerhub/library/alpine:3.20",
 				[]string{"BAD NAME"},
 			),
 		},
@@ -206,7 +214,9 @@ func TestSteps_VariableNamesValidation(t *testing.T) {
 			name string
 			body string
 		}{name: name, body: createStepBody(
-			"local", "alpine:3.20", []string{name},
+			"local",
+			"harbor.durp.info/dockerhub/library/alpine:3.20",
+			[]string{name},
 		)})
 	}
 	for _, tc := range cases {
@@ -222,12 +232,30 @@ func TestSteps_UpdateRejectsReservedVariableName(t *testing.T) {
 	token := h.adminToken(t)
 	project := h.seedProject(t, h.seedUser(t, "owner@example.com", "admin"))
 	path := fmt.Sprintf("/api/v1/projects/%d/steps", project.ID)
-	rec := h.request(t, "POST", path, token,
-		createStepBody("local", "alpine:3.20", nil))
+	rec := h.request(
+		t,
+		"POST",
+		path,
+		token,
+		createStepBody(
+			"local",
+			"harbor.durp.info/dockerhub/library/alpine:3.20",
+			nil,
+		),
+	)
 	h.assertStatus(t, rec, 201)
 
-	rec = h.request(t, "PUT", path+"/1", token,
-		createStepBody("local", "alpine:3.20", []string{"HOME"}))
+	rec = h.request(
+		t,
+		"PUT",
+		path+"/1",
+		token,
+		createStepBody(
+			"local",
+			"harbor.durp.info/dockerhub/library/alpine:3.20",
+			[]string{"HOME"},
+		),
+	)
 	h.assertStatus(t, rec, 400)
 }
 
@@ -252,12 +280,30 @@ func TestTemplates_RejectReservedVariableName(t *testing.T) {
 		{"PUT", "/api/v1/templates/1"},
 	} {
 		if tc.method == "PUT" {
-			rec := h.request(t, "POST", "/api/v1/templates", token,
-				createStepBody("local", "alpine:3.20", nil))
+			rec := h.request(
+				t,
+				"POST",
+				"/api/v1/templates",
+				token,
+				createStepBody(
+					"local",
+					"harbor.durp.info/dockerhub/library/alpine:3.20",
+					nil,
+				),
+			)
 			h.assertStatus(t, rec, 201)
 		}
-		rec := h.request(t, tc.method, tc.path, token,
-			createStepBody("local", "alpine:3.20", []string{"CONTAINER_HOST"}))
+		rec := h.request(
+			t,
+			tc.method,
+			tc.path,
+			token,
+			createStepBody(
+				"local",
+				"harbor.durp.info/dockerhub/library/alpine:3.20",
+				[]string{"CONTAINER_HOST"},
+			),
+		)
 		h.assertStatus(t, rec, 400)
 	}
 }
@@ -273,7 +319,11 @@ func TestSteps_UpdateStepContainerConfig(t *testing.T) {
 		"POST",
 		fmt.Sprintf("/api/v1/projects/%d/steps", project.ID),
 		token,
-		createStepBody("local", "alpine:3.20", nil),
+		createStepBody(
+			"local",
+			"harbor.durp.info/dockerhub/library/alpine:3.20",
+			nil,
+		),
 	)
 	h.assertStatus(t, rec, 201)
 
@@ -297,7 +347,11 @@ func TestSteps_UpdateStepContainerConfig(t *testing.T) {
 		"PUT",
 		path,
 		token,
-		createStepBody("agent", "alpine:3.20", nil),
+		createStepBody(
+			"agent",
+			"harbor.durp.info/dockerhub/library/alpine:3.20",
+			nil,
+		),
 	)
 	h.assertStatus(t, rec, 400)
 }
@@ -313,7 +367,11 @@ func TestSteps_ReorderPreservesContainerConfig(t *testing.T) {
 		"POST",
 		path,
 		token,
-		createStepBody("local", "alpine:3.20", []string{"DEPLOY_ENV"}),
+		createStepBody(
+			"local",
+			"harbor.durp.info/dockerhub/library/alpine:3.20",
+			[]string{"DEPLOY_ENV"},
+		),
 	)
 	h.assertStatus(t, rec, 201)
 	rec = h.request(
@@ -338,7 +396,7 @@ func TestSteps_ReorderPreservesContainerConfig(t *testing.T) {
 	assertStepContainerFields(
 		t,
 		rec.Body.String(),
-		"alpine:3.20",
+		"harbor.durp.info/dockerhub/library/alpine:3.20",
 		"DEPLOY_ENV",
 	)
 }
@@ -363,14 +421,14 @@ func TestTemplates_LocalTemplateRoundTrip(t *testing.T) {
 		"/api/v1/templates",
 		token,
 		`{"name":"tpl","script_body":"echo hi","interpreter":"bash",`+
-			`"execution_target":"local","container_image":"alpine:3.20",`+
+			`"execution_target":"local","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20",`+
 			`"variable_names":["DEPLOY_ENV"]}`,
 	)
 	h.assertStatus(t, rec, 201)
 	assertStepContainerFields(
 		t,
 		rec.Body.String(),
-		"alpine:3.20",
+		"harbor.durp.info/dockerhub/library/alpine:3.20",
 		"DEPLOY_ENV",
 	)
 
@@ -379,7 +437,7 @@ func TestTemplates_LocalTemplateRoundTrip(t *testing.T) {
 	assertStepContainerFields(
 		t,
 		rec.Body.String(),
-		"alpine:3.20",
+		"harbor.durp.info/dockerhub/library/alpine:3.20",
 		"DEPLOY_ENV",
 	)
 
@@ -396,7 +454,7 @@ func TestTemplates_LocalTemplateRoundTrip(t *testing.T) {
 	assertStepContainerFields(
 		t,
 		string(history[0]),
-		"alpine:3.20",
+		"harbor.durp.info/dockerhub/library/alpine:3.20",
 		"DEPLOY_ENV",
 	)
 

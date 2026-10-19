@@ -26,9 +26,12 @@ func artifactStagingCapacity() int64 {
 	)
 }
 
-const artifactHelperImage = "docker.io/library/alpine@sha256:ce64758a109eb420d874a118f87920e625e12d3634e03b4a5573fd9f6e5d3507"
+const artifactHelperImage = "harbor.durp.info/dockerhub/library/alpine@sha256:ce64758a109eb420d874a118f87920e625e12d3634e03b4a5573fd9f6e5d3507"
 
-type artifactStage struct{ volume, keeper string }
+type artifactStage struct {
+	volume, keeper      string
+	creationUnconfirmed bool
+}
 
 func (r *DeploymentRunner) stageArtifact(
 	ctx context.Context,
@@ -145,6 +148,9 @@ func (r *DeploymentRunner) cleanupArtifact(deploymentID int64) error {
 	defer cancel()
 	cleanupErr := transferErr
 	for _, stage := range stages {
+		if stage.creationUnconfirmed {
+			cleanupErr = errors.Join(cleanupErr, errContainerCleanup)
+		}
 		output, err := r.engine.command(ctx, r.engine.removeArgs(stage.keeper)...).
 			CombinedOutput()
 		if err = r.engine.removalError(output, err); err != nil {

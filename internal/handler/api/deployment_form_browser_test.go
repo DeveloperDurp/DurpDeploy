@@ -17,7 +17,7 @@ func TestArtifactGateDeploymentFormBrowserE2E(t *testing.T) {
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name":                   "Final gate",
 		"script_body":            "true",
-		"container_image":        "docker.io/library/bash:5.2",
+		"container_image":        "harbor.durp.info/dockerhub/library/bash:5.2",
 		"approval_artifact_path": "plan",
 		"approval_review_path":   "review",
 		"approval_review_format": "summary",
@@ -84,7 +84,7 @@ document.documentElement.scrollWidth <= innerWidth;
 	// A valid release still opens its deployment after the boosted POST.
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name": "Apply", "script_body": "true",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name": "Agent delivery", "script_body": "true",
@@ -126,7 +126,7 @@ func TestArtifactGateDeploymentFormPermissionsBrowserE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name": "Deploy", "script_body": "true",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	release := verificationRelease(t, f, "permissions-change")
 	b := startPackageBrowser(t)

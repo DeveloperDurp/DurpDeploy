@@ -4,15 +4,15 @@ set -euo pipefail
 
 directory=${1:?usage: publish_release_images.sh DIRECTORY VERSION}
 version=${2:?}
-[[ "${GITHUB_SHA:?}" =~ ^[0-9a-f]{40}$ ]]
-target=$(git rev-parse "${GITHUB_SHA:?}^{commit}")
+[[ "${CI_COMMIT_SHA:?}" =~ ^[0-9a-f]{40}$ ]]
+target=$(git rev-parse "${CI_COMMIT_SHA:?}^{commit}")
 image="ghcr.io/${REGISTRY_OWNER:?}/${IMAGE_NAME:?}"
 [[ "$image" =~ ^ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+$ ]]
 [[ "$version" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 digests=()
-for arch in amd64 arm64; do
+for arch in amd64; do
 	digest="sha256:$(sha256sum "$directory/$arch/manifest.json" | cut -d ' ' -f 1)"
 	# Digest-derived staging tags never overwrite another candidate image.
 	skopeo copy --preserve-digests --digestfile "$scratch/copied" \

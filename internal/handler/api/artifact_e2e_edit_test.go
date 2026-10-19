@@ -27,7 +27,7 @@ func (f *artifactE2E) verifyOrphanedPinEdits(
 				"name":            "read",
 				"script_body":     script,
 				"interpreter":     "bash",
-				"container_image": "docker.io/library/bash:5.2",
+				"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 			},
 		},
 	}
@@ -67,7 +67,9 @@ func (f *artifactE2E) verifyOrphanedPinEdits(
 			"step_script":         {script},
 			"step_interpreter":    {"bash"},
 			"step_target":         {"local"},
-			"step_image":          {"docker.io/library/bash:5.2"},
+			"step_image": {
+				"harbor.durp.info/dockerhub/library/bash:5.2",
+			},
 			"step_timeout":        {"0"},
 			"step_retries":        {"0"},
 			"step_selectors":      {""},

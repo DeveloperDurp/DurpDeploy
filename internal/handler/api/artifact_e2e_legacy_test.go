@@ -20,7 +20,7 @@ func (f *artifactE2E) verifyLegacyArtifactVariable(t *testing.T) {
 		db.CreateReleaseParams{
 			ProjectID: project.ID,
 			Version:   "legacy",
-			StepsJson: `[{"name":"default","script_body":"test \"$ARTIFACT_PATH\" = /legacy/package","container_image":"docker.io/library/bash:5.2"},{"name":"selected","script_body":"test \"$ARTIFACT_PATH\" = /legacy/package","container_image":"docker.io/library/bash:5.2","variable_names":["ARTIFACT_PATH"]}]`,
+			StepsJson: `[{"name":"default","script_body":"test \"$ARTIFACT_PATH\" = /legacy/package","container_image":"harbor.durp.info/dockerhub/library/bash:5.2"},{"name":"selected","script_body":"test \"$ARTIFACT_PATH\" = /legacy/package","container_image":"harbor.durp.info/dockerhub/library/bash:5.2","variable_names":["ARTIFACT_PATH"]}]`,
 		},
 	)
 	if err != nil {

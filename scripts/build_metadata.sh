@@ -21,13 +21,13 @@ fi
 semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
 IS_RELEASE=false
 if [[ -z "${BUILD_VERSION:-}" ]]; then
-	if [[ "${GITHUB_REF_TYPE:-}" == tag ]]; then
-		BUILD_VERSION=${GITHUB_REF_NAME:?}
+	if [[ -n "${CI_COMMIT_TAG:-}" ]]; then
+		BUILD_VERSION=$CI_COMMIT_TAG
 		[[ "$BUILD_VERSION" =~ $semver ]] || {
 			echo 'Tag must be a valid SemVer with a v prefix.' >&2
 			exit 1
 		}
-	elif [[ -z "${GITHUB_REF_TYPE:-}" && "$BUILD_MODIFIED" == false ]]; then
+	elif [[ "${GITLAB_CI:-}" != true && "$BUILD_MODIFIED" == false ]]; then
 		candidate=$(git describe --tags --exact-match --match 'v[0-9]*' HEAD 2>/dev/null || true)
 		if [[ "$candidate" =~ $semver ]]; then
 			BUILD_VERSION=$candidate
@@ -47,8 +47,8 @@ fi
 [[ "$BUILD_COMMIT" == unknown || "$BUILD_COMMIT" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]
 [[ "$BUILD_NUMBER" == unknown || "$BUILD_NUMBER" =~ ^(0|[1-9][0-9]*)$ ]]
 [[ "$BUILD_MODIFIED" == true || "$BUILD_MODIFIED" == false ]]
-if [[ "${GITHUB_REF_TYPE:-}" == tag ]]; then
-	[[ "$BUILD_VERSION" == "${GITHUB_REF_NAME:?}" && "$BUILD_MODIFIED" == false ]]
+if [[ -n "${CI_COMMIT_TAG:-}" ]]; then
+	[[ "$BUILD_VERSION" == "$CI_COMMIT_TAG" && "$BUILD_MODIFIED" == false ]]
 	IS_RELEASE=true
 fi
 IMAGE_VERSION=${BUILD_VERSION//+/_}

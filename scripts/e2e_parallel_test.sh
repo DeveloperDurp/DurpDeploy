@@ -33,12 +33,18 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 143' INT TERM
 
+# Warm the application build cache before the bounded startup checks.
+(
+	cd "$root"
+	bash scripts/e2e_build_server.sh "$tmp/durpdeploy"
+)
+
 # Given: a neighboring container owned by this regression, never a live app.
 "${engine[@]}" run --detach --rm --name="$scope" \
 	--label="io.durpdeploy.namespace=$runtime:$scope" \
 	--network=none --read-only --cap-drop=ALL \
 	--security-opt=no-new-privileges --user=65534:65534 \
-	--entrypoint=bash docker.io/library/bash:5.2 \
+	--entrypoint=bash harbor.durp.info/dockerhub/library/bash:5.2 \
 	-c 'exec sleep 300' >/dev/null
 
 # When: two independent processes start servers and run real API/web retries.
@@ -64,7 +70,12 @@ for lane in 1 2; do
 		sleep 0.25
 	done
 	if ((ready == 0)); then
-		cat "$tmp/$lane.log" >&2
+		if kill -0 "${pids[lane-1]}" 2>/dev/null; then
+			printf 'FAIL: E2E lane %s exceeded its startup budget.\n' "$lane" >&2
+		else
+			printf 'FAIL: E2E lane %s exited before readiness.\n' "$lane" >&2
+		fi
+		tail -n 100 "$tmp/1.log" "$tmp/2.log" >&2
 		exit 1
 	fi
 done

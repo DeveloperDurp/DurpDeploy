@@ -13,7 +13,7 @@ func TestTemplateWebRejectsContainerReservedVariableName(t *testing.T) {
 		"name":            {"local-template"},
 		"script_body":     {"echo hi"},
 		"interpreter":     {"bash"},
-		"container_image": {"alpine:3.20"},
+		"container_image": {"harbor.durp.info/dockerhub/library/alpine:3.20"},
 		"variable_names":  {"DOCKER_HOST"},
 		"csrf_token":      {h.csrfToken()},
 	}

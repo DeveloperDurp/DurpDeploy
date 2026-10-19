@@ -29,7 +29,7 @@ func createDeletionRunbook(
 	var saved deletionRunbook
 	body := f.api(t, "POST", f.base()+"/runbooks", map[string]any{
 		"name": name, "steps": []map[string]string{{"name": "check",
-			"script_body": "printf deletion-check", "container_image": "docker.io/library/bash:5.2"}},
+			"script_body": "printf deletion-check", "container_image": "harbor.durp.info/dockerhub/library/bash:5.2"}},
 	}, http.StatusCreated)
 	if err := json.Unmarshal(body, &saved); err != nil {
 		t.Fatal(err)

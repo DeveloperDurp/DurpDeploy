@@ -64,7 +64,7 @@ func TestRunbookAPI_AgentStepRejectsContainerImage(t *testing.T) {
 	created := request(http.MethodPost, base+"/runbooks",
 		`{"name":"maintenance","steps":[{"name":"check",
 		"script_body":"hostname","execution_target":"agent",
-		"container_image":"alpine:3.20"}]}`)
+		"container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]}`)
 	if created.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status=%d body=%s", created.Code, created.Body.String())
 	}
@@ -80,7 +80,7 @@ func TestRunbookAPI_ContainerFieldsSurviveVersions(t *testing.T) {
 	base := fmt.Sprintf("/api/v1/projects/%d", projectID)
 	created := request(http.MethodPost, base+"/runbooks",
 		`{"name":"maintenance","steps":[{"name":"check",
-		"script_body":"echo hi","container_image":"alpine:3.20",
+		"script_body":"echo hi","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20",
 		"variable_names":["DEPLOY_ENV","API_KEY"]}]}`)
 	if created.Code != http.StatusCreated {
 		t.Fatalf("status=%d body=%s", created.Code, created.Body.String())
@@ -115,7 +115,7 @@ func TestRunbookAPI_ContainerFieldsSurviveVersions(t *testing.T) {
 	}
 	if len(versioned.Steps) != 1 ||
 		versioned.Steps[0].ExecutionTarget != "local" ||
-		versioned.Steps[0].ContainerImage != "alpine:3.20" ||
+		versioned.Steps[0].ContainerImage != "harbor.durp.info/dockerhub/library/alpine:3.20" ||
 		strings.Join(versioned.Steps[0].VariableNames, ",") !=
 			"DEPLOY_ENV,API_KEY" {
 		t.Fatalf("version steps=%+v", versioned.Steps)
@@ -137,7 +137,7 @@ func TestRunbookAPI_ContainerFieldsSurviveVersions(t *testing.T) {
 	updated = request(http.MethodPut,
 		fmt.Sprintf("%s/runbooks/%d", base, saved.Runbook.ID),
 		`{"steps":[{"name":"check","script_body":"echo hi two",
-		"container_image":"alpine:3.20",
+		"container_image":"harbor.durp.info/dockerhub/library/alpine:3.20",
 		"variable_names":["DEPLOY_ENV"]}]}`)
 	if updated.Code != http.StatusCreated {
 		t.Fatalf("valid update status=%d body=%s", updated.Code,
@@ -164,7 +164,7 @@ func TestRunbookAPI_RejectsInvalidVariableNames(t *testing.T) {
 			base := fmt.Sprintf("/api/v1/projects/%d", projectID)
 			created := request(http.MethodPost, base+"/runbooks",
 				fmt.Sprintf(`{"name":"maintenance","steps":[{"name":"check",
-				"script_body":"echo hi","container_image":"alpine:3.20",
+				"script_body":"echo hi","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20",
 				"variable_names":%s}]}`, tc.names))
 			if created.Code != http.StatusUnprocessableEntity {
 				t.Fatalf("status=%d body=%s", created.Code,

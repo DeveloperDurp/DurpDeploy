@@ -117,7 +117,7 @@ func TestAPI_RequestBodyScriptBoundaryAndRejectedUpdate(t *testing.T) {
 		cron.NewParser(cron.Minute|cron.Hour|cron.Dom|cron.Month|cron.Dow),
 		handler.NewAuthHandler(h.repo))
 	path := fmt.Sprintf("/api/v1/projects/%d/steps", project.ID)
-	const prefix = `{"name":"large","container_image":"alpine:3.20","script_body":"`
+	const prefix = `{"name":"large","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20","script_body":"`
 	const suffix = `"}`
 	script := strings.Repeat("a", (4<<20)-len(prefix)-len(suffix))
 	for _, delta := range []int{1, 0} {

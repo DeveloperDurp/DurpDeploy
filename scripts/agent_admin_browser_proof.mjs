@@ -734,17 +734,17 @@ async function main() {
 		const headers = { Authorization: `Bearer ${token}` };
 		const stale = await context.request.post(`${baseURL}/api/v1/admin/agents/pair`,
 			{ headers, data: pairRequest });
-		check(stale.status() === 409, "deleted agent accepted its old pairing code");
+		check(stale.status() === 409, `old pairing code returned ${stale.status()}, expected 409`);
 		pairRequest.code = randomBytes(32).toString("base64url");
 		const wrong = await context.request.post(`${baseURL}/api/v1/admin/agents/pair`,
 			{ headers, data: pairRequest });
-		check(wrong.status() === 409, "agent accepted an incorrect fresh pairing code");
+		check(wrong.status() === 409, `incorrect pairing code returned ${wrong.status()}, expected 409`);
 		const hidden = await context.request.get(`${baseURL}/api/v1/admin/agents/${pairedAgentID}`, { headers });
 		check(hidden.status() === 404, "failed pairing made a deleted agent visible");
 		pairRequest.code = next.code;
 		const rejoined = await context.request.post(`${baseURL}/api/v1/admin/agents/pair`,
 			{ headers, data: pairRequest });
-		check(rejoined.status() === 201, "API pairing of the same identity failed");
+		check(rejoined.status() === 201, `API re-pairing returned ${rejoined.status()}, expected 201`);
 		const previousAgentID = pairedAgentID;
 		pairedAgentID = (await rejoined.json()).agent_id;
 		check(pairedAgentID && pairedAgentID !== previousAgentID,
@@ -829,6 +829,7 @@ try {
 	try {
 		durableState = await command("sqlite3", ["-readonly", database,
 			"SELECT 'claim|'||state||'|'||COALESCE(reason,'') FROM remote_deployment_claims " +
+			"UNION ALL SELECT 'pairing|'||state FROM agent_pairings " +
 			"UNION ALL SELECT 'run|'||state FROM remote_step_runs " +
 			"UNION ALL SELECT 'log|'||COALESCE(step_name,'')||'|'||line FROM deployment_logs;"]);
 	} catch (stateError) {

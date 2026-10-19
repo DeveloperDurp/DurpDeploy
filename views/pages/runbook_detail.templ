@@ -135,7 +135,7 @@ templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.Runbo
 								<p class="text-sm">Agent labels: { strings.Join(step.AgentSelectors, ", ") }</p>
 							}
 							if step.ContainerImage != "" {
-								<p class="text-sm">Container image: <code class="font-mono">{ step.ContainerImage }</code></p>
+								<p class="text-sm">Container image: <code class="font-mono break-all">{ step.ContainerImage }</code></p>
 							}
 							if len(step.VariableNames) > 0 {
 								<p class="text-sm">Variable names: { strings.Join(step.VariableNames, ", ") }</p>

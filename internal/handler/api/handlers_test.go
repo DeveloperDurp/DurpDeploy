@@ -382,7 +382,7 @@ func (h *testHarness) seedStep(t *testing.T, projectID int64) db.Step {
 			ProjectID:      projectID,
 			Name:           "step-one",
 			ScriptBody:     "echo 1",
-			ContainerImage: "alpine:3.20",
+			ContainerImage: "harbor.durp.info/dockerhub/library/alpine:3.20",
 			SortOrder:      1,
 			TimeoutSeconds: 60,
 			MaxRetries:     0,
@@ -418,7 +418,7 @@ func (h *testHarness) seedTemplate(t *testing.T, name string) db.StepTemplate {
 		db.CreateStepTemplateParams{
 			Name:           name,
 			ScriptBody:     "echo tpl",
-			ContainerImage: "alpine:3.20",
+			ContainerImage: "harbor.durp.info/dockerhub/library/alpine:3.20",
 		},
 	)
 	if err != nil {
@@ -969,7 +969,7 @@ func TestStep_CreateAndList(t *testing.T) {
 		token,
 		`{"name":"deploy","script_body":"Write-Output 'deploy'",`+
 			`"interpreter":"powershell",`+
-			`"container_image":"mcr.microsoft.com/powershell:latest"}`,
+			`"container_image":"harbor.durp.info/microsoft/powershell:latest"}`,
 	)
 	h.assertStatus(t, rec, http.StatusCreated)
 	h.assertJSONField(t, rec, "name", "deploy")
@@ -1066,7 +1066,7 @@ func TestStep_AgentPlacementRoundTripsThroughAPI(t *testing.T) {
 		"/api/v1/projects/"+itoa(project.ID)+"/steps/"+itoa(created.ID),
 		token,
 		`{"name":"local","script_body":"hostname",`+
-			`"execution_target":"local","container_image":"alpine:3.20"}`,
+			`"execution_target":"local","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}`,
 	)
 	h.assertStatus(t, rec, http.StatusOK)
 	h.assertJSONField(t, rec, "execution_target", "local")
@@ -1128,7 +1128,7 @@ func TestStep_GetUpdateDelete(t *testing.T) {
 		http.MethodPut,
 		"/api/v1/projects/"+itoa(p.ID)+"/steps/"+itoa(s.ID),
 		token,
-		`{"name":"updated","script_body":"echo updated","sort_order":2,"timeout_seconds":120,"max_retries":1,"container_image":"alpine:3.20"}`,
+		`{"name":"updated","script_body":"echo updated","sort_order":2,"timeout_seconds":120,"max_retries":1,"container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}`,
 	)
 	h.assertStatus(t, rec, http.StatusOK)
 	h.assertJSONField(t, rec, "name", "updated")
@@ -1206,7 +1206,7 @@ func TestTemplate_CreateAndList(t *testing.T) {
 		"/api/v1/templates",
 		token,
 		`{"name":"tpl","script_body":"Write-Output 'tpl'",`+
-			`"interpreter":"pwsh","container_image":"mcr.microsoft.com/powershell:7.4"}`,
+			`"interpreter":"pwsh","container_image":"harbor.durp.info/microsoft/powershell:7.4"}`,
 	)
 	h.assertStatus(t, rec, http.StatusCreated)
 	h.assertJSONField(t, rec, "name", "tpl")
@@ -1267,7 +1267,7 @@ func TestTemplate_AgentPlacementAndHistoryRoundTripThroughAPI(t *testing.T) {
 		token,
 		`{"name":"agent-template-v2","script_body":"hostname",`+
 			`"interpreter":"python3","execution_target":"local",`+
-			`"container_image":"python:3.12"}`,
+			`"container_image":"harbor.durp.info/dockerhub/library/python:3.12"}`,
 	)
 	h.assertStatus(t, rec, http.StatusOK)
 
@@ -1342,7 +1342,7 @@ func TestTemplate_GetUpdateDelete(t *testing.T) {
 		http.MethodPut,
 		"/api/v1/templates/"+itoa(tpl.ID),
 		token,
-		`{"name":"base-v2","script_body":"echo v2","container_image":"alpine:3.20"}`,
+		`{"name":"base-v2","script_body":"echo v2","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}`,
 	)
 	h.assertStatus(t, rec, http.StatusOK)
 	h.assertJSONField(t, rec, "name", "base-v2")
@@ -1406,7 +1406,7 @@ func TestTemplate_CreateDuplicate(t *testing.T) {
 		http.MethodPost,
 		"/api/v1/templates",
 		token,
-		`{"name":"dup","script_body":"x","container_image":"alpine:3.20"}`,
+		`{"name":"dup","script_body":"x","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}`,
 	)
 	h.assertStatus(t, rec, http.StatusConflict)
 }

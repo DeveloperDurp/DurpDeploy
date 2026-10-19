@@ -55,7 +55,7 @@ func newDeploymentCreationEngine(
 		defer cancel()
 		container, err := postgres.Run(
 			ctx,
-			"postgres:16-alpine",
+			"harbor.durp.info/dockerhub/library/postgres:16-alpine",
 			postgres.WithDatabase("creation"),
 			postgres.WithUsername("creation"),
 			postgres.WithPassword("fixture-only"),
@@ -220,10 +220,10 @@ func TestCreateDeploymentFromDeploymentPreservesSourceAcrossDatabases(
 		const original = `[` +
 			`{"name":"bash","script_body":"echo original",` +
 			`"interpreter":"bash","execution_target":"local",` +
-			`"container_image":"alpine:3.20"},` +
+			`"container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"},` +
 			`{"name":"python","script_body":"print('original')",` +
 			`"interpreter":"python3","execution_target":"local",` +
-			`"container_image":"python:3.13-alpine"}]`
+			`"container_image":"harbor.durp.info/dockerhub/library/python:3.13-alpine"}]`
 		if _, err := repo.Queries.UpdateRelease(
 			t.Context(),
 			db.UpdateReleaseParams{
@@ -249,7 +249,7 @@ func TestCreateDeploymentFromDeploymentPreservesSourceAcrossDatabases(
 				Version:   "v1",
 				StepsJson: `[{"name":"powershell","script_body":"Write-Output refreshed",` +
 					`"interpreter":"pwsh","execution_target":"local",` +
-					`"container_image":"mcr.microsoft.com/powershell:7.5-alpine-3.20"}]`,
+					`"container_image":"harbor.durp.info/microsoft/powershell:7.5-alpine-3.20"}]`,
 			},
 		); err != nil {
 			t.Fatal(err)

@@ -1,0 +1,21 @@
+CI tooling sources and licenses
+
+Docker Engine and CLI 29.9.0 use Apache-2.0.
+The CLI source is https://github.com/docker/cli/tree/v29.9.0.
+The engine source is https://github.com/moby/moby/tree/v29.9.0.
+Docker Buildx and Compose retain their Apache-2.0 upstream distribution licenses.
+The image exporter uses the pinned Apache-2.0 Moby BuildKit distribution.
+The pinned Docker distribution already supplies the release transport test tool.
+
+Hadolint 2.14.0 uses GPL-3.0.
+Its corresponding source is https://github.com/hadolint/hadolint/tree/v2.14.0.
+The complete upstream license is included in hadolint-LICENSE.
+
+Helm 4.2.2 and 3.16.2 use Apache-2.0.
+Their sources are https://github.com/helm/helm/tree/v4.2.2
+and https://github.com/helm/helm/tree/v3.16.2.
+
+The base image retains Go, Playwright, Node, and locked npm dependency notices.
+Ubuntu packages retain their copyright and license files in /usr/share/doc.
+The CI helper does not add or upgrade Go or npm project dependencies.
+SonarScanner remains a separate pinned upstream CI image with its upstream notices.

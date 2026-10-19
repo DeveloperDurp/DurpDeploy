@@ -15,7 +15,7 @@ func TestPostgres_WebAuthnCredentialCRUD(t *testing.T) {
 	ctx := context.Background()
 	ctr, err := postgres.Run(
 		ctx,
-		"postgres:16-alpine",
+		"harbor.durp.info/dockerhub/library/postgres:16-alpine",
 		postgres.WithDatabase("durpdeploy"),
 		postgres.WithUsername("durpdeploy"),
 		postgres.WithPassword("postgres"),

@@ -22,9 +22,10 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-const databaseTLSPostgresImage = "docker.io/library/postgres:16-alpine@" +
+const databaseTLSPostgresImage = "harbor.durp.info/dockerhub/library/postgres:16-alpine@" +
 	"sha256:1a66d744c1b459e13b05a8fca341da84cb63383e99ce262210efee5a319d4551"
-const databaseTLSMSSQLImage = "mcr.microsoft.com/mssql/server:2022-latest@" +
+
+const databaseTLSMSSQLImage = "harbor.durp.info/microsoft/mssql/server:2022-latest@" +
 	"sha256:4402d880dd4c34bfa7d8705e56a86cd6c88da80a1f6bbbe741f999e76264a090"
 
 func databaseTLSContainer(

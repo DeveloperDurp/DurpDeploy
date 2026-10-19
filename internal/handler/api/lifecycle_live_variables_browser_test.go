@@ -37,7 +37,7 @@ func TestLifecycleLiveScopeBrowserE2E(t *testing.T) {
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name":            "Print scope",
 		"script_body":     `printf 'LIVE=%s\n' "${LIVE-unset}"`,
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	release := verificationRelease(t, f, "before-shared-scope-edit")
 	b := startPackageBrowser(t)

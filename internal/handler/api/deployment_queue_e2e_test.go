@@ -21,7 +21,7 @@ func newQueueE2E(t *testing.T) (*artifactE2E, db.Release, db.Release) {
 	}
 	if err := json.Unmarshal(f.api(t, "POST", f.base()+"/steps", map[string]any{
 		"name": "Hold environment", "script_body": "echo queue-head; sleep 120",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201), &step); err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func newQueueE2E(t *testing.T) (*artifactE2E, db.Release, db.Release) {
 	f.api(t, "DELETE", fmt.Sprintf("%s/steps/%d", f.base(), step.ID), nil, 204)
 	f.api(t, "POST", f.base()+"/steps", map[string]any{
 		"name": "Fast work", "script_body": "echo queue-following-work",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	return f, slow, verificationRelease(t, f, "queue-fast")
 }
@@ -83,7 +83,7 @@ func TestEnvironmentQueueAPIWebE2E(t *testing.T) {
 	other.project.ID = created.ID
 	other.api(t, "POST", other.base()+"/steps", map[string]string{
 		"name": "Independent work", "script_body": "echo independent",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	independent := verificationDeploy(t, &other,
 		verificationRelease(t, &other, "independent"))
@@ -197,7 +197,7 @@ func TestEnvironmentQueueViewerAndProjectBoundaryE2E(t *testing.T) {
 	privateBase := fmt.Sprintf("/api/v1/projects/%d", privateProject.ID)
 	f.api(t, "POST", privateBase+"/steps", map[string]string{
 		"name": "Private work", "script_body": "sleep 120",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	if err := json.Unmarshal(f.api(
 		t,
@@ -262,7 +262,7 @@ func queueRunbook(t *testing.T, f *artifactE2E) db.Runbook {
 				{
 					"name":            "Maintenance",
 					"script_body":     "echo queue-runbook-work",
-					"container_image": "docker.io/library/bash:5.2",
+					"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 				},
 			},
 		}, 201),

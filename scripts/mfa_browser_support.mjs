@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -46,7 +46,11 @@ export async function startApp(root) {
 			DURPDEPLOY_URL: url,
 			TMPDIR: dir,
 		};
-		await run("go", ["build", "-o", binary, "./cmd/server"], { cwd: root, env });
+		if (env.DURPDEPLOY_E2E_BINARY) {
+			await copyFile(env.DURPDEPLOY_E2E_BINARY, binary);
+		} else {
+			await run("go", ["build", "-o", binary, "./cmd/server"], { cwd: root, env });
+		}
 		await run(binary, ["admin", "create", "--email", "admin@mfa.test", "--password", "admin-password-1234"], { env });
 		await new Promise((resolve, reject) => reservation.close((error) => error ? reject(error) : resolve()));
 		server = spawn(binary, [], { env, stdio: ["ignore", "pipe", "ignore"] });

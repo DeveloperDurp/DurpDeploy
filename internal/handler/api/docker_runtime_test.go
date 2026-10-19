@@ -36,7 +36,7 @@ func TestRunbookAPI_ExecutesWithDockerRuntime(t *testing.T) {
 	created := request(http.MethodPost, base+"/runbooks",
 		`{"name":"docker","steps":[{"name":"check",`+
 			`"script_body":"printf 'docker runtime\\n'",`+
-			`"container_image":"alpine:3.20"}]}`)
+			`"container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]}`)
 	if created.Code != http.StatusCreated {
 		t.Fatalf("create status=%d body=%s", created.Code, created.Body)
 	}

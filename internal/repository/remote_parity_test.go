@@ -31,7 +31,7 @@ func TestDispatchDatabaseParity(t *testing.T) {
 			if engine == "postgres" {
 				pg, err := postgres.Run(
 					ctx,
-					"postgres:16-alpine",
+					"harbor.durp.info/dockerhub/library/postgres:16-alpine",
 					postgres.WithDatabase(
 						"task3",
 					),
@@ -56,7 +56,7 @@ func TestDispatchDatabaseParity(t *testing.T) {
 				ctr, err = testcontainers.GenericContainer(ctx,
 					testcontainers.GenericContainerRequest{
 						ContainerRequest: testcontainers.ContainerRequest{
-							Image:        "mcr.microsoft.com/mssql/server:2022-latest",
+							Image:        "harbor.durp.info/microsoft/mssql/server:2022-latest",
 							ExposedPorts: []string{"1433/tcp"},
 							Env: map[string]string{
 								"ACCEPT_EULA":       "Y",

@@ -19,7 +19,7 @@ func newVerificationE2E(t *testing.T) *artifactE2E {
 	f := newArtifactE2E(t)
 	f.api(t, "POST", f.base()+"/steps", map[string]any{
 		"name": "Deploy", "script_body": "printf 'deployment-step-complete\\n'",
-		"interpreter": "bash", "container_image": "docker.io/library/bash:5.2",
+		"interpreter": "bash", "container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	f.api(t, "POST", f.base()+"/variables", map[string]any{
 		"name": "SECRET", "value": "verification-secret-value", "secret": true,

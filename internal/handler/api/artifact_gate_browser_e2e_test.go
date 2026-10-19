@@ -90,7 +90,7 @@ func TestArtifactGateBrowserE2E(t *testing.T) {
 const form=document.querySelector('[name="approval_artifact_path"]').form;
 form.querySelector('[name="name"]').value='Invalid gate';
 const script=form.querySelector('[name="script_body"]'); script.value='true'; script.dispatchEvent(new Event('input',{bubbles:true}));
-form.querySelector('[name="container_image"]').value='docker.io/library/bash:5.2';
+form.querySelector('[name="container_image"]').value='harbor.durp.info/dockerhub/library/bash:5.2';
 form.querySelector('[name="variable_names"]').value='KEEP_THIS';
 form.querySelector('[name="approval_artifact_path"]').value='../plan';
 form.querySelector('[name="approval_review_path"]').value='review';
@@ -99,7 +99,7 @@ setTimeout(()=>form.requestSubmit(),100); return true;
 })()`)
 			browser.wait(
 				t,
-				`document.body.innerText.includes('invalid artifact approval configuration') && document.querySelector('[name="container_image"]').value==='docker.io/library/bash:5.2' && document.querySelector('[name="variable_names"]').value==='KEEP_THIS'`,
+				`document.body.innerText.includes('invalid artifact approval configuration') && document.querySelector('[name="container_image"]').value==='harbor.durp.info/dockerhub/library/bash:5.2' && document.querySelector('[name="variable_names"]').value==='KEEP_THIS'`,
 			)
 			browser.screenshot(
 				t,

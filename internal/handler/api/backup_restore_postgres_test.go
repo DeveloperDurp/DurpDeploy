@@ -20,7 +20,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-const restorePostgresImage = "docker.io/library/postgres:16-alpine@" +
+const restorePostgresImage = "harbor.durp.info/dockerhub/library/postgres:16-alpine@" +
 	"sha256:1a66d744c1b459e13b05a8fca341da84cb63383e99ce262210efee5a319d4551"
 
 func restorePostgres(t *testing.T) *restoreNativeDB {

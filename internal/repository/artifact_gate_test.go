@@ -52,7 +52,7 @@ func TestArtifactGateClaimsAcrossDatabases(t *testing.T) {
 				ID:        1,
 				ProjectID: 1,
 				Version:   "gate",
-				StepsJson: `[{"name":"generate","container_image":"bash:5.2","approval_artifact_path":"plan","approval_review_path":"review","approval_review_format":"summary"},{"name":"apply","container_image":"bash:5.2"}]`,
+				StepsJson: `[{"name":"generate","container_image":"harbor.durp.info/dockerhub/library/bash:5.2","approval_artifact_path":"plan","approval_review_path":"review","approval_review_format":"summary"},{"name":"apply","container_image":"harbor.durp.info/dockerhub/library/bash:5.2"}]`,
 			},
 		); err != nil {
 			t.Fatal(err)

@@ -47,7 +47,7 @@ func TestAgentDurableOutcomeAfterMaintenanceAndRestart(t *testing.T) {
 					if legacy {
 						id = seedPollPayload(t, f, "pending", "test-agent")
 						if _, err := f.repo.DB.ExecContext(t.Context(), `UPDATE deployment_steps
-						SET agent_execution_mode='container', container_image='alpine:3.20',
+						SET agent_execution_mode='container', container_image='harbor.durp.info/dockerhub/library/alpine:3.20',
 						variable_names='[]' WHERE deployment_id=?`, id); err != nil {
 							t.Fatal(err)
 						}

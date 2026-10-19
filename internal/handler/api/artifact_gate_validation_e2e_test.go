@@ -90,7 +90,7 @@ func TestArtifactGatePublicationAllowsWritesDuringPreparationE2E(t *testing.T) {
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name":                   "Generate",
 		"script_body":            "true",
-		"container_image":        "docker.io/library/bash:5.2",
+		"container_image":        "harbor.durp.info/dockerhub/library/bash:5.2",
 		"approval_artifact_path": "plan",
 		"approval_review_path":   "review",
 		"approval_review_format": "summary",
@@ -98,7 +98,7 @@ func TestArtifactGatePublicationAllowsWritesDuringPreparationE2E(t *testing.T) {
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name":            "Apply",
 		"script_body":     "true",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	release := verificationRelease(t, f, "publication-lock")
 	created, err := f.h.repo.CreateDeployment(
@@ -197,7 +197,7 @@ func TestArtifactGateMalformedSummaryE2E(t *testing.T) {
 			f := newArtifactE2E(t)
 			f.api(t, "POST", f.base()+"/steps", map[string]string{
 				"name":                   "Generate",
-				"container_image":        "docker.io/library/bash:5.2",
+				"container_image":        "harbor.durp.info/dockerhub/library/bash:5.2",
 				"approval_artifact_path": "plan",
 				"approval_review_path":   "review",
 				"approval_review_format": "summary",
@@ -208,7 +208,7 @@ func TestArtifactGateMalformedSummaryE2E(t *testing.T) {
 			}, 201)
 			f.api(t, "POST", f.base()+"/steps", map[string]string{
 				"name": "Apply", "script_body": "exit 9",
-				"container_image": "docker.io/library/bash:5.2",
+				"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 			}, 201)
 			d := verificationDeploy(
 				t,
@@ -294,7 +294,7 @@ func TestArtifactGateInvalidFormPreservesContainerFieldsE2E(t *testing.T) {
 		f.api(t, "POST", apiPath, map[string]any{
 			"name":                   "Invalid gate",
 			"script_body":            "true",
-			"container_image":        "docker.io/library/bash:5.2",
+			"container_image":        "harbor.durp.info/dockerhub/library/bash:5.2",
 			"variable_names":         []string{"KEEP_THIS"},
 			"approval_artifact_path": "../plan",
 			"approval_review_path":   "review",
@@ -304,7 +304,7 @@ func TestArtifactGateInvalidFormPreservesContainerFieldsE2E(t *testing.T) {
 			"name":        {"Invalid gate"},
 			"script_body": {"true"},
 			"container_image": {
-				"docker.io/library/bash:5.2",
+				"harbor.durp.info/dockerhub/library/bash:5.2",
 			},
 			"variable_names": {"KEEP_THIS"},
 			"approval_artifact_path": {
@@ -313,7 +313,10 @@ func TestArtifactGateInvalidFormPreservesContainerFieldsE2E(t *testing.T) {
 			"approval_review_path":   {"review"},
 			"approval_review_format": {"summary"},
 		}, 422)
-		if !strings.Contains(page, `value="docker.io/library/bash:5.2"`) ||
+		if !strings.Contains(
+			page,
+			`value="harbor.durp.info/dockerhub/library/bash:5.2"`,
+		) ||
 			!strings.Contains(page, `value="KEEP_THIS"`) {
 			t.Fatalf("%s validation cleared container fields", surface)
 		}

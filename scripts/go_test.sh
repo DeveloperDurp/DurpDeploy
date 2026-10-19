@@ -4,6 +4,7 @@ set -euo pipefail
 # Each invocation owns a unique Testcontainers session, including on Podman
 # where Ryuk may be disabled. Never prune resources from another test or demo.
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+export TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX=${TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX:-harbor.durp.info/dockerhub}
 
 session_dir=$(mktemp -d \
     "${DURPDEPLOY_GO_TEST_DIRECTORY:-${TMPDIR:-/tmp}}/durpdeploy-go-test.XXXXXXXX")

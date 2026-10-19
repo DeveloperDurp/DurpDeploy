@@ -364,7 +364,7 @@ With `make dev` running in another terminal, start the published agent image:
 make dev-agent
 ```
 
-This pulls `ghcr.io/developerdurp/durpdeploy-agent:4110429` and runs it in the
+This pulls `harbor.durp.info/github/developerdurp/durpdeploy-agent:4110429` and runs it in the
 foreground using Docker or Podman. In **Admin > Agents > Pair agent**, enter
 `https://127.0.0.1:23188`, the terminal's pairing code, and fingerprint, then
 compare the fingerprint and approve. The development server advertises
@@ -402,7 +402,7 @@ The image supplies Bash; this image does not install Python or PowerShell.
 Override the image, host pairing port, or container name when needed:
 
 ```bash
-make dev-agent DEV_AGENT_IMAGE=ghcr.io/developerdurp/durpdeploy-agent:4110429 DEV_AGENT_PORT=10945
+make dev-agent DEV_AGENT_IMAGE=harbor.durp.info/github/developerdurp/durpdeploy-agent:4110429 DEV_AGENT_PORT=10945
 ```
 
 `DEV_AGENT_CONTAINER` also determines the default state-volume name. Supply

@@ -22,6 +22,16 @@ func TestSkipped(t *testing.T) {
 }
 EOF
 
+cat >"$fixture/one/tagged_test.go" <<'EOF'
+//go:build namedfixture
+
+package one
+
+import "testing"
+
+func TestTagged(t *testing.T) {}
+EOF
+
 cat >"$fixture/two/named_test.go" <<'EOF'
 package two
 
@@ -54,6 +64,12 @@ expect_pass \
 	--packages "$package_one" \
 	--tests 'TestPass|TestParent' \
 	--require 'TestPass|TestParent/Leaf'
+expect_pass --tags namedfixture --timeout 30s \
+	--packages "$package_one" --tests TestTagged --require TestTagged
+expect_fail --timeout invalid \
+	--packages "$package_one" --tests TestPass --require TestPass
+expect_fail \
+	--packages "$package_one" --tests TestTagged --require TestTagged
 expect_fail \
 	--packages "$package_one" \
 	--tests 'TestPass' \

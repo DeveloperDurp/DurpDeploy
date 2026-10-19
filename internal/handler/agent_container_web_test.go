@@ -15,7 +15,9 @@ func TestAgentContainerWebForms(t *testing.T) {
 			"container",
 		}, "script_body": {"echo hi"}, "interpreter": {"bash"},
 		"execution_target": {"agent"}, "agent_execution_mode": {"container"},
-		"container_image": {"alpine:3.20"}, "variable_names": {"DEPLOY_ENV"},
+		"container_image": {
+			"harbor.durp.info/dockerhub/library/alpine:3.20",
+		}, "variable_names": {"DEPLOY_ENV"},
 		"csrf_token": {h.csrfToken()},
 	}
 	response, err := h.authedClient().PostForm(
@@ -30,7 +32,7 @@ func TestAgentContainerWebForms(t *testing.T) {
 	steps, err := h.repo.Queries.ListStepsByProject(t.Context(), project.ID)
 	if err != nil || len(steps) != 1 ||
 		steps[0].AgentExecutionMode != "container" ||
-		steps[0].ContainerImage != "alpine:3.20" ||
+		steps[0].ContainerImage != "harbor.durp.info/dockerhub/library/alpine:3.20" ||
 		steps[0].VariableNames != `["DEPLOY_ENV"]` {
 		t.Fatalf("steps=%+v error=%v", steps, err)
 	}
@@ -45,13 +47,13 @@ func TestAgentContainerWebForms(t *testing.T) {
 	template, err := h.repo.Queries.GetStepTemplate(t.Context(), 1)
 	if err != nil || template.ExecutionTarget != "agent" ||
 		template.AgentExecutionMode != "container" ||
-		template.ContainerImage != "alpine:3.20" {
+		template.ContainerImage != "harbor.durp.info/dockerhub/library/alpine:3.20" {
 		t.Fatalf("template=%+v error=%v", template, err)
 	}
 	bookForm := runbookContainerForm(
 		h.csrfToken(),
 		[]string{"agent"},
-		[]string{"alpine:3.20"},
+		[]string{"harbor.durp.info/dockerhub/library/alpine:3.20"},
 		[]string{"DEPLOY_ENV"},
 	)
 	bookForm["step_agent_mode"] = []string{"container"}
@@ -82,7 +84,7 @@ func TestAgentContainerWebForms(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(snapshot) != 1 || snapshot[0].AgentExecutionMode != "container" ||
-		snapshot[0].ContainerImage != "alpine:3.20" {
+		snapshot[0].ContainerImage != "harbor.durp.info/dockerhub/library/alpine:3.20" {
 		t.Fatalf("snapshot=%+v", snapshot)
 	}
 	// Applying a template must preserve mode in both mutable and versioned records.

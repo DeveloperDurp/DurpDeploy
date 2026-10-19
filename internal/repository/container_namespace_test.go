@@ -27,7 +27,7 @@ func TestOtherNamespaceSweepKeepsRunbookExecutionBlocked(t *testing.T) {
 	}
 	book, version, err := repo.SaveRunbook(ctx, repository.RunbookSave{
 		ProjectID: project.ID, Name: "maintenance",
-		StepsJSON: `[{"name":"check","container_image":"alpine:3"}]`,
+		StepsJSON: `[{"name":"check","container_image":"harbor.durp.info/dockerhub/library/alpine:3"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)

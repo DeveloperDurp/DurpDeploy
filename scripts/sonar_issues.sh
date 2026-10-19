@@ -6,13 +6,13 @@ if [[ -z "${SONAR_TOKEN:-}" ]]; then
     exit 2
 fi
 
-pull_request=${1:-}
-if [[ -z "$pull_request" ]]; then
-    echo "Usage: SONAR_TOKEN=... $0 <pull-request-number>" >&2
+merge_request=${1:-}
+if [[ ! "$merge_request" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Usage: SONAR_TOKEN=... $0 <merge-request-number>" >&2
     exit 2
 fi
 
-SONAR_PULL_REQUEST="$pull_request" python3 -c '
+SONAR_PULL_REQUEST="gitlab-$merge_request" python3 -c '
 import json
 import os
 import urllib.parse

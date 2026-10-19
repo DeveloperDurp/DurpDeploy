@@ -116,7 +116,7 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 	)
 	set("name", "browser-container")
 	set("script_body", "echo browser-container")
-	set("container_image", "alpine:3.20")
+	set("container_image", "harbor.durp.info/dockerhub/library/alpine:3.20")
 	set("variable_names", "DEPLOY_ENV")
 	capture("step-new")
 	browser.evaluate(
@@ -148,13 +148,13 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 		)
 		browser.wait(
 			t,
-			`document.querySelector('form [name=agent_execution_mode]')?.value === 'container' && document.querySelector('form [name=container_image]')?.value === 'alpine:3.20'`,
+			`document.querySelector('form [name=agent_execution_mode]')?.value === 'container' && document.querySelector('form [name=container_image]')?.value === 'harbor.durp.info/dockerhub/library/alpine:3.20'`,
 		)
 		browser.screenshot(t, fmt.Sprintf("container-step-edit-%d", width))
 	}
 	// A native template form saves and reopens container placement.
 	fleetBrowserNavigate(t, browser, srv.URL+"/templates/new")
-	set("container_image", "alpine:3.21")
+	set("container_image", "harbor.durp.info/dockerhub/library/alpine:3.21")
 	set("network_mode", "bridge")
 	set("approval_artifact_path", "plan.out")
 	set("approval_review_path", "review.json")
@@ -173,16 +173,16 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 	set("execution_target", "agent")
 	browser.wait(
 		t,
-		`document.querySelector('[name=container_image]').disabled && document.querySelector('[name=container_image]').value === 'alpine:3.21'`,
+		`document.querySelector('[name=container_image]').disabled && document.querySelector('[name=container_image]').value === 'harbor.durp.info/dockerhub/library/alpine:3.21'`,
 	)
 	set("agent_execution_mode", "container")
 	browser.wait(
 		t,
-		`!document.querySelector('[name=container_image]').disabled && document.querySelector('[name=container_image]').value === 'alpine:3.21'`,
+		`!document.querySelector('[name=container_image]').disabled && document.querySelector('[name=container_image]').value === 'harbor.durp.info/dockerhub/library/alpine:3.21'`,
 	)
 	set("name", "browser-template")
 	set("script_body", "echo template")
-	set("container_image", "alpine:3.20")
+	set("container_image", "harbor.durp.info/dockerhub/library/alpine:3.20")
 	set("variable_names", "DEPLOY_ENV")
 	capture("template-new")
 	browser.wire.events = nil
@@ -203,7 +203,7 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 	capture("template-edit")
 	set("agent_execution_mode", "host")
 	set("execution_target", "local")
-	set("container_image", "alpine:3.21")
+	set("container_image", "harbor.durp.info/dockerhub/library/alpine:3.21")
 	set("network_mode", "bridge")
 	set("approval_artifact_path", "edited-plan.out")
 	set("approval_review_path", "edited-review.json")
@@ -222,12 +222,12 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 	set("execution_target", "agent")
 	browser.wait(
 		t,
-		`document.querySelector('[name=container_image]').disabled && document.querySelector('[name=container_image]').value === 'alpine:3.21'`,
+		`document.querySelector('[name=container_image]').disabled && document.querySelector('[name=container_image]').value === 'harbor.durp.info/dockerhub/library/alpine:3.21'`,
 	)
 	set("agent_execution_mode", "container")
 	browser.wait(
 		t,
-		`!document.querySelector('[name=container_image]').disabled && document.querySelector('[name=container_image]').value === 'alpine:3.21'`,
+		`!document.querySelector('[name=container_image]').disabled && document.querySelector('[name=container_image]').value === 'harbor.durp.info/dockerhub/library/alpine:3.21'`,
 	)
 	set("agent_execution_mode", "host")
 	browser.wait(t, `document.querySelector('[name=container_image]').disabled`)
@@ -257,7 +257,7 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 	set("step_script", "echo container")
 	set("step_target", "agent")
 	set("step_agent_mode", "container")
-	set("step_image", "alpine:3.20")
+	set("step_image", "harbor.durp.info/dockerhub/library/alpine:3.20")
 	set("step_variable_names", "DEPLOY_ENV")
 	capture("runbook-new")
 	browser.evaluate(

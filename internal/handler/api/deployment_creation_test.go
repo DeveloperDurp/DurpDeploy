@@ -19,9 +19,9 @@ func TestRetryDeploymentCreatesLocalSnapshot(t *testing.T) {
 	release := seedRelease(t, harness.repo, project.ID)
 	const mixedSteps = `[` +
 		`{"name":"bash-step","script_body":"echo hi",` +
-		`"interpreter":"bash","execution_target":"local","container_image":"alpine:3.20"},` +
+		`"interpreter":"bash","execution_target":"local","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"},` +
 		`{"name":"python-step","script_body":"print('ok')",` +
-		`"interpreter":"python3","execution_target":"local","container_image":"python:3.12"}]`
+		`"interpreter":"python3","execution_target":"local","container_image":"harbor.durp.info/dockerhub/library/python:3.12"}]`
 	if _, err := harness.repo.Queries.UpdateRelease(
 		context.Background(),
 		db.UpdateReleaseParams{

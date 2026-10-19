@@ -36,7 +36,7 @@ func TestRefreshReleaseAfterDeployment(t *testing.T) {
 			step, err := h.repo.Queries.CreateStep(
 				t.Context(), db.CreateStepParams{
 					ProjectID: project.ID, Name: "deploy",
-					ScriptBody: "echo before", ContainerImage: "alpine:3.20",
+					ScriptBody: "echo before", ContainerImage: "harbor.durp.info/dockerhub/library/alpine:3.20",
 				})
 			if err != nil {
 				t.Fatal(err)

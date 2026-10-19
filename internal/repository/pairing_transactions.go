@@ -33,6 +33,16 @@ func (r *Repository) PrepareAgentPairing(
 	ctx context.Context,
 	tuple AgentPairingTuple,
 ) (db.AgentPairing, error) {
+	// Retry the complete transaction so WAL conflicts get a fresh snapshot.
+	return withSQLiteBusyRetryValue(ctx, func() (db.AgentPairing, error) {
+		return r.prepareAgentPairing(ctx, tuple)
+	})
+}
+
+func (r *Repository) prepareAgentPairing(
+	ctx context.Context,
+	tuple AgentPairingTuple,
+) (db.AgentPairing, error) {
 	var pairing db.AgentPairing
 	err := r.WithTx(ctx, func(q *db.Queries) error {
 		candidates, err := q.ListAgentPairingRecoveryCandidates(

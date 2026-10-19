@@ -76,14 +76,14 @@ exec "$TEST_GATE_CLEANUP_BINARY" "$@"
 	f := newArtifactE2E(t, wrapper)
 	for _, step := range []map[string]any{
 		{
-			"name": "Plan", "container_image": "docker.io/library/bash:5.2",
+			"name": "Plan", "container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 			"approval_artifact_path": "tfplan",
 			"approval_review_path":   "review.json", "approval_review_format": "terraform",
 			"script_body": `printf plan > "$DURPDEPLOY_STAGE_DIR/tfplan"
 printf '%s' '{"format_version":"1.2","resource_changes":[]}' > "$DURPDEPLOY_STAGE_DIR/review.json"`,
 		},
 		{
-			"name": "Apply", "container_image": "docker.io/library/bash:5.2",
+			"name": "Apply", "container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 			"script_body": `test "$(cat "$DURPDEPLOY_APPROVED_DIR/tfplan")" = plan`,
 		},
 	} {

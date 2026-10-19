@@ -20,9 +20,13 @@ func serverStateParityDSN(t *testing.T, engine string) string {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
 	defer cancel()
-	container, err := postgres.Run(ctx, "postgres:16-alpine",
-		postgres.WithDatabase("rotation"), postgres.WithUsername("rotation"),
-		postgres.WithPassword("fixture-only"), postgres.BasicWaitStrategies(),
+	container, err := postgres.Run(
+		ctx,
+		"harbor.durp.info/dockerhub/library/postgres:16-alpine",
+		postgres.WithDatabase("rotation"),
+		postgres.WithUsername("rotation"),
+		postgres.WithPassword("fixture-only"),
+		postgres.BasicWaitStrategies(),
 	)
 	testutil.CleanupContainer(t, container)
 	if err != nil {

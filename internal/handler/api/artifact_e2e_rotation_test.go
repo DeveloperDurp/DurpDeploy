@@ -94,7 +94,7 @@ func (f *artifactE2E) createArtifactRelease(
 	}
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name": "read", "script_body": script, "interpreter": "bash",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	body = f.api(
 		t,

@@ -19,7 +19,9 @@ import (
 // detection) when no container runtime is available, e.g. in CI.
 func TestPostgres_MigrationsRun(t *testing.T) {
 	ctx := context.Background()
-	ctr, err := postgres.Run(ctx, "postgres:16-alpine",
+	ctr, err := postgres.Run(
+		ctx,
+		"harbor.durp.info/dockerhub/library/postgres:16-alpine",
 		postgres.WithDatabase("durpdeploy"),
 		postgres.WithUsername("durpdeploy"),
 		postgres.WithPassword("postgres"),

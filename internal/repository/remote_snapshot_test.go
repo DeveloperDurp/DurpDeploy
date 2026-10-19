@@ -61,7 +61,7 @@ func TestDeploymentStepSnapshotPreservesLifecycle(t *testing.T) {
 					}
 					source, err := r.Queries.GetDeploymentStepSource(ctx, d.ID)
 					if err != nil ||
-						source.StepsJson != `[{"name":"frozen","container_image":"alpine:3.20"}]` {
+						source.StepsJson != `[{"name":"frozen","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]` {
 						t.Fatalf("source=%+v error=%v", source, err)
 					}
 					before, err := r.Queries.ListDeploymentSteps(ctx, d.ID)

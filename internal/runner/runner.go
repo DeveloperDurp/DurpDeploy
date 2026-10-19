@@ -270,6 +270,13 @@ func (r *DeploymentRunner) Run(
 
 	var approved artifactStage
 	if gated && gateRun.NextStep > 0 {
+		if !artifactWork {
+			if !r.beginLocalWork() {
+				r.finalizeCancellation(ctx, deploymentID)
+				return
+			}
+			artifactWork = true
+		}
 		approved, err = r.restoreArtifactGate(
 			runCtx,
 			deploymentID,

@@ -4,8 +4,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 export DURPDEPLOY_RESTORE_BACKEND=${DURPDEPLOY_RESTORE_BACKEND:-sqlite}
 case $DURPDEPLOY_RESTORE_BACKEND in
-    sqlite) test_timeout=5m; setup_seconds=240 ;;
-    postgres|mssql) test_timeout=10m; setup_seconds=540 ;;
+    sqlite) test_timeout=2m; setup_seconds=240 ;;
+    postgres|mssql) test_timeout=4m; setup_seconds=540 ;;
     *) echo 'ERROR: set DURPDEPLOY_RESTORE_BACKEND to sqlite, postgres, or mssql.' >&2; exit 1 ;;
 esac
 if [[ -n ${DURPDEPLOY_CONTAINER_URL:-} ]]; then
@@ -52,7 +52,7 @@ fi
 
 unrelated=$(engine run --detach --network=none \
     --label "io.durpdeploy.namespace=restore-unrelated-${work_dir##*/}" \
-    docker.io/library/bash:5.2 bash -c 'while :; do sleep 3600; done')
+    harbor.durp.info/dockerhub/library/bash:5.2 bash -c 'while :; do sleep 3600; done')
 
 for mode in timeout TERM; do
     log_file="$work_dir/$mode.log"
@@ -64,8 +64,8 @@ for mode in timeout TERM; do
         ./internal/handler/api >"$log_file" 2>&1 &
     runner_pid=$!
     ready=
-    # Native startup, migration, build, and backup get nine minutes.
-    # Each global timeout leaves another minute of live work.
+    # This shell deadline also covers compilation before Go starts its timer.
+    # The fixture requires 30 seconds of native timeout headroom at readiness.
     while ((SECONDS < setup_deadline)); do
         ready=$(sed -n 's/.*restore-interrupt-ready pid=\([0-9]*\) namespace=\([^ ]*\) session=\([^ ]*\).*/\1 \2 \3/p' "$log_file")
         if [[ -n $ready ]]; then break; fi
@@ -78,6 +78,7 @@ for mode in timeout TERM; do
         exit 1
     fi
     read -r server_pid namespace session <<< "$ready"
+    grep 'restore-interrupt-timing ' "$log_file"
     database_containers=$(engine ps --all --quiet --filter "label=org.testcontainers.sessionId=$session")
     database_volumes=
     for id in $database_containers; do

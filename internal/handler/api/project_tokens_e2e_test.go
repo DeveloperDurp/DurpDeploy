@@ -167,7 +167,7 @@ func TestProjectTokensRolesAPIE2E(t *testing.T) {
 				map[string]string{
 					"name":            "token-" + role,
 					"script_body":     "echo scoped",
-					"container_image": "docker.io/library/bash:5.2",
+					"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 				},
 				writeStatus,
 			)

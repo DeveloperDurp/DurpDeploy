@@ -39,8 +39,11 @@ func TestRunbookWeb_CreateAndExecuteMultiStep(t *testing.T) {
 		"step_timeout":     {"0", "0"},
 		"step_retries":     {"0", "0"},
 		"step_target":      {"local", "local"},
-		"step_image":       {"alpine:3.20", "alpine:3.20"},
-		"step_selectors":   {"", ""},
+		"step_image": {
+			"harbor.durp.info/dockerhub/library/alpine:3.20",
+			"harbor.durp.info/dockerhub/library/alpine:3.20",
+		},
+		"step_selectors": {"", ""},
 	}
 	response, err := h.authedClient().
 		PostForm(h.server.URL+base, form)
@@ -159,7 +162,7 @@ func TestRunbookWeb_ViewerReadsButCannotEdit(t *testing.T) {
 		repository.RunbookSave{
 			ProjectID: project.ID,
 			Name:      "Maintenance",
-			StepsJSON: `[{"name":"check","script_body":"echo first_version","interpreter":"bash","container_image":"alpine:3.20"}]`,
+			StepsJSON: `[{"name":"check","script_body":"echo first_version","interpreter":"bash","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]`,
 		})
 	if err != nil {
 		t.Fatal(err)
@@ -168,7 +171,7 @@ func TestRunbookWeb_ViewerReadsButCannotEdit(t *testing.T) {
 		repository.RunbookSave{
 			ProjectID: project.ID,
 			RunbookID: book.ID,
-			StepsJSON: `[{"name":"check","script_body":"echo second_version","interpreter":"bash","container_image":"alpine:3.20"}]`,
+			StepsJSON: `[{"name":"check","script_body":"echo second_version","interpreter":"bash","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]`,
 		}); err != nil {
 		t.Fatal(err)
 	}

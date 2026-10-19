@@ -12,12 +12,12 @@ import (
 func TestArtifactGatePreviewOmissionBrowserE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
-		"name": "Generate", "container_image": "docker.io/library/bash:5.2",
+		"name": "Generate", "container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 		"approval_artifact_path": "tfplan", "approval_review_path": "review.json",
 		"approval_review_format": "terraform", "script_body": oversizedPreviewScript,
 	}, 201)
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
-		"name": "Apply", "container_image": "docker.io/library/bash:5.2", "script_body": "true",
+		"name": "Apply", "container_image": "harbor.durp.info/dockerhub/library/bash:5.2", "script_body": "true",
 	}, 201)
 	deployment := verificationDeploy(
 		t,

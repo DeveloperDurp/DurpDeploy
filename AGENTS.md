@@ -105,22 +105,26 @@ bash scripts/go_test.sh -run TestName ./internal/handler/...
 ./scripts/e2e_test.sh              # bash end-to-end: builds, runs server, curl happy/cancel/validation paths (~10s+)
 ```
 
-GitHub release-workflow PR checks run lint before Go tests and E2E checks.
+GitLab merge request checks run lint before Go tests and E2E checks.
 Run `make lint` for the pinned `golangci-lint` checks across packages and tests.
 The target generates required assets and installs a checksum-verified tool in `bin/lint/`.
 CI also requires `go vet ./...`, clean `gofmt` and `golines` output, and `hadolint`.
 Other security, browser, and backend checks run in separate jobs.
-Image/chart publication runs on push or manual dispatch after its dependencies.
+Image/chart publication runs on protected pushes or manual pipelines after its dependencies.
+See `docs/gitlab-ci.md` for the AMD64 Kubernetes runner and credential setup.
 
 ## SonarCloud and Codex
 
-SonarCloud and the main Go/E2E suites run on pull requests. Security gates also run on main pushes, a schedule, and manual dispatch, including a targeted API-token test. SonarCloud reports
-Go coverage and waits for the Quality Gate, so a failed gate fails the GitHub
-check. Before declaring pull-request work complete, inspect the SonarCloud
-check and address valid new-code findings. With a local `SONAR_TOKEN`, use:
+SonarCloud and the main Go/E2E suites run on merge requests.
+Security scans also run on main pushes, tags, configured schedules, and manual pipelines.
+The targeted API-token test runs on merge requests.
+SonarCloud reports Go coverage and waits for the Quality Gate.
+A failed gate fails the GitLab pipeline.
+Before declaring merge request work complete, inspect SonarCloud and address valid new-code findings.
+With a local `SONAR_TOKEN`, use:
 
 ```bash
-make sonar-issues PR=<pull-request-number>
+make sonar-issues MR=<merge-request-number>
 ```
 
 The command is read-only and must never print or persist `SONAR_TOKEN`.

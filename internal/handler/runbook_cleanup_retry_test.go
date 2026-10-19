@@ -31,7 +31,7 @@ func TestWebRunbookRetryRejectsUnconfirmedCleanup(t *testing.T) {
 		t.Context(),
 		repository.RunbookSave{
 			ProjectID: project.ID, Name: "maintenance",
-			StepsJSON: `[{"name":"local","container_image":"alpine:3.20"}]`,
+			StepsJSON: `[{"name":"local","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]`,
 		},
 	)
 	if err != nil {

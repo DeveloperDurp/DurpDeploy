@@ -4,7 +4,7 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 work=${1:?}
 older=${2:?}
-newer=${GITHUB_SHA:?}
+newer=${CI_COMMIT_SHA:?}
 engine=${DURPDEPLOY_CONTAINER_RUNTIME:-docker}
 real_skopeo=$(command -v skopeo)
 transport=$(mktemp -d)
@@ -37,7 +37,7 @@ chmod 644 "$transport/config.yml"
 registry=$("$engine" run -d --user 0 --entrypoint /usr/bin/registry \
 	-p 127.0.0.1::5000 --tmpfs /tmp \
 	-v "$transport/config.yml:/config.yml:ro,Z" \
-	registry.gitlab.com/gitlab-org/build/cng/gitlab-container-registry@sha256:d275d58502f89db09a5d6eda50862e9ad8621bc4ea924570b667f7e1a65e1264 \
+	harbor.durp.info/gitlab/gitlab-org/build/cng/gitlab-container-registry@sha256:d275d58502f89db09a5d6eda50862e9ad8621bc4ea924570b667f7e1a65e1264 \
 	serve /config.yml)
 port=$("$engine" port "$registry" 5000/tcp | sed 's/.*://')
 export TEST_REGISTRY="localhost:$port/release-test"
@@ -84,23 +84,23 @@ if [[ "$TEST_ENGINE" == docker ]]; then
 	exec "$TEST_DOCKER" "${arguments[@]}"
 fi
 exec "$TEST_ENGINE" run --rm --network host --entrypoint docker \
-	docker.io/library/docker@sha256:1a4c7cb63513f349bdad01fcc6e0f3f2f67d37b9da86f14dc0d4a0942eecda00 "${arguments[@]}"
+	harbor.durp.info/dockerhub/library/docker@sha256:1a4c7cb63513f349bdad01fcc6e0f3f2f67d37b9da86f14dc0d4a0942eecda00 "${arguments[@]}"
 SH
 chmod +x "$transport/bin/"*
 export PATH="$transport/bin:$PATH"
 export REGISTRY_OWNER=fixture IMAGE_NAME=project IS_RELEASE=true
 
-# Given verified image archives, publish and verify both platform digests.
-export GITHUB_SHA="$older"
+# Given verified image archives, publish and verify the AMD64 platform digest.
+export CI_COMMIT_SHA="$older"
 bash "$root/scripts/publish_release_images.sh" "$work/verified" v1.0.0
 skopeo inspect --raw docker://ghcr.io/fixture/project:v1.0.0 > "$transport/index.json"
-for arch in amd64 arm64; do
+for arch in amd64; do
 	expected="sha256:$(sha256sum "$work/verified/$arch/manifest.json" | cut -d ' ' -f 1)"
 	jq -e --arg arch "$arch" --arg digest "$expected" \
 		'any(.manifests[]; .platform.architecture == $arch and .digest == $digest)' \
 		"$transport/index.json" > /dev/null
 done
-echo 'PASS: real registry retains both scanned platform digests'
+echo 'PASS: real registry retains the scanned AMD64 platform digest'
 
 # Given a normalized SemVer build tag, publish the same scanned manifests.
 bash "$root/scripts/publish_release_images.sh" "$work/verified" v1.0.0_build.4
@@ -109,7 +109,7 @@ cmp "$transport/index.json" "$transport/build.json"
 echo 'PASS: normalized SemVer build metadata publishes the scanned images'
 
 # Given a newer release already exists, an older publisher cannot replace latest.
-export GITHUB_SHA="$newer"
+export CI_COMMIT_SHA="$newer"
 bash "$root/scripts/publish_release_images.sh" "$work/verified" v1.0.0-build.4
 skopeo inspect --raw docker://ghcr.io/fixture/project:v1.0.0-build.4 |
 	jq -e --arg newer "$newer" '.annotations["org.opencontainers.image.revision"] == $newer' > /dev/null
@@ -117,7 +117,7 @@ skopeo inspect --raw docker://ghcr.io/fixture/project:v1.0.0_build.4 |
 	jq -e --arg older "$older" '.annotations["org.opencontainers.image.revision"] == $older' > /dev/null
 echo 'PASS: build metadata and prerelease tags publish separate source revisions'
 bash "$root/scripts/publish_release_images.sh" "$work/verified" v2.0.0
-export GITHUB_SHA="$older"
+export CI_COMMIT_SHA="$older"
 bash "$root/scripts/publish_release_images.sh" "$work/verified" v1.1.0
 skopeo inspect --raw docker://ghcr.io/fixture/project:latest |
 	jq -e --arg newer "$newer" '.annotations["org.opencontainers.image.revision"] == $newer' > /dev/null

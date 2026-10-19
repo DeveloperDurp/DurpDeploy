@@ -29,7 +29,7 @@ func TestRunningServerBrowserE2E(t *testing.T) {
 	if session == "" || token == "" {
 		t.Fatal("running browser suite requires its test session and API token")
 	}
-	b := startPackageBrowser(t)
+	b := startPackageBrowser(t, true)
 	b.call(t, "Security.setIgnoreCertificateErrors",
 		map[string]bool{"ignore": true}, &struct{}{})
 	b.setBackTestSession(t, base, session)
@@ -139,7 +139,7 @@ func TestRunningServerBrowserE2E(t *testing.T) {
  root.querySelector('[name=name]').value = %q;
  const image = root.querySelector('[name=container_image]');
  const script = root.querySelector('[name=script_body]');
- if (image) image.value = 'docker.io/library/bash:5.2';
+ if (image) image.value = 'harbor.durp.info/dockerhub/library/bash:5.2';
  if (script) script.value = 'echo live-template';
  window.liveModalSentinel = true;
  root.querySelector('button[form]').click(); return true;
@@ -208,7 +208,7 @@ func TestRunningServerBrowserE2E(t *testing.T) {
  const form = document.querySelector('#step-edit-content form');
  form.querySelector('[name=name]').value = 'live-step';
  form.querySelector('[name=script_body]').value = 'echo live-step';
- form.querySelector('[name=container_image]').value = 'docker.io/library/bash:5.2';
+ form.querySelector('[name=container_image]').value = 'harbor.durp.info/dockerhub/library/bash:5.2';
  form.querySelector('[type=submit]').click(); return true;
 })()`)
 				b.wait(

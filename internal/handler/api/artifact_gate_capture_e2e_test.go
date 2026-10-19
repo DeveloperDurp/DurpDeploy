@@ -42,7 +42,7 @@ func artifactGateCaptureFailure(t *testing.T, script string) string {
 	f := newArtifactE2E(t)
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name":                   "Generate",
-		"container_image":        "docker.io/library/bash:5.2",
+		"container_image":        "harbor.durp.info/dockerhub/library/bash:5.2",
 		"approval_artifact_path": "plan",
 		"approval_review_path":   "review",
 		"approval_review_format": "summary",
@@ -50,7 +50,7 @@ func artifactGateCaptureFailure(t *testing.T, script string) string {
 	}, 201)
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name":            "Apply",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 		"script_body":     "echo apply-must-not-run",
 	}, 201)
 	// When: the deployment tries to capture the approval context.

@@ -49,7 +49,7 @@ func TestVariableScopesBeforeDeploymentBrowserE2E(t *testing.T) {
 		lifecycle.ID), map[string]int64{
 		"environment_id": eligible, "sort_order": 1,
 	}, 201)
-	b := startPackageBrowser(t)
+	b := startPackageBrowser(t, true)
 	b.call(t, "Page.bringToFront", struct{}{}, &struct{}{})
 	b.call(t, "Security.setIgnoreCertificateErrors",
 		map[string]bool{"ignore": true}, &struct{}{})

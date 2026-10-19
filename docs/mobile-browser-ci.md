@@ -1,16 +1,15 @@
 # Mobile browser CI
 
-`mobile-browser` is a serialized test job in
-`.github/workflows/ci.yml` with a `ci-mobile-browser` concurrency
-group. It builds `Dockerfile.mobile-browser` and runs
-`/usr/local/bin/mobile-browser-container`. The ordinary lint, test,
-and build jobs in `release.yml` do not run this suite.
+`mobile-browser` is a merge request test job in `.gitlab/ci/test.yml`.
+The pipeline builds its helper image from `Dockerfile.mobile-browser` and `Dockerfile.ci`.
+The job runs the shared `scripts/mobile-browser-container.sh` entrypoint.
+The ordinary lint and Go test jobs do not run this suite.
 
-The image stays pinned to `mcr.microsoft.com/playwright:v1.61.1-noble`, which
-matches the committed Playwright 1.61.1 lockfile. It copies Go 1.26.9, installs
-`templ@v0.3.1020` with `GOBIN=/usr/local/bin`, runs `npm ci`, and supplies the
-locked Chromium and its OS dependencies. Keep the image and lockfile versions
-aligned when changing Playwright.
+The image uses `harbor.durp.info/microsoft/playwright:v1.61.1-noble`, which matches Playwright 1.61.1 in `package-lock.json`.
+It copies Go 1.26.9 and builds templ from `go.mod` and `go.sum` with `-mod=readonly`.
+It installs Node dependencies with `npm ci --ignore-scripts`.
+It supplies the locked Chromium and its OS dependencies.
+When you change Playwright, keep the image and lockfile versions aligned.
 
 ## Run the tagged test on the host
 
@@ -25,7 +24,7 @@ Node, `node_modules/playwright`, Playwright's downloaded Chromium, generated
 templ output, and generated Swagger UI assets. For example:
 
 ```bash
-npm ci
+npm ci --ignore-scripts
 templ generate
 make swagger-ui-copy
 npx playwright install chromium
@@ -73,18 +72,18 @@ an output, not a necessary checkout artifact.
 The container supplies a run-specific receipt name, then copies it on exit to
 `/artifacts/<run-id>/mobile-readability-<run-id>.json`. The harness also writes
 its JSON reports and PNG screenshots below that run directory. Local Docker
-runs export it as `artifacts/mobile/<run-id>/`. CI copies `/artifacts` and
-uploads `artifacts/mobile/` with `if: always()` for seven days. The container
+runs export it as `artifacts/mobile/<run-id>/`. CI writes `artifacts/mobile/` and
+retains that directory with `when: always` for seven days. The container
 does not copy source or evidence into an image layer.
 
 ## CI runner Docker
 
-`mobile-browser` runs on a GitHub-hosted `ubuntu-latest` runner whose docker
-daemon runs on the runner host, so there is no Docker-in-Docker service, no
-`DOCKER_HOST`/TLS plumbing, and only a one-line `docker info` guard before
-building. The job copies the checkout into a created container instead of
-bind-mounting it, starts the shared entrypoint, copies `/artifacts` back, and
-removes the container.
+`mobile-browser` runs inside a privileged Kubernetes job pod on the AMD64 runner.
+The job image already supplies the pinned browser and Go tooling.
+It starts a private Docker daemon for adjacent runtime checks.
+The mobile entrypoint runs directly in the job container and writes evidence into the checkout artifact directory.
+Pod cleanup removes the private daemon and its containers.
+See [GitLab CI](gitlab-ci.md) for runner and helper image details.
 
 ## Static contract check
 

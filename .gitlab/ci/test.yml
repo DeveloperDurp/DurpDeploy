@@ -1,0 +1,246 @@
+.mr-built-app:
+  extends: .mr-test
+  needs: [ci-runtime, lint, version, images]
+  variables:
+    DURPDEPLOY_E2E_IMAGE: localhost/durpdeploy-e2e:$CI_JOB_ID
+    DURPDEPLOY_E2E_BINARY: $CI_PROJECT_DIR/.cache/e2e-app/durpdeploy
+  before_script:
+    - !reference [default, before_script]
+    - bash scripts/ci_e2e_app.sh
+
+pre-commit:
+  extends: .mr-test
+  timeout: 30 minutes
+  variables:
+    CI_JOB_TEMP: /tmp/durpdeploy-ci
+  script:
+  - |-
+    (
+    export GOFLAGS=-mod=readonly
+    make pre-commit-test
+    )
+  - make dev-agent-test
+  - make dev-secret-key-test
+  - make demo-test
+  - env --default-signal=INT,TERM,HUP make go-test-cleanup-test
+  - make backup-restore-script-test
+  - bash scripts/check-dev-database-contract.sh
+backup-restore:
+  extends: .mr-test
+  timeout: 90 minutes
+  variables:
+    CI_JOB_TEMP: /tmp/durpdeploy-ci
+    DURPDEPLOY_CONTAINER_RUNTIME: docker
+  parallel:
+    matrix:
+    - DURPDEPLOY_RESTORE_BACKEND:
+      - sqlite
+      - postgres
+      - mssql
+  script:
+  - docker info >/dev/null
+  - make backup-restore-test
+database-tls:
+  extends: .mr-test
+  timeout: 20 minutes
+  variables:
+    CI_JOB_TEMP: /tmp/durpdeploy-ci
+  parallel:
+    matrix:
+    - DURPDEPLOY_TLS_BACKEND:
+      - postgres
+      - mssql
+  script:
+  - docker info >/dev/null
+  - make database-tls-test
+auth-mfa-parity:
+  extends: .mr-test
+  timeout: 30 minutes
+  variables:
+    CI_JOB_TEMP: /tmp/durpdeploy-ci
+  script:
+  - go tool templ generate
+  - make swagger-ui-copy
+  - make auth-mfa-e2e-postgres auth-mfa-e2e-mssql
+  - |-
+    echo 'auth-mfa-parity failure diagnostics (capped at 32 KiB):'
+    find artifacts/auth-mfa -type f \( -name summary.txt \
+      -o -name '*.redacted.log' -o -name trace.redacted.json \) \
+      -size -33k -print -exec cat {} \; 2>&1 | head -c 32768 || true
+agent-rollout:
+  extends: .mr-test
+  timeout: 45 minutes
+  parallel:
+    matrix:
+      - ROLLOUT_SHARD: [contracts, artifacts-1, artifacts-2, verification]
+  variables:
+    CI_JOB_TEMP: /tmp/durpdeploy-ci
+    DURPDEPLOY_CONTAINER_RUNTIME: docker
+  script:
+    - go tool templ generate
+    - make swagger-ui-copy
+    - bash scripts/ci_test_shard.sh "rollout-$ROLLOUT_SHARD"
+package-browser:
+  extends: .mr-test
+  timeout: 45 minutes
+  parallel:
+    matrix:
+      - BROWSER_SHARD: [navigation, resources, execution, agents]
+  variables:
+    CI_JOB_TEMP: /tmp/durpdeploy-ci
+    DURPDEPLOY_CONTAINER_RUNTIME: docker
+    DURPDEPLOY_PACKAGE_UI_EVIDENCE: $CI_PROJECT_DIR/artifacts/package-ui/$BROWSER_SHARD
+  script:
+    - docker pull harbor.durp.info/microsoft/playwright:v1.61.1-noble
+    - go tool templ generate
+    - make swagger-ui-copy
+    - bash scripts/ci_browser_shard.sh "browser-$BROWSER_SHARD"
+artifact-stress:
+  extends: .mr-test
+  timeout: 20 minutes
+  variables:
+    CI_JOB_TEMP: /tmp/durpdeploy-ci
+    DURPDEPLOY_CONTAINER_RUNTIME: docker
+  script:
+  - |-
+    docker info >/dev/null
+    available=$(df -Pk "$CI_JOB_TEMP" | awk 'NR == 2 {print $4}')
+    test "$available" -ge 3145728
+  - |-
+    go tool templ generate
+    make swagger-ui-copy
+  - bash scripts/go_test.sh -tags=e2e,artifactstress -race -count=1 -timeout=15m -v -run '^TestArtifact(CrashRecovery|Capacity)E2E$'
+    ./internal/handler/api
+mobile-browser:
+  extends: .mr-test
+  timeout: 30 minutes
+  script:
+  - |-
+    trap 'status=$?; if ((status)); then find artifacts/mobile -name "mobile-readability-*.json" -size -33k -exec cat {} \; | head -c 32768; fi; exit "$status"' EXIT
+    MOBILE_RUN_ID="gitlab-$CI_JOB_ID" MOBILE_ARTIFACT_DIR="$CI_PROJECT_DIR/artifacts/mobile" \
+      bash scripts/mobile-browser-container.sh
+auth-mfa-sqlite:
+  extends: .mr-built-app
+  timeout: 30 minutes
+  script:
+  - go tool templ generate
+  - make swagger-ui-copy
+  - make auth-mfa-e2e-sqlite
+agent-smoke:
+  extends: .mr-test
+  timeout: 30 minutes
+  script:
+  - |-
+    AGENT_E2E_EVIDENCE_DIR="$CI_PROJECT_DIR/artifacts/agent-smoke" \
+      bash scripts/agent_smoke_container.sh
+agent-image:
+  stage: prepare
+  needs: [ci-runtime]
+  timeout: 30 minutes
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    - bash scripts/ci_agent_image.sh build
+  artifacts:
+    expire_in: 7 days
+    paths: [artifacts/agent-build/]
+    reports:
+      dotenv: artifacts/agent-build/build.env
+
+agent-container-docker:
+  extends: .mr-test
+  needs: [ci-runtime, lint, agent-image]
+  timeout: 30 minutes
+  variables:
+    CI_RUNTIME: docker
+    DURPDEPLOY_CONTAINER_RUNTIME: docker
+  script:
+  - |-
+    go tool templ generate
+    make swagger-ui-copy
+    go mod download github.com/DeveloperDurp/durpdeploy-agent
+    AGENT_SOURCE=$(go list -m -f '{{.Dir}}' github.com/DeveloperDurp/durpdeploy-agent)
+    export AGENT_SOURCE
+    export AGENT_TEST_RUNTIME=$DURPDEPLOY_CONTAINER_RUNTIME
+    export AGENT_TEST_SOCKET=$DOCKER_HOST
+    export AGENT_TEST_IMAGE="localhost/durpdeploy-agent:gitlab-$CI_PIPELINE_ID"
+    bash scripts/ci_agent_image.sh load
+    make -C "$AGENT_SOURCE" container-executor-contract
+    bash scripts/go_test.sh -tags=e2e,agentcontainer -race -count=1 -timeout=8m -v -run '^TestAgentContainerAPIE2E$' ./internal/agentserver
+agent-container-podman:
+  extends: .mr-test
+  needs: [ci-runtime, lint, agent-image]
+  timeout: 30 minutes
+  # Temporary exception for the runner's disabled user namespaces.
+  allow_failure:
+    exit_codes: 77
+  variables:
+    CI_RUNTIME: podman
+    DURPDEPLOY_CONTAINER_RUNTIME: podman
+  script:
+  - |-
+    bash scripts/ci_rootless.sh <<'ROOTLESS'
+    go tool templ generate
+    make swagger-ui-copy
+    go mod download github.com/DeveloperDurp/durpdeploy-agent
+    AGENT_SOURCE=$(go list -m -f '{{.Dir}}' github.com/DeveloperDurp/durpdeploy-agent)
+    export AGENT_SOURCE
+    export AGENT_TEST_RUNTIME=$DURPDEPLOY_CONTAINER_RUNTIME
+    export AGENT_TEST_SOCKET=$DOCKER_HOST
+    export AGENT_TEST_IMAGE="localhost/durpdeploy-agent:gitlab-$CI_PIPELINE_ID"
+    bash scripts/ci_agent_image.sh load
+    make -C "$AGENT_SOURCE" container-executor-contract
+    bash scripts/go_test.sh -tags=e2e,agentcontainer -race -count=1 -timeout=8m -v -run '^TestAgentContainerAPIE2E$' ./internal/agentserver
+    DURPDEPLOY_AGENT_E2E_BINARY="$CI_PROJECT_DIR/artifacts/agent-build/agent" \
+      bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 -timeout=10m -v \
+      -run '^(TestDeploymentStaging(Transfer|ImportFailure|TransferPausesStepTimeout|Audit|ArtifactGate|Package|PackageAgentOnly|PackageLegacyAgent)APIE2E|TestExecutionLocationAPIWebE2E|TestLegacyExecutionLocationAPIWebE2E)$' ./internal/agentserver
+    ROOTLESS
+test:
+  extends: .mr-test
+  timeout: 45 minutes
+  parallel:
+    matrix:
+      - TEST_SHARD: [repository, database, handlers, core]
+  script:
+  - go tool templ generate
+  - make swagger-ui-copy
+  - |-
+    package_list=$(bash scripts/ci_test_packages.sh "$TEST_SHARD")
+    test -n "$package_list"
+    mapfile -t packages <<< "$package_list"
+    bash scripts/go_test.sh -v -count=1 -timeout=20m "${packages[@]}"
+  - if [[ $TEST_SHARD == core ]]; then bash scripts/build_version_test.sh; fi
+e2e:
+  extends: .mr-built-app
+  timeout: 45 minutes
+  script:
+  - docker pull harbor.durp.info/microsoft/playwright:v1.61.1-noble
+  - go tool templ generate
+  - make swagger-ui-copy
+  - bash scripts/release_images_test.sh
+  - bash scripts/e2e_build_server_test.sh
+  - |-
+    for script in scripts/e2e_test.sh scripts/e2e_lifecycle.sh scripts/e2e_wait.sh scripts/e2e_parallel_test.sh scripts/e2e_db_test.sh scripts/e2e_fixture_reset.sh scripts/e2e_fixture_reset_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh; do
+      bash -n "$script"
+    done
+    shellcheck -S error scripts/e2e_test.sh scripts/e2e_lifecycle.sh scripts/e2e_wait.sh scripts/e2e_parallel_test.sh scripts/e2e_db_test.sh scripts/e2e_fixture_reset.sh scripts/e2e_fixture_reset_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh
+    bash scripts/e2e_fixture_reset_test.sh
+    bash scripts/check_e2e_containers_test.sh
+    bash -n scripts/mobile-browser-image-cleanup-test.sh
+    shellcheck -S error scripts/mobile-browser-image-cleanup-test.sh
+    bash scripts/mobile-browser-image-cleanup-test.sh
+  - |-
+    for script in scripts/build_metadata.sh scripts/build_server.sh scripts/build_version_test.sh scripts/prepare_versioned_images.sh scripts/ci_e2e_app.sh scripts/e2e_build_server.sh scripts/e2e_build_server_test.sh scripts/ci_agent_image.sh scripts/ci_browser_shard.sh scripts/ensure_fixture_image.sh; do
+      bash -n "$script"
+    done
+    shellcheck -S error scripts/build_metadata.sh scripts/build_server.sh scripts/build_version_test.sh scripts/prepare_versioned_images.sh scripts/ci_e2e_app.sh scripts/e2e_build_server.sh scripts/e2e_build_server_test.sh scripts/ci_agent_image.sh scripts/ci_browser_shard.sh scripts/ensure_fixture_image.sh
+  - |-
+    (
+    export DURPDEPLOY_CONTAINER_RUNTIME=docker
+    bash scripts/e2e_parallel_test.sh
+    )
+  - |-
+    (
+    export DURPDEPLOY_RUNBOOK_BROWSER_E2E=1
+    bash ./scripts/e2e_server_containers.sh
+    )

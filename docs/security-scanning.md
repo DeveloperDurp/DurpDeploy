@@ -1,46 +1,42 @@
 # Security scanning
 
-The Security gates workflow runs on pull requests, main, Mondays at 06:23
-UTC, and manual dispatch. It complements SonarCloud; it does not replace
-the existing test or quality gates. No production credentials are needed.
-The release workflow calls the same scanner workflow for PRs, main pushes,
-all release tags, and manual dispatch. Docker image and Helm chart publication
-require that scan to succeed. Standalone and called scans have separate
-concurrency groups so they cannot cancel each other on the same ref.
-The scanner fixture suite and API-token regression test run only on PRs;
-the production scans still run for every supported event.
+The GitLab pipeline runs security checks for merge requests, main, tags, manual runs, and configured schedules.
+It preserves the existing test and SonarCloud quality gates.
+Security jobs do not need production credentials.
+Image and chart publication require successful source and configuration scans from the same pipeline.
+The scanner fixture suite and API-token regression test run only for merge requests.
+See [GitLab CI](gitlab-ci.md) for schedule, credential, and runner setup.
 
 ## Image verification and publication
 
-Pull requests, main pushes, release tags, and manual runs build Linux AMD64 and ARM64 images on native runners.
+Merge requests, main pushes, release tags, manual runs, and scheduled runs build Linux AMD64 images.
 Each build embeds its software version, source commit, and commit-count build number.
-Trivy scans each exported OCI image layout before GitHub retains the original archive as a workflow artifact.
+Trivy scans each exported OCI image layout before GitLab retains the original archive as a job artifact.
 The image policy blocks fixable HIGH and CRITICAL vulnerabilities and scanner errors.
 The scanner ignores configuration and ignore files from the checkout.
-GitHub retains sanitized reports and CycloneDX SBOMs for seven days, including reports from blocked image scans.
+GitLab retains sanitized reports and CycloneDX SBOMs for seven days, including reports from blocked image scans.
 Reports identify the checkout commit, OCI manifest digests, scanner version, and vulnerability database version and timestamps.
-The `Image verification` check requires both image scans, Go tests, E2E tests, and source security checks.
+The `image-verification` job requires the AMD64 image scan, Go tests, E2E tests, and source security checks.
 
-After merge, publication verifies artifacts from the matching successful pull-request run.
-It checks each PR image job's attempt, archive digests, source tree, merge parents, and platform metadata.
+After merge, publication verifies artifacts from the latest matching successful merge request pipeline.
+It checks the latest job identifiers, archive digests, source tree, source references, and platform metadata.
 Squash merges can have different commit identifiers but must have the same source tree.
 Publication then verifies the current run's scanned archives, including version, build number, commit, platform, and image labels.
 The publisher uses these scanned platform manifests without rebuilding or rescanning.
 Helm publication requires successful image publication.
 
-Partial reruns reuse verified artifacts for unchanged image jobs.
-GitHub can copy completed job records into new attempts.
-Publication matches copied records to their original execution.
+Partial retries reuse verified artifacts for unchanged image jobs.
+Publication rejects artifacts that name an older image job after that job is retried.
 
-GitHub retains image artifacts for 30 days.
+GitLab retains successful image artifacts for 30 days.
 Missing, expired, failed, or mismatched artifacts stop publication.
 If artifacts expire, the original commit cannot use this promotion path.
-Create a new pull request for a new verified release revision.
-Commits without matching pull-request artifacts cannot use this publication path.
+Create a new merge request for a new verified release revision.
+Commits without matching merge request artifacts cannot use this publication path.
 This includes releases built before this workflow was introduced.
 
 Image publishing jobs share one queue.
-Separate release runs keep their own workflow and source-scan concurrency groups.
+Each pipeline retains its own source-scan jobs and artifacts.
 Version tags cannot replace different images.
 An older or unrelated source revision cannot replace `latest`.
 
@@ -52,13 +48,13 @@ The published image index identifies the final merged revision.
 
 ## Container and deployment scanning
 
-The release workflow scans both production image architectures before retaining promotion archives.
-Image evidence uses separate artifacts named `image-evidence-<architecture>-<attempt>`.
+The image job scans the AMD64 production image before retaining promotion archives.
+Sanitized image evidence is stored in `artifacts/image-evidence/`.
 Failed scans cannot retain promotion archives or publish images.
 Scanner failures leave an `incomplete` report when the scan runner starts.
 Missing artifacts also indicate missing evidence.
 
-The Security gates workflow scans the Dockerfile and Kubernetes resources rendered from the Helm chart.
+The `container-security` job scans the Dockerfile and Kubernetes resources rendered from the Helm chart.
 The renderer uses synthetic defaults and references external Secrets.
 It does not load operator values, cluster configuration, environment files, or live credentials.
 Reports retain check identifiers, severity, and status.
@@ -77,7 +73,7 @@ The production image scan covers OS packages and Go binary dependencies.
 Bundled JavaScript does not expose a reliable lockfile inventory inside the runtime image.
 The separate lockfile scan covers that gap without installing or executing scanned packages.
 
-Standalone scheduled and manual Security gates runs rebuild and scan both production image architectures with current vulnerability data.
+Scheduled and manual security checks rebuild and scan the Linux AMD64 production image with current vulnerability data.
 These builds use the selected checkout and the production Dockerfile.
 They do not publish images or change infrastructure.
 They evaluate fresh builds rather than the bytes of an existing registry tag.
@@ -140,9 +136,9 @@ They do not execute fixture workloads or publish images.
 Fault injection verifies image policy, SBOM retention, report sanitization, missing inventories, database metadata failures, and malformed outputs.
 Go CI contract tests verify publication barriers, bounded jobs, evidence separation, and scheduled scan wiring.
 
-After the new workflow reports successfully, add `Image verification` to main's required GitHub Actions checks.
-Preserve the existing required checks and administrator enforcement.
-Update other open pull requests from main before merging them.
+After the first successful GitLab merge request pipeline, enable **Pipelines must succeed**.
+Preserve branch protection and administrator enforcement.
+Update other open merge requests from main before merging them.
 
 Run the artifact and isolated registry checks with:
 
@@ -151,7 +147,7 @@ DURPDEPLOY_CONTAINER_RUNTIME=podman bash scripts/release_images_test.sh
 bash scripts/go_test.sh -race -count=1 ./internal/cicontract
 ```
 
-The shell suite requires Git, jq, ZIP tools, Skopeo, curl, and Docker or Podman.
+The shell suite requires Git, jq, Skopeo, curl, and Docker or Podman.
 It uses disposable source repositories, synthetic images, and a loopback-only registry.
 The Podman path runs the Docker CLI in a pinned disposable container.
 Both paths remove their registry container when the suite exits.
@@ -184,10 +180,10 @@ Pins: govulncheck 1.8.0, gosec 2.29.0, Gitleaks 8.30.1.
   scans test sources as well as application sources. Compile/load errors, empty analysis, and
   invalid reports fail.
 - Gitleaks fails on credentials in the current source tree or Git history.
-  PRs scan base SHA..head SHA plus the merge checkout's source tree. Main,
+  Merge requests scan base SHA..head SHA and the pipeline checkout source tree. Main,
   scheduled, manual, and default local scans inspect all available history.
   Checkout fetches full history. Ignored binaries, databases, and reports
-  are not source inputs. To reproduce a PR range locally, export
+  are not source inputs. To reproduce a merge request range locally, export
   `SECURITY_GIT_RANGE=<40-character-base-SHA>..<40-character-head-SHA>`.
 - Scanner errors, absent tools, unavailable vulnerability databases, and
   malformed reports fail rather than produce a clean result.

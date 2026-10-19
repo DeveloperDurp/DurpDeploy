@@ -20,7 +20,7 @@ func TestDeploymentMobileBrowserE2E(t *testing.T) {
 	script := "echo " + strings.Repeat("deployment-output", 12)
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name": name, "script_body": script,
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	var release db.Release
 	decodeStepLogTest(t, f.api(t, "POST", f.base()+"/releases",

@@ -30,7 +30,7 @@ func TestRunbookAPI_CancelAcknowledgesRequestBeforeTerminalState(t *testing.T) {
 		repository.RunbookSave{
 			ProjectID: project.ID,
 			Name:      "long-running",
-			StepsJSON: `[{"name":"wait","script_body":"sleep 30","interpreter":"bash","container_image":"alpine:3.20"}]`,
+			StepsJSON: `[{"name":"wait","script_body":"sleep 30","interpreter":"bash","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]`,
 		})
 	if err != nil {
 		t.Fatal(err)

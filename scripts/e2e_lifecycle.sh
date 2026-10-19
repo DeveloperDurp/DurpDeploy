@@ -33,9 +33,9 @@ trap 'exit 143' INT TERM
 
 ADMIN_EMAIL="${DURPDEPLOY_ADMIN_EMAIL:-e2e-admin@test.local}"
 ADMIN_PASS="${DURPDEPLOY_ADMIN_PASSWORD:-e2e-admin-password-1234}"
-BASH_IMAGE=docker.io/library/bash:5.2
-PYTHON_IMAGE=docker.io/library/python:3.12-alpine
-PWSH_IMAGE=mcr.microsoft.com/powershell:latest
+BASH_IMAGE=harbor.durp.info/dockerhub/library/bash:5.2
+PYTHON_IMAGE=harbor.durp.info/dockerhub/library/python:3.12-alpine
+PWSH_IMAGE=harbor.durp.info/microsoft/powershell:latest
 CONTROL_PLANE_PORT=${DURPDEPLOY_E2E_CONTROL_PLANE_PORT:-$PORT}
 
 if [[ "$CLIENT_ONLY" == "1" ]]; then
@@ -77,11 +77,32 @@ else
         echo "ERROR: openssl not found." >&2
         exit 1
     fi
+
+    # Resolve cold images before deployment execution deadlines start.
+    e2e_runtime=${DURPDEPLOY_CONTAINER_RUNTIME:-}
+    if [[ -z $e2e_runtime ]]; then
+        for e2e_runtime in docker podman; do
+            command -v "$e2e_runtime" >/dev/null 2>&1 && \
+                "$e2e_runtime" info >/dev/null 2>&1 && break
+        done
+    fi
+    export DURPDEPLOY_CONTAINER_RUNTIME=$e2e_runtime
+    e2e_engine=("$e2e_runtime")
+    if [[ -n ${DURPDEPLOY_CONTAINER_URL:-} ]]; then
+        if [[ $e2e_runtime == podman ]]; then
+            e2e_engine+=(--remote "--url=$DURPDEPLOY_CONTAINER_URL")
+        else
+            e2e_engine+=("--host=$DURPDEPLOY_CONTAINER_URL")
+        fi
+    fi
+    for e2e_image in "$BASH_IMAGE" "$PYTHON_IMAGE" "$PWSH_IMAGE"; do
+        bash "$ROOT_DIR/scripts/ensure_fixture_image.sh" "$e2e_image" "${e2e_engine[@]}"
+    done
     DURPDEPLOY_SECRET_KEY=$(openssl rand -base64 32)
     export DURPDEPLOY_SECRET_KEY
 
     echo "=== Building and starting server ==="
-    bash scripts/build_server.sh -o "$TMP/durpdeploy"
+    bash scripts/e2e_build_server.sh "$TMP/durpdeploy"
 
     # Seed the first admin user via the CLI. The CLI runs migrations on its
     # own, so the server's startup migration is a no-op. This mirrors the

@@ -27,7 +27,7 @@ func TestStepWebCreateLocalSucceedsWithImage(t *testing.T) {
 		"script_body":      {"Write-Output 'hi'"},
 		"interpreter":      {"powershell"},
 		"execution_target": {"local"},
-		"container_image":  {"mcr.microsoft.com/powershell:latest"},
+		"container_image":  {"harbor.durp.info/microsoft/powershell:latest"},
 		"variable_names":   {"DEPLOY_ENV, API_KEY"},
 		"csrf_token":       {h.csrfToken()},
 	}
@@ -56,9 +56,9 @@ func TestStepWebCreateLocalSucceedsWithImage(t *testing.T) {
 	if steps[0].Interpreter != "pwsh" {
 		t.Fatalf("interpreter=%q, want pwsh", steps[0].Interpreter)
 	}
-	if steps[0].ContainerImage != "mcr.microsoft.com/powershell:latest" {
+	if steps[0].ContainerImage != "harbor.durp.info/microsoft/powershell:latest" {
 		t.Fatalf(
-			"container_image=%q, want mcr.microsoft.com/powershell:latest",
+			"container_image=%q, want harbor.durp.info/microsoft/powershell:latest",
 			steps[0].ContainerImage,
 		)
 	}
@@ -126,7 +126,7 @@ func TestStepWebCreateAgentRejectsContainerImage(t *testing.T) {
 		"interpreter":      {"bash"},
 		"execution_target": {"agent"},
 		"agent_label":      {""},
-		"container_image":  {"alpine:3.20"},
+		"container_image":  {"harbor.durp.info/dockerhub/library/alpine:3.20"},
 		"variable_names":   {"DEPLOY_ENV"},
 		"csrf_token":       {h.csrfToken()},
 	}
@@ -278,9 +278,11 @@ func TestStepWebCreateRejectsInvalidVariableNames(t *testing.T) {
 				"script_body":      {"echo hi"},
 				"interpreter":      {"bash"},
 				"execution_target": {"local"},
-				"container_image":  {"alpine:3.20"},
-				"variable_names":   {tc.names},
-				"csrf_token":       {h.csrfToken()},
+				"container_image": {
+					"harbor.durp.info/dockerhub/library/alpine:3.20",
+				},
+				"variable_names": {tc.names},
+				"csrf_token":     {h.csrfToken()},
 			}
 			response, err := h.authedClient().PostForm(
 				fmt.Sprintf(
@@ -339,7 +341,7 @@ func TestStepWebLegacyLocalUpdateRejected(t *testing.T) {
 		"script_body":      {"hostname"},
 		"interpreter":      {"bash"},
 		"execution_target": {"local"},
-		"container_image":  {"alpine:3.20"},
+		"container_image":  {"harbor.durp.info/dockerhub/library/alpine:3.20"},
 		"variable_names":   {""},
 		"csrf_token":       {h.csrfToken()},
 	}

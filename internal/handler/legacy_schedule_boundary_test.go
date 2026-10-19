@@ -38,7 +38,7 @@ func TestWebRefreshRejectsHistoricalReleaseAfterStepRecreation(t *testing.T) {
 			ProjectID:      project.ID,
 			Name:           "new",
 			ScriptBody:     "true",
-			ContainerImage: "alpine:3.20",
+			ContainerImage: "harbor.durp.info/dockerhub/library/alpine:3.20",
 		},
 		"local",
 		nil,

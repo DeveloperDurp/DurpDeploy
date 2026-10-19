@@ -24,7 +24,7 @@ func TestReleaseDeferredPackageAPIWebE2E(t *testing.T) {
 	f.api(t, "POST", base+"/steps", map[string]any{
 		"name":            "with-package",
 		"script_body":     `printf step-executed; test -f "$ARTIFACT_PATH/app.txt"; test "$SNAPSHOT" = saved`,
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	f.api(t, "POST", base+"/variables", map[string]string{
 		"name": "SNAPSHOT", "value": "saved",

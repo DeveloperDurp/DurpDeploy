@@ -49,7 +49,7 @@ func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 	created := request(
 		http.MethodPost,
 		base+"/runbooks",
-		`{"name":"maintenance","steps":[{"name":"check","script_body":"printf 'version one\\n'","container_image":"alpine:3.20"}]}`,
+		`{"name":"maintenance","steps":[{"name":"check","script_body":"printf 'version one\\n'","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]}`,
 	)
 	if created.Code != http.StatusCreated {
 		t.Fatalf(
@@ -72,7 +72,7 @@ func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 	updated := request(
 		http.MethodPut,
 		fmt.Sprintf("%s/runbooks/%d", base, saved.Runbook.ID),
-		`{"steps":[{"name":"check","script_body":"printf 'version two\\n'","container_image":"alpine:3.20"}]}`,
+		`{"steps":[{"name":"check","script_body":"printf 'version two\\n'","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]}`,
 	)
 	if updated.Code != http.StatusCreated {
 		t.Fatalf(
@@ -247,7 +247,7 @@ func TestRunbookAPI_ProjectDeleteAfterVersion(t *testing.T) {
 	created := request(
 		http.MethodPost,
 		base+"/runbooks",
-		`{"name":"maintenance","steps":[{"name":"check","script_body":"true","container_image":"alpine:3.20"}]}`,
+		`{"name":"maintenance","steps":[{"name":"check","script_body":"true","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]}`,
 	)
 	if created.Code != http.StatusCreated {
 		t.Fatalf(
@@ -292,7 +292,7 @@ func TestRunbookAPI_ProjectDeleteAfterVersion(t *testing.T) {
 	updated := request(
 		http.MethodPut,
 		fmt.Sprintf("%s/runbooks/%d", base, saved.Runbook.ID),
-		`{"steps":[{"name":"wait","script_body":"exec sleep 10","container_image":"alpine:3.20"}]}`,
+		`{"steps":[{"name":"wait","script_body":"exec sleep 10","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]}`,
 	)
 	if updated.Code != http.StatusCreated {
 		t.Fatalf("update status=%d body=%s", updated.Code,

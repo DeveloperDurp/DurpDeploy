@@ -43,11 +43,14 @@ func provisionLifecycleEngine(t *testing.T, name string) lifecycleEngine {
 	case "PostgreSQL":
 		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 		defer cancel()
-		container, err := postgres.Run(ctx, "postgres:16-alpine",
+		container, err := postgres.Run(
+			ctx,
+			"harbor.durp.info/dockerhub/library/postgres:16-alpine",
 			postgres.WithDatabase("lifecycle"),
 			postgres.WithUsername("lifecycle"),
 			postgres.WithPassword("fixture-only"),
-			postgres.BasicWaitStrategies())
+			postgres.BasicWaitStrategies(),
+		)
 		testutil.CleanupContainer(t, container)
 		if err != nil {
 			t.Fatalf("start required PostgreSQL backend: %v", err)
@@ -73,7 +76,7 @@ func provisionSQLServerLifecycleEngine(t *testing.T) lifecycleEngine {
 	container, err := testcontainers.GenericContainer(ctx,
 		testcontainers.GenericContainerRequest{
 			ContainerRequest: testcontainers.ContainerRequest{
-				Image:        "mcr.microsoft.com/mssql/server:2022-latest",
+				Image:        "harbor.durp.info/microsoft/mssql/server:2022-latest",
 				ExposedPorts: []string{"1433/tcp"},
 				Env: map[string]string{
 					"ACCEPT_EULA": "Y", "MSSQL_SA_PASSWORD": password,

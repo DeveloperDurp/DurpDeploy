@@ -75,7 +75,7 @@ test "$(wc -c < "$DURPDEPLOY_STAGE_DIR/package-copy")" -eq 7
 				"name":            name,
 				"script_body":     script + handoffScript,
 				"interpreter":     "bash",
-				"container_image": "docker.io/library/bash:5.2",
+				"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 				"variable_names":  []string{"LIMITED"},
 			},
 			201,

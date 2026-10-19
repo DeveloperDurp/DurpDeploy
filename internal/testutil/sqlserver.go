@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"durpdeploy/internal/mssqldriver"
-
+	// Register the native driver for fixture readiness checks.
+	_ "github.com/microsoft/go-mssqldb"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/testcontainers/testcontainers-go"
@@ -27,7 +27,7 @@ func SQLServerDSN(t *testing.T) string {
 	t.Helper()
 	_, dsn := SQLServerContainer(
 		t,
-		"mcr.microsoft.com/mssql/server:2022-latest",
+		"harbor.durp.info/microsoft/mssql/server:2022-latest",
 	)
 	return dsn
 }
@@ -78,7 +78,7 @@ func SQLServerContainer(
 		Scheme: "sqlserver", User: url.UserPassword("sa", password),
 		Host: net.JoinHostPort(host, port.Port()),
 	}).String() + "?database=master&encrypt=false&trustservercertificate=true"
-	probe, err := sql.Open(mssqldriver.DriverName, dsn)
+	probe, err := sql.Open("sqlserver", dsn)
 	if err != nil {
 		t.Fatal(err)
 	}

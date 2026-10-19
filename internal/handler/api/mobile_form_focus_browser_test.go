@@ -12,14 +12,14 @@ func TestMobileFormFocusBrowserE2E(t *testing.T) {
 	project := fmt.Sprintf("/projects/%d", f.project.ID)
 	f.api(t, "POST", "/api/v1"+project+"/steps", map[string]string{
 		"name": "focus-step", "script_body": "echo focus",
-		"container_image": "alpine:3.20",
+		"container_image": "harbor.durp.info/dockerhub/library/alpine:3.20",
 	}, 201)
 	var book struct{ Runbook struct{ ID int64 } }
 	decodeStepLogTest(t, f.api(t, "POST", "/api/v1"+project+"/runbooks",
 		map[string]any{
 			"name": "focus-runbook", "steps": []map[string]string{{
 				"name": "focus", "script_body": "echo focus",
-				"container_image": "alpine:3.20",
+				"container_image": "harbor.durp.info/dockerhub/library/alpine:3.20",
 			}},
 		}, 201), &book)
 	b := startPackageBrowser(t)

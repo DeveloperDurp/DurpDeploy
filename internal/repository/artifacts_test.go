@@ -96,7 +96,7 @@ func newArtifactFixture(t *testing.T) artifactFixture {
 			ProjectID:      project.ID,
 			Name:           "check",
 			ScriptBody:     "true",
-			ContainerImage: "alpine:3.21",
+			ContainerImage: "harbor.durp.info/dockerhub/library/alpine:3.21",
 			VariableNames:  "[]",
 		},
 	); err != nil {

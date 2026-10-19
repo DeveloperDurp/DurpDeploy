@@ -4,13 +4,13 @@ BINARY_NAME=durpdeploy
 MAIN_PATH=./cmd/server
 GOLANGCI_LINT_VERSION=2.11.3
 DEV_POSTGRES_CONTAINER ?= durpdeploy-dev-postgres
-DEV_POSTGRES_IMAGE ?= postgres:16-alpine
+DEV_POSTGRES_IMAGE ?= harbor.durp.info/dockerhub/library/postgres:16-alpine
 DEV_MSSQL_CONTAINER ?= durpdeploy-dev-mssql
-DEV_MSSQL_IMAGE ?= mcr.microsoft.com/mssql/server:2022-latest
+DEV_MSSQL_IMAGE ?= harbor.durp.info/microsoft/mssql/server:2022-latest
 DEV_AGENT_CONTAINER ?= durpdeploy-dev-agent
 # Keep the published image pin separate from agent module revisions under review.
 # Update this pin after the matching agent image is published.
-DEV_AGENT_IMAGE ?= ghcr.io/developerdurp/durpdeploy-agent:4110429
+DEV_AGENT_IMAGE ?= harbor.durp.info/github/developerdurp/durpdeploy-agent:4110429
 DEV_AGENT_PORT ?= 23188
 DEV_AGENT_STATE_VOLUME ?= $(DEV_AGENT_CONTAINER)-state
 DEV_AGENT_RUNTIME_SOCKET ?=
@@ -359,9 +359,9 @@ verify: lint golines-check templ-generate swagger-ui-copy e2e-test-isolated go-t
 	go vet ./...
 	bash scripts/go_test.sh -count=1 -timeout=20m ./...
 
-# Read unresolved SonarCloud findings for a pull request. Requires SONAR_TOKEN.
+# Read unresolved SonarCloud findings for a merge request. Requires SONAR_TOKEN.
 sonar-issues:
-	./scripts/sonar_issues.sh $(PR)
+	./scripts/sonar_issues.sh $(MR)
 
 # Task-local binaries; Go's checksum database verifies pinned modules.
 .PHONY: security-tools security-scan security-scan-test trivy-tools container-scan-test

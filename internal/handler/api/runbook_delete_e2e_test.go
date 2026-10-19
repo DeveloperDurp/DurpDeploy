@@ -34,7 +34,7 @@ func checkRunbookDeletionHistory(t *testing.T, transport string) {
 		"name": "obsolete", "artifact_release_id": release.ID,
 		"steps": []map[string]string{{"name": "read",
 			"script_body":     "printf retained-runbook-output",
-			"container_image": "docker.io/library/bash:5.2"}},
+			"container_image": "harbor.durp.info/dockerhub/library/bash:5.2"}},
 	}, http.StatusCreated)
 	var saved deletionRunbook
 	if err := json.Unmarshal(body, &saved); err != nil {
@@ -45,7 +45,7 @@ func checkRunbookDeletionHistory(t *testing.T, transport string) {
 	f.api(t, "PUT", path, map[string]any{
 		"artifact_release_id": release.ID,
 		"steps": []map[string]string{{"name": "new",
-			"script_body": "printf newer", "container_image": "docker.io/library/bash:5.2"}},
+			"script_body": "printf newer", "container_image": "harbor.durp.info/dockerhub/library/bash:5.2"}},
 	}, http.StatusCreated)
 	var execution db.RunbookExecution
 	if err := json.Unmarshal(f.api(t, "POST", path+"/executions",

@@ -176,6 +176,9 @@ func webauthnOfficialVectorSourcePath(t *testing.T) string {
 		"github.com/go-webauthn/webauthn",
 	).Output()
 	if err != nil {
+		if failure, ok := err.(*exec.ExitError); ok {
+			t.Fatalf("resolve WebAuthn module: %v\n%s", err, failure.Stderr)
+		}
 		t.Fatalf("resolve WebAuthn module: %v", err)
 	}
 	return filepath.Join(

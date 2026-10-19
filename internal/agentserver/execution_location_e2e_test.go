@@ -56,10 +56,10 @@ func TestExecutionLocationAPIWebE2E(t *testing.T) {
 	}
 	base := fmt.Sprintf("/projects/%d", project.ID)
 	for _, step := range []map[string]any{
-		{"name": "Server retry", "script_body": `if [ ! -e "$DURPDEPLOY_STAGE_DIR/once" ]; then touch "$DURPDEPLOY_STAGE_DIR/once"; exit 1; fi; echo server-output`, "container_image": "docker.io/library/bash:5.2", "max_retries": 1},
+		{"name": "Server retry", "script_body": `if [ ! -e "$DURPDEPLOY_STAGE_DIR/once" ]; then touch "$DURPDEPLOY_STAGE_DIR/once"; exit 1; fi; echo server-output`, "container_image": "harbor.durp.info/dockerhub/library/bash:5.2", "max_retries": 1},
 		{"name": "Agent shell", "script_body": "echo host-output", "execution_target": "agent", "agent_execution_mode": "host", "agent_selectors": []string{"test-agent"}},
-		{"name": "Agent container", "script_body": "echo container-output", "execution_target": "agent", "agent_execution_mode": "container", "agent_selectors": []string{"second-agent"}, "container_image": "docker.io/library/bash:5.2"},
-		{"name": "Fan-out", "script_body": "echo fanout-output", "execution_target": "agent", "agent_execution_mode": "container", "agent_selectors": []string{"execution-location"}, "container_image": "docker.io/library/bash:5.2"},
+		{"name": "Agent container", "script_body": "echo container-output", "execution_target": "agent", "agent_execution_mode": "container", "agent_selectors": []string{"second-agent"}, "container_image": "harbor.durp.info/dockerhub/library/bash:5.2"},
+		{"name": "Fan-out", "script_body": "echo fanout-output", "execution_target": "agent", "agent_execution_mode": "container", "agent_selectors": []string{"execution-location"}, "container_image": "harbor.durp.info/dockerhub/library/bash:5.2"},
 	} {
 		s.api(t, "POST", base+"/steps", step, 201)
 	}
@@ -75,7 +75,7 @@ func TestExecutionLocationAPIWebE2E(t *testing.T) {
 	s.wait(t, deployment.ID, "succeeded")
 	rawImage, err := exec.CommandContext(t.Context(), "podman", "--remote",
 		"--url="+os.Getenv("AGENT_TEST_SOCKET"), "image", "inspect",
-		"docker.io/library/bash:5.2", "--format", "{{.Id}}",
+		"harbor.durp.info/dockerhub/library/bash:5.2", "--format", "{{.Id}}",
 	).Output()
 	if err != nil {
 		t.Fatal(err)
@@ -111,7 +111,7 @@ func TestExecutionLocationAPIWebE2E(t *testing.T) {
 		mode := "mode=container"
 		expectedImage := image
 		if index == 0 {
-			expectedImage = "docker.io/library/bash:5.2"
+			expectedImage = "harbor.durp.info/dockerhub/library/bash:5.2"
 		}
 		if index == 1 {
 			mode = "mode=host/shell"

@@ -42,7 +42,7 @@ func TestDeploymentStagingPackageAgentOnlyAPIE2E(t *testing.T) {
 			"execution_target":     "agent",
 			"agent_execution_mode": "container",
 			"agent_selectors":      []string{"second-agent"},
-			"container_image":      "docker.io/library/bash:5.2",
+			"container_image":      "harbor.durp.info/dockerhub/library/bash:5.2",
 			"variable_names":       []string{"SELECTED"},
 			"script_body":          `set -eu; test "$SELECTED" = selected; test "${UNRELATED-unset}" = unset; test "$(cat "$DURPDEPLOY_STAGE_DIR/output")" = package; test "$(cat "$ARTIFACT_PATH/package.txt")" = package; ! touch "$ARTIFACT_PATH/write"; echo package-agent-only-ok`,
 		},

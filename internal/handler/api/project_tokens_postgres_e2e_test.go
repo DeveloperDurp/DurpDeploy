@@ -20,11 +20,14 @@ import (
 )
 
 func TestProjectTokensPostgresSerializationAPIE2E(t *testing.T) {
-	container, err := postgres.Run(t.Context(), "postgres:16-alpine",
+	container, err := postgres.Run(
+		t.Context(),
+		"harbor.durp.info/dockerhub/library/postgres:16-alpine",
 		postgres.WithDatabase("durpdeploy"),
 		postgres.WithUsername("durpdeploy"),
 		postgres.WithPassword("postgres"),
-		postgres.BasicWaitStrategies())
+		postgres.BasicWaitStrategies(),
+	)
 	testutil.CleanupContainer(t, container)
 	if err != nil {
 		t.Fatal(err)

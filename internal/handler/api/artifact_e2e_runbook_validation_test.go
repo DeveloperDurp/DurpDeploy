@@ -21,7 +21,7 @@ func (f *artifactE2E) verifyRunbookArtifactValidation(
 	unpinned := seedRelease(t, f.h.repo, f.project.ID)
 	steps := []map[string]string{{
 		"name": "check", "script_body": "true", "interpreter": "bash",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}}
 	path := fmt.Sprintf("%s/runbooks/%d", f.base(), runbookID)
 	for _, test := range []struct {
@@ -120,7 +120,7 @@ func (f *artifactE2E) seedForeignPinnedRelease(
 	}, 200)
 	f.api(t, "POST", base+"/steps", map[string]string{
 		"name": "check", "script_body": "true", "interpreter": "bash",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	body := f.api(
 		t,

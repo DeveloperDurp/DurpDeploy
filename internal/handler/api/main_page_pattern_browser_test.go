@@ -15,7 +15,7 @@ func TestMainPagePatternBrowserE2E(t *testing.T) {
 	decodeStepLogTest(t, f.api(t, "POST", "/api/v1/templates",
 		map[string]string{
 			"name": "consistent-template", "script_body": "echo hi",
-			"interpreter": "bash", "container_image": "alpine:3.20",
+			"interpreter": "bash", "container_image": "harbor.durp.info/dockerhub/library/alpine:3.20",
 			"execution_target": "local",
 		}, 201), &template)
 	decodeStepLogTest(t, f.api(t, "POST", "/api/v1/lifecycles",

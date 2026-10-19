@@ -51,7 +51,7 @@ echo applied-large-bundle`
 	}
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name":                   "Generate",
-		"container_image":        "docker.io/library/bash:5.2",
+		"container_image":        "harbor.durp.info/dockerhub/library/bash:5.2",
 		"approval_artifact_path": "tfplan",
 		"approval_review_path":   "review.json",
 		"approval_review_format": "terraform",
@@ -59,7 +59,7 @@ echo applied-large-bundle`
 	}, 201)
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name":            "Apply",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 		"script_body":     apply,
 	}, 201)
 	// When: the public API starts generation and reads the saved review.

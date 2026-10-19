@@ -21,7 +21,7 @@ func TestScheduledOccurrenceSingleDeploymentAPIWebE2E(t *testing.T) {
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name": "scheduled-step", "script_body": "echo schedule",
 		"interpreter": "bash", "execution_target": "local",
-		"container_image": "alpine:3.23",
+		"container_image": "harbor.durp.info/dockerhub/library/alpine:3.23",
 	}, 201)
 	var release db.Release
 	if err := json.Unmarshal(f.api(t, "POST", f.base()+"/releases",

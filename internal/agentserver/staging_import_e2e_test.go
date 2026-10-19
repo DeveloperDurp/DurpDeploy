@@ -75,7 +75,7 @@ exec "$STAGING_TEST_RUNTIME" "$@"
 		"name":             "consumer",
 		"script_body":      `cat "$DURPDEPLOY_STAGE_DIR/data"`,
 		"execution_target": "local",
-		"container_image":  "docker.io/library/bash:5.2",
+		"container_image":  "harbor.durp.info/dockerhub/library/bash:5.2",
 		"interpreter":      "bash",
 	}, 201)
 	release := decode(

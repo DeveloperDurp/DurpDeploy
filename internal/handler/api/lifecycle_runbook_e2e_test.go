@@ -48,7 +48,7 @@ printf 'snapshot=%s secret=%s\n' "$REGION" "$TOKEN"`
 		{
 			"name":            "shared",
 			"script_body":     script,
-			"container_image": "docker.io/library/bash:5.2",
+			"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 		},
 	}
 	var first, second struct {
@@ -106,7 +106,7 @@ printf 'snapshot=%s secret=%s\n' "$REGION" "$TOKEN"`
 		url.Values{
 			"step_name": {"shared"}, "step_script": {script},
 			"step_interpreter": {"bash"}, "step_target": {"local"},
-			"step_image":   {"docker.io/library/bash:5.2"},
+			"step_image":   {"harbor.durp.info/dockerhub/library/bash:5.2"},
 			"step_timeout": {"0"}, "step_retries": {"0"},
 			"step_selectors": {""}, "step_variable_names": {""},
 		},

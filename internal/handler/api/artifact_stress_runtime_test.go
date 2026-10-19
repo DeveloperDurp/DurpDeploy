@@ -115,7 +115,7 @@ func (p *artifactProcessFixture) unrelatedResources(
 		"--memory=32m",
 		"--pids-limit=8",
 		"--entrypoint=/bin/sh",
-		"docker.io/library/bash:5.2",
+		"harbor.durp.info/dockerhub/library/bash:5.2",
 		"-c",
 		"exec sleep 600",
 	)

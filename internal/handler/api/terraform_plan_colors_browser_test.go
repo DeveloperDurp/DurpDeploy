@@ -15,7 +15,7 @@ func TestTerraformPlanColorsBrowserE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	f.api(t, "POST", f.base()+"/steps", map[string]any{
 		"name":                   "Terraform plan",
-		"container_image":        "docker.io/library/bash:5.2",
+		"container_image":        "harbor.durp.info/dockerhub/library/bash:5.2",
 		"approval_artifact_path": "tfplan",
 		"approval_review_path":   "review.json",
 		"approval_review_format": "terraform",
@@ -28,7 +28,7 @@ printf '%s' '{"format_version":"1.2","resource_changes":[{"address":"example.add
 	}, 201)
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name": "Terraform apply", "script_body": "true",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	release := verificationRelease(t, f, "plan-colors")
 	b := startPackageBrowser(t)

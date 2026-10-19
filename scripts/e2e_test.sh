@@ -1629,7 +1629,12 @@ for i in {1..200}; do
     [[ "$API_DEP_STATUS" == "cancelled" ]] && break
     sleep 0.1
 done
-[[ "$API_DEP_STATUS" == "cancelled" ]] || { echo "FAIL: deployment did not cancel, status=$API_DEP_STATUS"; exit 1; }
+[[ "$API_DEP_STATUS" == "cancelled" ]] || {
+    echo "FAIL: deployment did not cancel, status=$API_DEP_STATUS"
+    api_get --max-time 10 "$BASE/api/v1/deployments/$API_DEP_ID/logs.txt" |
+        tail -c 32768 >&2 || true
+    exit 1
+}
 echo "  Deployment cancelled: OK"
 
 # A8: Log streaming (ndjson). Use a fresh step + release + deployment so we can

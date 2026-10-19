@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
+	"io"
 
 	"github.com/microsoft/go-mssqldb"
 )
@@ -19,11 +21,11 @@ type wrappedDriver struct {
 }
 
 func (d wrappedDriver) Open(name string) (driver.Conn, error) {
-	conn, err := d.driver().Open(name)
+	connector, err := d.OpenConnector(name)
 	if err != nil {
 		return nil, err
 	}
-	return &wrappedConn{Conn: conn}, nil
+	return connector.Connect(context.Background())
 }
 
 func (d wrappedDriver) OpenConnector(name string) (driver.Connector, error) {
@@ -33,7 +35,7 @@ func (d wrappedDriver) OpenConnector(name string) (driver.Connector, error) {
 		if err != nil {
 			return nil, err
 		}
-		return wrappedConnector{connector: connector, driver: d}, nil
+		return wrappedConnector{connector: connector, driver: d, dsn: name}, nil
 	}
 	return wrappedConnector{
 		connector: driverConnector{driver: upstream, name: name},
@@ -51,14 +53,22 @@ func (d wrappedDriver) driver() driver.Driver {
 type wrappedConnector struct {
 	connector driver.Connector
 	driver    driver.Driver
+	dsn       string
 }
 
 func (c wrappedConnector) Connect(ctx context.Context) (driver.Conn, error) {
-	conn, err := c.connector.Connect(ctx)
+	connector, transport, err := trackConnector(c.connector, c.dsn)
 	if err != nil {
 		return nil, err
 	}
-	return &wrappedConn{Conn: conn}, nil
+	conn, err := connector.Connect(ctx)
+	if err != nil {
+		if transport != nil {
+			err = errors.Join(err, transport.Close())
+		}
+		return nil, err
+	}
+	return &wrappedConn{Conn: conn, transport: transport}, nil
 }
 
 func (c wrappedConnector) Driver() driver.Driver {
@@ -82,6 +92,21 @@ func (c driverConnector) Driver() driver.Driver {
 // available while the query execution paths are rewritten.
 type wrappedConn struct {
 	driver.Conn
+	transport io.Closer
+	// database/sql serializes transaction completion and validation.
+	unusable bool
+}
+
+func (c *wrappedConn) Close() error {
+	if c.transport == nil {
+		return c.Conn.Close()
+	}
+	if c.unusable {
+		// Native Close recycles its buffer before its reader can finish.
+		// Close the sockets and let this private buffer be garbage collected.
+		return c.transport.Close()
+	}
+	return errors.Join(c.Conn.Close(), c.transport.Close())
 }
 
 func (c *wrappedConn) Prepare(query string) (driver.Stmt, error) {
@@ -142,11 +167,44 @@ func (c *wrappedConn) BeginTx(
 	ctx context.Context,
 	opts driver.TxOptions,
 ) (driver.Tx, error) {
+	var tx driver.Tx
+	var err error
 	if b, ok := c.Conn.(driver.ConnBeginTx); ok {
-		return b.BeginTx(ctx, opts)
+		tx, err = b.BeginTx(ctx, opts)
+	} else {
+		//nolint:staticcheck // Required fallback without ConnBeginTx.
+		tx, err = c.Conn.Begin()
 	}
-	//nolint:staticcheck // Required fallback for drivers without ConnBeginTx.
-	return c.Conn.Begin()
+	if err != nil {
+		c.unusable = true
+		return nil, err
+	}
+	return &wrappedTx{Tx: tx, conn: c}, nil
+}
+
+func (c *wrappedConn) Begin() (driver.Tx, error) {
+	return c.BeginTx(context.Background(), driver.TxOptions{})
+}
+
+type wrappedTx struct {
+	driver.Tx
+	conn *wrappedConn
+}
+
+func (tx *wrappedTx) Commit() error {
+	err := tx.Tx.Commit()
+	if err != nil {
+		tx.conn.unusable = true
+	}
+	return err
+}
+
+func (tx *wrappedTx) Rollback() error {
+	err := tx.Tx.Rollback()
+	if err != nil {
+		tx.conn.unusable = true
+	}
+	return err
 }
 
 func (c *wrappedConn) Ping(ctx context.Context) error {
@@ -171,6 +229,11 @@ func (c *wrappedConn) ResetSession(ctx context.Context) error {
 }
 
 func (c *wrappedConn) IsValid() bool {
+	// A cancelled rollback can return before the upstream reader finishes.
+	// Discard that connection without replacing ambiguous errors with ErrBadConn.
+	if c.unusable {
+		return false
+	}
 	if validator, ok := c.Conn.(driver.Validator); ok {
 		return validator.IsValid()
 	}

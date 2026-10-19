@@ -47,7 +47,8 @@ case "$scanner" in
       '{version: $version, status: "complete", exit_code: $result}' >"$report"
     ;;
   gosec)
-    "$tool_dir/gosec" -nosec=true -tests=false -exclude-generated -fmt=json \
+    "$tool_dir/gosec" -nosec=true -tests=false -exclude-generated \
+      -exclude-dir='\.cache/' -fmt=json \
       -out="$private/raw.json" ./... >"$private/log" 2>&1 || scan_exit=$?
     [[ "$scan_exit" == 0 || "$scan_exit" == 1 ]] || fail 'scanner execution failed'
     jq -se --arg root "$scan_root" -f "$root/.security/gosec-report.jq" \

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"durpdeploy/internal/db"
@@ -21,12 +22,13 @@ type disconnectAfterApprovalDB struct {
 	request      context.Context
 	cancel       context.CancelFunc
 	deploymentID int64
+	enabled      atomic.Bool
 }
 
-func (d disconnectAfterApprovalDB) QueryRowContext(
+func (d *disconnectAfterApprovalDB) QueryRowContext(
 	ctx context.Context, query string, args ...any,
 ) *sql.Row {
-	if ctx == d.request {
+	if d.enabled.Load() && ctx == d.request {
 		var status string
 		if err := d.DB.QueryRow("SELECT status FROM deployments WHERE id=?",
 			d.deploymentID).Scan(&status); err == nil && status == "pending" {
@@ -48,7 +50,10 @@ func (w disconnectedGateResponse) Write(data []byte) (int, error) {
 }
 
 func TestArtifactGateDispatchSurvivesDisconnectE2E(t *testing.T) {
-	f, deployment, gate := newGateDeployment(t)
+	f := newArtifactE2E(t)
+	disconnect := &disconnectAfterApprovalDB{DB: f.h.repo.DB}
+	f.h.repo.Queries = db.New(disconnect)
+	_, deployment, gate := createGateDeployment(t, f)
 	user := seedAPIUser(t, f.h.repo, "disconnect@gate.example", "admin")
 	data, err := json.Marshal(map[string]any{
 		"revision": gate.Revision, "sha256": gate.SHA256,
@@ -63,10 +68,10 @@ func TestArtifactGateDispatchSurvivesDisconnectE2E(t *testing.T) {
 	req = withAPIUser(req, user)
 	req = withAPIURLParam(req, "id", fmt.Sprint(deployment.ID))
 	req = withAPIURLParam(req, "stepIndex", "0")
-	f.h.repo.Queries = db.New(disconnectAfterApprovalDB{
-		DB: f.h.repo.DB, request: req.Context(), cancel: cancel,
-		deploymentID: deployment.ID,
-	})
+	disconnect.request = req.Context()
+	disconnect.cancel = cancel
+	disconnect.deploymentID = deployment.ID
+	disconnect.enabled.Store(true)
 	response := httptest.NewRecorder()
 	handler.NewArtifactGateHandler(f.h.repo, f.h.runner).Approve(
 		disconnectedGateResponse{response, cancel}, req,

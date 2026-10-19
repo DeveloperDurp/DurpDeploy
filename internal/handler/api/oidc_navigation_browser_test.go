@@ -20,7 +20,7 @@ import (
 
 func TestOIDCNavigationBrowserE2E(t *testing.T) {
 	// Start Chromium before the fake runner changes the runtime setting.
-	b := startPackageBrowser(t)
+	b := startPackageBrowser(t, true)
 	f := newArtifactE2E(t, fakePodman(t))
 	// A different-origin callback records whether SSO used a document request.
 	destination := httptest.NewServer(

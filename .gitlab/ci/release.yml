@@ -1,0 +1,99 @@
+version:
+  stage: prepare
+  needs: [ci-runtime]
+  variables:
+    CI_RUNTIME: none
+  script:
+    - mkdir -p artifacts
+    - BUILD_MODIFIED=false bash scripts/build_metadata.sh > artifacts/build.env
+  artifacts:
+    expire_in: 7 days
+    paths: [artifacts/build.env]
+    reports:
+      dotenv: artifacts/build.env
+
+lint:
+  stage: lint
+  needs: [ci-runtime]
+  variables:
+    CI_RUNTIME: none
+  script:
+    - make templ-generate swagger-ui-copy lint
+    - go vet ./...
+    - test -z "$(git ls-files -z '*.go' | xargs -0 gofmt -l)"
+    - make golines-check
+    - hadolint --failure-threshold warning Dockerfile
+
+images:
+  stage: prepare
+  needs: [ci-runtime, version]
+  timeout: 30 minutes
+  script:
+    - bash scripts/ci_image.sh
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths: [artifacts/image-evidence/, artifacts/built-image-amd64/, artifacts/image.env]
+    reports:
+      dotenv: artifacts/image.env
+
+# Keep sanitized failure evidence for seven days and successful images for thirty.
+retain-image:
+  stage: verify
+  needs: [ci-runtime, images]
+  variables:
+    CI_RUNTIME: none
+  script:
+    - test -s artifacts/built-image-amd64/image.tar
+    - test -s artifacts/built-image-amd64/source.json
+  artifacts:
+    when: on_success
+    expire_in: 30 days
+    paths: [artifacts/built-image-amd64/, artifacts/image.env]
+    reports:
+      dotenv: artifacts/image.env
+
+image-verification:
+  stage: verify
+  artifacts:
+    paths: []
+  variables:
+    CI_RUNTIME: none
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  needs:
+    - ci-runtime
+    - retain-image
+    - security-scan
+    - container-security
+    - pre-commit
+    - backup-restore
+    - database-tls
+    - auth-mfa-parity
+    - agent-rollout
+    - package-browser
+    - artifact-stress
+    - mobile-browser
+    - auth-mfa-sqlite
+    - agent-smoke
+    - agent-container-docker
+    - agent-container-podman
+    - test
+    - e2e
+    - coverage
+  script:
+    - printf 'All required merge request checks passed.\n'
+
+publish-images:
+  extends: .publish
+  needs: [ci-runtime, version, lint, security-scan, container-security, retain-image]
+  timeout: 30 minutes
+  script:
+    - bash scripts/ci_publish.sh images
+
+publish-chart:
+  extends: .publish
+  needs: [ci-runtime, version, lint, security-scan, container-security, publish-images]
+  timeout: 30 minutes
+  script:
+    - bash scripts/ci_publish.sh chart

@@ -16,7 +16,7 @@ func TestPermissionRolesExecutionAPIE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name": "approved command", "script_body": "printf approved-role-execution; exit 1",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	release := verificationRelease(t, f, "approved-execution")
 	user := seedAPIUser(

@@ -24,7 +24,9 @@ func TestCleanupContainerRemovesFailedStartup(t *testing.T) {
 	// When: setup skips the test after a startup error.
 	t.Run("startup failure", func(t *testing.T) {
 		var err error
-		container, err = postgres.Run(ctx, "postgres:16-alpine",
+		container, err = postgres.Run(
+			ctx,
+			"harbor.durp.info/dockerhub/library/postgres:16-alpine",
 			postgres.WithPassword("fixture-only"),
 			testcontainers.WithWaitStrategy(wait.ForLog(
 				"deliberately absent readiness marker",
@@ -55,9 +57,12 @@ func TestCleanupContainerRemovesContainerAfterContextCancellation(
 	// Given: a started database and a context canceled before teardown.
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
-	container, err := postgres.Run(ctx, "postgres:16-alpine",
+	container, err := postgres.Run(
+		ctx,
+		"harbor.durp.info/dockerhub/library/postgres:16-alpine",
 		postgres.WithPassword("fixture-only"),
-		postgres.BasicWaitStrategies())
+		postgres.BasicWaitStrategies(),
+	)
 	CleanupContainer(t, container)
 	require.NoError(t, err)
 
@@ -84,4 +89,36 @@ func TestCleanupContainerAcceptsNilHandles(t *testing.T) {
 	CleanupContainer(t, nil)
 	CleanupContainer(t, container)
 	// Then: cleanup completes without dereferencing either nil handle.
+}
+
+func TestCleanupContainerDiscardsFixtureWithoutShutdownGrace(t *testing.T) {
+	testcontainers.SkipIfProviderIsNotHealthy(t)
+	// Given: an owned fixture that ignores graceful termination.
+	container, err := testcontainers.GenericContainer(t.Context(),
+		testcontainers.GenericContainerRequest{
+			ContainerRequest: testcontainers.ContainerRequest{
+				Image: "harbor.durp.info/dockerhub/library/bash:5.2",
+				Cmd: []string{"bash", "-c",
+					"trap '' TERM; echo fixture-ready; exec sleep 300"},
+				WaitingFor: wait.ForLog("fixture-ready"),
+			},
+			Started: true,
+		})
+	CleanupContainer(t, container)
+	require.NoError(t, err)
+
+	// When: assertions finish and cleanup discards the fixture.
+	started := time.Now()
+	t.Run("disposable fixture", func(t *testing.T) {
+		CleanupContainer(t, container)
+	})
+	// Then: removal does not consume the default ten-second grace period.
+	require.Less(t, time.Since(started), 8*time.Second)
+	api, err := testcontainers.NewDockerClientWithOpts(t.Context())
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, api.Close()) })
+	_, err = api.ContainerInspect(t.Context(), container.GetContainerID(),
+		client.ContainerInspectOptions{})
+	require.True(t, errdefs.IsNotFound(err),
+		"disposable fixture survived cleanup: %v", err)
 }

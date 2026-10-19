@@ -109,7 +109,7 @@ func (h *scheduledHarness) makeRelease(
 	h.t.Helper()
 	steps := []map[string]any{
 		{"name": "s1", "script_body": scriptBody, "sort_order": 1,
-			"container_image": "alpine:3.20"},
+			"container_image": "harbor.durp.info/dockerhub/library/alpine:3.20"},
 	}
 	stepsJSON, _ := json.Marshal(steps)
 	r, err := h.repo.Queries.CreateRelease(

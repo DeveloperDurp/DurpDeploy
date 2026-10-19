@@ -1,0 +1,90 @@
+package cicontract
+
+import (
+	"os"
+	"os/exec"
+	"slices"
+	"strings"
+	"testing"
+)
+
+func artifactShardCommand(t *testing.T, shard, inventory string) *exec.Cmd {
+	t.Helper()
+	path := fixtureCommand(t, "bash", `
+[ "$LIST_FAIL" != 1 ] || exit 9
+printf '%s\n' "$TEST_INVENTORY"
+`)
+	cmd := exec.Command("bash", "../../scripts/ci_artifact_tests.sh", shard)
+	cmd.Env = append(os.Environ(), "PATH="+path+":"+os.Getenv("PATH"),
+		"LIST_FAIL=0", "TEST_INVENTORY="+inventory)
+	return cmd
+}
+
+func TestArtifactShardsSelectEveryCompiledTestOnce(t *testing.T) {
+	names := []string{"TestArtifactGateAlphaE2E", "TestArtifactGateBetaE2E",
+		"TestArtifactGateFutureE2E", "TestArtifactGateOtherE2E", "TestArtifactGateÜnicodeE2E"}
+	counts := map[string]int{}
+	for _, shard := range []string{"1", "2"} {
+		inventory := "noise\n" + strings.Join(names, "\n") + "\nok package\n"
+		output, err := artifactShardCommand(
+			t,
+			shard,
+			inventory,
+		).CombinedOutput()
+		if err != nil {
+			t.Fatalf("shard %s: %v: %s", shard, err, output)
+		}
+		for _, name := range strings.Fields(string(output)) {
+			counts[name]++
+		}
+	}
+	if len(counts) != len(names) {
+		t.Fatalf("unexpected inventory: %v", counts)
+	}
+	for _, name := range names {
+		if counts[name] != 1 {
+			t.Fatalf("%s selected %d times", name, counts[name])
+		}
+	}
+}
+
+func TestArtifactShardsRejectFailedOrEmptyInventories(t *testing.T) {
+	for _, fixture := range []struct{ shard, inventory, fail string }{
+		{"unknown", "", "0"}, {"1", "noise", "0"},
+		{"2", "TestArtifactGateOnlyE2E", "0"},
+		{"1", "TestArtifactGatePartialE2E", "1"},
+	} {
+		cmd := artifactShardCommand(t, fixture.shard, fixture.inventory)
+		cmd.Env = append(cmd.Env, "LIST_FAIL="+fixture.fail)
+		if output, err := cmd.CombinedOutput(); err == nil {
+			t.Fatalf("accepted failed inventory: %s", output)
+		}
+	}
+}
+
+func TestEveryPackageAndArtifactShardIsScheduled(t *testing.T) {
+	jobs := pipeline(t)
+	for _, fixture := range []struct {
+		job, variable string
+		want          []string
+	}{
+		{"test", "TEST_SHARD", []string{"repository", "database", "handlers", "core"}},
+		{"coverage", "COVERAGE_SHARD", []string{"api", "handlers", "repository", "migrations", "core"}},
+		{"agent-rollout", "ROLLOUT_SHARD", []string{"contracts", "artifacts-1", "artifacts-2", "verification"}},
+	} {
+		var actual []string
+		for _, entry := range jobs[fixture.job].Parallel.Matrix {
+			actual = append(actual, entry[fixture.variable]...)
+		}
+		slices.Sort(actual)
+		slices.Sort(fixture.want)
+		if !slices.Equal(actual, fixture.want) {
+			t.Fatalf(
+				"%s scheduled shards %v, want %v",
+				fixture.job,
+				actual,
+				fixture.want,
+			)
+		}
+	}
+}

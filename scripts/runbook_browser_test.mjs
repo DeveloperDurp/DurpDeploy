@@ -64,14 +64,14 @@ try {
   await page.getByRole("button", { name: "Add step", exact: true }).click();
   await editor.locator('input[name="step_name"]').fill("browser check");
   await editor.locator('textarea[name="step_script"]').fill("printf browser-runbook-step; sleep 5");
-  await editor.locator('input[name="step_image"]:not([type="hidden"])').fill("docker.io/library/bash:5.2");
+  await editor.locator('input[name="step_image"]:not([type="hidden"])').fill("harbor.durp.info/dockerhub/library/bash:5.2");
   await editor.getByRole("button", { name: "Save", exact: true }).click();
   await page.getByRole("button", { name: "Move step down" }).first().click();
   assert.equal(await page.locator('#runbook-version-form input[name="step_selectors"]').nth(1).inputValue(), "canary, production");
   assert.equal(await page.locator('#runbook-version-form input[name="step_variable_names"]').nth(1).inputValue(), "REMOTE_TOKEN");
   await page.locator('#runbook-version-form button').filter({ hasText: /^Edit$/ }).nth(1).click();
   await editor.locator('select[name="step_target"]').selectOption("local");
-  await editor.locator('input[name="step_image"]:not([type="hidden"])').fill("docker.io/library/bash:5.2");
+  await editor.locator('input[name="step_image"]:not([type="hidden"])').fill("harbor.durp.info/dockerhub/library/bash:5.2");
   await editor.getByRole("button", { name: "Save", exact: true }).click();
   await page.getByRole("button", { name: "Create new version", exact: true }).click();
   await page.waitForURL(new RegExp(`/projects/${projectID}/runbooks/${runbookID}$`));
@@ -81,7 +81,7 @@ try {
   const step = await api("POST", `/projects/${stepProject.id}/steps`, {
     name: "agent variables",
     script_body: "printf agent",
-    container_image: "docker.io/library/bash:5.2",
+    container_image: "harbor.durp.info/dockerhub/library/bash:5.2",
   });
   await page.goto(`${base}/projects/${stepProject.id}/steps-page`);
   await page.locator('[data-step-action="edit"]').first().click();
@@ -165,7 +165,7 @@ try {
 
   const longBook = await api("POST", `/projects/${projectID}/runbooks`, {
     name: "browser-cancel-check",
-    steps: [{ name: "wait", script_body: "sleep 15", interpreter: "bash", container_image: "docker.io/library/bash:5.2" }],
+    steps: [{ name: "wait", script_body: "sleep 15", interpreter: "bash", container_image: "harbor.durp.info/dockerhub/library/bash:5.2" }],
   });
   await page.goto(`${base}/projects/${projectID}/runbooks/${longBook.runbook.id}`);
   const longForm = page.locator(`form[action$="/runbooks/${longBook.runbook.id}/execute"]`);
@@ -188,7 +188,7 @@ try {
 
   const approvalBook = await api("POST", `/projects/${approvalProjectID}/runbooks`, {
     name: "browser-approval-check",
-    steps: [{ name: "check", script_body: "true", interpreter: "bash", container_image: "docker.io/library/bash:5.2" }],
+    steps: [{ name: "check", script_body: "true", interpreter: "bash", container_image: "harbor.durp.info/dockerhub/library/bash:5.2" }],
   });
   for (const envID of approvalEnvironments.slice(0, 2)) {
     const execution = await api("POST", `/projects/${approvalProjectID}/runbooks/${approvalBook.runbook.id}/executions`, { environment_id: Number(envID) });

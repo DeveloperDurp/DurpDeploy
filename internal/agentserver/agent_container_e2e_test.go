@@ -251,10 +251,10 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 		interpreter, image, script string
 		variables                  []string
 	}{
-		{"bash", "docker.io/library/bash:5.2", `test "$SELECTED" = selected; test "${UNRELATED-unset}" = unset; printf 'bash-ok\n'`, []string{"SELECTED"}},
-		{"python3", "docker.io/library/python:3.12-alpine", `import os; assert os.environ['SELECTED']=='selected'; assert 'UNRELATED' not in os.environ; print('python-ok')`, []string{"SELECTED"}},
-		{"pwsh", "mcr.microsoft.com/powershell:latest", `if ($env:SELECTED -ne 'selected' -or $env:UNRELATED) { exit 1 }; Write-Output 'pwsh-ok'`, []string{"SELECTED"}},
-		{"bash", "docker.io/library/bash:5.2", `test "$SELECTED" = selected; test "$UNRELATED" = unrelated; printf 'all-ok\n'`, []string{}},
+		{"bash", "harbor.durp.info/dockerhub/library/bash:5.2", `test "$SELECTED" = selected; test "${UNRELATED-unset}" = unset; printf 'bash-ok\n'`, []string{"SELECTED"}},
+		{"python3", "harbor.durp.info/dockerhub/library/python:3.12-alpine", `import os; assert os.environ['SELECTED']=='selected'; assert 'UNRELATED' not in os.environ; print('python-ok')`, []string{"SELECTED"}},
+		{"pwsh", "harbor.durp.info/microsoft/powershell:latest", `if ($env:SELECTED -ne 'selected' -or $env:UNRELATED) { exit 1 }; Write-Output 'pwsh-ok'`, []string{"SELECTED"}},
+		{"bash", "harbor.durp.info/dockerhub/library/bash:5.2", `test "$SELECTED" = selected; test "$UNRELATED" = unrelated; printf 'all-ok\n'`, []string{}},
 	} {
 		request("POST", base+"/steps", map[string]any{
 			"name":                 step.interpreter,

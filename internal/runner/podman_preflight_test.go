@@ -35,7 +35,7 @@ esac
 		db.CreateReleaseParams{
 			ProjectID: project.ID, Version: "v1",
 			StepsJson: `[{"name":"prepare","script_body":"echo never",` +
-				`"execution_target":"local","container_image":"docker.io/library/bash:5.2"}]`,
+				`"execution_target":"local","container_image":"harbor.durp.info/dockerhub/library/bash:5.2"}]`,
 		},
 	)
 	if err != nil {

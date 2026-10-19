@@ -40,7 +40,7 @@ func createGateDeployment(
 	}
 	f.api(t, "POST", f.base()+"/steps", map[string]any{
 		"name":                   "Generate",
-		"container_image":        "docker.io/library/bash:5.2",
+		"container_image":        "harbor.durp.info/dockerhub/library/bash:5.2",
 		"network_mode":           "bridge",
 		"approval_artifact_path": "tfplan",
 		"approval_review_path":   "review.json",
@@ -54,7 +54,7 @@ test -e /sys/class/net/eth0`,
 	}, 201)
 	f.api(t, "POST", f.base()+"/steps", map[string]any{
 		"name":            "Apply",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 		"network_mode":    "bridge",
 		"script_body": `set -eu
 test "$(cat "$DURPDEPLOY_APPROVED_DIR/tfplan")" = exact-approved-plan-secret
@@ -229,14 +229,14 @@ func TestArtifactGateRequiresReviewFormatE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name": "Generate", "script_body": "true",
-		"container_image":        "docker.io/library/bash:5.2",
+		"container_image":        "harbor.durp.info/dockerhub/library/bash:5.2",
 		"approval_artifact_path": "plan", "approval_review_path": "review",
 	}, 400)
 	f.web(t, "POST", fmt.Sprintf("/projects/%d/steps", f.project.ID),
 		url.Values{
 			"name":            {"Generate"},
 			"script_body":     {"true"},
-			"container_image": {"docker.io/library/bash:5.2"},
+			"container_image": {"harbor.durp.info/dockerhub/library/bash:5.2"},
 			"approval_artifact_path": {
 				"plan",
 			},

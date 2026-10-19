@@ -49,7 +49,7 @@ func getOIDCReauthStart(
 		})
 	}
 	client := http.Client{
-		Timeout: time.Second,
+		Timeout: 10 * time.Second,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -149,7 +149,7 @@ func doOIDCReauthCallback(
 		})
 	}
 	client := http.Client{
-		Timeout: time.Second,
+		Timeout: 10 * time.Second,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},

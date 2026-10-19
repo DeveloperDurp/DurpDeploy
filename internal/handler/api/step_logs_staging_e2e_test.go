@@ -26,7 +26,7 @@ volume) if [ "$4" = create ]; then exit 7; fi;;`, 1))
 	f := newArtifactE2E(t, binary)
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name": "Cannot stage", "script_body": "echo must-not-run",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	var release db.Release
 	decodeStepLogTest(

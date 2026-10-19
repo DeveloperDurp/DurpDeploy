@@ -21,7 +21,7 @@ cp -R "$root/charts/durpdeploy" "$work/source/charts/"
 sed '/allowPrivilegeEscalation: false/a\  privileged: true' \
   "$work/source/charts/durpdeploy/values.yaml" >"$work/unsafe-values.yaml"
 cp "$work/unsafe-values.yaml" "$work/source/charts/durpdeploy/values.yaml"
-printf 'FROM alpine:3.20\nUSER root\n' >"$work/source/Dockerfile"
+printf 'FROM harbor.durp.info/dockerhub/library/alpine:3.20\nUSER root\n' >"$work/source/Dockerfile"
 expect_exit 1 bash "$runner" config "$work/source" "$work/config"
 jq -e '.status == "complete" and .blocking > 0 and
   any(.results[]; .type == "dockerfile" and any(.misconfigurations[]; .id == "DS-0002" and .status == "FAIL")) and
@@ -47,7 +47,7 @@ expect_exit 1 bash "$runner" dependencies "$work/source" "$work/dev-dependencies
 jq -e '.blocking > 0 and any(.results[].vulnerabilities[]; .package == "lodash")' \
   "$work/dev-dependencies/scan.json" >/dev/null
 # An inline suppression cannot convert an unsafe configuration to a pass.
-printf '# trivy:ignore:DS0002\nFROM alpine:3.20\nUSER root\n' >"$work/source/Dockerfile"
+printf '# trivy:ignore:DS0002\nFROM harbor.durp.info/dockerhub/library/alpine:3.20\nUSER root\n' >"$work/source/Dockerfile"
 expect_exit 2 bash "$runner" config "$work/source" "$work/config"
 jq -e '.status == "incomplete"' "$work/config/scan.json" >/dev/null
 

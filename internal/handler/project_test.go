@@ -114,7 +114,7 @@ func (h *projectHarness) makeRelease(
 	h.t.Helper()
 	steps := []map[string]any{
 		{"name": "s1", "script_body": scriptBody, "sort_order": 1,
-			"container_image": "alpine:3.20"},
+			"container_image": "harbor.durp.info/dockerhub/library/alpine:3.20"},
 	}
 	stepsJSON, _ := json.Marshal(steps)
 	r, err := h.repo.Queries.CreateRelease(
@@ -708,7 +708,7 @@ func makeStepGlobal(
 	t.Helper()
 	form := url.Values{
 		"name": {name}, "script_body": {body},
-		"container_image": {"alpine:3.20"},
+		"container_image": {"harbor.durp.info/dockerhub/library/alpine:3.20"},
 	}
 	form.Set("csrf_token", h.csrfToken())
 	resp, err := h.authedClient().PostForm(

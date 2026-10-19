@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 trap 'printf "E2E failed at line %s\n" "$LINENO" >&2' ERR
 
-[[ "${GITHUB_ACTIONS:-}" == true ]] || {
-	printf 'Run only on an ephemeral GitHub runner\n' >&2
+[[ "${GITLAB_CI:-}" == true ]] || {
+	printf 'Run only in an isolated GitLab job pod\n' >&2
 	exit 2
 }
 
@@ -12,8 +12,8 @@ tmp=$(mktemp -d)
 source "$root/scripts/e2e_wait.sh"
 nonce=${tmp##*.}
 nonce=${nonce,,}
-namespace="e2e_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}_$nonce"
-app_name="durpdeploy-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-$nonce"
+namespace="e2e_${CI_PIPELINE_ID:?}_${CI_JOB_ID:?}_$nonce"
+app_name="durpdeploy-e2e-${CI_PIPELINE_ID}-${CI_JOB_ID}-$nonce"
 volume="${app_name}-data"
 identity_volume="${app_name}-identity"
 image="${app_name}:test"
@@ -27,6 +27,9 @@ cleanup() {
 		wait "$server_pid" 2>/dev/null || true
 	fi
 	if ((result != 0)); then
+		if [[ -f "$tmp/running-server.log" ]]; then
+			tail -c 32768 "$tmp/running-server.log" >&2 || true
+		fi
 		docker logs "$app_name" 2>/dev/null || true
 		local remaining
 		remaining=$(docker ps -aq \
@@ -51,7 +54,7 @@ export DURPDEPLOY_CONTAINER_URL=unix:///var/run/docker.sock
 docker info >/dev/null
 
 cd "$root"
-bash scripts/build_server.sh -o "$tmp/durpdeploy"
+bash scripts/e2e_build_server.sh "$tmp/durpdeploy"
 export DURPDEPLOY_SECRET_KEY
 DURPDEPLOY_SECRET_KEY=$(openssl rand -base64 32)
 
@@ -91,7 +94,7 @@ project=$(api '{"name":"runtime-probe"}' projects |
 	python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
 environment=$(api '{"name":"runtime-probe"}' environments |
 	python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
-api '{"name":"probe","script_body":"echo must-not-run","container_image":"docker.io/library/bash:5.2"}' \
+api '{"name":"probe","script_body":"echo must-not-run","container_image":"harbor.durp.info/dockerhub/library/bash:5.2"}' \
 	"projects/$project/steps" >/dev/null
 release=$(api '{"version":"v1"}' "projects/$project/releases" |
 	python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
@@ -146,8 +149,14 @@ suite_started=$(date -u +%FT%TZ)
 DURPDEPLOY_E2E_PORT=0 ./scripts/e2e_test.sh
 bash scripts/check_e2e_containers.sh "$namespace" "$suite_started"
 
-printf 'Building containerized control plane\n'
-docker build -t "$image" .
+if [[ -n ${DURPDEPLOY_E2E_IMAGE:-} ]]; then
+	printf 'Reusing scanned containerized control plane\n'
+	image=$DURPDEPLOY_E2E_IMAGE
+	docker image inspect "$image" >/dev/null
+else
+	printf 'Building containerized control plane\n'
+	docker build -t "$image" .
+fi
 docker volume create "$volume" >/dev/null
 docker volume create "$identity_volume" >/dev/null
 docker run --rm --volume "$volume:/data" -e DURPDEPLOY_SECRET_KEY \

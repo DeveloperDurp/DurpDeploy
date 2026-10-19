@@ -29,7 +29,7 @@ func testArtifactGateMultipleReviews(t *testing.T, expire bool) {
 				"Generate %d",
 				index,
 			),
-			"container_image":        "docker.io/library/bash:5.2",
+			"container_image":        "harbor.durp.info/dockerhub/library/bash:5.2",
 			"approval_artifact_path": "plan",
 			"approval_review_path":   "review",
 			"approval_review_format": "summary",
@@ -45,7 +45,7 @@ func testArtifactGateMultipleReviews(t *testing.T, expire bool) {
 		f.base()+"/steps",
 		map[string]any{
 			"name":            "Apply",
-			"container_image": "docker.io/library/bash:5.2",
+			"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 			"script_body":     `test "$(cat "$DURPDEPLOY_APPROVED_DIR/plan")" = 1`,
 		},
 		201,

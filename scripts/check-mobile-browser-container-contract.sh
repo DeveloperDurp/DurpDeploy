@@ -117,20 +117,22 @@ receipt=internal/handler/mobile_browser_receipt_test.go
 strictness=internal/handler/mobile_browser_strictness_test.go
 environment=internal/handler/mobile_browser_test.go
 harness=scripts/mobile_readability_qa.mjs
-ci=.github/workflows/ci.yml
+ci=.gitlab/ci/test.yml
 
 for file in "$dockerfile" "$entrypoint" "$runner" "$receipt" "$strictness" \
 	"$environment" "$harness" Makefile "$ci"; do
 	require_file "$file"
 done
 
-require_active_text docker "$dockerfile" 'mcr.microsoft.com/playwright:v1.61.1-noble' \
+require_active_text docker "$dockerfile" 'harbor.durp.info/microsoft/playwright:v1.61.1-noble' \
 	'Playwright image pin is missing'
+require_active_text docker "$dockerfile" 'COPY go.mod go.sum /opt/go-tools/' \
+	'Go tool lock files are missing'
 require_active_regex docker "$dockerfile" \
-	'^[[:space:]]*RUN[[:space:]]+GOBIN=/usr/local/bin[[:space:]]+go[[:space:]]+install[[:space:]]+github\.com/a-h/templ/cmd/templ@v0\.3\.1020[[:space:]]*$' \
+	'^[[:space:]]*RUN[[:space:]]+go[[:space:]]+-C[[:space:]]+/opt/go-tools[[:space:]]+build[[:space:]]+-mod=readonly[[:space:]]+-o[[:space:]]+/usr/local/bin/templ[[:space:]]+github\.com/a-h/templ/cmd/templ[[:space:]]*$' \
 	'deterministic templ installation is missing'
-require_active_regex docker "$dockerfile" '^[[:space:]]*RUN[[:space:]]+npm ci[[:space:]]*$' \
-	'locked Node dependency installation is missing'
+require_active_regex docker "$dockerfile" '^[[:space:]]*RUN[[:space:]]+npm ci --ignore-scripts[[:space:]]*$' \
+	'locked Node dependency installation with lifecycle scripts disabled is missing'
 require_active_text docker "$dockerfile" 'ENTRYPOINT ["/usr/local/bin/mobile-browser-container"]' \
 	'container entrypoint is missing'
 require_text "$entrypoint" 'templ generate' \
@@ -194,16 +196,20 @@ require_text Makefile 'docker build -f Dockerfile.mobile-browser' \
 	'Make does not build the shared browser image'
 require_text Makefile 'mobile-browser-container' \
 	'Make does not invoke the shared browser entrypoint'
-require_text "$ci" 'docker build -f Dockerfile.mobile-browser' \
+require_text scripts/ci_build_runtime.sh 'build_image browser Dockerfile.mobile-browser' \
 	'CI does not build the shared browser image'
-require_text "$ci" 'mobile-browser-container' \
+require_text scripts/ci_build_runtime.sh 'docker buildx build --pull --platform linux/amd64 --push' \
+	'CI does not build and push the shared AMD64 browser image'
+require_text scripts/ci_build_runtime.sh '--build-arg "BROWSER_IMAGE=$browser_digest"' \
+	'CI helper does not use the pushed browser digest'
+require_text "$ci" 'scripts/mobile-browser-container.sh' \
 	'CI does not invoke the shared browser entrypoint'
 require_text "$ci" 'mobile-readability-*.json' \
 	'CI failure diagnostic receipt allowlist is missing'
 require_text "$ci" 'head -c 32768' \
 	'CI failure diagnostic byte cap is missing'
-require_text "$ci" 'docker rm -f "$MOBILE_BROWSER_CONTAINER"' \
-	'CI container cleanup is missing'
+require_text .gitlab-ci.yml 'bash scripts/ci_prepare.sh' \
+	'CI does not isolate the runtime in the job pod'
 
 if sed -n '/^[[:space:]]*mobile-browser:/,/^[[:space:]]*auth-mfa-sqlite:/p' \
 	"$root/$ci" | \

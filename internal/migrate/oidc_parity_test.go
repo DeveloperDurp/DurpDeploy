@@ -16,7 +16,9 @@ import (
 func TestPostgres_OIDCSchemaParity(t *testing.T) {
 	// Given: a disposable PostgreSQL database.
 	ctx := context.Background()
-	container, err := postgres.Run(ctx, "postgres:16-alpine",
+	container, err := postgres.Run(
+		ctx,
+		"harbor.durp.info/dockerhub/library/postgres:16-alpine",
 		postgres.WithDatabase("durpdeploy"),
 		postgres.WithUsername("durpdeploy"),
 		postgres.WithPassword("postgres"),

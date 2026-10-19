@@ -55,7 +55,7 @@ func seedProjectDeletion(
 		db.CreateReleaseParams{
 			ProjectID: project.ID,
 			Version:   "1",
-			StepsJson: `[{"name":"normal","script_body":"true","container_image":"bash:5.2"}]`,
+			StepsJson: `[{"name":"normal","script_body":"true","container_image":"harbor.durp.info/dockerhub/library/bash:5.2"}]`,
 		},
 	)
 	if err != nil {

@@ -18,7 +18,7 @@ func TestLegacyRunbookStreamDrainsAfterTerminalBadgeBrowserE2E(t *testing.T) {
 		repository.RunbookSave{
 			ProjectID: f.project.ID,
 			Name:      "cleanup-stream",
-			StepsJSON: `[{"name":"check","script_body":"true","container_image":"docker.io/library/bash:5.2"}]`,
+			StepsJSON: `[{"name":"check","script_body":"true","container_image":"harbor.durp.info/dockerhub/library/bash:5.2"}]`,
 		},
 	)
 	if err != nil {

@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -1196,10 +1197,7 @@ func TestStreamLogs_SSE(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx, cancel := context.WithTimeout(
-		context.Background(),
-		100*time.Millisecond,
-	)
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/deployments/%d/logs/stream", d.ID), nil).
@@ -1211,14 +1209,20 @@ func TestStreamLogs_SSE(t *testing.T) {
 			api.NewLogHandler(h.broker, h.repo).StreamLogs(w, req)
 		}),
 	)
-	defer closeStreamServer(t, srv)
+	t.Cleanup(func() { closeStreamServer(t, srv) })
 	srv.Client().Timeout = time.Second
 	resp, err := srv.Client().Get(srv.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
+	reader := bufio.NewReader(resp.Body)
+	first, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	data, err := io.ReadAll(reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1229,7 +1233,7 @@ func TestStreamLogs_SSE(t *testing.T) {
 	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
 		t.Fatalf("expected text/event-stream, got %s", ct)
 	}
-	body := string(data)
+	body := first + string(data)
 	if !strings.Contains(body, "data: historical log") {
 		t.Fatalf("expected historical log in body, got %s", body)
 	}
@@ -1358,10 +1362,7 @@ func TestStreamLogs_NDJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx, cancel := context.WithTimeout(
-		context.Background(),
-		100*time.Millisecond,
-	)
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/deployments/%d/logs/stream?format=ndjson", d.ID), nil).
@@ -1373,14 +1374,20 @@ func TestStreamLogs_NDJSON(t *testing.T) {
 			api.NewLogHandler(h.broker, h.repo).StreamLogs(w, req)
 		}),
 	)
-	defer closeStreamServer(t, srv)
+	t.Cleanup(func() { closeStreamServer(t, srv) })
 	srv.Client().Timeout = time.Second
 	resp, err := srv.Client().Get(srv.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
+	reader := bufio.NewReader(resp.Body)
+	first, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	data, err := io.ReadAll(reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1391,7 +1398,7 @@ func TestStreamLogs_NDJSON(t *testing.T) {
 	if ct := resp.Header.Get("Content-Type"); ct != "application/x-ndjson" {
 		t.Fatalf("expected application/x-ndjson, got %s", ct)
 	}
-	body := string(data)
+	body := first + string(data)
 	if !strings.Contains(body, `"line":"historical log"`) {
 		t.Fatalf("expected ndjson line in body, got %s", body)
 	}

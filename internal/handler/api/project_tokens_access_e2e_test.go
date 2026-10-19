@@ -23,6 +23,7 @@ type changingTokenDB struct {
 	hash    string
 	id      string
 	changed atomic.Bool
+	enabled atomic.Bool
 	change  func()
 }
 
@@ -30,7 +31,8 @@ func (d *changingTokenDB) QueryRowContext(
 	ctx context.Context, query string, args ...any,
 ) *sql.Row {
 	row := d.DBTX.QueryRowContext(ctx, query, args...)
-	if strings.Contains(query, "FROM api_tokens") && len(args) > 0 &&
+	if d.enabled.Load() &&
+		strings.Contains(query, "FROM api_tokens") && len(args) > 0 &&
 		(args[0] == d.hash || args[0] == d.id) &&
 		d.changed.CompareAndSwap(false, true) {
 		d.change()
@@ -47,22 +49,22 @@ func TestProjectTokensConcurrentScopeAuditAPIE2E(t *testing.T) {
 				"PRAGMA journal_mode = WAL"); err != nil {
 				t.Fatal(err)
 			}
-			token := mintProjectToken(t, f, "viewer", f.project.ID)
-			changing := &changingTokenDB{
-				DBTX: f.h.repo.DB, id: token.TokenID,
-				change: func() {
-					_, err := f.h.repo.ReplaceTokenScope(
-						t.Context(),
-						token.TokenID,
-						repository.TokenScope{Scope: "scoped", Role: "admin",
-							ProjectIDs: []int64{other.ID}},
-					)
-					if err != nil {
-						t.Errorf("overlapping owner edit: %v", err)
-					}
-				},
-			}
+			changing := &changingTokenDB{DBTX: f.h.repo.DB}
 			f.h.repo.Queries = db.New(changing)
+			token := mintProjectToken(t, f, "viewer", f.project.ID)
+			changing.id = token.TokenID
+			changing.change = func() {
+				_, err := f.h.repo.ReplaceTokenScope(
+					t.Context(),
+					token.TokenID,
+					repository.TokenScope{Scope: "scoped", Role: "admin",
+						ProjectIDs: []int64{other.ID}},
+				)
+				if err != nil {
+					t.Errorf("overlapping owner edit: %v", err)
+				}
+			}
+			changing.enabled.Store(true)
 			if surface == "API" {
 				f.api(t, "PATCH", "/api/v1/tokens/"+token.TokenID,
 					map[string]any{"scope": "scoped", "role": "deployer",
@@ -105,21 +107,21 @@ func TestProjectTokensConcurrentScopeEditAPIE2E(t *testing.T) {
 		"PRAGMA journal_mode = WAL"); err != nil {
 		t.Fatal(err)
 	}
-	token := mintProjectToken(t, f, "admin", f.project.ID)
-	changing := &changingTokenDB{
-		DBTX: f.h.repo.DB, hash: auth.HashApiToken(token.ID),
-		change: func() {
-			err := f.h.repo.WithTx(t.Context(), func(q *db.Queries) error {
-				return repository.SaveTokenScope(t.Context(), q, token.TokenID,
-					repository.TokenScope{Scope: "scoped", Role: "viewer",
-						ProjectIDs: []int64{other.ID}})
-			})
-			if err != nil {
-				t.Errorf("concurrent scope edit: %v", err)
-			}
-		},
-	}
+	changing := &changingTokenDB{DBTX: f.h.repo.DB}
 	f.h.repo.Queries = db.New(changing)
+	token := mintProjectToken(t, f, "admin", f.project.ID)
+	changing.hash = auth.HashApiToken(token.ID)
+	changing.change = func() {
+		err := f.h.repo.WithTx(t.Context(), func(q *db.Queries) error {
+			return repository.SaveTokenScope(t.Context(), q, token.TokenID,
+				repository.TokenScope{Scope: "scoped", Role: "viewer",
+					ProjectIDs: []int64{other.ID}})
+		})
+		if err != nil {
+			t.Errorf("concurrent scope edit: %v", err)
+		}
+	}
+	changing.enabled.Store(true)
 	f.token = token.ID
 	// Neither admin/A nor viewer/B permits a write to B.
 	f.api(t, "POST", fmt.Sprintf("/api/v1/projects/%d/steps", other.ID),

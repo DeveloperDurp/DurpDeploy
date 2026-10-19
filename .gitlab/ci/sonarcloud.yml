@@ -1,0 +1,46 @@
+coverage:
+  extends: .mr-test
+  timeout: 45 minutes
+  parallel:
+    matrix:
+      - COVERAGE_SHARD: [api, handlers, repository, migrations, core]
+  script:
+    - make templ-generate swagger-ui-copy
+    - |-
+      mkdir -p artifacts/coverage
+      package_list=$(bash scripts/ci_coverage_packages.sh "$COVERAGE_SHARD")
+      test -n "$package_list"
+      mapfile -t packages <<< "$package_list"
+      bash scripts/go_test.sh -tags=e2e -count=1 -timeout=20m \
+        -covermode=atomic -coverpkg=./... \
+        -coverprofile="artifacts/coverage/$COVERAGE_SHARD.out" "${packages[@]}"
+  artifacts:
+    expire_in: 7 days
+    paths: [artifacts/coverage/]
+
+sonarcloud:
+  stage: verify
+  image:
+    name: harbor.durp.info/dockerhub/sonarsource/sonar-scanner-cli@sha256:a3f4215076706c95a17a68c19322ee916e40a3acd081a8c1a1e839e0194afa57
+    entrypoint: [""]
+  needs: [coverage]
+  before_script:
+    - unset GHCR_TOKEN GHCR_USER GITLAB_READ_TOKEN
+  cache: []
+  timeout: 15 minutes
+  environment:
+    name: sonar
+    action: prepare
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID == $CI_PROJECT_ID'
+  script:
+    - test -n "$SONAR_TOKEN"
+    - |-
+      for shard in api handlers repository migrations core; do
+        test -s "artifacts/coverage/$shard.out"
+      done
+      sonar-scanner -Dsonar.qualitygate.wait=true \
+        -Dsonar.go.coverage.reportPaths=artifacts/coverage/api.out,artifacts/coverage/handlers.out,artifacts/coverage/repository.out,artifacts/coverage/migrations.out,artifacts/coverage/core.out \
+        -Dsonar.pullrequest.key="gitlab-$CI_MERGE_REQUEST_IID" \
+        -Dsonar.pullrequest.branch="$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" \
+        -Dsonar.pullrequest.base="$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"

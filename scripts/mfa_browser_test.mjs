@@ -133,11 +133,13 @@ async function reauthenticate(page, url) {
 	await page.goto(`${url}/settings/security/reauth`);
 	await page.locator('input[name="password"]').fill(passwords.deployer);
 	await page.getByRole("button", { name: "Continue" }).click();
-	const reauthPasskey = page.getByRole("button", { name: "Use a passkey" });
-	if (await reauthPasskey.isVisible()) {
-		await reauthPasskey.click();
+	const security = page.getByRole("heading", { name: "Security", exact: true });
+	const factor = page.getByRole("heading", { name: "Verify your factor", exact: true });
+	await security.or(factor).waitFor();
+	if (await factor.isVisible()) {
+		await page.getByRole("button", { name: "Use a passkey" }).click();
 	}
-	await page.getByRole("heading", { name: "Security" }).waitFor();
+	await security.waitFor();
 }
 
 function totpCode(seed, at = Date.now()) {

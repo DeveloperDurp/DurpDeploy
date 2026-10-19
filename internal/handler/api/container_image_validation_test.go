@@ -10,7 +10,7 @@ import (
 
 func TestContainerImageAPI_RejectsRunnerIncompatibleImages(t *testing.T) {
 	images := []string{
-		"-alpine", "alpine :3", " alpine:3", "alpine:3\n", "alpine:3\x00",
+		"-alpine", "alpine :3", " harbor.durp.info/dockerhub/library/alpine:3", "harbor.durp.info/dockerhub/library/alpine:3\n", "harbor.durp.info/dockerhub/library/alpine:3\x00",
 	}
 	for _, image := range images {
 		t.Run(fmt.Sprintf("%q", image), func(t *testing.T) {

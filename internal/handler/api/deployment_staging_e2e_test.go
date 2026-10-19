@@ -14,6 +14,7 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/staging"
+	"github.com/stretchr/testify/require"
 )
 
 func stagingRuntime(t *testing.T, args ...string) string {
@@ -72,8 +73,11 @@ func cleanupArtifactRuntime(t *testing.T, h *harness, binary ...string) {
 }
 
 func TestDeploymentStagingCleanupE2E(t *testing.T) {
-	for _, terminal := range []string{"succeeded", "failed", "cancelled"} {
-		t.Run(terminal, func(t *testing.T) {
+	for _, scenario := range []string{
+		"succeeded", "failed", "cancelled", "cancelled_during_setup",
+	} {
+		t.Run(scenario, func(t *testing.T) {
+			terminal := strings.Split(scenario, "_")[0]
 			// Given: a real API deployment creates a staging file.
 			f := newArtifactE2E(t)
 			script := fmt.Sprintf(`set -eu
@@ -89,15 +93,13 @@ printf 'stage-ready\n'
 			}
 			f.api(t, "POST", f.base()+"/steps", map[string]any{
 				"name": "stage", "script_body": script,
-				"container_image": "docker.io/library/bash:5.2",
+				"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 			}, 201)
 			var release db.Release
-			if err := json.Unmarshal(f.api(t, "POST", f.base()+"/releases",
-				map[string]string{"version": "1"}, 201), &release); err != nil {
-				t.Fatal(err)
-			}
+			decodeStepLogTest(t, f.api(t, "POST", f.base()+"/releases",
+				map[string]string{"version": "1"}, 201), &release)
 			var dep db.Deployment
-			if err := json.Unmarshal(f.api(
+			decodeStepLogTest(t, f.api(
 				t,
 				"POST",
 				f.base()+"/deployments",
@@ -106,43 +108,49 @@ printf 'stage-ready\n'
 					"environment_id": f.environment.ID,
 				},
 				201,
-			), &dep); err != nil {
-				t.Fatal(err)
-			}
+			), &dep)
 			path := fmt.Sprintf("/api/v1/deployments/%d", dep.ID)
-			// When: the deployment succeeds, fails, or is cancelled after writing.
-			logs := awaitStagingTerminal(t, f, path, terminal)
-			if !strings.Contains(string(logs), "stage-ready") {
+			filter := "--filter=label=io.durpdeploy.namespace=" +
+				os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME") + ":" +
+				os.Getenv("DURPDEPLOY_CONTAINER_NAMESPACE")
+			if scenario == "cancelled_during_setup" {
+				cancelStagingSetup(t, f, path, filter)
+			}
+			// When: cancellation can interrupt setup or follow a staged write.
+			logs := awaitStagingTerminal(t, f, path, scenario)
+			if scenario != "cancelled_during_setup" &&
+				!strings.Contains(string(logs), "stage-ready") {
 				t.Fatal("deployment completed without writing the staged file")
 			}
 			// Then: terminal status is not visible until volume and keeper are gone.
-			filter := "--filter=label=io.durpdeploy.namespace=" +
-				os.Getenv(
-					"DURPDEPLOY_CONTAINER_RUNTIME",
-				) + ":" + os.Getenv("DURPDEPLOY_CONTAINER_NAMESPACE")
-			if volumes := stagingRuntime(
+			require.Empty(t, stagingRuntime(
 				t,
 				"volume",
 				"ls",
 				"--quiet",
 				filter,
-			); volumes != "" {
-				t.Fatalf(
-					"terminal deployment left staging volumes: %s",
-					volumes,
-				)
-			}
-			if containers := stagingRuntime(
+			), "terminal deployment left staging volumes")
+			require.Empty(t, stagingRuntime(
 				t,
 				"ps",
 				"--all",
 				"--quiet",
 				filter,
-			); containers != "" {
-				t.Fatalf("terminal deployment left containers: %s", containers)
-			}
+			), "terminal deployment left containers")
 		})
 	}
+}
+
+func cancelStagingSetup(t *testing.T, f *artifactE2E, path, filter string) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for stagingRuntime(t, "volume", "ls", "--quiet", filter) == "" {
+		if time.Now().After(deadline) {
+			t.Fatal("staging setup did not start")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	f.api(t, "POST", path+"/cancel", nil, 200)
 }
 
 func awaitStagingTerminal(
@@ -152,7 +160,10 @@ func awaitStagingTerminal(
 ) []byte {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
-	cancelled := false
+	cancelled := terminal == "cancelled_during_setup"
+	if cancelled {
+		terminal = "cancelled"
+	}
 	for {
 		logs := f.api(t, "GET", path+"/logs", nil, 200)
 		if terminal == "cancelled" && !cancelled &&

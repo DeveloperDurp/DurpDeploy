@@ -19,7 +19,7 @@ import (
 )
 
 // Match the deployed 0.3 backup format. Pin the Linux amd64 image content.
-const restoreLitestreamImage = "docker.io/litestream/litestream:0.3.13@" +
+const restoreLitestreamImage = "harbor.durp.info/dockerhub/litestream/litestream:0.3.13@" +
 	"sha256:a932d9801f9d8f11ed0566aa105ef866c097c00ef1191b88a8aa0ff8e78b4071"
 
 type restoreReplica struct {

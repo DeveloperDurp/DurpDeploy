@@ -186,7 +186,7 @@ func TestVerificationRollbackBrowserE2E(t *testing.T) {
 	f.api(t, "PUT", fmt.Sprintf("%s/steps/%d", f.base(), steps[0].ID),
 		map[string]any{
 			"name": "Deploy", "script_body": "echo refreshed-release-step",
-			"interpreter": "bash", "container_image": "docker.io/library/bash:5.2",
+			"interpreter": "bash", "container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 		}, 200)
 	// When: the operator refreshes a deployed release through the HTMX form.
 	browser.evaluate(t, `(() => {

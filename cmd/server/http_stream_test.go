@@ -80,7 +80,7 @@ func newStreamFixture(t *testing.T) streamFixture {
 	book, _, err := repo.SaveRunbook(ctx, repository.RunbookSave{
 		ProjectID: project.ID,
 		Name:      "stream-timeouts",
-		StepsJSON: `[{"name":"check","script_body":"true","container_image":"alpine:3.20"}]`,
+		StepsJSON: `[{"name":"check","script_body":"true","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]`,
 	})
 	require.NoError(t, err)
 	execution, deployment, err := repo.CreateRunbookExecution(ctx,

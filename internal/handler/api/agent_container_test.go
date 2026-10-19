@@ -14,7 +14,7 @@ func TestSteps_AgentContainerContract(t *testing.T) {
 	path := fmt.Sprintf("/api/v1/projects/%d/steps", project.ID)
 	body := `{"name":"container","script_body":"echo hi","interpreter":"bash",
         "execution_target":"agent","agent_execution_mode":"container",
-        "container_image":"alpine:3.20","variable_names":["DEPLOY_ENV"]}`
+        "container_image":"harbor.durp.info/dockerhub/library/alpine:3.20","variable_names":["DEPLOY_ENV"]}`
 	rec := h.request(t, "POST", path, token, body)
 	h.assertStatus(t, rec, 201)
 	assertAgentContainer(t, rec.Body.Bytes())
@@ -22,8 +22,8 @@ func TestSteps_AgentContainerContract(t *testing.T) {
 	h.assertStatus(t, rec, 200)
 	assertAgentContainer(t, rec.Body.Bytes())
 	for _, invalid := range []string{
-		strings.Replace(body, "alpine:3.20", "", 1),
-		strings.Replace(body, "alpine:3.20", "-privileged", 1),
+		strings.Replace(body, "harbor.durp.info/dockerhub/library/alpine:3.20", "", 1),
+		strings.Replace(body, "harbor.durp.info/dockerhub/library/alpine:3.20", "-privileged", 1),
 		strings.Replace(body, `"agent_execution_mode":"container"`, `"agent_execution_mode":"host"`, 1),
 		strings.Replace(body, `"execution_target":"agent"`, `"execution_target":"local"`, 1),
 		strings.Replace(body, `"agent_execution_mode":"container"`, `"agent_execution_mode":"unknown"`, 1),
@@ -49,7 +49,7 @@ func assertAgentContainer(t *testing.T, raw []byte) {
 	}
 	if step.ExecutionTarget != "agent" ||
 		step.AgentExecutionMode != "container" ||
-		step.ContainerImage != "alpine:3.20" ||
+		step.ContainerImage != "harbor.durp.info/dockerhub/library/alpine:3.20" ||
 		strings.Join(step.VariableNames, ",") != "DEPLOY_ENV" {
 		t.Fatalf("step=%+v", step)
 	}
@@ -60,7 +60,7 @@ func TestTemplates_AgentContainerVersionsAreImmutable(t *testing.T) {
 	token := h.adminToken(t)
 	body := `{"name":"container","script_body":"echo hi","interpreter":"bash",
         "execution_target":"agent","agent_execution_mode":"container",
-        "container_image":"alpine:3.20","variable_names":["DEPLOY_ENV"]}`
+        "container_image":"harbor.durp.info/dockerhub/library/alpine:3.20","variable_names":["DEPLOY_ENV"]}`
 	rec := h.request(t, "POST", "/api/v1/templates", token, body)
 	h.assertStatus(t, rec, 201)
 	assertAgentContainer(t, rec.Body.Bytes())
@@ -89,7 +89,7 @@ func TestRunbookAPI_AgentContainerSnapshot(t *testing.T) {
 	base := fmt.Sprintf("/api/v1/projects/%d/runbooks", projectID)
 	created := request("POST", base, `{"name":"container","steps":[
         {"name":"container","script_body":"echo hi","execution_target":"agent",
-        "agent_execution_mode":"container","container_image":"alpine:3.20",
+        "agent_execution_mode":"container","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20",
         "variable_names":["DEPLOY_ENV"]}]}`)
 	if created.Code != 201 {
 		t.Fatalf("status=%d body=%s", created.Code, created.Body.String())

@@ -71,7 +71,7 @@ func TestRunbookAPI_ApprovalAndSchedule(t *testing.T) {
 	created := request(
 		http.MethodPost,
 		base+"/runbooks",
-		`{"name":"maintenance","steps":[{"name":"check","script_body":"printf 'approved\\n'","container_image":"alpine:3.20"}]}`,
+		`{"name":"maintenance","steps":[{"name":"check","script_body":"printf 'approved\\n'","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]}`,
 	)
 	if created.Code != http.StatusCreated {
 		t.Fatalf(

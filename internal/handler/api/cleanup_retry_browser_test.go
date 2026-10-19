@@ -43,7 +43,7 @@ func TestVerificationCleanupRetryBrowserE2E(t *testing.T) {
 					repository.RunbookSave{
 						ProjectID: f.project.ID,
 						Name:      "cleanup-retry",
-						StepsJSON: `[{"name":"Retry","script_body":"echo retry","container_image":"docker.io/library/bash:5.2"}]`,
+						StepsJSON: `[{"name":"Retry","script_body":"echo retry","container_image":"harbor.durp.info/dockerhub/library/bash:5.2"}]`,
 					},
 				)
 				if err != nil {

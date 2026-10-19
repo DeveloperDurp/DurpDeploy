@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
 	printf '%s\n' \
-		'usage: run_named_go_tests.sh [--race] --packages PACKAGES --tests EXPRESSION (--require NAMES | --require-file PATH)' >&2
+		'usage: run_named_go_tests.sh [--race] [--tags TAGS] [--timeout DURATION] --packages PACKAGES --tests EXPRESSION (--require NAMES | --require-file PATH)' >&2
 }
 
 packages_value=
@@ -11,12 +11,23 @@ tests_value=
 require_value=
 require_file=
 race_flag=()
+tags_flag=()
+timeout_flag=()
 
 while (($# > 0)); do
 	case $1 in
 	--race)
 		race_flag=(-race)
 		shift
+		;;
+	--tags | --timeout)
+		if (($# < 2)); then usage; exit 2; fi
+		if [[ $1 == --tags ]]; then
+			tags_flag=(-tags "$2")
+		else
+			timeout_flag=(-timeout "$2")
+		fi
+		shift 2
 		;;
 	--packages | --tests | --require | --require-file)
 		if (($# < 2)); then
@@ -81,6 +92,7 @@ trap 'rm -f "$events"' EXIT
 
 set +e
 bash "$repo_root/scripts/go_test.sh" -json -v -count=1 "${race_flag[@]}" \
+	"${tags_flag[@]}" "${timeout_flag[@]}" \
 	-run "^(${tests_value})$" "${packages[@]}" | tee "$events"
 go_status=${PIPESTATUS[0]}
 set -e

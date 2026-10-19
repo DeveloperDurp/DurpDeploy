@@ -1,0 +1,44 @@
+container-security:
+  stage: scan
+  needs: [ci-runtime]
+  timeout: 30 minutes
+  script:
+    - make trivy-tools
+    - |
+      result=0
+      make container-scan-test || result=1
+      bash scripts/container_scan.sh config . artifacts/container/config || result=1
+      bash scripts/check-agent-compose-contract.sh || result=1
+      bash scripts/container_scan.sh dependencies . artifacts/container/dependencies || result=1
+      exit "$result"
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths: [artifacts/container/]
+
+security-scan:
+  stage: scan
+  needs: [ci-runtime]
+  timeout: 30 minutes
+  variables:
+    KUBERNETES_MEMORY_LIMIT: "6Gi"
+    # Leave memory for compiler subprocesses within the job's memory limit.
+    GOMEMLIMIT: 2GiB
+  script:
+    - bash scripts/check-ci-contract.sh
+    - make security-tools templ-generate swagger-ui-copy
+    - |
+      if [[ $CI_PIPELINE_SOURCE == merge_request_event ]]; then
+        make security-scan-test
+        bash scripts/go_test.sh -race -count=1 -run '^TestAPITokenTelemetryE2E$' ./internal/handler/api
+        export SECURITY_GIT_RANGE="${CI_MERGE_REQUEST_DIFF_BASE_SHA:?}..${CI_COMMIT_SHA:?}"
+      fi
+      result=0
+      for scanner in govulncheck gosec gitleaks; do
+        bash scripts/security_scan.sh "$scanner" || result=1
+      done
+      exit "$result"
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths: [artifacts/security/]

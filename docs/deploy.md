@@ -104,7 +104,7 @@ docker compose run --rm --no-deps --entrypoint /bin/sh app -ec \
   'su-exec 10001:10001 test -r /etc/durpdeploy/key'
 
 # 5. Cache the staging helper in the execution runtime, then start
-STAGING_HELPER_IMAGE=docker.io/library/alpine@sha256:ce64758a109eb420d874a118f87920e625e12d3634e03b4a5573fd9f6e5d3507
+STAGING_HELPER_IMAGE=harbor.durp.info/dockerhub/library/alpine@sha256:ce64758a109eb420d874a118f87920e625e12d3634e03b4a5573fd9f6e5d3507
 docker pull "$STAGING_HELPER_IMAGE"
 docker compose up -d
 # With rootless Podman, use instead:

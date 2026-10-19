@@ -20,7 +20,7 @@ func TestDeploymentStepLogsAPIWebE2E(t *testing.T) {
 	for _, script := range scripts {
 		f.api(t, "POST", f.base()+"/steps", map[string]any{
 			"name": "Duplicate name", "script_body": script,
-			"container_image": "docker.io/library/bash:5.2",
+			"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 		}, http.StatusCreated)
 	}
 	var release db.Release

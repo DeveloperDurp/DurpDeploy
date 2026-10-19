@@ -71,7 +71,7 @@ func TestRollbackAPIWebContainerE2E(t *testing.T) {
 		map[string]any{
 			"name":            "Deploy",
 			"script_body":     "echo changed-release; exit 23",
-			"container_image": "docker.io/library/bash:5.2",
+			"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 			"sort_order":      1,
 		},
 		200,

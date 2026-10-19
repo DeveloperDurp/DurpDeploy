@@ -278,7 +278,10 @@ func (h *stepTemplateHarness) createTemplate(name, script string) int {
 	form := url.Values{}
 	form.Set("name", name)
 	form.Set("script_body", script)
-	form.Set("container_image", "alpine:3.20")
+	form.Set(
+		"container_image",
+		"harbor.durp.info/dockerhub/library/alpine:3.20",
+	)
 	resp, err := h.client.PostForm(
 		h.server.URL+"/templates",
 		form,
@@ -297,7 +300,10 @@ func (h *stepTemplateHarness) updateTemplate(
 	form := url.Values{}
 	form.Set("name", name)
 	form.Set("script_body", script)
-	form.Set("container_image", "alpine:3.20")
+	form.Set(
+		"container_image",
+		"harbor.durp.info/dockerhub/library/alpine:3.20",
+	)
 	req, _ := http.NewRequest(
 		"PUT",
 		fmt.Sprintf("%s/templates/%d", h.server.URL, id),

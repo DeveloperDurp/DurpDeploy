@@ -29,7 +29,7 @@ func TestDeploymentStepLogOutcomesAPIWebE2E(t *testing.T) {
 			f := newArtifactE2E(t)
 			f.api(t, "POST", f.base()+"/steps", map[string]any{
 				"name": test.name, "script_body": test.script,
-				"container_image": "docker.io/library/bash:5.2", "max_retries": test.retries,
+				"container_image": "harbor.durp.info/dockerhub/library/bash:5.2", "max_retries": test.retries,
 			}, 201)
 			var release db.Release
 			decodeStepLogTest(

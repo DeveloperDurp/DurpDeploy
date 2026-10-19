@@ -89,7 +89,7 @@ func TestLifecycleVariablesAPIWebE2E(t *testing.T) {
 			map[string]any{
 				"name":            "shared",
 				"script_body":     `test "$REGION" = edited-env; test "$TOKEN" = lifecycle-secret-sentinel; printf '%s %s\n' "$REGION" "$TOKEN"`,
-				"container_image": "docker.io/library/bash:5.2",
+				"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 			},
 			201,
 		)

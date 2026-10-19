@@ -12,7 +12,7 @@ import urllib.parse
 
 directory = pathlib.Path(sys.argv[1])
 limit = 4 << 20
-payload = {"name": "body-limit-api", "script_body": "", "container_image": "alpine:3.20"}
+payload = {"name": "body-limit-api", "script_body": "", "container_image": "harbor.durp.info/dockerhub/library/alpine:3.20"}
 overhead = len(json.dumps(payload, separators=(",", ":")).encode())
 payload["script_body"] = "a" * (limit - overhead)
 body = json.dumps(payload, separators=(",", ":")).encode()
@@ -21,7 +21,7 @@ assert len(body) == limit
 (directory / "oversized.json").write_bytes(body + b" ")
 (directory / "trailing.json").write_text('{"name":"body-rejected"}' + " " * limit)
 (directory / "large.form").write_text(urllib.parse.urlencode({
-    "name": "body-limit-web", "script_body": "a" * limit, "container_image": "alpine:3.20"
+    "name": "body-limit-web", "script_body": "a" * limit, "container_image": "harbor.durp.info/dockerhub/library/alpine:3.20"
 }))
 (directory / "oversized.form").write_text("name=body-rejected&padding=" + "a" * (16 << 20))
 (directory / "oversized.multipart").write_text(

@@ -7,10 +7,10 @@
 replicaCount: 1
 
 image:
-  # -- Container image repository. Defaults to the ghcr.io path the
-  # release pipeline pushes to. Override with --set image.repository=...
-  # for an internal mirror or a fork.
-  repository: ghcr.io/developerdurp/durpdeploy
+  # -- Pull container images through the Harbor GitHub proxy.
+  # The release pipeline publishes these images to GHCR.
+  # Override the repository with --set image.repository=...
+  repository: harbor.durp.info/github/developerdurp/durpdeploy
   # -- Image pull policy.
   pullPolicy: IfNotPresent
   # -- Image tag. Defaults to the chart's appVersion.

@@ -17,6 +17,7 @@ func TestBackupRestoreInterruptFixture(t *testing.T) {
 	if os.Getenv("DURPDEPLOY_RESTORE_INTERRUPT_FIXTURE") != "1" {
 		t.Skip("run scripts/test-backup-restore-cleanup.sh")
 	}
+	started := time.Now()
 	f := newRestoreFixture(t)
 	p := f.start(t)
 	f.login(t)
@@ -31,7 +32,7 @@ func TestBackupRestoreInterruptFixture(t *testing.T) {
 		"script_body":      "echo interrupt-ready; sleep 1800",
 		"interpreter":      "bash",
 		"execution_target": "local",
-		"container_image":  "docker.io/library/bash:5.2",
+		"container_image":  "harbor.durp.info/dockerhub/library/bash:5.2",
 		"timeout_seconds":  1800,
 	}, 201)
 	var release db.Release
@@ -57,6 +58,13 @@ func TestBackupRestoreInterruptFixture(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+	deadline, ok := t.Deadline()
+	if !ok || time.Until(deadline) < 30*time.Second {
+		t.Fatal("interruption fixture requires 30 seconds of timeout headroom")
+	}
+	t.Logf("restore-interrupt-timing startup=%s headroom=%s",
+		time.Since(started).Round(time.Millisecond),
+		time.Until(deadline).Round(time.Millisecond))
 	t.Logf(
 		"restore-interrupt-ready pid=%d namespace=%s:%s session=%s",
 		p.command.Process.Pid,

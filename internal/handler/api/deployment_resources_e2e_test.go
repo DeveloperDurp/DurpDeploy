@@ -35,7 +35,7 @@ echo %s-complete
 				f.api(t, "POST", f.base()+"/steps", map[string]any{
 					"name": name, "sort_order": index,
 					"script_body":     "set -eu\n" + script,
-					"container_image": "docker.io/library/bash:5.2",
+					"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 				}, 201)
 			}
 			// When: the public API runs the release and each step.

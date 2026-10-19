@@ -18,7 +18,7 @@ func TestRunbookSchedule_LatestAndPinnedResolveConcreteVersions(t *testing.T) {
 		repository.RunbookSave{
 			ProjectID: project.ID,
 			Name:      "maintenance",
-			StepsJSON: `[{"name":"check","script_body":"echo first","interpreter":"bash","container_image":"alpine:3"}]`,
+			StepsJSON: `[{"name":"check","script_body":"echo first","interpreter":"bash","container_image":"harbor.durp.info/dockerhub/library/alpine:3"}]`,
 		},
 	)
 	if err != nil {
@@ -35,7 +35,7 @@ func TestRunbookSchedule_LatestAndPinnedResolveConcreteVersions(t *testing.T) {
 	_, second, err := f.repo.SaveRunbook(f.ctx(), repository.RunbookSave{
 		ProjectID: project.ID,
 		RunbookID: book.ID,
-		StepsJSON: `[{"name":"check","script_body":"echo second","interpreter":"bash","container_image":"alpine:3"}]`,
+		StepsJSON: `[{"name":"check","script_body":"echo second","interpreter":"bash","container_image":"harbor.durp.info/dockerhub/library/alpine:3"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -82,7 +82,7 @@ func TestRunbookSchedule_ApprovalHoldsExecution(t *testing.T) {
 	book, _, err := f.repo.SaveRunbook(f.ctx(), repository.RunbookSave{
 		ProjectID: project.ID,
 		Name:      "approval-book",
-		StepsJSON: `[{"name":"check","script_body":"true","container_image":"alpine:3"}]`,
+		StepsJSON: `[{"name":"check","script_body":"true","container_image":"harbor.durp.info/dockerhub/library/alpine:3"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -142,7 +142,7 @@ func TestRunbookSchedule_InvalidCronDisablesSchedule(t *testing.T) {
 	book, _, err := f.repo.SaveRunbook(f.ctx(), repository.RunbookSave{
 		ProjectID: project.ID,
 		Name:      "invalid-cron-book",
-		StepsJSON: `[{"name":"check","script_body":"true","container_image":"alpine:3"}]`,
+		StepsJSON: `[{"name":"check","script_body":"true","container_image":"harbor.durp.info/dockerhub/library/alpine:3"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -173,7 +173,7 @@ func TestRunbookSchedule_ActiveExecutionQueuesNextOccurrence(t *testing.T) {
 	book, _, err := f.repo.SaveRunbook(f.ctx(), repository.RunbookSave{
 		ProjectID: project.ID,
 		Name:      "overlap-book",
-		StepsJSON: `[{"name":"check","script_body":"true","container_image":"alpine:3"}]`,
+		StepsJSON: `[{"name":"check","script_body":"true","container_image":"harbor.durp.info/dockerhub/library/alpine:3"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -239,7 +239,7 @@ func TestRunbookSchedule_BlockedAndInaccessibleStages(t *testing.T) {
 	book, _, err := f.repo.SaveRunbook(f.ctx(), repository.RunbookSave{
 		ProjectID: project.ID,
 		Name:      "gated-book",
-		StepsJSON: `[{"name":"check","script_body":"true","container_image":"alpine:3"}]`,
+		StepsJSON: `[{"name":"check","script_body":"true","container_image":"harbor.durp.info/dockerhub/library/alpine:3"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)

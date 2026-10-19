@@ -38,7 +38,7 @@ func TestAgentV3MixedFleetAndClaimRecheck(t *testing.T) {
                 INSERT INTO agent_environment_labels(agent_id,environment_id) VALUES('a',2),('b',2),('c',2);
                 UPDATE deployments SET status='running' WHERE id=3;
                 UPDATE deployment_steps SET agent_execution_mode=?1, interpreter=?2,
-                    container_image=CASE WHEN ?1='container' THEN 'alpine:3.20' ELSE '' END
+                    container_image=CASE WHEN ?1='container' THEN 'harbor.durp.info/dockerhub/library/alpine:3.20' ELSE '' END
                     WHERE deployment_id=3 AND step_index=0;`,
 				test.mode,
 				test.interpreter,

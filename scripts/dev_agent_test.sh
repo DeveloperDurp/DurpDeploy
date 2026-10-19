@@ -24,7 +24,7 @@ with socket.socket(socket.AF_UNIX) as listener:
 # Source-based PR checks can precede image publication. Report the image's
 # actual commit tag rather than the newer module revision under review.
 expected_image=$(awk '$1 == "DEV_AGENT_IMAGE" && $2 == "?=" {print $3}' "$root/Makefile")
-[[ $expected_image =~ ^ghcr.io/developerdurp/durpdeploy-agent:[0-9a-f]{7}$ ]]
+[[ $expected_image =~ ^harbor.durp.info/github/developerdurp/durpdeploy-agent:[0-9a-f]{7}$ ]]
 expected_tag=${expected_image##*:}
 
 run_make() {

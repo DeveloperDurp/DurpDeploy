@@ -17,7 +17,7 @@ func TestPendingLogLimitCancelsContainerE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	cleanupArtifactRuntime(t, f.h)
 	f.api(t, "POST", f.base()+"/steps", map[string]any{
-		"name": "newline-free", "container_image": "docker.io/library/bash:5.2",
+		"name": "newline-free", "container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 		"script_body": "head -c 1048577 /dev/zero | tr '\\000' X\nsleep 60\n",
 	}, 201)
 	var release db.Release

@@ -33,10 +33,10 @@ func TestCreateDeploymentPreservesReleaseInterpreter(t *testing.T) {
 			ProjectID: project.ID, Version: "v1",
 			StepsJson: `[{"name":"bash","script_body":"echo ok",` +
 				`"interpreter":"bash","execution_target":"local",` +
-				`"container_image":"alpine:3.20"},` +
+				`"container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"},` +
 				`{"name":"python","script_body":"print('ok')",` +
 				`"interpreter":"python3","execution_target":"local",` +
-				`"container_image":"python:3.13-alpine"}]`,
+				`"container_image":"harbor.durp.info/dockerhub/library/python:3.13-alpine"}]`,
 		},
 	)
 	if err != nil {
@@ -72,7 +72,7 @@ func TestCreateDeploymentPreservesReleaseInterpreter(t *testing.T) {
 		ID: release.ID, ProjectID: project.ID, Version: release.Version,
 		StepsJson: `[{"name":"changed","script_body":"Write-Output changed",` +
 			`"interpreter":"pwsh","execution_target":"local",` +
-			`"container_image":"mcr.microsoft.com/powershell:7.5-alpine-3.20"}]`,
+			`"container_image":"harbor.durp.info/microsoft/powershell:7.5-alpine-3.20"}]`,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -114,10 +114,10 @@ func TestCreateDeploymentPreservesReleaseInterpreter(t *testing.T) {
 	}
 	if rerunSource.StepsJson != `[{"name":"bash","script_body":"echo ok",`+
 		`"interpreter":"bash","execution_target":"local",`+
-		`"container_image":"alpine:3.20"},`+
+		`"container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"},`+
 		`{"name":"python","script_body":"print('ok')",`+
 		`"interpreter":"python3","execution_target":"local",`+
-		`"container_image":"python:3.13-alpine"}]` {
+		`"container_image":"harbor.durp.info/dockerhub/library/python:3.13-alpine"}]` {
 		t.Fatalf("rerun source = %s", rerunSource.StepsJson)
 	}
 }

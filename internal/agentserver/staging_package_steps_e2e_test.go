@@ -82,7 +82,7 @@ func (s *stagingE2E) addPackageStep(
 		"interpreter": "bash", "timeout_seconds": 120,
 	}
 	if spec.target == "local" || spec.mode == "container" {
-		step["container_image"] = "docker.io/library/bash:5.2"
+		step["container_image"] = "harbor.durp.info/dockerhub/library/bash:5.2"
 		script += "\n! touch \"$ARTIFACT_PATH/write\"\nawk '$5 == \"/artifacts\" { if ($6 !~ /ro/ || $6 !~ /noexec/) exit 1; found=1 } END { exit !found }' /proc/self/mountinfo"
 	}
 	step["script_body"] = script

@@ -219,7 +219,7 @@ func claimedRemoteStepWithMode(
         INSERT INTO agent_container_runtimes VALUES('test-agent','podman');
         INSERT INTO agent_container_interpreters VALUES('test-agent','bash');
         UPDATE deployment_steps SET agent_execution_mode = 'container',
-            container_image = 'alpine:3.20', variable_names = '["MODE"]'
+            container_image = 'harbor.durp.info/dockerhub/library/alpine:3.20', variable_names = '["MODE"]'
             WHERE deployment_id = ?;`, deploymentID); err != nil {
 			t.Fatal(err)
 		}

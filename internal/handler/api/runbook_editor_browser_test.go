@@ -30,7 +30,7 @@ func TestRunbookEditorBrowserE2E(t *testing.T) {
 			 "execution_target":"agent","agent_selectors":["canary"],
 			 "variable_names":["DB_HOST","API_TOKEN"]},
 			{"name":"local & <one>","script_body":"printf local",
-			 "container_image":"alpine:3.20","network_mode":"bridge"}
+			 "container_image":"harbor.durp.info/dockerhub/library/alpine:3.20","network_mode":"bridge"}
 		]}`), 201)
 	var saved struct {
 		Runbook db.Runbook `json:"runbook"`
@@ -100,7 +100,7 @@ func TestRunbookEditorBrowserE2E(t *testing.T) {
 	)
 	b.wait(t, `document.querySelector('dialog').matches(':modal')`)
 	b.evaluate(t, `(() => {
- const values = {step_name:'temporary', step_script:'echo temporary', step_image:'alpine:3.20'};
+ const values = {step_name:'temporary', step_script:'echo temporary', step_image:'harbor.durp.info/dockerhub/library/alpine:3.20'};
  for (const [name, value] of Object.entries(values)) {
   const input = document.querySelector('dialog [name=' + name + ']:not([type=hidden])');
   input.value = value; input.dispatchEvent(new Event('input'));
@@ -146,7 +146,7 @@ func TestRunbookEditorBrowserE2E(t *testing.T) {
 	)
 	b.wait(
 		t,
-		`document.querySelector('dialog').matches(':modal') && document.querySelector('dialog [name=step_image]:not([type=hidden])')?.value === 'alpine:3.20' && document.querySelector('dialog [name=step_network]')?.value === 'bridge'`,
+		`document.querySelector('dialog').matches(':modal') && document.querySelector('dialog [name=step_image]:not([type=hidden])')?.value === 'harbor.durp.info/dockerhub/library/alpine:3.20' && document.querySelector('dialog [name=step_network]')?.value === 'bridge'`,
 	)
 	b.captureNavigation(t, "runbook-step")
 	b.evaluate(
@@ -187,7 +187,7 @@ func TestRunbookEditorBrowserE2E(t *testing.T) {
 	}
 	if len(version.Steps) != 2 ||
 		version.Steps[0].Name != "local & <one>" ||
-		version.Steps[0].ContainerImage != "alpine:3.20" ||
+		version.Steps[0].ContainerImage != "harbor.durp.info/dockerhub/library/alpine:3.20" ||
 		version.Steps[0].NetworkMode != "bridge" ||
 		version.Steps[1].Name != "remote" ||
 		fmt.Sprint(version.Steps[1].AgentSelectors) != "[canary]" ||

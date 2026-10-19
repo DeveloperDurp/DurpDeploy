@@ -27,7 +27,7 @@ func TestTemplateWebCreateLocalRoundTripPersistsImageAndVariables(
 		"name":            {"local-template"},
 		"script_body":     {"echo hi"},
 		"interpreter":     {"bash"},
-		"container_image": {"alpine:3.20"},
+		"container_image": {"harbor.durp.info/dockerhub/library/alpine:3.20"},
 		"variable_names":  {"DEPLOY_ENV, API_KEY"},
 		"csrf_token":      {h.csrfToken()},
 	}
@@ -55,9 +55,9 @@ func TestTemplateWebCreateLocalRoundTripPersistsImageAndVariables(
 		t.Fatalf("expected 1 template, got %d", len(templates))
 	}
 	got := templates[0]
-	if got.ContainerImage != "alpine:3.20" {
+	if got.ContainerImage != "harbor.durp.info/dockerhub/library/alpine:3.20" {
 		t.Fatalf(
-			"created container_image=%q, want alpine:3.20",
+			"created container_image=%q, want harbor.durp.info/dockerhub/library/alpine:3.20",
 			got.ContainerImage,
 		)
 	}
@@ -83,7 +83,7 @@ func TestTemplateWebCreateLocalRoundTripPersistsImageAndVariables(
 		"name":            {"local-template"},
 		"script_body":     {"echo updated"},
 		"interpreter":     {"bash"},
-		"container_image": {"alpine:3.20"},
+		"container_image": {"harbor.durp.info/dockerhub/library/alpine:3.20"},
 		"variable_names":  {"DEPLOY_ENV, API_KEY"},
 		"csrf_token":      {h.csrfToken()},
 	}
@@ -114,9 +114,9 @@ func TestTemplateWebCreateLocalRoundTripPersistsImageAndVariables(
 	if err != nil {
 		t.Fatalf("get updated template: %v", err)
 	}
-	if updated.ContainerImage != "alpine:3.20" {
+	if updated.ContainerImage != "harbor.durp.info/dockerhub/library/alpine:3.20" {
 		t.Fatalf(
-			"after update container_image=%q, want alpine:3.20",
+			"after update container_image=%q, want harbor.durp.info/dockerhub/library/alpine:3.20",
 			updated.ContainerImage,
 		)
 	}
@@ -150,7 +150,7 @@ func TestTemplateWebUpdatePreservesApiMetadata(t *testing.T) {
 			Name:           "api-created",
 			ScriptBody:     "echo hi",
 			Interpreter:    "bash",
-			ContainerImage: "python:3.12",
+			ContainerImage: "harbor.durp.info/dockerhub/library/python:3.12",
 			VariableNames:  `["DEPLOY_ENV","API_KEY"]`,
 		},
 		"local",
@@ -167,7 +167,7 @@ func TestTemplateWebUpdatePreservesApiMetadata(t *testing.T) {
 		"name":            {"api-created"},
 		"script_body":     {"echo edited"},
 		"interpreter":     {"bash"},
-		"container_image": {"python:3.12"},
+		"container_image": {"harbor.durp.info/dockerhub/library/python:3.12"},
 		"variable_names":  {"DEPLOY_ENV, API_KEY"},
 		"csrf_token":      {h.csrfToken()},
 	}
@@ -198,9 +198,9 @@ func TestTemplateWebUpdatePreservesApiMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get updated template: %v", err)
 	}
-	if updated.ContainerImage != "python:3.12" {
+	if updated.ContainerImage != "harbor.durp.info/dockerhub/library/python:3.12" {
 		t.Fatalf(
-			"api metadata wiped: container_image=%q, want python:3.12",
+			"api metadata wiped: container_image=%q, want harbor.durp.info/dockerhub/library/python:3.12",
 			updated.ContainerImage,
 		)
 	}
@@ -238,9 +238,9 @@ func TestTemplateWebUpdatePreservesApiMetadata(t *testing.T) {
 	if len(versions) != 2 {
 		t.Fatalf("expected 2 versions, got %d", len(versions))
 	}
-	if versions[0].ContainerImage != "python:3.12" {
+	if versions[0].ContainerImage != "harbor.durp.info/dockerhub/library/python:3.12" {
 		t.Fatalf(
-			"latest version container_image=%q, want python:3.12",
+			"latest version container_image=%q, want harbor.durp.info/dockerhub/library/python:3.12",
 			versions[0].ContainerImage,
 		)
 	}
@@ -504,7 +504,7 @@ func TestTemplateWebUpdateLocalRoundTripPreservesImage(t *testing.T) {
 		db.CreateStepTemplateParams{
 			Name:           "local-tpl",
 			ScriptBody:     "echo hi",
-			ContainerImage: "alpine:3.20",
+			ContainerImage: "harbor.durp.info/dockerhub/library/alpine:3.20",
 			VariableNames:  `["DEPLOY_ENV"]`,
 		},
 		"local",
@@ -518,7 +518,7 @@ func TestTemplateWebUpdateLocalRoundTripPreservesImage(t *testing.T) {
 		"name":            {"local-tpl"},
 		"script_body":     {"echo edited"},
 		"interpreter":     {"bash"},
-		"container_image": {"alpine:3.20"},
+		"container_image": {"harbor.durp.info/dockerhub/library/alpine:3.20"},
 		"variable_names":  {"DEPLOY_ENV"},
 		"csrf_token":      {h.csrfToken()},
 	}
@@ -556,9 +556,9 @@ func TestTemplateWebUpdateLocalRoundTripPreservesImage(t *testing.T) {
 			updated.ExecutionTarget,
 		)
 	}
-	if updated.ContainerImage != "alpine:3.20" {
+	if updated.ContainerImage != "harbor.durp.info/dockerhub/library/alpine:3.20" {
 		t.Fatalf(
-			"local image wiped: container_image=%q, want alpine:3.20",
+			"local image wiped: container_image=%q, want harbor.durp.info/dockerhub/library/alpine:3.20",
 			updated.ContainerImage,
 		)
 	}

@@ -39,7 +39,7 @@ func TestArtifactGateImagePruneRetentionE2E(t *testing.T) {
 	image := "localhost/durpdeploy-gate-retention:" + identity
 	label := "io.durpdeploy.prune-test=" + identity
 	directory := t.TempDir()
-	dockerfile := "FROM docker.io/library/bash:5.2\n"
+	dockerfile := "FROM harbor.durp.info/dockerhub/library/bash:5.2\n"
 	if os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME") == "podman" {
 		// Docker deliberately rejects VOLUME images for executable steps.
 		dockerfile += "VOLUME /image-data\n"

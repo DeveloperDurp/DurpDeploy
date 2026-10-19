@@ -56,20 +56,20 @@ func TestBuildMetadataCountsSourceCommits(t *testing.T) {
 		t.Fatalf("first build = %v", first)
 	}
 	git("commit", "-q", "--allow-empty", "-m", "second")
-	second := read("GITHUB_REF_TYPE=branch")
+	second := read("GITLAB_CI=true")
 	if second["build_number"] != "2" ||
 		second["version"] == first["version"] ||
-		second["version"] != read("GITHUB_REF_TYPE=branch")["version"] {
+		second["version"] != read("GITLAB_CI=true")["version"] {
 		t.Fatalf("repeated source identity = %v", second)
 	}
 	git("tag", "v1.2.3+build.4")
-	tag := read("GITHUB_REF_TYPE=tag", "GITHUB_REF_NAME=v1.2.3+build.4")
+	tag := read("GITLAB_CI=true", "CI_COMMIT_TAG=v1.2.3+build.4")
 	if tag["software_version"] != "v1.2.3+build.4" ||
 		tag["version"] != "v1.2.3_build.4" || tag["is_release"] != "true" ||
 		tag["commit"] != git("rev-parse", "HEAD") {
 		t.Fatalf("tag identity = %v", tag)
 	}
-	if read("GITHUB_REF_TYPE=branch")["software_version"] !=
+	if read("GITLAB_CI=true")["software_version"] !=
 		second["software_version"] {
 		t.Fatal("branch build at tagged commit was presented as a release")
 	}
@@ -88,8 +88,8 @@ func TestBuildMetadataCountsSourceCommits(t *testing.T) {
 		command := exec.Command("bash", script)
 		command.Dir = directory
 		command.Env = append(metadataEnvironment(),
-			"BUILD_MODIFIED=false", "GITHUB_REF_TYPE=tag",
-			"GITHUB_REF_NAME="+invalid)
+			"BUILD_MODIFIED=false", "GITLAB_CI=true",
+			"CI_COMMIT_TAG="+invalid)
 		if data, err := command.CombinedOutput(); err == nil {
 			t.Fatalf("accepted invalid tag %q: %s", invalid, data)
 		}
@@ -102,7 +102,7 @@ func TestBuildMetadataCountsSourceCommits(t *testing.T) {
 	}
 	command := exec.Command("bash", script)
 	command.Dir = shallow
-	command.Env = append(metadataEnvironment(), "GITHUB_REF_TYPE=branch")
+	command.Env = append(metadataEnvironment(), "GITLAB_CI=true")
 	data, err := command.CombinedOutput()
 	if err != nil ||
 		!strings.Contains(string(data), "build_number=unknown\n") ||
@@ -123,7 +123,8 @@ func metadataEnvironment() []string {
 	var env []string
 	for _, value := range os.Environ() {
 		if !strings.HasPrefix(value, "BUILD_") &&
-			!strings.HasPrefix(value, "GITHUB_") {
+			!strings.HasPrefix(value, "CI_") &&
+			!strings.HasPrefix(value, "GITLAB_CI=") {
 			env = append(env, value)
 		}
 	}

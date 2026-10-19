@@ -35,7 +35,7 @@ printf before > "$DURPDEPLOY_STAGE_DIR/before"
 echo mixed-gate-prepared-once`,
 		},
 		{
-			"name": "Plan", "container_image": "docker.io/library/bash:5.2",
+			"name": "Plan", "container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 			"approval_artifact_path": "plan",
 			"approval_review_path":   "review",
 			"approval_review_format": "summary",
@@ -45,7 +45,7 @@ printf approved-plan > "$DURPDEPLOY_STAGE_DIR/plan"
 printf '{"create":1}' > "$DURPDEPLOY_STAGE_DIR/review"`,
 		},
 		{
-			"name": "Apply", "container_image": "docker.io/library/bash:5.2",
+			"name": "Apply", "container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 			"script_body": `set -eu
 test "$(cat "$DURPDEPLOY_APPROVED_DIR/plan")" = approved-plan
 test "$(cat "$DURPDEPLOY_APPROVED_DIR/before")" = before
@@ -55,7 +55,7 @@ printf applied > "$DURPDEPLOY_STAGE_DIR/result"`,
 		{
 			"name":             "Deliver in agent container",
 			"execution_target": "agent", "agent_execution_mode": "container",
-			"container_image": "docker.io/library/bash:5.2",
+			"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 			"agent_selectors": []string{"second-agent"},
 			"script_body": `set -eu
 test "$(cat "$DURPDEPLOY_STAGE_DIR/result")" = applied

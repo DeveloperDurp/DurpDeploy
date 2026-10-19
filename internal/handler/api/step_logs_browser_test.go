@@ -21,7 +21,7 @@ func TestDeploymentStepLogsBrowserE2E(t *testing.T) {
 	} {
 		f.api(t, "POST", f.base()+"/steps", map[string]any{
 			"name": "Same step name", "script_body": script,
-			"container_image": "docker.io/library/bash:5.2",
+			"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 		}, 201)
 	}
 	var release db.Release
@@ -150,7 +150,7 @@ func TestDeploymentStepLogsHistoricalQuietBrowserE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name": "Historical quiet step", "script_body": "true",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	var release db.Release
 	decodeStepLogTest(

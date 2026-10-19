@@ -58,7 +58,8 @@ func renderChart(t *testing.T, values string) []chartResource {
 	if err := os.WriteFile(path, []byte(values), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("helm", "template", "connection", ".", "-f", path)
+	cmd := exec.Command("helm", "template", "connection", ".",
+		"--namespace", "default", "-f", path)
 	output, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("render chart: %v", err)

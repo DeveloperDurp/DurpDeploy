@@ -172,14 +172,16 @@ export async function startBrowserFixture(root) {
 			}
 		},
 		async close() {
-			const results = await Promise.allSettled([
-				...Array.from(contexts, (context) => context.close()),
+			const results = await Promise.allSettled(
+				Array.from(contexts, (context) => context.close()),
+			);
+			results.push(...await Promise.allSettled([
 				browser?.close(),
 				stopApp(app),
-			]);
-			await markArtifactsCleaned(fixture.artifacts);
+			]));
 			const failure = results.find((result) => result.status === "rejected");
 			if (failure?.status === "rejected") throw failure.reason;
+			await markArtifactsCleaned(fixture.artifacts);
 		},
 	};
 	try {

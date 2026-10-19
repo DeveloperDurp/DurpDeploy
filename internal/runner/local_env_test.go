@@ -85,7 +85,7 @@ esac
 `)
 	err := r.runStepAttempt(t.Context(), localStepAttempt{
 		step: deploymentStep{
-			ContainerImage: "mcr.microsoft.com/powershell:latest",
+			ContainerImage: "harbor.durp.info/microsoft/powershell:latest",
 			Interpreter:    "pwsh",
 			ScriptBody:     "Get-Host",
 		},

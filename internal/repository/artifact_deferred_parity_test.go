@@ -36,7 +36,7 @@ func checkDeferredArtifactPinsAcrossDatabase(t *testing.T, name string) {
 		db.CreateReleaseParams{
 			ProjectID: project.ID,
 			Version:   "pending",
-			StepsJson: `[{"name":"read","script_body":"true","container_image":"bash:5.2"}]`,
+			StepsJson: `[{"name":"read","script_body":"true","container_image":"harbor.durp.info/dockerhub/library/bash:5.2"}]`,
 		},
 	)
 	if err != nil {

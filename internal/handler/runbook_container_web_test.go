@@ -111,8 +111,14 @@ func TestRunbookWeb_AgentStepRejectsContainerImage(t *testing.T) {
 		t.Fatal(err)
 	}
 	response, body := postRunbookForm(t, h, project.ID,
-		runbookContainerForm(h.csrfToken(), []string{"agent"},
-			[]string{"alpine:3.20"}, []string{""}))
+		runbookContainerForm(
+			h.csrfToken(),
+			[]string{"agent"},
+			[]string{
+				"harbor.durp.info/dockerhub/library/alpine:3.20",
+			},
+			[]string{""},
+		))
 	if response.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("status=%d body=%s", response.StatusCode, body)
 	}
@@ -135,8 +141,14 @@ func TestRunbookWeb_ContainerFieldsSurviveVersionSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	form := runbookContainerForm(h.csrfToken(), []string{"local"},
-		[]string{"alpine:3.20"}, []string{"DEPLOY_ENV, API_KEY"})
+	form := runbookContainerForm(
+		h.csrfToken(),
+		[]string{"local"},
+		[]string{
+			"harbor.durp.info/dockerhub/library/alpine:3.20",
+		},
+		[]string{"DEPLOY_ENV, API_KEY"},
+	)
 	form.Set("step_network", "bridge")
 	response, body := postRunbookForm(t, h, project.ID, form)
 	if response.StatusCode != http.StatusSeeOther ||
@@ -167,7 +179,7 @@ func TestRunbookWeb_ContainerFieldsSurviveVersionSnapshot(t *testing.T) {
 		t.Fatalf("steps=%+v", steps)
 	}
 	if steps[0].ExecutionTarget != "local" ||
-		steps[0].ContainerImage != "alpine:3.20" || steps[0].NetworkMode != "bridge" {
+		steps[0].ContainerImage != "harbor.durp.info/dockerhub/library/alpine:3.20" || steps[0].NetworkMode != "bridge" {
 		t.Fatalf("step=%+v", steps[0])
 	}
 	if strings.Join(steps[0].VariableNames, ",") != "DEPLOY_ENV,API_KEY" {
@@ -201,8 +213,14 @@ func TestRunbookWeb_RejectsInvalidVariableNames(t *testing.T) {
 				t.Fatal(err)
 			}
 			response, body := postRunbookForm(t, h, project.ID,
-				runbookContainerForm(h.csrfToken(), []string{"local"},
-					[]string{"alpine:3.20"}, []string{tc.names}))
+				runbookContainerForm(
+					h.csrfToken(),
+					[]string{"local"},
+					[]string{
+						"harbor.durp.info/dockerhub/library/alpine:3.20",
+					},
+					[]string{tc.names},
+				))
 			if response.StatusCode != http.StatusUnprocessableEntity {
 				t.Fatalf("status=%d body=%s", response.StatusCode, body)
 			}

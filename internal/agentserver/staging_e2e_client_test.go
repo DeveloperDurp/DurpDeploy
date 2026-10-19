@@ -60,7 +60,14 @@ func (s *stagingE2E) api(
 
 func (s *stagingE2E) wait(t *testing.T, id int64, want string) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Minute)
+	s.waitFor(t, id, want, 3*time.Minute)
+}
+
+func (s *stagingE2E) waitFor(
+	t *testing.T, id int64, want string, timeout time.Duration,
+) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
 	for {
 		var deployment struct{ Status string }
 		if err := json.Unmarshal(

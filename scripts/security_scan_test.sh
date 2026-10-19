@@ -134,8 +134,8 @@ fi
 expect_exit 2 env SECURITY_GIT_RANGE=invalid bash "$runner" gitleaks "$fixture/history"
 
 # Given a workflow that weakens permissions or disables findings.
-for mutation in 's/contents: read/contents: write/' 's/run: make security-scan-test/run: true/'; do
-  sed "$mutation" "$root/.github/workflows/security.yml" >"$fixture/workflow.yml"
+for mutation in 's/security-scan:/security-scan:\n  environment: production/' 's/make security-scan-test/true/'; do
+  sed "$mutation" "$root/.gitlab/ci/security.yml" >"$fixture/workflow.yml"
   expect_exit 1 bash "$root/scripts/check-security-contract.sh" "$fixture/workflow.yml"
 done
 

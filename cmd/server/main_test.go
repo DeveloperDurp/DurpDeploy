@@ -608,7 +608,7 @@ esac
 	}
 	localRelease, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
 		ProjectID: project.ID, Version: "local",
-		StepsJson: `[{"name":"local","container_image":"alpine:3.20"}]`,
+		StepsJson: `[{"name":"local","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)

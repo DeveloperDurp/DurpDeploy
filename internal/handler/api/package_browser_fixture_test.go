@@ -23,7 +23,7 @@ type packageBrowser struct {
 	session string
 }
 
-func startPackageBrowser(t *testing.T) *packageBrowser {
+func packageBrowserEndpoint(t *testing.T) string {
 	t.Helper()
 	kind := os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME")
 	if kind == "" {
@@ -45,7 +45,7 @@ func startPackageBrowser(t *testing.T) *packageBrowser {
 		"--security-opt=no-new-privileges",
 		"--shm-size=256m",
 		"--entrypoint=/bin/bash",
-		"mcr.microsoft.com/playwright:v1.61.1-noble",
+		"harbor.durp.info/microsoft/playwright:v1.61.1-noble",
 		"-lc",
 		"exec /ms-playwright/chromium-*/chrome-linux*/chrome --headless --no-sandbox --disable-dev-shm-usage --remote-debugging-address=127.0.0.1 --remote-debugging-port=0 --user-data-dir=/tmp/package-browser about:blank",
 	)
@@ -72,35 +72,92 @@ func startPackageBrowser(t *testing.T) *packageBrowser {
 		}
 	})
 	ready := make(chan string, 1)
+	startupError := make(chan error, 1)
+	startupLog := make(chan string, 1)
 	go func() {
 		scanner := bufio.NewScanner(stderr)
+		var diagnostics string
+		started := false
 		for scanner.Scan() {
+			diagnostics += scanner.Text() + "\n"
+			if len(diagnostics) > 8192 {
+				diagnostics = diagnostics[len(diagnostics)-8192:]
+			}
+			select {
+			case <-startupLog:
+			default:
+			}
+			startupLog <- diagnostics
 			if endpoint, ok := strings.CutPrefix(
 				scanner.Text(),
 				"DevTools listening on ",
-			); ok {
+			); ok && !started {
 				ready <- endpoint
+				started = true
 			}
+		}
+		if !started {
+			startupError <- fmt.Errorf(
+				"Chromium exited before readiness: %v\n%s",
+				scanner.Err(), diagnostics,
+			)
 		}
 	}()
 	var endpoint string
 	select {
 	case endpoint = <-ready:
+	case err := <-startupError:
+		t.Fatal(err)
 	case <-time.After(time.Minute):
+		select {
+		case diagnostics := <-startupLog:
+			t.Log(diagnostics)
+		default:
+		}
 		t.Fatal("Chromium did not expose its test endpoint")
+	}
+	return endpoint
+}
+
+// Tests that change browser-wide settings request their own process.
+func startPackageBrowser(t *testing.T, privateProcess ...bool) *packageBrowser {
+	t.Helper()
+	endpoint := os.Getenv("DURPDEPLOY_TEST_BROWSER_ENDPOINT")
+	if len(privateProcess) != 0 && privateProcess[0] {
+		endpoint = ""
+	}
+	if endpoint == "" {
+		endpoint = packageBrowserEndpoint(t)
 	}
 	wire, err := connectPackageBrowser(endpoint)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { wire.connection.Close() })
+	var isolated struct {
+		ID string `json:"browserContextId"`
+	}
+	if err := wire.call("Target.createBrowserContext", "",
+		map[string]bool{"disposeOnDetach": true}, &isolated); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := wire.call("Target.disposeBrowserContext", "",
+			map[string]string{"browserContextId": isolated.ID},
+			&struct{}{}); err != nil {
+			t.Errorf("dispose test browser context: %v", err)
+		}
+	})
 	var created struct {
 		Target string `json:"targetId"`
 	}
 	if err := wire.call(
 		"Target.createTarget",
 		"",
-		map[string]string{"url": "about:blank"},
+		map[string]string{
+			"url":              "about:blank",
+			"browserContextId": isolated.ID,
+		},
 		&created,
 	); err != nil {
 		t.Fatal(err)
@@ -171,7 +228,10 @@ func (b *packageBrowser) wait(t *testing.T, predicate string) {
 			Exception json.RawMessage `json:"exceptionDetails"`
 		}
 		err := b.wire.call("Runtime.evaluate", b.session, map[string]any{
-			"expression":    fmt.Sprintf("Boolean(%s)", predicate),
+			// A new document can expose its URL before its DOM is parsed.
+			"expression": fmt.Sprintf(
+				"document.readyState !== 'loading' && Boolean(%s)", predicate,
+			),
 			"returnByValue": true,
 		}, &result)
 		// A navigation destroys promises tied to the old document. Poll from

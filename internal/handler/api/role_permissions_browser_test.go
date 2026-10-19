@@ -14,7 +14,7 @@ func TestRolePermissionsBrowserE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name": "approved execution", "script_body": "printf permission-run-ok",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	release := verificationRelease(t, f, "permission-browser")
 	b := startPackageBrowser(t)

@@ -36,7 +36,7 @@ func TestProjectTokensBrowserE2E(t *testing.T) {
 			"token browser suite requires two retained projects and a session",
 		)
 	}
-	b := startPackageBrowser(t)
+	b := startPackageBrowser(t, true)
 	t.Cleanup(func() {
 		if !t.Failed() {
 			return

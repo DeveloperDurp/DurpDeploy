@@ -23,6 +23,7 @@ import (
 type delayedGateScanDB struct {
 	*sql.DB
 	paused  atomic.Bool
+	enabled atomic.Bool
 	started chan struct{}
 	resume  chan struct{}
 }
@@ -32,7 +33,8 @@ func (d *delayedGateScanDB) QueryRowContext(
 	query string,
 	args ...any,
 ) *sql.Row {
-	if strings.Contains(query, "-- name: GetArtifactGateChunk") &&
+	if d.enabled.Load() &&
+		strings.Contains(query, "-- name: GetArtifactGateChunk") &&
 		!d.paused.Swap(true) {
 		close(d.started)
 		select {
@@ -46,13 +48,15 @@ func (d *delayedGateScanDB) QueryRowContext(
 func TestArtifactGateScanAllowsConcurrentWritesE2E(t *testing.T) {
 	for _, reject := range []bool{false, true} {
 		t.Run(fmt.Sprint("reject=", reject), func(t *testing.T) {
-			f, deployment, gate := newGateDeployment(t)
+			f := newArtifactE2E(t)
 			scan := &delayedGateScanDB{
 				DB:      f.h.repo.DB,
 				started: make(chan struct{}),
 				resume:  make(chan struct{}),
 			}
 			f.h.repo.Queries = db.New(scan)
+			_, deployment, gate := createGateDeployment(t, f)
+			scan.enabled.Store(true)
 			var once sync.Once
 			unblock := func() { once.Do(func() { close(scan.resume) }) }
 			defer unblock()

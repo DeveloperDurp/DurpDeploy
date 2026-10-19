@@ -158,7 +158,7 @@ func (hc *harnessCtx) makeRelease(
 	t.Helper()
 	steps := []map[string]any{
 		{"name": "s1", "script_body": scriptBody, "sort_order": 1,
-			"container_image": "alpine:3.20"},
+			"container_image": "harbor.durp.info/dockerhub/library/alpine:3.20"},
 	}
 	stepsJSON, _ := json.Marshal(steps)
 	rel, err := hc.h.repo.Queries.CreateRelease(
@@ -260,7 +260,7 @@ func TestGate_FreeFloatingProject_AllowsAnyEnv(t *testing.T) {
 		db.CreateEnvironmentParams{Name: "B"},
 	)
 
-	steps := `[{"name":"s","script_body":"exit 0","sort_order":1,"container_image":"alpine:3.20"}]`
+	steps := `[{"name":"s","script_body":"exit 0","sort_order":1,"container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]`
 	rel, _ := h.repo.Queries.CreateRelease(
 		ctx,
 		db.CreateReleaseParams{

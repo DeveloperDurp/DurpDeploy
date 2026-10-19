@@ -170,9 +170,9 @@ trap cleanup EXIT
 echo "=== Preparing E2E checks against the running server ==="
 ADMIN_EMAIL="${E2E_ADMIN_EMAIL:-e2e-admin@test.local}"
 ADMIN_PASS="${E2E_ADMIN_PASSWORD:-e2e-admin-password-1234}"
-BASH_IMAGE=docker.io/library/bash:5.2
-PYTHON_IMAGE=docker.io/library/python:3.12-alpine
-PWSH_IMAGE=mcr.microsoft.com/powershell:latest
+BASH_IMAGE=harbor.durp.info/dockerhub/library/bash:5.2
+PYTHON_IMAGE=harbor.durp.info/dockerhub/library/python:3.12-alpine
+PWSH_IMAGE=harbor.durp.info/microsoft/powershell:latest
 ensure_test_admin "$ADMIN_EMAIL" "$ADMIN_PASS" "configured primary E2E admin"
 ensure_test_admin "$E2E_TASK3_ADMIN_EMAIL" "$E2E_TASK3_ADMIN_PASSWORD" "task-3 fixed admin"
 

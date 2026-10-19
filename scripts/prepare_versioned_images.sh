@@ -3,17 +3,17 @@
 set -euo pipefail
 source_directory=${1:?usage: prepare_versioned_images.sh SOURCE DESTINATION}
 destination=${2:?}
-[[ "${GITHUB_SHA:?}" =~ ^[0-9a-f]{40}$ ]]
-target=$(git rev-parse "${GITHUB_SHA:?}^{commit}")
+[[ "${CI_COMMIT_SHA:?}" =~ ^[0-9a-f]{40}$ ]]
+target=$(git rev-parse "${CI_COMMIT_SHA:?}^{commit}")
 tree=$(git rev-parse "$target^{tree}")
-for arch in amd64 arm64; do
+for arch in amd64; do
 	source="$source_directory/built-image-$arch"
 	jq -e --arg commit "$target" --arg tree "$tree" --arg arch "$arch" \
 		--arg version "${BUILD_VERSION:?}" --arg number "${BUILD_NUMBER:?}" \
-		--argjson run "${GITHUB_RUN_ID:?}" --argjson attempt "${GITHUB_RUN_ATTEMPT:?}" '
-		.schema == 1 and .commit == $commit and .tree == $tree and .arch == $arch
-		and .version == $version and .build_number == $number and .run == $run
-		and (.attempt | type == "number") and .attempt > 0 and .attempt <= $attempt
+		--argjson pipeline "${CI_PIPELINE_ID:?}" --argjson job "${SCANNED_IMAGE_JOB_ID:?}" '
+		.schema == 2 and .commit == $commit and .tree == $tree and .arch == $arch
+		and .version == $version and .build_number == $number and .pipeline == $pipeline
+		and .image_job == $job
 		and (.sha256 | test("^[0-9a-f]{64}$"))
 	' "$source/source.json" > /dev/null
 	archive_hash=$(jq -er '.sha256' "$source/source.json")

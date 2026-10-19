@@ -1,0 +1,46 @@
+# syntax=harbor.durp.info/dockerhub/docker/dockerfile:1
+# Build the existing browser image first. This image is CI tooling only.
+ARG BROWSER_IMAGE=durpdeploy-ci-browser
+FROM harbor.durp.info/dockerhub/library/docker:29.9.0-dind@sha256:0b6d18a4a222e71c88be6034926b4f6cde2fc33c2218643d03ccfddc65995470 AS docker
+FROM harbor.durp.info/dockerhub/hadolint/hadolint:v2.14.0-alpine@sha256:7aba693c1442eb31c0b015c129697cb3b6cb7da589d85c7562f9deb435a6657c AS hadolint
+FROM harbor.durp.info/dockerhub/alpine/helm:4.2.2@sha256:ee6fe3e96d9f8ea8dd1af9ecd7bbb3e233616a25f145392376f020fd2a51eb33 AS helm
+FROM harbor.durp.info/dockerhub/alpine/helm:3.16.2@sha256:a19a2968fd672336d39771f6c899781424d725229148656dbc2a1e305003cdec AS helm3
+FROM ${BROWSER_IMAGE}
+
+# Retain distribution license notices in /usr/share/doc.
+# hadolint ignore=DL3008
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        curl fuse-overlayfs gcc iptables jq libc6-dev openssl podman python3 python3-yaml \
+        shellcheck skopeo slirp4netns sudo uidmap unzip util-linux zip && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=docker /usr/local/bin/ /usr/local/bin/
+COPY --from=docker /usr/local/libexec/docker/cli-plugins/ /usr/local/libexec/docker/cli-plugins/
+COPY --from=hadolint /bin/hadolint /usr/local/bin/hadolint
+COPY --from=helm /usr/bin/helm /usr/local/bin/helm
+COPY --from=helm3 /usr/bin/helm /usr/local/bin/helm3
+COPY .gitlab/licenses/ /usr/local/share/licenses/durpdeploy-ci/
+
+ENV CGO_ENABLED=1
+
+# The Podman lane runs as this unprivileged user, without systemd or host sockets.
+RUN getent passwd pwuser && \
+    printf 'pwuser:100000:65536\n' > /etc/subuid && \
+    printf 'pwuser:100000:65536\n' > /etc/subgid
+
+# Share locked dependencies and the Go tool build cache through this image.
+# Each job writes only to its own container layer, including rootless Podman.
+COPY go.mod go.sum /opt/go-deps/
+ENV GOMODCACHE=/opt/go-mod GOCACHE=/opt/go-build
+COPY .gitlab/go-cache/main.go /opt/go-deps/main.go
+RUN export GOMEMLIMIT=768MiB GOMAXPROCS=2 && \
+    mv /root/.cache/go-build /opt/go-build && \
+    go -C /opt/go-deps mod download && \
+    go -C /opt/go-deps build -mod=readonly -p=1 -o /tmp/cache-prime . && \
+    go -C /opt/go-deps build -mod=readonly -p=1 -race -o /tmp/cache-prime . && \
+    rm /tmp/cache-prime && \
+    chown -R pwuser:pwuser /opt/go-mod /opt/go-build
+
+ENTRYPOINT []
+CMD ["bash"]

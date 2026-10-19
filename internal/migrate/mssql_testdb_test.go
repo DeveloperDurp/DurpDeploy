@@ -25,7 +25,7 @@ func newSQLServerTestDB(t *testing.T, fixtureFS ...fs.FS) *sql.DB {
 		ctx,
 		testcontainers.GenericContainerRequest{
 			ContainerRequest: testcontainers.ContainerRequest{
-				Image:        "mcr.microsoft.com/mssql/server:2022-latest",
+				Image:        "harbor.durp.info/microsoft/mssql/server:2022-latest",
 				ExposedPorts: []string{"1433/tcp"},
 				Env: map[string]string{
 					"ACCEPT_EULA":       "Y",

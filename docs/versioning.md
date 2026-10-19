@@ -40,11 +40,11 @@ CI replaces `+` with `_` only in the image tag and Helm `appVersion`.
 For example, the development version above uses this image tag:
 
 ```text
-ghcr.io/developerdurp/durpdeploy:v0.0.0-dev.742_g0123456789ab
+harbor.durp.info/github/developerdurp/durpdeploy:v0.0.0-dev.742_g0123456789ab
 ```
 
-CI builds and scans each architecture before publication.
-Publication also requires a successful PR run with the same source tree.
+CI builds and scans Linux AMD64 before publication.
+Publication also requires a successful GitLab merge request pipeline with the same source tree.
 The publisher verifies the current build metadata and publishes the scanned image bytes.
 It refuses to replace an existing version tag with different image bytes.
 

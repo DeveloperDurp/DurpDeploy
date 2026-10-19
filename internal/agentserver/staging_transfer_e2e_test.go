@@ -62,7 +62,7 @@ func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 					"variable_names":   []string{"SELECTED"},
 				}
 				if target == "local" || mode == "container" {
-					step["container_image"] = "docker.io/library/bash:5.2"
+					step["container_image"] = "harbor.durp.info/dockerhub/library/bash:5.2"
 				}
 				if target == "agent" {
 					step["agent_execution_mode"] = mode
@@ -209,7 +209,12 @@ func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 				s.cancelRunningStaging(t, deployment.ID)
 				want = "cancelled"
 			}
-			s.wait(t, deployment.ID, want)
+			if scenario == "capacity" {
+				// VFS must copy 512 MiB and 20,000 files before cleanup.
+				s.waitFor(t, deployment.ID, want, 5*time.Minute)
+			} else {
+				s.wait(t, deployment.ID, want)
+			}
 			if scenario == "background-writer" {
 				time.Sleep(3 * time.Second)
 			}

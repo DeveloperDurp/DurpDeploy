@@ -30,12 +30,12 @@ printf exact-plan > "$DURPDEPLOY_STAGE_DIR/tfplan"
 func TestArtifactGateBoundedPreviewE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
-		"name": "Generate", "container_image": "docker.io/library/bash:5.2",
+		"name": "Generate", "container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 		"approval_artifact_path": "tfplan", "approval_review_path": "review.json",
 		"approval_review_format": "terraform", "script_body": oversizedPreviewScript,
 	}, 201)
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
-		"name": "Apply", "container_image": "docker.io/library/bash:5.2",
+		"name": "Apply", "container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 		"script_body": `set -eu
 test "$(cat "$DURPDEPLOY_APPROVED_DIR/tfplan")" = exact-plan
 test "$(wc -c < "$DURPDEPLOY_APPROVED_DIR/review.json")" -gt 2000000

@@ -1,9 +1,9 @@
-# syntax=docker/dockerfile:1
+# syntax=harbor.durp.info/dockerhub/docker/dockerfile:1
 # Go 1.26.9 is copied into Playwright's pinned runtime image so its bundled
 # Chromium and Linux dependencies match package-lock.json's Playwright 1.61.1.
-FROM golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c AS go
+FROM harbor.durp.info/dockerhub/library/golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c AS go
 
-FROM mcr.microsoft.com/playwright:v1.61.1-noble
+FROM harbor.durp.info/microsoft/playwright:v1.61.1-noble
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
@@ -19,11 +19,12 @@ RUN apt-get update && \
 COPY --from=go /usr/local/go /usr/local/go
 ENV PATH=/go/bin:/usr/local/go/bin:${PATH}
 
-RUN GOBIN=/usr/local/bin go install github.com/a-h/templ/cmd/templ@v0.3.1020
+COPY go.mod go.sum /opt/go-tools/
+RUN go -C /opt/go-tools build -mod=readonly -o /usr/local/bin/templ github.com/a-h/templ/cmd/templ
 
 WORKDIR /opt/mobile-browser
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 
 COPY scripts/mobile-browser-container.sh /usr/local/bin/mobile-browser-container
 COPY scripts/agent_smoke_container.sh /usr/local/bin/agent-smoke-container

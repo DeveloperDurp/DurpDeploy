@@ -73,7 +73,7 @@ func TestRunbookDeletionBrowserE2E(t *testing.T) {
 			"runbook browser deletion requires its server, session, and history",
 		)
 	}
-	b := startPackageBrowser(t)
+	b := startPackageBrowser(t, true)
 	b.call(
 		t,
 		"Security.setIgnoreCertificateErrors",
@@ -200,11 +200,11 @@ func captureRunbookDeletion(t *testing.T, b *packageBrowser, state string) {
 			"width": width, "height": 900, "deviceScaleFactor": 1, "mobile": false,
 		}, &struct{}{})
 		b.wait(t, `document.fonts.status === 'loaded'`)
+		b.screenshot(t, fmt.Sprintf("%s-%d", state, width))
 		if string(
 			b.evaluate(t, "document.documentElement.scrollWidth <= innerWidth"),
 		) != "true" {
 			t.Fatalf("%s overflows at %d pixels", state, width)
 		}
-		b.screenshot(t, fmt.Sprintf("%s-%d", state, width))
 	}
 }

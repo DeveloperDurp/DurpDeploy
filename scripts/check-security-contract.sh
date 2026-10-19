@@ -1,20 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
-root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-workflow=${1:-$root/.github/workflows/security.yml}
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+workflow=${1:-$root/.gitlab/ci/security.yml}
 require() {
-  local file=$1 token=$2
-  grep -Fq -- "$token" "$file" || { printf 'Security contract missing: %s\n' "$token" >&2; exit 1; }
+  grep -Fq -- "$2" "$1" || { printf 'Security contract missing: %s\n' "$2" >&2; exit 1; }
 }
-for token in 'pull_request:' 'branches: [main]' 'schedule:' 'workflow_dispatch:' \
-  'contents: read' 'persist-credentials: false' 'fetch-depth: 0' \
-  'timeout-minutes: 30' 'retention-days: 7' 'make security-scan-test' \
-  'bash scripts/security_scan.sh govulncheck' 'bash scripts/security_scan.sh gosec' \
-  'bash scripts/security_scan.sh gitleaks'; do
+for token in 'security-scan:' 'container-security:' 'timeout: 30 minutes' \
+  'when: always' 'expire_in: 7 days' 'make security-scan-test' \
+  'for scanner in govulncheck gosec gitleaks' 'exit "$result"' \
+  'artifacts/security/' 'artifacts/container/'; do
   require "$workflow" "$token"
 done
-if grep -Eq 'secrets\.|pull_request_target|continue-on-error:|contents: write|permissions: write-all' "$workflow"; then
-  printf 'Security contract: privileged or non-blocking workflow\n' >&2
+if grep -Eq 'GHCR_TOKEN|GITLAB_READ_TOKEN|SONAR_TOKEN|docker login|allow_failure: *true|environment:' "$workflow"; then
+  echo 'Security contract: privileged or non-blocking pipeline' >&2
   exit 1
 fi
 for token in 'golang.org/x/vuln/cmd/govulncheck@v1.8.0' \

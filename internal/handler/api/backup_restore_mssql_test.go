@@ -17,7 +17,7 @@ import (
 	tcexec "github.com/testcontainers/testcontainers-go/exec"
 )
 
-const restoreMSSQLImage = "mcr.microsoft.com/mssql/server:2022-latest@" +
+const restoreMSSQLImage = "harbor.durp.info/microsoft/mssql/server:2022-latest@" +
 	"sha256:4402d880dd4c34bfa7d8705e56a86cd6c88da80a1f6bbbe741f999e76264a090"
 
 func restoreMSSQL(t *testing.T, source bool) *restoreNativeDB {

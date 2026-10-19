@@ -187,7 +187,7 @@ fi
     --security-opt=no-new-privileges:true \
     --tmpfs /data:size=64m --tmpfs /config:size=64m --tmpfs /tmp:size=64m \
     --publish "$https_publish" --volume "$directory/tls:/demo:ro,Z" \
-    docker.io/library/caddy:2-alpine \
+    harbor.durp.info/dockerhub/library/caddy:2-alpine \
     caddy run --config /demo/Caddyfile --adapter caddyfile \
     >"$directory/proxy.log" 2>&1
 https_address=$("$engine" port "$proxy" 8443/tcp | head -1)
@@ -336,11 +336,11 @@ project_id=$(api POST projects '{"name":"Demo agent execution"}' | \
 api POST "projects/$project_id/steps" \
     '{"name":"Agent hello","script_body":"echo demo-agent-connected","execution_target":"agent","agent_selectors":["demo"]}' >/dev/null
 api POST "projects/$project_id/steps" \
-    '{"name":"Agent Bash container","script_body":"test \"$(id -u)\" = 65534; test ! -e /run/durpdeploy/runtime.sock; echo demo-agent-container-bash","interpreter":"bash","container_image":"docker.io/library/bash:5.2","execution_target":"agent","agent_execution_mode":"container","agent_selectors":["demo"]}' >/dev/null
+    '{"name":"Agent Bash container","script_body":"test \"$(id -u)\" = 65534; test ! -e /run/durpdeploy/runtime.sock; echo demo-agent-container-bash","interpreter":"bash","container_image":"harbor.durp.info/dockerhub/library/bash:5.2","execution_target":"agent","agent_execution_mode":"container","agent_selectors":["demo"]}' >/dev/null
 api POST "projects/$project_id/steps" \
-    '{"name":"Agent Python container","script_body":"import os\nassert os.getuid() == 65534\nassert not os.path.exists(\"/run/durpdeploy/runtime.sock\")\nprint(\"demo-agent-container-python\")","interpreter":"python3","container_image":"docker.io/library/python:3.12-alpine","execution_target":"agent","agent_execution_mode":"container","agent_selectors":["demo"]}' >/dev/null
+    '{"name":"Agent Python container","script_body":"import os\nassert os.getuid() == 65534\nassert not os.path.exists(\"/run/durpdeploy/runtime.sock\")\nprint(\"demo-agent-container-python\")","interpreter":"python3","container_image":"harbor.durp.info/dockerhub/library/python:3.12-alpine","execution_target":"agent","agent_execution_mode":"container","agent_selectors":["demo"]}' >/dev/null
 api POST "projects/$project_id/steps" \
-    '{"name":"Agent PowerShell container","script_body":"if (Test-Path /run/durpdeploy/runtime.sock) { throw \"Unexpected runtime socket\" }; Write-Output demo-agent-container-pwsh","interpreter":"pwsh","container_image":"mcr.microsoft.com/powershell:latest","execution_target":"agent","agent_execution_mode":"container","agent_selectors":["demo"]}' >/dev/null
+    '{"name":"Agent PowerShell container","script_body":"if (Test-Path /run/durpdeploy/runtime.sock) { throw \"Unexpected runtime socket\" }; Write-Output demo-agent-container-pwsh","interpreter":"pwsh","container_image":"harbor.durp.info/microsoft/powershell:latest","execution_target":"agent","agent_execution_mode":"container","agent_selectors":["demo"]}' >/dev/null
 release_id=$(api POST "projects/$project_id/releases" '{"version":"demo-v1"}' | \
     python3 -c "$read_id")
 deployment_id=$(api POST "projects/$project_id/deployments" \

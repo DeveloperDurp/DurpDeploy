@@ -90,7 +90,7 @@ func TestAlpineDialogsBrowserE2E(t *testing.T) {
 		"/api/v1/projects/%d/steps", f.project.ID,
 	), map[string]any{
 		"name": "editor", "script_body": "printf editor",
-		"container_image": "alpine:3.20",
+		"container_image": "harbor.durp.info/dockerhub/library/alpine:3.20",
 	}, 201)
 	event, err := f.h.repo.Queries.CreateNotificationEvent(t.Context(),
 		db.CreateNotificationEventParams{

@@ -16,7 +16,7 @@ func TestResourceCreateModalBrowserE2E(t *testing.T) {
 			api := "/api/v1/" + resource
 			payload := map[string]string{"name": "duplicate-" + resource}
 			if resource == "templates" {
-				payload["container_image"] = "alpine:3.20"
+				payload["container_image"] = "harbor.durp.info/dockerhub/library/alpine:3.20"
 				payload["script_body"] = "echo original"
 				payload["interpreter"] = "bash"
 			}
@@ -88,7 +88,7 @@ func TestResourceCreateModalBrowserE2E(t *testing.T) {
 			b.evaluate(
 				t,
 				fmt.Sprintf(
-					`const form = document.querySelector('#project-edit-content'); form.querySelector('[name="name"]').value = %q; const desc = form.querySelector('[name="description"]'); if (desc) desc.value = 'retained'; const image = form.querySelector('[name="container_image"]'); if (image) image.value = 'alpine:3.20'; const script = form.querySelector('[name="script_body"]'); if (script) script.value = 'echo retained'; form.querySelector('button[form]').click(); true`,
+					`const form = document.querySelector('#project-edit-content'); form.querySelector('[name="name"]').value = %q; const desc = form.querySelector('[name="description"]'); if (desc) desc.value = 'retained'; const image = form.querySelector('[name="container_image"]'); if (image) image.value = 'harbor.durp.info/dockerhub/library/alpine:3.20'; const script = form.querySelector('[name="script_body"]'); if (script) script.value = 'echo retained'; form.querySelector('button[form]').click(); true`,
 					payload["name"],
 				),
 			)
@@ -167,7 +167,7 @@ func TestResourceEditModalBrowserE2E(t *testing.T) {
 			api := "/api/v1/" + resource
 			payload := map[string]string{"name": "original-" + resource}
 			if resource == "templates" {
-				payload["container_image"] = "alpine:3.20"
+				payload["container_image"] = "harbor.durp.info/dockerhub/library/alpine:3.20"
 				payload["script_body"] = "echo original"
 				payload["interpreter"] = "bash"
 			}

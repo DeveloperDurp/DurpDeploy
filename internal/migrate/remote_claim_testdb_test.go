@@ -53,7 +53,7 @@ func newRemoteClaimTestDB(t *testing.T, name string) remoteClaimTestDB {
 		defer cancel()
 		container, err := postgres.Run(
 			ctx,
-			"postgres:16-alpine",
+			"harbor.durp.info/dockerhub/library/postgres:16-alpine",
 			postgres.WithDatabase("claims"),
 			postgres.WithUsername("claims"),
 			postgres.WithPassword("fixture-only"),
@@ -75,7 +75,7 @@ func newRemoteClaimTestDB(t *testing.T, name string) remoteClaimTestDB {
 			ctx,
 			testcontainers.GenericContainerRequest{
 				ContainerRequest: testcontainers.ContainerRequest{
-					Image:        "mcr.microsoft.com/mssql/server:2022-latest",
+					Image:        "harbor.durp.info/microsoft/mssql/server:2022-latest",
 					ExposedPorts: []string{"1433/tcp"},
 					Env: map[string]string{
 						"ACCEPT_EULA":       "Y",

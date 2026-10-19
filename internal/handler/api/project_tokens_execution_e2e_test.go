@@ -16,7 +16,7 @@ func TestProjectTokensExecutionAPIE2E(t *testing.T) {
 	owner := f.token
 	step := map[string]string{"name": "scoped execution",
 		"script_body": "printf scoped-execution-ok", "interpreter": "bash",
-		"container_image": "docker.io/library/bash:5.2"}
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2"}
 	f.api(t, "POST", f.base()+"/steps", step, 201)
 	var release db.Release
 	if err := json.Unmarshal(f.api(

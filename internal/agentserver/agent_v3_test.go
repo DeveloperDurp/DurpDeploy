@@ -214,7 +214,7 @@ func TestAgentV3EncryptedPayloadKeepsStepRestriction(t *testing.T) {
 	f := newAgentFixture(t)
 	id := seedPollPayload(t, f, "pending", "test-agent")
 	if _, err := f.repo.DB.ExecContext(t.Context(), `
-        UPDATE deployment_steps SET agent_execution_mode='container', container_image='alpine:3.20',
+        UPDATE deployment_steps SET agent_execution_mode='container', container_image='harbor.durp.info/dockerhub/library/alpine:3.20',
         variable_names=CASE step_index WHEN 0 THEN '["MODE"]' ELSE '["TOKEN"]' END WHERE deployment_id=?`, id); err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestAgentV3EncryptedPayloadKeepsStepRestriction(t *testing.T) {
 	for i, name := range []string{"MODE", "TOKEN"} {
 		step := payload.Release.Steps[i]
 		if step.ExecutionMode != agentproto.ExecutionContainer ||
-			step.ContainerImage != "alpine:3.20" ||
+			step.ContainerImage != "harbor.durp.info/dockerhub/library/alpine:3.20" ||
 			len(step.VariableNames) != 1 ||
 			step.VariableNames[0] != name {
 			t.Fatalf("step=%+v", step)

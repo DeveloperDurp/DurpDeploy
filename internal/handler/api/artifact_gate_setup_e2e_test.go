@@ -27,7 +27,8 @@ type failedGateLookupDB struct {
 
 type stalePublishingStatusDB struct {
 	*sql.DB
-	stale atomic.Bool
+	stale   atomic.Bool
+	enabled atomic.Bool
 }
 
 func (d *stalePublishingStatusDB) QueryRowContext(
@@ -35,7 +36,8 @@ func (d *stalePublishingStatusDB) QueryRowContext(
 	query string,
 	args ...any,
 ) *sql.Row {
-	if strings.Contains(query, "-- name: GetDeployment :one") &&
+	if d.enabled.Load() &&
+		strings.Contains(query, "-- name: GetDeployment :one") &&
 		len(args) == 1 {
 		var status string
 		if err := d.DB.QueryRowContext(ctx, "SELECT status FROM deployments WHERE id=?", args[0]).
@@ -57,9 +59,11 @@ func (d *stalePublishingStatusDB) QueryRowContext(
 func TestArtifactGateCancellationAcrossPublicationE2E(t *testing.T) {
 	for _, surface := range []string{"api", "web"} {
 		t.Run(surface, func(t *testing.T) {
-			f, deployment, _ := newGateDeployment(t)
+			f := newArtifactE2E(t)
 			stale := &stalePublishingStatusDB{DB: f.h.repo.DB}
 			f.h.repo.Queries = db.New(stale)
+			_, deployment, _ := createGateDeployment(t, f)
+			stale.enabled.Store(true)
 			if surface == "api" {
 				f.api(
 					t,
@@ -122,6 +126,9 @@ func (d *failedGateLookupDB) QueryRowContext(
 
 func TestArtifactGateFailureDoesNotUseGlobalNotifiersE2E(t *testing.T) {
 	f := newArtifactE2E(t)
+	f.h.repo.Queries = db.New(
+		&failedGateLookupDB{DB: f.h.repo.DB, failRelease: true},
+	)
 	release := verificationRelease(t, f, "release-lookup-failure")
 	deployment, err := f.h.repo.Queries.CreateDeployment(
 		t.Context(),
@@ -139,9 +146,6 @@ func TestArtifactGateFailureDoesNotUseGlobalNotifiersE2E(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	f.h.repo.Queries = db.New(
-		&failedGateLookupDB{DB: f.h.repo.DB, failRelease: true},
-	)
 	f.h.runner.Run(t.Context(), deployment.ID, release.ID, f.environment.ID)
 	var stored db.Deployment
 	if err := json.Unmarshal(
@@ -174,9 +178,12 @@ func TestArtifactGateSetupFailureNotifiesE2E(t *testing.T) {
 	for _, scenario := range []string{"ordinary-claim", "gated-claim", "capture"} {
 		t.Run(scenario, func(t *testing.T) {
 			f := newArtifactE2E(t)
+			if scenario != "capture" {
+				f.h.repo.Queries = db.New(&failedGateLookupDB{DB: f.h.repo.DB})
+			}
 			step := map[string]any{
 				"name":            "Generate",
-				"container_image": "docker.io/library/bash:5.2",
+				"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 				"script_body":     "true",
 			}
 			if scenario != "ordinary-claim" {
@@ -192,15 +199,12 @@ func TestArtifactGateSetupFailureNotifiesE2E(t *testing.T) {
 				f.base()+"/steps",
 				map[string]any{
 					"name":            "Apply",
-					"container_image": "docker.io/library/bash:5.2",
+					"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 					"script_body":     "true",
 				},
 				201,
 			)
 			release := verificationRelease(t, f, scenario)
-			if scenario != "capture" {
-				f.h.repo.Queries = db.New(&failedGateLookupDB{DB: f.h.repo.DB})
-			}
 			deployment := verificationDeploy(t, f, release)
 			f.completion(t, deployment.ID, events.DeploymentFailed)
 			var stored db.Deployment
@@ -315,7 +319,7 @@ func TestArtifactGateInvalidScheduleDisabledE2E(t *testing.T) {
 		f.base()+"/steps",
 		map[string]any{
 			"name":                   "Final gate",
-			"container_image":        "docker.io/library/bash:5.2",
+			"container_image":        "harbor.durp.info/dockerhub/library/bash:5.2",
 			"script_body":            "true",
 			"approval_artifact_path": "plan",
 			"approval_review_path":   "review",

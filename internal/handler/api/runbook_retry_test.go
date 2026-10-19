@@ -27,7 +27,7 @@ func TestRunbookRetryRejectsUnconfirmedRemoteOutcome(t *testing.T) {
 		repository.RunbookSave{
 			ProjectID: project.ID,
 			Name:      "maintenance",
-			StepsJSON: `[{"name":"check","script_body":"true","container_image":"alpine:3.20"}]`,
+			StepsJSON: `[{"name":"check","script_body":"true","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]`,
 		})
 	if err != nil {
 		t.Fatal(err)
@@ -89,7 +89,7 @@ func TestRunbookRetryRejectsUnconfirmedContainerCleanup(t *testing.T) {
 		repository.RunbookSave{
 			ProjectID: project.ID,
 			Name:      "maintenance",
-			StepsJSON: `[{"name":"check","script_body":"true","container_image":"alpine:3.20"}]`,
+			StepsJSON: `[{"name":"check","script_body":"true","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]`,
 		},
 	)
 	if err != nil {

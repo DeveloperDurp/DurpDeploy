@@ -16,7 +16,7 @@ func TestPermissionRolesExecutionRetryGatesAPIE2E(t *testing.T) {
 	ownerToken := f.token
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name": "requires approval", "script_body": "echo approved",
-		"container_image": "docker.io/library/bash:5.2",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
 	}, 201)
 	release := verificationRelease(t, f, "retry-approval")
 	var lifecycle struct {

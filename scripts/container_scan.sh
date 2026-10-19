@@ -23,6 +23,9 @@ mkdir -p "$cache"
 cache=$(realpath "$cache")
 run_trivy() {
   env -i PATH="$PATH" HOME="$private" TMPDIR="$private" \
+    TRIVY_DB_REPOSITORY=harbor.durp.info/github/aquasecurity/trivy-db:2 \
+    TRIVY_JAVA_DB_REPOSITORY=harbor.durp.info/github/aquasecurity/trivy-java-db:1 \
+    TRIVY_CHECKS_BUNDLE_REPOSITORY=harbor.durp.info/github/aquasecurity/trivy-checks:2 \
     "$trivy" --config /dev/null --cache-dir "$cache" "$@"
 }
 run_trivy --version --format json >"$private/version.json" 2>"$private/errors" || fail 'version query failed'

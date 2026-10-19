@@ -82,7 +82,7 @@ func TestStepAddModalBrowserE2E(t *testing.T) {
 	b.wait(t, `!document.querySelector('.htmx-settling, .htmx-request')`)
 	b.evaluate(
 		t,
-		`const form = document.querySelector('#step-edit-content form'); form.querySelector('[name="script_body"]').value = 'echo retained'; form.querySelector('[name="container_image"]').value = 'alpine:3.20'; form.querySelector('[type="submit"]').click(); true`,
+		`const form = document.querySelector('#step-edit-content form'); form.querySelector('[name="script_body"]').value = 'echo retained'; form.querySelector('[name="container_image"]').value = 'harbor.durp.info/dockerhub/library/alpine:3.20'; form.querySelector('[type="submit"]').click(); true`,
 	)
 	b.wait(
 		t,
@@ -91,7 +91,7 @@ func TestStepAddModalBrowserE2E(t *testing.T) {
 	if string(
 		b.evaluate(
 			t,
-			`document.querySelector('#step-edit-content [name="script_body"]').value === 'echo retained' && document.querySelector('#step-edit-content [name="container_image"]').value === 'alpine:3.20'`,
+			`document.querySelector('#step-edit-content [name="script_body"]').value === 'echo retained' && document.querySelector('#step-edit-content [name="container_image"]').value === 'harbor.durp.info/dockerhub/library/alpine:3.20'`,
 		),
 	) != "true" {
 		t.Fatal("validation discarded step fields")
@@ -137,7 +137,7 @@ func TestStepEditModalBrowserE2E(t *testing.T) {
 	for i, step := range []*stepView{&first, &second} {
 		decodeStepLogTest(t, f.api(t, "POST", api, map[string]any{
 			"name": fmt.Sprintf("step-%d", i), "script_body": "echo original",
-			"container_image": "alpine:3.20",
+			"container_image": "harbor.durp.info/dockerhub/library/alpine:3.20",
 		}, 201), step)
 	}
 	b := startPackageBrowser(t)

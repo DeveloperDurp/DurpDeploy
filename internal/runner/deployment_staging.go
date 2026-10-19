@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"time"
 
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/containerenv"
@@ -51,6 +52,19 @@ func (r *DeploymentRunner) createStagingVolume(
 	deploymentID int64,
 	mount string,
 ) (artifactStage, error) {
+	if err := ctx.Err(); err != nil {
+		return artifactStage{}, err
+	}
+	// An engine can finish creating resources after its client is killed.
+	// Let setup settle before cleanup, even when the deployment is cancelled.
+	setupTimeout := 30 * time.Second
+	if deadline, exists := ctx.Deadline(); exists {
+		setupTimeout = min(setupTimeout, time.Until(deadline))
+	}
+	setupCtx, cancelSetup := context.WithTimeout(
+		context.WithoutCancel(ctx), setupTimeout,
+	)
+	defer cancelSetup()
 	var nonce [12]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return artifactStage{}, fmt.Errorf("name staging volume: %w", err)
@@ -65,27 +79,38 @@ func (r *DeploymentRunner) createStagingVolume(
 		)*int64(
 			os.Getpagesize(),
 		)
-		// tmpfs charges security attributes to its inode quota too.
-		nodes = 2*(staging.MaxFiles+1) - 1
+		nodes = staging.MaxFiles
 	}
 	r.mu.Lock()
+	stageIndex := len(r.staging[deploymentID])
 	r.staging[deploymentID] = append(r.staging[deploymentID], stage)
 	r.mu.Unlock()
+	defer func() {
+		if setupCtx.Err() != nil {
+			r.mu.Lock()
+			r.staging[deploymentID][stageIndex].creationUnconfirmed = true
+			r.mu.Unlock()
+		}
+	}()
 	args := []string{
 		"volume", "create", "--label=io.durpdeploy.artifact=true",
 		"--label=io.durpdeploy.namespace=" + r.engine.scope(),
 	}
 	if r.engine.kind == "docker" || mount == deploymentStageMount {
+		// tmpfs charges security attributes to its inode quota too.
 		args = append(args, "--driver=local", "--opt=type=tmpfs",
 			"--opt=device=tmpfs", fmt.Sprintf(
 				"--opt=o=noexec,nosuid,nodev,size=%d,nr_inodes=%d,uid=65534,gid=65534,mode=0755",
 				capacity,
-				nodes+1,
+				2*(nodes+1),
 			))
 	}
 	args = append(args, stage.volume)
-	if _, err := r.engine.command(ctx, args...).CombinedOutput(); err != nil {
+	if _, err := r.engine.command(setupCtx, args...).CombinedOutput(); err != nil {
 		return stage, fmt.Errorf("create staging volume: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return stage, err
 	}
 	keeperMount := stage.volume + ":" + mount + ":rw,nocopy"
 	if r.engine.kind == "podman" {
@@ -107,10 +132,10 @@ func (r *DeploymentRunner) createStagingVolume(
 		"--entrypoint=/usr/bin/tail", artifactHelperImage,
 		"-f", "/dev/null",
 	}
-	if _, err := r.engine.command(ctx, args...).CombinedOutput(); err != nil {
+	if _, err := r.engine.command(setupCtx, args...).CombinedOutput(); err != nil {
 		return stage, fmt.Errorf("start staging keeper: %w", err)
 	}
-	return stage, nil
+	return stage, ctx.Err()
 }
 
 func (r *DeploymentRunner) deploymentMountArgs(stage artifactStage) []string {
