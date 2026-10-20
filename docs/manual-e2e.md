@@ -1396,6 +1396,47 @@ Run the isolated browser and API checks:
 bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestRerunInputs(APIWeb|Browser)E2E$' ./internal/handler/api
 ```
 
+## Device, certificate, and passkey checks (V04)
+
+Use an isolated HTTPS instance and disposable accounts for these checks.
+Use a browser profile that contains no personal credentials.
+Keep certificate exceptions disabled.
+Trust a test CA only in that isolated profile.
+Do not change the system trust store.
+
+1. Open the HTTPS login page before trusting its CA.
+2. Expect an untrusted-certificate error.
+3. Trust the CA in the isolated profile and reload the matching hostname.
+4. Expect the login page without a certificate warning.
+5. Call `GET /api/v1/healthz` from that page and expect `200` with `{"ok":true}`.
+6. Open the same server through a hostname absent from the certificate.
+7. Expect a TLS failure and record its exact error.
+8. Sign in with a disposable account and open Security.
+9. Reauthenticate and select Add passkey.
+10. Complete registration and select Verify passkey.
+11. Confirm that ten recovery codes appear without recording their values.
+12. Select Continue and sign in again with the password.
+13. Confirm that the MFA page appears without a final `session` cookie.
+14. Select Use a passkey and complete its assertion.
+15. Confirm that the dashboard opens.
+16. Confirm that the final session cookie has `Secure`, `HttpOnly`, and `SameSite=Lax`.
+
+Record each device and security result separately.
+The isolated Chromium check passed with a trusted test CA and a CTAP2 virtual authenticator.
+The untrusted CA failed with `ERR_CERT_AUTHORITY_INVALID`.
+The wrong-host request failed with `ERR_SSL_PROTOCOL_ERROR` because the proxy rejected TLS first.
+That result does not independently prove browser hostname validation.
+These checks do not establish production certificate trust or physical authenticator behavior.
+
+Physical-phone keyboard behavior remains pending because device access is disabled in this environment.
+Orca is installed, but no controlled browser session was available to measure spoken announcements.
+Screen-reader announcements remain pending.
+
+When suitable tools are available, repeat these checks on a physical phone and with a screen reader.
+Check keyboard overlap, focused-field visibility, form submission, validation announcements, toast announcements, and focus after navigation.
+Record the device, operating system, browser, screen reader, action, expected result, and observed result.
+Keep each unmeasured result pending.
+
 ## Database TLS policy
 
 Use a disposable database when changing TLS settings for this check.
