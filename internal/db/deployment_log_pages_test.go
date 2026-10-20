@@ -19,7 +19,7 @@ func TestLogMetadataUsesSparseIndex(t *testing.T) {
 	// When: SQLite plans the metadata lookup independently of page output.
 	rows, err := conn.QueryContext(t.Context(),
 		"EXPLAIN QUERY PLAN "+listDeploymentLogStateMetadata,
-		int64(1), int64(math.MaxInt64))
+		"", int64(1), int64(math.MaxInt64))
 	if err != nil {
 		t.Fatal(err)
 	}
