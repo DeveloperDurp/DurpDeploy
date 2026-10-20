@@ -168,6 +168,12 @@ templ DeploymentListRow(item DeploymentListItem) {
 				<div class="min-w-0"><dt class="text-xs opacity-70 mb-1">Status</dt><dd>@StatusBadge(item.Deployment)</dd></div>
 				<div class="min-w-0"><dt class="text-xs opacity-70 mb-1">Date</dt><dd>{ formatUnixTime(item.Deployment.CreatedAt) }</dd></div>
 			</dl>
+			if item.Deployment.Note.Valid && item.Deployment.Note.String != "" {
+				<dl class="mt-3">
+					<dt class="text-xs opacity-70 mb-1">Note</dt>
+					<dd class="whitespace-pre-wrap break-all" data-deployment-note>{ item.Deployment.Note.String }</dd>
+				</dl>
+			}
 		}
 	</div>
 }

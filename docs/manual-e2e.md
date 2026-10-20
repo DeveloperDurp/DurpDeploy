@@ -1182,6 +1182,28 @@ Project administrators with global Maintainer permission can retain or remove an
 As a Maintainer, create or update a project with a new lifecycle ID.
 Confirm a 403 response without a project change.
 
+## Deployment notes in history
+
+1. Create a deployment with an incident note, such as `incident-failure`.
+2. Wait for the deployment to finish.
+3. Select Re-run.
+4. Confirm the request.
+5. Wait for the re-run to finish.
+6. Open Deployments or the project's Deployment history link.
+7. Confirm the original card shows the complete incident note.
+8. Confirm the re-run card shows `Re-run of #` with the original deployment ID.
+9. Use Load more when the original record is on another page.
+10. Confirm appended cards show their saved notes.
+11. Repeat at phone and desktop widths with a long note containing line breaks and markup.
+12. Confirm notes wrap and display markup as plain text.
+13. Confirm deployments without notes have no empty Note field.
+14. Repeat with a Viewer assigned to the project.
+
+Public deployment list endpoints include the same saved `note` values.
+History does not change notes, deployment statuses, or project access.
+Keep the incident and re-run records for manual checks.
+These checks create no schedules.
+
 ## Empty deployment filters
 
 1. Open Deployments for an account with deployment history.
