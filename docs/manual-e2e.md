@@ -306,6 +306,40 @@ bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestStepF
 
 ## Swagger request target
 
+### Scoped-token verification (V01)
+
+Retained example: [project B](http://127.0.0.1:53987/projects/21), [deployment45](http://127.0.0.1:53987/deployments/45).
+Projects20 and22 retain the removed and unselected examples. Environment37 and release29 remain available.
+The disposable token is revoked. No schedules were created.
+
+1. Create a disposable Viewer token with selected projects A and B.
+2. Open `/api/swagger/` and verify the displayed API target.
+3. Enter the raw token through **Authorize**. Keep its value out of saved output.
+4. Execute `GET /projects`. Expect only A and B, with total2.
+5. Execute `GET /projects/{id}` for unselected project C. Expect403.
+6. Execute `POST /projects/{id}/deployments` for B with a valid release and environment. Expect403 and no new deployment.
+7. Change the same token to Deployer access for B only through its owner settings or API.
+8. Keep the original Swagger authorization. Execute `GET /projects`. Expect only B, with total1.
+9. Execute `GET /projects/{id}` for removed project A. Expect403.
+10. Execute the same valid deployment request for B. Expect201 and one new deployment.
+11. Execute `GET /deployments/{id}` after completion. Expect200 and status `succeeded`.
+12. Revoke the token through its owner settings or API.
+13. Repeat the project list and deployment requests with the cached Swagger authorization. Expect401 and no additional deployment.
+14. Clear Swagger authorization. Redact generated curl credentials before saving screenshots.
+
+The native check used the backend on port53987. A02 separately verifies HTTPS and a non-default proxy port.
+Some denied operations show `Undocumented` beside the actual403 response. Read the numeric status and returned JSON.
+The auxiliary global deployment-list operation currently requests an unused required `id` in Swagger.
+That auxiliary check did not send an HTTP request. It is outside the V01 project-list and deployment-creation checks.
+
+Run the focused regression:
+
+```bash
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestSwaggerTokensBrowserE2E$' ./internal/handler/api
+```
+
+### Request-target verification (A02)
+
 Open `/api/swagger/` through the instance's HTTPS proxy on a non-default port.
 Before authorization, confirm that **API target** shows the current HTTPS origin and `/api/v1`.
 Expand `GET /healthz` in Swagger.
