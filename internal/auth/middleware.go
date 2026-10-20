@@ -98,15 +98,16 @@ func AuthMiddleware(
 }
 
 func redirectToLogin(w http.ResponseWriter, r *http.Request) {
+	location := loginRedirectURL(r)
 	if r.Header.Get("HX-History-Restore-Request") == "true" {
-		w.Header().Set("HX-Redirect", "/login")
+		w.Header().Set("HX-Redirect", location)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 	if r.Header.Get("HX-Boosted") == "true" {
-		w.Header().Set("HX-Redirect", "/login")
+		w.Header().Set("HX-Redirect", location)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	http.Redirect(w, r, location, http.StatusSeeOther)
 }

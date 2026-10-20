@@ -29,7 +29,7 @@ func (h *AuthHandler) completeMFAForm(
 		h.writeMFAFormError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, h.takeLoginDestination(w, r), http.StatusSeeOther)
 }
 
 func (h *AuthHandler) completeMFAJSON(
@@ -43,7 +43,9 @@ func (h *AuthHandler) completeMFAJSON(
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).
-		Encode(map[string]string{"redirect": "/"}); err != nil {
+		Encode(map[string]string{
+			"redirect": h.takeLoginDestination(w, r),
+		}); err != nil {
 		h.writeMFAJSONError(w, r, err)
 	}
 }

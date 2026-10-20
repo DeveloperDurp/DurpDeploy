@@ -66,7 +66,7 @@ func TestLogin_TOTPCompletesPendingChallengeAndIssuesFinalSession(
 	box := configureMFA(t, h, mfa.Config{})
 	user := h.seedUser(t, "totp@example.com", "hunter2")
 	code := seedTOTP(t, h, user, box)
-	pending := loginPending(t, h, user.Email)
+	pending := loginPending(t, h, user.Email, "/projects?name=totp")
 
 	// When
 	response, err := pending.client.PostForm(
@@ -83,10 +83,11 @@ func TestLogin_TOTPCompletesPendingChallengeAndIssuesFinalSession(
 
 	// Then
 	if response.StatusCode != http.StatusSeeOther ||
-		response.Header.Get("Location") != "/" {
+		response.Header.Get("Location") != "/projects?name=totp" {
 		t.Fatalf("TOTP response = %d %q", response.StatusCode,
 			response.Header.Get("Location"))
 	}
+	assertLoginDestinationCleared(t, response)
 	if response.Header.Get("Cache-Control") != "no-store" {
 		t.Fatalf(
 			"Cache-Control = %q, want no-store",

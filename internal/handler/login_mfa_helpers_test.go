@@ -64,9 +64,18 @@ func loginPending(
 	t *testing.T,
 	h *authHarness,
 	email string,
+	destination ...string,
 ) pendingLogin {
 	t.Helper()
 	client := newJar(t)
+	if len(destination) != 0 {
+		response, err := client.Get(h.server + "/login?" +
+			url.Values{"next": {destination[0]}}.Encode())
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+	}
 	response, err := client.PostForm(h.server+"/login", url.Values{
 		"email":    {email},
 		"password": {"hunter2"},

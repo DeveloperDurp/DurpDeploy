@@ -139,6 +139,13 @@ Configure the OIDC Maintainer group to preserve authoring access on the next OID
 
 ### Web session + CSRF (only when driving the UI)
 
+Unauthenticated browser page requests redirect to `/login?next=<local-path>`.
+Fetch that login page with a cookie jar before submitting credentials to preserve the destination.
+Successful password, MFA, and SSO login returns to that local page with normal authorization checks.
+External and invalid destinations fall back to `/`.
+Failed password login returns `422`, retains the email, and leaves the password empty.
+Direct `/login` requests start without a saved destination.
+
 ```bash
 curl -c /tmp/dd-cookies -X POST \
     -d "email=you@example.com&password=SECRET" "$BASE/login"    # 303 on success

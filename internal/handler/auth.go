@@ -100,7 +100,9 @@ func (h *AuthHandler) SetOIDCLogin(
 }
 
 func (h *AuthHandler) LoginGet(w http.ResponseWriter, r *http.Request) {
-	if err := pages.LoginPage(r.URL.Path, "", h.oidcDisplayName).
+	setNoStore(w)
+	h.rememberLoginDestination(w, r)
+	if err := pages.LoginPage(r.URL.Path, "", h.oidcDisplayName, "").
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -139,10 +141,12 @@ func (h *AuthHandler) renderOIDCLoginUnavailable(
 		r.URL.Path,
 		"Single sign-on is temporarily unavailable",
 		h.oidcDisplayName,
+		"",
 	).Render(r.Context(), w)
 }
 
 func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
+	setNoStore(w)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -209,7 +213,7 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, h.takeLoginDestination(w, r), http.StatusSeeOther)
 }
 
 func (h *AuthHandler) renderInvalidLogin(
@@ -221,6 +225,7 @@ func (h *AuthHandler) renderInvalidLogin(
 		r.URL.Path,
 		"Invalid email or password",
 		h.oidcDisplayName,
+		r.PostFormValue("email"),
 	).Render(r.Context(), w)
 }
 

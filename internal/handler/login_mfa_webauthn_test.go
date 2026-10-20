@@ -53,7 +53,7 @@ func TestLogin_WebAuthnCompletesPendingChallenge(t *testing.T) {
 	); err != nil {
 		t.Fatalf("create WebAuthn credential: %v", err)
 	}
-	pending := loginPending(t, h, user.Email)
+	pending := loginPending(t, h, user.Email, "/environments")
 
 	// When
 	begin, err := http.NewRequest(
@@ -119,6 +119,16 @@ func TestLogin_WebAuthnCompletesPendingChallenge(t *testing.T) {
 			finishResponse.Header.Get("Cache-Control"))
 	}
 	pendingCookiesCleared(t, finishResponse)
+	assertLoginDestinationCleared(t, finishResponse)
+	var result struct {
+		Redirect string `json:"redirect"`
+	}
+	if err := json.NewDecoder(finishResponse.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Redirect != "/environments" {
+		t.Fatalf("passkey redirect = %q", result.Redirect)
+	}
 	if sessionCount(t, h, user.ID) != 1 {
 		t.Fatal("WebAuthn completion did not create one final session")
 	}

@@ -707,8 +707,12 @@ func TestAuth_ProtectedRoute_RedirectsToLogin(t *testing.T) {
 			if resp.StatusCode != http.StatusSeeOther {
 				t.Fatalf("GET %s: status = %d, want 303", path, resp.StatusCode)
 			}
-			if loc := resp.Header.Get("Location"); loc != "/login" {
-				t.Fatalf("GET %s: location = %q, want /login", path, loc)
+			want := "/login"
+			if path != "/" {
+				want += "?" + url.Values{"next": {path}}.Encode()
+			}
+			if loc := resp.Header.Get("Location"); loc != want {
+				t.Fatalf("GET %s: location = %q, want %q", path, loc, want)
 			}
 		})
 	}

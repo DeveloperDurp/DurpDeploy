@@ -810,6 +810,28 @@ Enable a disposable schedule through its existing toggle control to repeat sched
 
 ## List and authentication checks
 
+Open a protected project URL in a separate signed-out browser session.
+Confirm that the login URL contains the requested local destination.
+Enter an incorrect password and submit the form.
+Confirm that the email remains visible and the password field is empty.
+Confirm that the error remains generic.
+Enter the correct password and submit again.
+Confirm that the requested project opens with its original query parameters.
+Repeat at phone and desktop widths.
+Repeat with an MFA-enrolled account and through configured SSO.
+Confirm that completion returns to the requested page.
+Use an account without project access and repeat the login.
+Confirm that the project still denies access.
+Open `/login?next=//example.invalid` and complete login.
+Confirm that the dashboard opens on the same instance.
+Keep the test project and accounts available for repeat checks.
+
+Run the public login and browser regressions:
+
+```bash
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -run '^TestLoginDestination(APIWeb|HTMXAPIWeb|Browser)E2E$' ./internal/handler/api
+```
+
 Schedules show 50 entries per page.
 Create 51 disabled schedules in a disposable project.
 Open the second page with **Next**.

@@ -2,7 +2,7 @@ package pages
 
 import "durpdeploy/views/layouts"
 
-templ LoginPage(currentPath, errorMsg, oidcDisplayName string) {
+templ LoginPage(currentPath, errorMsg, oidcDisplayName, email string) {
 	@layouts.Base("Login", currentPath) {
 		<div class="w-full px-4 sm:px-6 lg:px-8 py-12">
 			<div class="max-w-md mx-auto">
@@ -20,7 +20,7 @@ templ LoginPage(currentPath, errorMsg, oidcDisplayName string) {
 								<label class="label" for="login-email">
 									<span class="label-text">Email</span>
 								</label>
-								<input id="login-email" type="email" name="email" class="input input-bordered" autocomplete="username" required/>
+								<input id="login-email" type="email" name="email" class="input input-bordered" autocomplete="username" required value={ email }/>
 							</div>
 							<div class="form-control">
 								<label class="label" for="login-password">

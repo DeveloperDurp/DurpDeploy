@@ -32,7 +32,7 @@ func TestLogin_RecoveryCompletesPendingChallengeOnlyOnce(t *testing.T) {
 	); err != nil {
 		t.Fatalf("create recovery code: %v", err)
 	}
-	pending := loginPending(t, h, user.Email)
+	pending := loginPending(t, h, user.Email, "/deployments?status=failed")
 
 	// When
 	response, err := pending.client.PostForm(
@@ -49,10 +49,11 @@ func TestLogin_RecoveryCompletesPendingChallengeOnlyOnce(t *testing.T) {
 
 	// Then
 	if response.StatusCode != http.StatusSeeOther ||
-		response.Header.Get("Location") != "/" {
+		response.Header.Get("Location") != "/deployments?status=failed" {
 		t.Fatalf("recovery response = %d %q", response.StatusCode,
 			response.Header.Get("Location"))
 	}
+	assertLoginDestinationCleared(t, response)
 	pendingCookiesCleared(t, response)
 	if sessionCount(t, h, user.ID) != 1 {
 		t.Fatal("recovery completion did not create one final session")

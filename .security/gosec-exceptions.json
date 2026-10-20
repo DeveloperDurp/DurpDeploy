@@ -263,8 +263,8 @@
   {
     "rule": "G124",
     "file": "internal/handler/auth.go",
-    "line": "252",
-    "source_sha256": "c81d614699a91b1168daf372be86f781a734379a8a64c008d72e247570970e66",
+    "line": "257",
+    "source_sha256": "5f88869e9609887bcbbb3ac9429042e3a412a37fc7c681420f85c62f8305dba4",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."

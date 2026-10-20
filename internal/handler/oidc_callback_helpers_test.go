@@ -136,9 +136,15 @@ func (f oidcCallbackFixture) begin(
 	}
 }
 
-func (f oidcCallbackFlow) callback(t *testing.T) *http.Response {
+func (f oidcCallbackFlow) callback(
+	t *testing.T,
+	cookies ...*http.Cookie,
+) *http.Response {
 	t.Helper()
-	response, err := doOIDCCallback(f.callbackURL, f.transactionCookie)
+	response, err := doOIDCCallback(
+		f.callbackURL,
+		f.transactionCookie,
+		cookies...)
 	if err != nil {
 		t.Fatalf("call OIDC callback: %v", err)
 	}
@@ -148,6 +154,7 @@ func (f oidcCallbackFlow) callback(t *testing.T) *http.Response {
 func doOIDCCallback(
 	callbackURL string,
 	transactionCookie *http.Cookie,
+	cookies ...*http.Cookie,
 ) (*http.Response, error) {
 	request, err := http.NewRequestWithContext(
 		context.Background(),
@@ -160,6 +167,9 @@ func doOIDCCallback(
 	}
 	request.Header.Set("User-Agent", oidcCallbackUserAgent)
 	request.AddCookie(transactionCookie)
+	for _, cookie := range cookies {
+		request.AddCookie(cookie)
+	}
 	client := http.Client{
 		Timeout: 10 * time.Second,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {

@@ -69,7 +69,7 @@ func (h *AuthHandler) LoginOIDCCallbackGet(
 			h.redirectOIDCLoginFailure(w, r)
 			return
 		}
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		http.Redirect(w, r, h.takeLoginDestination(w, r), http.StatusSeeOther)
 	case oidc.TransactionModeReauth:
 		h.completeOIDCReauthentication(w, r, query.Get("code"), transaction)
 	default:
@@ -92,6 +92,7 @@ func (h *AuthHandler) LoginOIDCFailureGet(
 		r.URL.Path,
 		"Single sign-on could not be completed",
 		h.oidcDisplayName,
+		"",
 	).Render(r.Context(), w)
 }
 
