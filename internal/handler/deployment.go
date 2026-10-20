@@ -200,10 +200,8 @@ func (h *DeploymentHandler) availableEnvsForDeployPage(
 	return out, nil
 }
 
-// stageGateStateForRelease computes the gate state for one lifecycle
-// stage given a chosen release. Returns AlreadyDeployed=true if this
-// stage already has a successful deployment of the release (the env
-// shouldn't appear in the dropdown at all in that case).
+// stageGateStateForRelease checks the predecessor before classifying
+// an eligible environment as new or already deployed.
 func (h *DeploymentHandler) stageGateStateForRelease(
 	r *http.Request,
 	project db.Project,
@@ -212,10 +210,27 @@ func (h *DeploymentHandler) stageGateStateForRelease(
 	stageEnvs []db.Environment,
 	e db.Environment,
 ) pages.GateState {
-	// Has this stage already seen this release? If yes, hide from the
-	// dropdown (nothing to do). Checked for every stage including the
-	// first — you wouldn't redeploy to a stage that's already at this
-	// version.
+	if index > 0 {
+		prior := stageEnvs[index-1]
+		priorDep, err := h.repo.Queries.GetLatestSuccessfulDeploymentForReleaseEnv(
+			r.Context(),
+			db.GetLatestSuccessfulDeploymentForReleaseEnvParams{
+				ReleaseID:     release.ID,
+				EnvironmentID: prior.ID,
+			},
+		)
+		if err != nil || priorDep.ReleaseID != release.ID {
+			return pages.GateState{
+				Bypassable: true,
+				Reason: fmt.Sprintf(
+					"Deploy %s successfully to %s first.",
+					release.Version,
+					prior.Name,
+				),
+			}
+		}
+	}
+
 	deployed, err := h.repo.Queries.GetLatestSuccessfulDeploymentForReleaseEnv(
 		r.Context(),
 		db.GetLatestSuccessfulDeploymentForReleaseEnvParams{
@@ -226,34 +241,7 @@ func (h *DeploymentHandler) stageGateStateForRelease(
 	if err == nil && deployed.ReleaseID == release.ID {
 		return pages.GateState{AlreadyDeployed: true}
 	}
-
-	// First stage with no prior: always deployable (assuming not already
-	// deployed, which we just checked).
-	if index == 0 {
-		return pages.GateState{Deployable: true}
-	}
-
-	// Has the prior stage seen this release?
-	prior := stageEnvs[index-1]
-	priorDep, err := h.repo.Queries.GetLatestSuccessfulDeploymentForReleaseEnv(
-		r.Context(),
-		db.GetLatestSuccessfulDeploymentForReleaseEnvParams{
-			ReleaseID:     release.ID,
-			EnvironmentID: prior.ID,
-		},
-	)
-	if err == nil && priorDep.ReleaseID == release.ID {
-		return pages.GateState{Deployable: true}
-	}
-	return pages.GateState{
-		Deployable: false,
-		Bypassable: true,
-		Reason: fmt.Sprintf(
-			"%s has not been successfully deployed to %s yet. Tick Force to deploy anyway.",
-			release.Version,
-			prior.Name,
-		),
-	}
+	return pages.GateState{Deployable: true}
 }
 
 // ScheduleDeployment handles POST /projects/{id}/deploy. The body is

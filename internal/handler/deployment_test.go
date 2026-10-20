@@ -650,7 +650,7 @@ func TestGate_RenderError_ContainsReasonText(t *testing.T) {
 	buf := new(bytes.Buffer)
 	testutil.ReadFrom(t, buf, resp.Body)
 	body := buf.String()
-	if !strings.Contains(body, "has not been successfully deployed to Alpha") {
+	if !strings.Contains(body, "Deploy 1.0.0 successfully to Alpha first.") {
 		t.Errorf("error body missing gate reason; got: %s", body)
 	}
 }

@@ -1,5 +1,30 @@
 # Manual checks after `make e2e-test`
 
+## Preceding stages for promotion (A18)
+
+As an Admin, force a release to production before test succeeds.
+Confirm that production still names test as its prerequisite for normal deployment.
+
+1. Create a lifecycle with dev, test, and prod in that order.
+2. Assign the lifecycle to a project with an executable release.
+3. Open its deploy form and select the release.
+4. Confirm that the environment guidance requires dev before test and test before prod.
+5. Attempt early production deployment through the public API and confirm a 422 response.
+6. Deploy the release successfully to dev.
+7. Reload the form and confirm that test is available while prod still requires test.
+8. Deploy successfully to test and confirm that prod becomes available.
+9. Deploy successfully to prod.
+10. Repeat the guidance checks at 375, 390, 768, and 1280 pixels as a project Deployer.
+11. Confirm that a Deployer cannot use Force to bypass the restriction.
+12. Select a different release and confirm that its promotion sequence starts again.
+13. Retain the lifecycle, project, release, environments, and deployments.
+
+This check creates no schedules.
+
+```sh
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestPromotionGuidance(APIWeb|Browser)E2E$' ./internal/handler/api
+```
+
 ## Saved version for runbook Retry (A17)
 
 1. Execute a failing runbook version 1.

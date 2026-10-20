@@ -96,7 +96,7 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 					}
 				</div>
 				<div class="form-control">
-					<label class="label">
+					<label class="label" for="deploy-environment">
 						<span class="label-text">Environment</span>
 					</label>
 					if len(envs) == 0 {
@@ -112,7 +112,11 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 							</div>
 						}
 					<select
+						id="deploy-environment"
 						name="environment_id"
+						if hasForceableEnvs(envs) {
+							aria-describedby="promotion-guidance"
+						}
 						class="select select-bordered"
 						required
 						x-model="environmentID"
@@ -161,6 +165,18 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 								</optgroup>
 							}
 						</select>
+						if hasForceableEnvs(envs) {
+							<div id="promotion-guidance" class="mt-2 text-sm space-y-2">
+								<p class="font-semibold">Unavailable environments</p>
+								<ul class="space-y-1">
+									for _, e := range envs {
+										if !e.State.Deployable && e.State.Bypassable {
+											<li class="break-all" data-promotion-environment-id={ strconv.FormatInt(e.Environment.ID, 10) }><span class="font-semibold">{ e.Environment.Name }: </span>{ e.State.Reason }</li>
+										}
+									}
+								</ul>
+							</div>
+						}
 					}
 				</div>
 				if hasForceableEnvs(envs) {
