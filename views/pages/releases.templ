@@ -234,7 +234,7 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 							<td colspan="4" class="text-gray-500 italic text-center py-4">No steps in this release.</td>
 						</tr>
 					} else {
-						for _, step := range parseReleaseSteps(release.StepsJson) {
+						for index, step := range parseReleaseSteps(release.StepsJson) {
 							<tr>
 								<td>{ strconv.FormatInt(step.SortOrder, 10) }</td>
 								<td class="font-medium truncate">
@@ -246,12 +246,16 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 								<td class="whitespace-nowrap">{ releaseStepInterpreter(step) }</td>
 								<td class="truncate">
 									<code class="text-sm bg-base-300 px-2 py-1 rounded">
-										if len(step.ScriptBody) > 60 {
-											{ step.ScriptBody[:60] + "..." }
-										} else {
-											{ step.ScriptBody }
-										}
+										{ step.ScriptBody }
 									</code>
+								</td>
+							</tr>
+							<tr>
+								<td colspan="4">
+									<details class="min-w-0" data-release-script data-release-script-index={ strconv.Itoa(index) }>
+										<summary class="cursor-pointer text-primary min-h-12 py-3 break-all">View full script: { step.Name }</summary>
+										<pre class="mt-2 whitespace-pre-wrap break-all rounded bg-base-300 p-3 text-sm" data-release-full-content><code>{ step.ScriptBody }</code></pre>
+									</details>
 								</td>
 							</tr>
 						}
@@ -277,7 +281,7 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 							<td colspan="3" class="text-gray-500 italic text-center py-4">No variables in this release.</td>
 						</tr>
 					} else {
-						for _, v := range variables {
+						for index, v := range variables {
 							<tr>
 								<td class="font-medium truncate">{ v.Name }</td>
 								<td class="truncate">
@@ -299,6 +303,14 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 									} else {
 										<span class="text-gray-500">Unscoped</span>
 									}
+								</td>
+							</tr>
+							<tr>
+								<td colspan="3">
+									<details class="min-w-0" data-release-variable-name data-release-variable-index={ strconv.Itoa(index) }>
+										<summary class="cursor-pointer text-primary min-h-12 py-3">View full variable name</summary>
+										<p class="mt-2 break-all font-mono" data-release-full-content>{ v.Name }</p>
+									</details>
 								</td>
 							</tr>
 						}

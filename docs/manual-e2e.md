@@ -64,6 +64,28 @@ bash scripts/go_test.sh -tags=e2e -race -count=1 -run '^TestProjectPanelScopeAPI
 bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestProjectPanelScopeBrowserE2E$' ./internal/handler/api
 ```
 
+## Full release content (A14)
+
+Create a release with long scripts, long variable names, and a secret variable.
+Change the project's current script and variable name after creating the release.
+Open the release at 375, 390, 768, and 1280 pixels.
+Select View full script below each step.
+Confirm that the full saved script wraps within the page.
+Select View full variable name below each variable.
+Confirm that the full saved name is readable.
+Press Tab to focus each disclosure control.
+Press Enter to close and reopen each disclosure.
+Repeat these checks with a Viewer account.
+Confirm that secret values remain masked.
+Read the same release through the public API.
+Confirm that scripts and names match the saved release content.
+Keep the release for repeat checks.
+These checks require no deployment or schedule.
+
+```bash
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestReleaseContent(APIWeb|Browser)E2E$' ./internal/handler/api
+```
+
 ## Variable identifier guidance (A13)
 
 Open a disposable project's variable forms at 375, 768, and 1280 pixels.
