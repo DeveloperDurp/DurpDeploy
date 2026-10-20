@@ -17,6 +17,25 @@ func TestRerunInputsBrowserE2E(t *testing.T) {
 	b := startPackageBrowser(t)
 	b.setBackTestSession(t, f.baseURL, f.session)
 	path := fmt.Sprintf("/deployments/%d", fixture.original.ID)
+	assertCount := func(want int) {
+		t.Helper()
+		var listed struct {
+			Items []db.Deployment
+			Total int
+		}
+		decodeStepLogTest(t,
+			f.api(t, "GET", f.base()+"/deployments", nil, 200), &listed)
+		if listed.Total != want || len(listed.Items) != want {
+			t.Fatalf("deployment count = %d/%d, want %d",
+				listed.Total, len(listed.Items), want)
+		}
+		ids := make([]int64, 0, len(listed.Items))
+		for _, item := range listed.Items {
+			ids = append(ids, item.ID)
+		}
+		t.Logf("deployment count=%d, IDs=%v", listed.Total, ids)
+	}
+	assertCount(1)
 	for index, width := range []int{375, 1280} {
 		b.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
 			"width": width, "height": 844, "deviceScaleFactor": 1, "mobile": false,
@@ -44,15 +63,7 @@ func TestRerunInputsBrowserE2E(t *testing.T) {
 			}
 		}
 		confirmRerunInputs(t, b, false)
-		var listed struct{ Items []db.Deployment }
-		decodeStepLogTest(
-			t,
-			f.api(t, "GET", f.base()+"/deployments", nil, 200),
-			&listed,
-		)
-		if len(listed.Items) != index+1 {
-			t.Fatal("dismissed confirmation created a deployment")
-		}
+		assertCount(index + 1)
 		b.screenshot(t, fmt.Sprintf("rerun-inputs-%d", width))
 		confirmRerunInputs(t, b, true)
 		b.wait(
@@ -82,6 +93,36 @@ func TestRerunInputsBrowserE2E(t *testing.T) {
 			t.Fatal("re-run navigation and API identity differ")
 		}
 		fixture.check(t, next)
+		if !next.Note.Valid ||
+			next.Note.String != fmt.Sprintf(
+				"Re-run of #%d",
+				fixture.original.ID,
+			) {
+			t.Fatal("confirmed re-run lost its original deployment lineage")
+		}
+		assertCount(index + 2)
+
+		b.evaluate(t, "history.back(); true")
+		b.waitBackTestURL(t, f.baseURL+path)
+		t.Logf("browser Back returned to original %s", path)
+		assertCount(index + 2)
+		b.screenshot(t, fmt.Sprintf("rerun-browser-back-%d", width))
+
+		b.evaluate(t, "history.forward(); true")
+		b.waitBackTestURL(t, f.baseURL+nextPath)
+		t.Logf("browser Forward returned to re-run %s", nextPath)
+		assertCount(index + 2)
+
+		b.wire.events = nil
+		b.call(t, "Page.reload", struct{}{}, &struct{}{})
+		if err := b.wire.waitEvent(
+			"Page.frameStoppedLoading", b.session,
+		); err != nil {
+			t.Fatal(err)
+		}
+		b.waitBackTestURL(t, f.baseURL+nextPath)
+		t.Logf("reload retained re-run %s", nextPath)
+		assertCount(index + 2)
 	}
 }
 

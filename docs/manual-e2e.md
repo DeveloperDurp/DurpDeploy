@@ -1367,6 +1367,35 @@ Run the isolated browser and API regression:
 bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestStaleFormBackBrowserE2E$' ./internal/handler/api
 ```
 
+## Browser Back after a confirmed re-run (V03)
+
+Use a disposable project with one completed deployment.
+Record its ID and the project deployment count through `GET /api/v1/projects/{id}/deployments`.
+
+1. Open the completed deployment in the browser.
+2. Select Re-run and dismiss the confirmation.
+3. Confirm that the API deployment count has not changed.
+4. Select Re-run again and accept once.
+5. Wait for the new deployment to complete.
+6. Record its ID and confirm that the count increased by one.
+7. Confirm that its note identifies the original deployment.
+8. Use browser Back and confirm that the original deployment opens.
+9. Confirm that the API count has not changed.
+10. Use browser Forward and confirm that the re-run opens.
+11. Reload the re-run detail.
+12. Confirm that the API count has not changed after either action.
+13. Confirm that the original deployment logs have not changed.
+
+The verified sequence retains exactly the original deployment and one confirmed re-run.
+Browser history traversal and detail reload do not create another execution.
+Keep both deployments, their logs, the project, release, and environment available for repeat checks.
+
+Run the isolated browser and API checks:
+
+```bash
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestRerunInputs(APIWeb|Browser)E2E$' ./internal/handler/api
+```
+
 ## Database TLS policy
 
 Use a disposable database when changing TLS settings for this check.
