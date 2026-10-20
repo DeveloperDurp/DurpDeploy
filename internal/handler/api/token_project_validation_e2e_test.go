@@ -25,7 +25,7 @@ func TestProjectTokensMissingProjectsAPIE2E(t *testing.T) {
 			assertMissingTokenProjects(t, body)
 		}
 	}
-	if after := tokenValidationState(t, f); after != before {
+	if tokenValidationState(t, f) != before {
 		t.Fatal("rejected token creation changed stored tokens")
 	}
 	token := mintProjectToken(t, f, "viewer", f.project.ID)
@@ -34,7 +34,7 @@ func TestProjectTokensMissingProjectsAPIE2E(t *testing.T) {
 	assertMissingTokenProjects(t, f.api(t, "PATCH", path, map[string]any{
 		"scope": "scoped", "role": "deployer", "project_ids": []int64{},
 	}, 422))
-	if after := tokenValidationState(t, f); after != before {
+	if tokenValidationState(t, f) != before {
 		t.Fatal("rejected scope edit changed stored tokens")
 	}
 	// Other invalid fields must not be diagnosed as a missing selection.
@@ -109,7 +109,7 @@ func TestProjectTokensMissingProjectsAPIWebE2E(t *testing.T) {
 	if !strings.Contains(body, `value="retry-selected"`) {
 		t.Fatal("validation discarded the token name")
 	}
-	if after := tokenValidationState(t, f); after != before {
+	if tokenValidationState(t, f) != before {
 		t.Fatal("invalid web creation stored a token")
 	}
 	token := mintProjectToken(t, f, "viewer", f.project.ID)
@@ -122,7 +122,7 @@ func TestProjectTokensMissingProjectsAPIWebE2E(t *testing.T) {
 	if strings.Contains(body, `id="new-token-projects-error"`) {
 		t.Fatal("scope edit marked the unrelated create form invalid")
 	}
-	if after := tokenValidationState(t, f); after != before {
+	if tokenValidationState(t, f) != before {
 		t.Fatal("invalid web edit changed stored grants")
 	}
 	form.Set("role", "root")

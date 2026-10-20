@@ -102,22 +102,28 @@ func (r *Repository) ValidateTokenScope(
 	grant.ProjectIDs = slices.Clone(grant.ProjectIDs)
 	slices.Sort(grant.ProjectIDs)
 	grant.ProjectIDs = slices.Compact(grant.ProjectIDs)
-	for _, id := range grant.ProjectIDs {
+	return grant, r.validateTokenProjects(ctx, user, grant.ProjectIDs)
+}
+
+func (r *Repository) validateTokenProjects(
+	ctx context.Context, user db.User, ids []int64,
+) error {
+	for _, id := range ids {
 		if id <= 0 {
-			return grant, ErrTokenScope
+			return ErrTokenScope
 		}
 		if _, err := r.Queries.GetProject(ctx, id); err != nil {
-			return grant, ErrTokenScope
+			return ErrTokenScope
 		}
 		if user.Role != "admin" {
 			member, err := r.Queries.IsProjectMember(ctx,
 				db.IsProjectMemberParams{ProjectID: id, UserID: user.ID})
 			if err != nil || member != 1 {
-				return grant, ErrTokenScope
+				return ErrTokenScope
 			}
 		}
 	}
-	return grant, nil
+	return nil
 }
 
 // SaveTokenScope runs inside the transaction that creates or updates the token.

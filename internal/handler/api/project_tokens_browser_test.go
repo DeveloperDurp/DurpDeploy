@@ -185,34 +185,7 @@ func TestProjectTokensBrowserE2E(t *testing.T) {
  scope.value='scoped'; scope.dispatchEvent(new Event('change',{bubbles:true})); return true;
 })()`)
 	b.wait(t, `!document.querySelector('#new-token-projects').disabled`)
-	for _, width := range []int{375, 430, 540, 768, 980, 1280} {
-		b.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
-			"width":             width,
-			"height":            900,
-			"deviceScaleFactor": 1,
-			"mobile":            width < 768,
-		}, &struct{}{})
-		if string(
-			b.evaluate(t, `document.documentElement.scrollWidth <= innerWidth`),
-		) != "true" {
-			t.Fatalf("token page overflows at width %d", width)
-		}
-		if string(b.evaluate(t, fmt.Sprintf(`(() => {
- const form = document.querySelector('form[action="/settings/tokens"]');
- const fields = [...form.querySelectorAll('#token-name,#new-token-scope,#new-token-role,#new-token-projects')].map(field=>field.getBoundingClientRect()).filter(field=>field.width);
- const bounds = form.getBoundingClientRect();
- const record = %s;
- return fields.every((field,index)=>field.width >= bounds.width - 2 && field.left >= 0 && field.right <= innerWidth && (!index || field.top >= fields[index-1].bottom))
-   && record.tagName === (innerWidth < 1280 ? 'ARTICLE' : 'TR');
-})()`, row))) != "true" {
-			t.Fatalf(
-				"token controls are squeezed or overlap at width %d",
-				width,
-			)
-		}
-		b.screenshot(t, fmt.Sprintf("project-token-scope-%d", width))
-		b.checkTokenPickerLayout(t, width)
-	}
+	b.checkTokenSettingsLayouts(t, row)
 	// Exercise the card's edit form at phone width.
 	b.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
 		"width": 375, "height": 900, "deviceScaleFactor": 1, "mobile": true,
@@ -294,6 +267,38 @@ func TestProjectTokensBrowserE2E(t *testing.T) {
 		t.Fatal("editing scope redisplayed a bearer credential")
 	}
 	b.captureNavigation(t, "project-token-edited-scope")
+}
+
+func (b *packageBrowser) checkTokenSettingsLayouts(t *testing.T, row string) {
+	t.Helper()
+	for _, width := range []int{375, 430, 540, 768, 980, 1280} {
+		b.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
+			"width":             width,
+			"height":            900,
+			"deviceScaleFactor": 1,
+			"mobile":            width < 768,
+		}, &struct{}{})
+		if string(
+			b.evaluate(t, `document.documentElement.scrollWidth <= innerWidth`),
+		) != "true" {
+			t.Fatalf("token page overflows at width %d", width)
+		}
+		if string(b.evaluate(t, fmt.Sprintf(`(() => {
+ const form = document.querySelector('form[action="/settings/tokens"]');
+ const fields = [...form.querySelectorAll('#token-name,#new-token-scope,#new-token-role,#new-token-projects')].map(field=>field.getBoundingClientRect()).filter(field=>field.width);
+ const bounds = form.getBoundingClientRect();
+ const record = %s;
+ return fields.every((field,index)=>field.width >= bounds.width - 2 && field.left >= 0 && field.right <= innerWidth && (!index || field.top >= fields[index-1].bottom))
+   && record.tagName === (innerWidth < 1280 ? 'ARTICLE' : 'TR');
+})()`, row))) != "true" {
+			t.Fatalf(
+				"token controls are squeezed or overlap at width %d",
+				width,
+			)
+		}
+		b.screenshot(t, fmt.Sprintf("project-token-scope-%d", width))
+		b.checkTokenPickerLayout(t, width)
+	}
 }
 
 func (b *packageBrowser) assertTokenProjectError(
