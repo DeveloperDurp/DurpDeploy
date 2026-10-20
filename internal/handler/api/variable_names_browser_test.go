@@ -11,7 +11,7 @@ func TestVariableNamesBrowserE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	b := startPackageBrowser(t)
 	b.setBackTestSession(t, f.baseURL, f.session)
-	for _, width := range []int{375, 1280} {
+	for _, width := range []int{375, 768, 1280} {
 		b.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
 			"width": width, "height": 844, "deviceScaleFactor": 1, "mobile": false,
 		}, &struct{}{})
@@ -105,10 +105,12 @@ func checkVariableNameEdit(
 	if string(
 		b.evaluate(
 			t,
-			`window.namesEditForm.isConnected && window.namesEditForm.elements.namedItem('name').value === '1BAD' && window.namesEditForm.elements.namedItem('value').value === 'keep-edit-draft'`,
+			`window.namesEditForm.isConnected && window.namesEditForm.elements.namedItem('name').value === '1BAD' && window.namesEditForm.elements.namedItem('value').value === 'keep-edit-draft' && document.documentElement.scrollWidth <= innerWidth`,
 		),
 	) != "true" {
-		t.Fatal("name rejection discarded the edit draft")
+		t.Fatal(
+			"name rejection discarded the edit draft or overflowed the viewport",
+		)
 	}
 	b.screenshot(t, fmt.Sprintf("variable-names-edit-%d", width))
 	corrected := fmt.Sprintf("Edited_%d", width)

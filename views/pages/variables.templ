@@ -9,7 +9,7 @@ import (
 const variableNameGuidance = "Use 1–255 ASCII letters, digits, or underscores. Start with a letter or underscore. ARTIFACT_PATH, DURPDEPLOY_STAGE_DIR, and DURPDEPLOY_APPROVED_DIR are reserved."
 
 templ VariableNameHelp() {
-	<p class="text-sm opacity-70 mt-1" data-variable-name-help>{ variableNameGuidance }</p>
+	<p class="text-sm opacity-70 mt-1 break-words" data-variable-name-help>{ variableNameGuidance }</p>
 }
 
 func filterUnscoped(vars []db.Variable) []db.Variable {
@@ -237,7 +237,7 @@ templ VariableRow(projectID int64, variable db.Variable, environments VariableEn
 				</button>
 			}
 			if CanWrite(ctx) {
-				<div x-cloak x-show="editing" data-desktop-variable-edit={ strconv.FormatInt(variable.ID, 10) } class="basis-full mt-2">
+				<div x-cloak x-show="editing" data-desktop-variable-edit={ strconv.FormatInt(variable.ID, 10) } class="basis-full min-w-0 mt-2">
 					@VariableQuickEditForm(projectID, variable, environments)
 				</div>
 			}

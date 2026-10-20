@@ -66,12 +66,13 @@ bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestProje
 
 ## Variable identifier guidance (A13)
 
-Open a disposable project's variable forms at phone and desktop widths.
+Open a disposable project's variable forms at 375, 768, and 1280 pixels.
 Confirm that Name guidance explains the ASCII format, 255-character limit, first character, and reserved names.
 Enter `bad name` and attempt to submit.
 Confirm that validation retains the draft and explains the required format.
 Create `Mixed_2` with an empty value.
 Edit that variable and attempt to rename it to `1BAD`.
+Confirm that the edit form and guidance fit within the viewport.
 Confirm that rejection leaves the saved variable unchanged.
 Correct the name and save again.
 Repeat invalid creation and updates through the public variable API.
