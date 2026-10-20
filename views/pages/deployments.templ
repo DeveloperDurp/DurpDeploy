@@ -311,7 +311,7 @@ templ DeploymentActions(deployment db.Deployment, outOfBand bool) {
 				<button
 					class="btn btn-primary sm:btn-sm"
 					hx-post={ fmt.Sprintf("/deployments/%d/redeploy", deployment.ID) }
-					hx-confirm="Re-run this deployment with the same release and environment?"
+					hx-confirm="Re-run this release in the same environment? Uses the original steps with current release and lifecycle variables. Refreshing the release can change its variables. Original logs stay unchanged."
 					hx-disable-elt
 					data-toast-success="Re-run started"
 					data-toast-error="Failed to re-run"

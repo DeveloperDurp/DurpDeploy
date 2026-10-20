@@ -64,6 +64,30 @@ bash scripts/go_test.sh -tags=e2e -race -count=1 -run '^TestProjectPanelScopeAPI
 bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestProjectPanelScopeBrowserE2E$' ./internal/handler/api
 ```
 
+## Deployment re-run inputs (A10)
+
+Create a disposable project with a non-secret variable named `RERUN_VALUE` set to `base-one`.
+Create a step that prints the variable with an identifying script marker.
+Create a release, then deploy it in a disposable environment.
+Keep the original deployment link and logs.
+Change the project variable to `base-two`.
+Change the step marker, then refresh the release.
+Change the project variable to `base-three` without another refresh.
+Open the original deployment, then select Re-run.
+Confirm that the message identifies current release and lifecycle variables, original steps, and unchanged original logs.
+Select Cancel, then confirm that no deployment was created.
+Select Re-run again, then accept the confirmation.
+Confirm that the new deployment prints `base-two` with the original script marker.
+Read the original logs, then confirm that they remain unchanged.
+Repeat at phone and desktop widths.
+Repeat through `POST /api/v1/deployments/{id}/redeploy`.
+Keep all deployment examples for repeat checks.
+These checks require no schedules.
+
+```bash
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestRerunInputs(APIWeb|Browser)E2E$' ./internal/handler/api
+```
+
 ## Reachable Step form actions (A09)
 
 Open a disposable project's Steps page at 375 × 844.
