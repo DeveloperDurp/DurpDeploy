@@ -212,7 +212,9 @@ PY
 }
 
 matrix_password_failure_body() {
-    python3 - "$AUTH_MFA_HTTP_BODY" "$1" <<'PY'
+    local email=$1
+
+    python3 - "$AUTH_MFA_HTTP_BODY" "$email" <<'PY'
 import html
 import re
 import sys
@@ -226,6 +228,7 @@ if len(matches) != 1 or html.unescape(matches[0][2]) != sys.argv[2]:
 match = matches[0]
 print(body[:match.start(2)] + "[submitted-email]" + body[match.end(2):])
 PY
+    return
 }
 
 matrix_login_password_session_transition() {
