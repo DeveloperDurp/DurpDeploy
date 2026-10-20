@@ -11,6 +11,9 @@ import (
 
 var ErrDeploymentQueueConflict = errors.New("deployment queue state changed")
 
+const QueuedCancellationLogLine = "Not run: cancelled while queued. " +
+	"No output exists because this step never started."
+
 // Batch maintenance already changes many environments; lock them in ID order.
 // Execution admission itself only locks its own environment.
 func (r *Repository) WithQueueMaintenanceTx(
@@ -227,12 +230,21 @@ func (r *Repository) CancelQueuedDeployment(
 		ctx,
 		id,
 		func(ctx context.Context, q *db.Queries) error {
+			deployment, err := q.GetDeployment(ctx, id)
+			if err != nil {
+				return err
+			}
 			changed, err := q.CancelQueuedDeployment(ctx, id)
 			if err != nil {
 				return err
 			}
 			if changed != 1 {
 				return ErrDeploymentQueueConflict
+			}
+			if deployment.Status == "queued" {
+				if err := recordQueuedCancellation(ctx, q, id); err != nil {
+					return err
+				}
 			}
 			if err := q.CancelWaitingQueuedRemoteClaim(ctx, id); err != nil {
 				return err
@@ -247,4 +259,32 @@ func (r *Repository) CancelQueuedDeployment(
 			return nil
 		},
 	)
+}
+
+func recordQueuedCancellation(
+	ctx context.Context, q *db.Queries, id int64,
+) error {
+	locked, err := q.LockDeploymentLogStream(ctx, id)
+	if err != nil {
+		return err
+	}
+	if locked != 1 {
+		return sql.ErrNoRows
+	}
+	steps, err := q.ListDeploymentSteps(ctx, id)
+	if err != nil {
+		return err
+	}
+	for _, step := range steps {
+		if _, err := q.CreateStepDeploymentLog(ctx,
+			db.CreateStepDeploymentLogParams{
+				DeploymentID: id, Line: QueuedCancellationLogLine,
+				StepIndex: sql.NullInt64{Int64: step.StepIndex, Valid: true},
+				StepName:  sql.NullString{String: step.Name, Valid: true},
+				StepState: sql.NullString{String: "cancelled", Valid: true},
+			}); err != nil {
+			return err
+		}
+	}
+	return nil
 }

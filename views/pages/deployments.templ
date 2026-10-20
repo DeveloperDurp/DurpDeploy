@@ -450,7 +450,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 							<div class="font-mono text-sm whitespace-pre-wrap break-words" x-bind:data-log-id="entry.id" x-effect="renderEntry($el, entry)"></div>
 						</template>
 						if len(panel.Logs) == 0 {
-							<p class="text-gray-500 italic" x-show={ fmt.Sprintf("panels[%d].live.length === 0", position) }>No output yet.</p>
+							<p class="text-gray-500 italic" x-show={ fmt.Sprintf("panels[%d].live.length === 0", position) } x-text={ fmt.Sprintf("emptyMessage(panels[%d].state)", position) }>{ deploymentStepEmptyMessage(panel.State) }</p>
 						}
 					</div>
 				</details>

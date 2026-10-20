@@ -165,6 +165,9 @@ export function registerLogComponents(Alpine) {
 			retain(this, { id: entry.id, panel }, entry);
 			if (entry.state) {
 				panel.state = entry.state;
+				if (entry.state === 'cancelled' && entry.line === view.queuedCancellationLine) {
+					panel.state = 'not_run_queued';
+				}
 			} else if (panel.state === 'pending') {
 				panel.state = 'unknown';
 			}
@@ -172,7 +175,10 @@ export function registerLogComponents(Alpine) {
 		stateLabel(state) {
 			return ({ waiting: 'Waiting for agents', running: 'Running',
 				succeeded: 'Succeeded', failed: 'Failed', cancelled: 'Cancelled',
-				not_run: 'Not run', unknown: 'State unavailable' })[state] ?? 'Pending';
+				not_run: 'Not run', not_run_queued: 'Not run: cancelled while queued', unknown: 'State unavailable' })[state] ?? 'Pending';
+		},
+		emptyMessage(state) {
+			return state === 'not_run_queued' ? 'No output exists because this step never started.' : 'No output yet.';
 		},
 		activeStepText() {
 			if (['queued', 'publishing_artifact', 'awaiting_artifact_approval'].includes(this.deploymentStatus)) {

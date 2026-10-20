@@ -21,12 +21,13 @@ type deploymentLogPanel struct {
 }
 
 type deploymentLogView struct {
-	Panels      []deploymentLogPanel `json:"panels"`
-	LastID      int64                `json:"lastID,string"`
-	Historical  bool                 `json:"historical"`
-	OlderBefore int64                `json:"olderBefore,string"`
-	Limit       int64                `json:"limit"`
-	ByteLimit   int                  `json:"byteLimit"`
+	Panels                 []deploymentLogPanel `json:"panels"`
+	LastID                 int64                `json:"lastID,string"`
+	Historical             bool                 `json:"historical"`
+	OlderBefore            int64                `json:"olderBefore,string"`
+	Limit                  int64                `json:"limit"`
+	ByteLimit              int                  `json:"byteLimit"`
+	QueuedCancellationLine string               `json:"queuedCancellationLine"`
 }
 
 func deploymentLogPanels(
@@ -36,9 +37,10 @@ func deploymentLogPanels(
 ) deploymentLogView {
 	steps := parseReleaseSteps(release.StepsJson)
 	view := deploymentLogView{
-		Panels:    make([]deploymentLogPanel, len(steps)+1),
-		Limit:     repository.LogPageLimit,
-		ByteLimit: repository.LogPageByteLimit,
+		Panels:                 make([]deploymentLogPanel, len(steps)+1),
+		Limit:                  repository.LogPageLimit,
+		ByteLimit:              repository.LogPageByteLimit,
+		QueuedCancellationLine: repository.QueuedCancellationLogLine,
 	}
 	for index, step := range steps {
 		view.Panels[index] = deploymentLogPanel{
@@ -86,6 +88,10 @@ func deploymentLogPanels(
 		panel.Logs = append(panel.Logs, log)
 		if log.StepState.Valid {
 			panel.State = log.StepState.String
+			if panel.State == "cancelled" &&
+				log.Line == repository.QueuedCancellationLogLine {
+				panel.State = "not_run_queued"
+			}
 		} else if panel.State == "pending" {
 			panel.State = "unknown"
 		}
@@ -155,9 +161,18 @@ func deploymentStepStateLabel(state string) string {
 		return "Cancelled"
 	case "not_run":
 		return "Not run"
+	case "not_run_queued":
+		return "Not run: cancelled while queued"
 	case "unknown":
 		return "State unavailable"
 	default:
 		return "Pending"
 	}
+}
+
+func deploymentStepEmptyMessage(state string) string {
+	if state == "not_run_queued" {
+		return "No output exists because this step never started."
+	}
+	return "No output yet."
 }

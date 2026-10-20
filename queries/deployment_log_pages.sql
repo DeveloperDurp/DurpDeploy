@@ -26,7 +26,10 @@ WHERE deployment_id = sqlc.arg(deployment_id) AND id > sqlc.arg(after_id)
 ORDER BY id LIMIT 64;
 
 -- name: ListDeploymentLogStateMetadata :many
-SELECT l.id, l.step_index, l.step_name, l.step_state FROM deployment_logs l
+SELECT l.id, l.step_index, l.step_name, l.step_state,
+    CAST(CASE WHEN l.line = sqlc.arg(queued_cancellation_line)
+        THEN sqlc.arg(queued_cancellation_line) ELSE '' END AS TEXT) AS line
+FROM deployment_logs l
 WHERE l.deployment_id = sqlc.arg(deployment_id) AND l.id <= sqlc.arg(last_id)
   AND l.is_step_metadata = 1 AND l.id IN (
     SELECT MAX(id) FROM deployment_logs

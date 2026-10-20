@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
 	"github.com/go-chi/chi/v5"
 )
@@ -72,6 +73,7 @@ func (h *DeploymentHandler) GetDeployment(
 	states, err := h.repo.Queries.ListDeploymentLogStateMetadata(r.Context(),
 		db.ListDeploymentLogStateMetadataParams{
 			DeploymentID: id, LastID: stateThrough,
+			QueuedCancellationLine: repository.QueuedCancellationLogLine,
 		})
 	if err != nil {
 		http.Error(w, "Cannot read step states", http.StatusInternalServerError)

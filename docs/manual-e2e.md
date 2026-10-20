@@ -1,5 +1,34 @@
 # Manual checks after `make e2e-test`
 
+## Queued cancellation step explanations (A15)
+
+1. Create a release with at least two steps.
+2. Start a slow deployment in its project and environment.
+3. Start a second deployment in the same project and environment.
+4. Confirm that the second deployment shows `queued`.
+5. Open the second deployment at 375, 768, and 1280 pixels.
+6. Select **Cancel** while its step panels remain collapsed.
+7. Confirm that each step shows `Not run: cancelled while queued` without reloading.
+8. Open a step with Enter or its summary control.
+9. Confirm that its log explains why no output exists.
+10. Reload the page and repeat the panel check.
+11. Read `/api/v1/deployments/{id}/logs` and its structured stream.
+12. Confirm that each frozen step has a `cancelled` record with the explanation.
+13. Confirm that the first deployment remains active.
+14. Cancel the first deployment and wait for confirmed cleanup.
+15. Read the second deployment as a project Viewer.
+16. Retain both deployments and their release for repeat checks.
+
+The cancelled queued steps must never print script output.
+Cancellation after execution starts must retain its existing states and output.
+This check creates no schedules.
+
+Run the focused API and browser regression with:
+
+```sh
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestQueuedCancellation(APIWeb|Browser)E2E$' ./internal/handler/api
+```
+
 ## Dedicated agent port
 
 Run `make agent-e2e-sqlite` to check explicit ports and the default dedicated port `23187`.

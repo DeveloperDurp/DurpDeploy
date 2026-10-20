@@ -624,6 +624,11 @@ drains its logs, sends `event: complete` with JSON `status`, then closes;
 clients should close their EventSource on that event. Default SSE/NDJSON and
 plain-text export retain their formats.
 
+Queued cancellation saves a `cancelled` lifecycle log for each frozen step.
+Each log explains `Not run: cancelled while queued` and why no output exists.
+The web page retains this explanation after reload.
+Cancellation after execution starts retains its existing step states and output.
+
 Add `preview=true` to a structured deployment or runbook stream to receive bounded display text.
 Shortened events include `truncated: true` and a visible truncation marker.
 Omit `preview`, or use `preview=false`, to receive complete text.

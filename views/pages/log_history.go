@@ -51,6 +51,7 @@ func deploymentPageLogView(
 			combined = append(combined, db.DeploymentLog{
 				ID: state.ID, StepIndex: state.StepIndex,
 				StepName: state.StepName, StepState: state.StepState,
+				Line: state.Line,
 			})
 		}
 	}

@@ -78,11 +78,14 @@ func (q *Queries) ListDeploymentLogPreviewsAfter(ctx context.Context, arg ListDe
 }
 
 const listDeploymentLogStateMetadata = `-- name: ListDeploymentLogStateMetadata :many
-SELECT l.id, l.step_index, l.step_name, l.step_state FROM deployment_logs l
-WHERE l.deployment_id = ?1 AND l.id <= ?2
+SELECT l.id, l.step_index, l.step_name, l.step_state,
+    CAST(CASE WHEN l.line = ?1
+        THEN ?1 ELSE '' END AS TEXT) AS line
+FROM deployment_logs l
+WHERE l.deployment_id = ?2 AND l.id <= ?3
   AND l.is_step_metadata = 1 AND l.id IN (
     SELECT MAX(id) FROM deployment_logs
-    WHERE deployment_id = ?1 AND id <= ?2
+    WHERE deployment_id = ?2 AND id <= ?3
       AND is_step_metadata = 1
     GROUP BY step_index, step_name
   )
@@ -90,8 +93,9 @@ ORDER BY l.id ASC
 `
 
 type ListDeploymentLogStateMetadataParams struct {
-	DeploymentID int64 `json:"deployment_id"`
-	LastID       int64 `json:"last_id"`
+	QueuedCancellationLine string `json:"queued_cancellation_line"`
+	DeploymentID           int64  `json:"deployment_id"`
+	LastID                 int64  `json:"last_id"`
 }
 
 type ListDeploymentLogStateMetadataRow struct {
@@ -99,10 +103,11 @@ type ListDeploymentLogStateMetadataRow struct {
 	StepIndex sql.NullInt64  `json:"step_index"`
 	StepName  sql.NullString `json:"step_name"`
 	StepState sql.NullString `json:"step_state"`
+	Line      string         `json:"line"`
 }
 
 func (q *Queries) ListDeploymentLogStateMetadata(ctx context.Context, arg ListDeploymentLogStateMetadataParams) ([]ListDeploymentLogStateMetadataRow, error) {
-	rows, err := q.db.QueryContext(ctx, listDeploymentLogStateMetadata, arg.DeploymentID, arg.LastID)
+	rows, err := q.db.QueryContext(ctx, listDeploymentLogStateMetadata, arg.QueuedCancellationLine, arg.DeploymentID, arg.LastID)
 	if err != nil {
 		return nil, err
 	}
@@ -115,6 +120,7 @@ func (q *Queries) ListDeploymentLogStateMetadata(ctx context.Context, arg ListDe
 			&i.StepIndex,
 			&i.StepName,
 			&i.StepState,
+			&i.Line,
 		); err != nil {
 			return nil, err
 		}
