@@ -1,5 +1,29 @@
 # Manual checks after `make e2e-test`
 
+## Phone runbook execution history (A16)
+
+1. Create a runbook with a step that exits with an error.
+2. Execute the runbook and wait for failure.
+3. Retry the execution and wait for failure.
+4. Save another version and execute it in a different environment.
+5. Open the project runbook history at 375 and 390 pixels.
+6. Confirm that each row shows its execution ID, runbook name, version, environment, status, and creation date.
+7. Confirm that long names wrap without horizontal scrolling or overlapping fields.
+8. Focus an execution link and press Enter.
+9. Confirm that the detail page shows the selected execution.
+10. Repeat the history check at 768 and 1280 pixels.
+11. Repeat the checks as a project Viewer.
+12. Read `/api/v1/projects/{id}/runbook-executions` and compare the execution identities.
+13. Retain the runbook, versions, environments, and executions for repeat checks.
+
+This check creates no schedules.
+
+Run the focused API and browser regressions with:
+
+```sh
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestRunbookHistoryPhone(APIWeb|Browser)E2E$' ./internal/handler/api
+```
+
 ## Queued cancellation step explanations (A15)
 
 1. Create a release with at least two steps.

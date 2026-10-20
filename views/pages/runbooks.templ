@@ -49,11 +49,20 @@ templ RunbooksPage(project db.Project, books []db.Runbook, executions []db.ListR
 			</div>
 			<div class="card bg-base-200 p-4">
 				<h2 class="text-xl font-bold mb-3">Execution history</h2>
-				<table class="table table-zebra table-fixed w-full">
-					<thead><tr><th class="w-1/2 sm:w-1/5">Runbook</th><th class="hidden sm:table-cell w-1/5">Version</th><th class="hidden sm:table-cell w-1/5">Environment</th><th class="w-1/2 sm:w-1/5">Status</th><th class="hidden sm:table-cell w-1/5">Created</th></tr></thead>
-					<tbody>
+				<table class="table table-zebra table-fixed w-full block! sm:table!">
+					<thead class="hidden sm:table-header-group"><tr><th class="w-1/5">Execution</th><th class="w-1/5">Version</th><th class="w-1/5">Environment</th><th class="w-1/5">Status</th><th class="w-1/5">Created</th></tr></thead>
+					<tbody class="block sm:table-row-group">
 						for _, execution := range executions {
-							<tr><td class="truncate"><a class="link link-primary" href={ fmt.Sprintf("/projects/%d/runbooks/executions/%d", project.ID, execution.ID) }>{ execution.RunbookName }</a></td><td class="hidden sm:table-cell">{ strconv.FormatInt(execution.Version, 10) }</td><td class="hidden sm:table-cell truncate">{ execution.EnvironmentName }</td><td class="truncate">{ execution.Status }</td><td class="hidden sm:table-cell whitespace-nowrap">{ formatUnixTime(execution.CreatedAt) }</td></tr>
+							<tr data-runbook-execution-id={ strconv.FormatInt(execution.ID, 10) } class="grid grid-cols-2 gap-3 sm:table-row max-sm:p-3 max-sm:mb-3 max-sm:rounded-box max-sm:bg-base-100">
+								<td class="col-span-2 min-w-0 break-all sm:truncate">
+									<span class="block sm:hidden text-xs opacity-70 mb-1">Execution</span>
+									<a class="link link-primary block min-h-11 sm:min-h-0" href={ fmt.Sprintf("/projects/%d/runbooks/executions/%d", project.ID, execution.ID) }>#{ strconv.FormatInt(execution.ID, 10) } — { execution.RunbookName }</a>
+								</td>
+								<td class="min-w-0 break-all"><span class="block sm:hidden text-xs opacity-70 mb-1">Version</span><span data-execution-version>{ strconv.FormatInt(execution.Version, 10) }</span></td>
+								<td class="min-w-0 break-all sm:truncate"><span class="block sm:hidden text-xs opacity-70 mb-1">Environment</span><span data-execution-environment>{ execution.EnvironmentName }</span></td>
+								<td class="min-w-0 break-all"><span class="block sm:hidden text-xs opacity-70 mb-1">Status</span><span data-execution-status>{ execution.Status }</span></td>
+								<td class="min-w-0 break-words sm:whitespace-nowrap"><span class="block sm:hidden text-xs opacity-70 mb-1">Created</span><span data-execution-created>{ formatUnixTime(execution.CreatedAt) }</span></td>
+							</tr>
 						}
 					</tbody>
 				</table>
