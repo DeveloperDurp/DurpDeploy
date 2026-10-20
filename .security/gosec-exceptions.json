@@ -547,5 +547,50 @@
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "OAuth access_token serialization is the protocol of an isolated generated-key oidctest TLS fixture, imported only by tests/browser fixtures. Evidence: internal/oidc/oidctest/fixture.go and fixture_protocol.go."
+  },
+  {
+    "rule": "G124",
+    "file": "internal/handler/login_destination.go",
+    "line": "22",
+    "source_sha256": "a0433e3459054a33c42fce2e2ed3c6aeb06802f6d37ea5567743e87bbcbc9717",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Navigation-only cookie sets HttpOnly, SameSite=Lax, and a ten-minute lifetime. Secure follows the existing mfa.LoadConfig HTTPS policy; public HTTP configuration is rejected. Destination data grants no permissions. Evidence: internal/handler/login_destination_test.go cookie policy and tampering tests; internal/mfa/config.go."
+  },
+  {
+    "rule": "G124",
+    "file": "internal/handler/login_destination.go",
+    "line": "38",
+    "source_sha256": "a0433e3459054a33c42fce2e2ed3c6aeb06802f6d37ea5567743e87bbcbc9717",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Deletion cookie preserves HttpOnly, SameSite=Lax, Path=/, and the configured HTTPS Secure policy. MaxAge=-1 and an expired timestamp remove navigation context. Evidence: internal/handler/login_destination_test.go cookie policy and destination consumption tests; internal/mfa/config.go."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/auth.go",
+    "line": "216",
+    "source_sha256": "5f88869e9609887bcbbb3ac9429042e3a412a37fc7c681420f85c62f8305dba4",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Password login redirects only after session issuance through takeLoginDestination. This helper bounds and decodes the cookie, then SafeLoginDestination rejects external authorities, schemes, backslashes, controls, auth loops, and excessive lengths. Only local paths and queries survive. Evidence: internal/auth/login_destination_test.go; internal/handler/login_destination_test.go; API/browser login destination E2E tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/login_mfa_completion.go",
+    "line": "32",
+    "source_sha256": "c6d35e64bce7c6c4941131a10250fdd8fa881b32cb491f81209dde2aab10d43e",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "MFA redirects only after atomic factor and session completion through takeLoginDestination. This helper bounds and decodes the cookie, then SafeLoginDestination accepts only validated local paths and queries. Evidence: internal/auth/login_destination_test.go; internal/handler/login_destination_test.go; TOTP, recovery, and WebAuthn completion tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/oidc_callback.go",
+    "line": "72",
+    "source_sha256": "2e6d50aa3d3dafb47ddfee5567104d6cc9e864129780d4e273f3b106342a7e98",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "OIDC login redirects only after bound state validation and session issuance through takeLoginDestination. This helper bounds and decodes the cookie, then SafeLoginDestination accepts only validated local paths and queries. OIDC reauthentication retains its fixed continuation. Evidence: internal/auth/login_destination_test.go; internal/handler/login_destination_test.go OIDC return test; OIDC callback and reauthentication tests."
   }
 ]

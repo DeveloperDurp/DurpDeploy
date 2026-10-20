@@ -211,6 +211,23 @@ PY
     matrix_assert_pending_challenge
 }
 
+matrix_password_failure_body() {
+    python3 - "$AUTH_MFA_HTTP_BODY" "$1" <<'PY'
+import html
+import re
+import sys
+from pathlib import Path
+
+body = Path(sys.argv[1]).read_text("utf-8", "replace")
+pattern = r'(<input\b[^>]*\bid="login-email"[^>]*\bvalue=")([^"]*)(")'
+matches = list(re.finditer(pattern, body))
+if len(matches) != 1 or html.unescape(matches[0][2]) != sys.argv[2]:
+    raise SystemExit("Failed login did not retain the submitted email")
+match = matches[0]
+print(body[:match.start(2)] + "[submitted-email]" + body[match.end(2):])
+PY
+}
+
 matrix_login_password_session_transition() {
     local jar unknown_body invalid_body csrf
 
@@ -219,12 +236,14 @@ matrix_login_password_session_transition() {
     MATRIX_USER_ID=$(matrix_db_query "SELECT id FROM users WHERE email = '$DURPDEPLOY_AUTH_MFA_ADMIN_EMAIL'")
     auth_mfa_login "$jar" "$DURPDEPLOY_AUTH_MFA_ADMIN_EMAIL" wrong-password-1234
     auth_mfa_assert_status 422
-    invalid_body=$(<"$AUTH_MFA_HTTP_BODY")
+    invalid_body=$(matrix_password_failure_body "$DURPDEPLOY_AUTH_MFA_ADMIN_EMAIL") \
+        || auth_mfa_fail "known-user failure did not retain email"
     matrix_assert_no_final_session
     auth_mfa_assert_audit_count login 0 "$MATRIX_USER_ID"
     auth_mfa_login "$jar" unknown-login@test.local wrong-password-1234
     auth_mfa_assert_status 422
-    unknown_body=$(<"$AUTH_MFA_HTTP_BODY")
+    unknown_body=$(matrix_password_failure_body unknown-login@test.local) \
+        || auth_mfa_fail "unknown-user failure did not retain email"
     [[ $invalid_body == "$unknown_body" ]] || auth_mfa_fail "known and unknown password failures differ"
     auth_mfa_login "$jar" "$DURPDEPLOY_AUTH_MFA_ADMIN_EMAIL" "$DURPDEPLOY_AUTH_MFA_ADMIN_PASSWORD"
     auth_mfa_assert_status 303

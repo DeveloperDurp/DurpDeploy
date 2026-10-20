@@ -22,7 +22,8 @@ func TestOIDCReauthStart_requiresProtectedSession(t *testing.T) {
 
 	// Then
 	if response.StatusCode != http.StatusSeeOther ||
-		response.Header.Get("Location") != "/login" {
+		response.Header.Get("Location") !=
+			"/login?next=%2Fsettings%2Fsecurity%2Freauth%2Foidc" {
 		t.Fatalf(
 			"unauthenticated OIDC reauthentication start = %d %q, want login redirect",
 			response.StatusCode,

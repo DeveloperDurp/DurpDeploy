@@ -239,9 +239,10 @@ func TestOIDCRoutes_ExposePublicStartAndCallback_when_enabled(t *testing.T) {
 		)
 	}
 	if reauthResponse.StatusCode != http.StatusSeeOther ||
-		reauthResponse.Header.Get("Location") != "/login" {
+		reauthResponse.Header.Get("Location") !=
+			"/login?next=%2Fsettings%2Fsecurity%2Freauth%2Foidc" {
 		t.Fatalf(
-			"anonymous OIDC reauth = %d %q, want 303 to /login",
+			"anonymous OIDC reauth = %d %q, want login with return path",
 			reauthResponse.StatusCode,
 			reauthResponse.Header.Get("Location"),
 		)

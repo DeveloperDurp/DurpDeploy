@@ -84,7 +84,7 @@ func TestPageNavigationHTTPAPIWebE2E(t *testing.T) {
 		}
 		response.Body.Close()
 		if response.StatusCode != test.status ||
-			response.Header.Get("HX-Redirect") != "/login" {
+			response.Header.Get("HX-Redirect") != "/login?next=%2Fprojects" {
 			t.Fatalf(
 				"unauthenticated %s status=%d redirect=%s",
 				test.header,
