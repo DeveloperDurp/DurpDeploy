@@ -261,7 +261,8 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 		</div>
 		<div class="card bg-base-200 p-4">
 			<h2 class="text-xl font-bold mb-4">Snapshotted Variables</h2>
-			<p class="text-sm opacity-70 mb-4">Project variables are saved here. Lifecycle variables use their current values and scope when a deployment is created; refreshing this release is not required.</p>
+			<p class="text-sm opacity-70 mb-4" data-release-project-guidance><strong>Project variables:</strong> This table shows the values saved in this release. After changing project variables, select Refresh to update these saved values.</p>
+			<p class="text-sm opacity-70 mb-4" data-release-lifecycle-guidance><strong>Lifecycle variables:</strong> Each new deployment uses their current values and scope. No release refresh is required.</p>
 			<table class="table table-zebra table-fixed w-full">
 				<thead>
 					<tr>

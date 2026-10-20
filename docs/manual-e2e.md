@@ -64,6 +64,34 @@ bash scripts/go_test.sh -tags=e2e -race -count=1 -run '^TestProjectPanelScopeAPI
 bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestProjectPanelScopeBrowserE2E$' ./internal/handler/api
 ```
 
+## Release variable guidance (A11)
+
+Create a disposable project with a lifecycle and a stage environment.
+Create a project variable named `VALUE` with value `old`.
+Create a lifecycle variable named `SHARED` with value `initial`.
+Create a step that prints both variables.
+Create a release.
+Change the project value to `new` and the lifecycle value to `current`.
+Open the release at phone and desktop widths.
+Confirm that separate Project variables and Lifecycle variables instructions explain their refresh behavior.
+Confirm that the table retains the saved project value `old`.
+When secret variables exist, confirm that their values remain masked.
+Deploy the existing release without Refresh.
+Expect `project=old shared=current` in its logs.
+Select Refresh on the release.
+Accept the confirmation.
+Confirm that the table shows `new`.
+Deploy the refreshed release.
+Expect `project=new shared=current`.
+Read the release through `GET /api/v1/projects/{id}/releases/{relId}` before and after Refresh.
+Confirm that its project variable values agree with the visible table.
+Keep all examples for repeat checks.
+These checks require no schedules.
+
+```bash
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestReleaseVariableGuidance(APIWeb|Browser)E2E$' ./internal/handler/api
+```
+
 ## Deployment re-run inputs (A10)
 
 Create a disposable project with a non-secret variable named `RERUN_VALUE` set to `base-one`.
