@@ -64,6 +64,27 @@ bash scripts/go_test.sh -tags=e2e -race -count=1 -run '^TestProjectPanelScopeAPI
 bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestProjectPanelScopeBrowserE2E$' ./internal/handler/api
 ```
 
+## Variable identifier guidance (A13)
+
+Open a disposable project's variable forms at phone and desktop widths.
+Confirm that Name guidance explains the ASCII format, 255-character limit, first character, and reserved names.
+Enter `bad name` and attempt to submit.
+Confirm that validation retains the draft and explains the required format.
+Create `Mixed_2` with an empty value.
+Edit that variable and attempt to rename it to `1BAD`.
+Confirm that rejection leaves the saved variable unchanged.
+Correct the name and save again.
+Repeat invalid creation and updates through the public variable API.
+Expect `422` for NUL, equals signs, embedded whitespace, leading digits, hyphens, Unicode, and names longer than 255 characters.
+Confirm that invalid requests store no changes.
+Confirm that empty values, masked secrets, and environment overrides still work.
+Keep all examples for repeat checks.
+These checks require no schedules.
+
+```bash
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^Test(VariableNames(APIWeb|Browser)E2E|ProjectVariableNamesRejectInvalidWrites)$' ./internal/repository ./internal/handler/api
+```
+
 ## Duplicate release recovery (A12)
 
 Create a disposable project and a release named `edge-v1`.

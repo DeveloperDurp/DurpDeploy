@@ -50,7 +50,7 @@ func TestVariableWeb_LifecycleEnvironmentOptions(t *testing.T) {
 
 	checkOptions(path, false)
 	variable, err := h.repo.CreateVariable(t.Context(), db.CreateVariableParams{
-		ProjectID: project.ID, Name: "existing-outside",
+		ProjectID: project.ID, Name: "existing_outside",
 		EnvironmentID: sql.NullInt64{Int64: outside.ID, Valid: true},
 	})
 	if err != nil {

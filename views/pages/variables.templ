@@ -6,6 +6,12 @@ import (
 	"strconv"
 )
 
+const variableNameGuidance = "Use 1–255 ASCII letters, digits, or underscores. Start with a letter or underscore. ARTIFACT_PATH, DURPDEPLOY_STAGE_DIR, and DURPDEPLOY_APPROVED_DIR are reserved."
+
+templ VariableNameHelp() {
+	<p class="text-sm opacity-70 mt-1" data-variable-name-help>{ variableNameGuidance }</p>
+}
+
 func filterUnscoped(vars []db.Variable) []db.Variable {
 	result := make([]db.Variable, 0)
 	for _, v := range vars {
@@ -69,7 +75,8 @@ templ VariableForm(projectID int64, environments VariableEnvironments, errorMsg 
 				<label class="label">
 					<span class="label-text">Name</span>
 				</label>
-				<input type="text" name="name" class="input input-bordered" required/>
+				<input type="text" name="name" class="input input-bordered" required pattern="[A-Za-z_][A-Za-z0-9_]*" maxlength="255" title={ variableNameGuidance } aria-label="Name" aria-description={ variableNameGuidance }/>
+				@VariableNameHelp()
 				if errorMsg != "" {
 					<span class="text-error text-sm mt-1">{ errorMsg }</span>
 				}
@@ -249,7 +256,8 @@ templ VariableQuickEditForm(projectID int64, variable db.Variable, environments 
 	>
 		<div class="form-control">
 			<label class="label"><span class="label-text">Name</span></label>
-			<input type="text" name="name" value={ variable.Name } class="input input-bordered input-sm w-full" required/>
+			<input type="text" name="name" value={ variable.Name } class="input input-bordered input-sm w-full" required pattern="[A-Za-z_][A-Za-z0-9_]*" maxlength="255" title={ variableNameGuidance } aria-label="Name" aria-description={ variableNameGuidance }/>
+			@VariableNameHelp()
 		</div>
 		<div class="form-control">
 			<label class="label"><span class="label-text">Value</span></label>
@@ -372,7 +380,8 @@ templ VariableEditRow(projectID int64, variable db.Variable, environments Variab
 				data-toast-success="Variable updated"
 				data-toast-error="Failed to update variable"
 			></form>
-			<input type="text" name="name" value={ variable.Name } form={ fmt.Sprintf("variable-edit-form-%d", variable.ID) } class="input input-bordered input-sm w-full" required/>
+			<input type="text" name="name" value={ variable.Name } form={ fmt.Sprintf("variable-edit-form-%d", variable.ID) } class="input input-bordered input-sm w-full" required pattern="[A-Za-z_][A-Za-z0-9_]*" maxlength="255" title={ variableNameGuidance } aria-label="Name" aria-description={ variableNameGuidance }/>
+			@VariableNameHelp()
 			if errorMsg != "" {
 				<span class="text-error text-sm mt-1">{ errorMsg }</span>
 			}

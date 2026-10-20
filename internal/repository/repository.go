@@ -100,6 +100,9 @@ func (r *Repository) CreateVariable(
 	ctx context.Context,
 	arg db.CreateVariableParams,
 ) (db.Variable, error) {
+	if err := validateVariableName(arg.Name); err != nil {
+		return db.Variable{}, err
+	}
 	if arg.Name == artifact.PathVariable {
 		return db.Variable{}, ErrArtifactPathReserved
 	}
@@ -125,6 +128,9 @@ func (r *Repository) UpdateVariable(
 	ctx context.Context,
 	arg db.UpdateVariableParams,
 ) (db.Variable, error) {
+	if err := validateVariableName(arg.Name); err != nil {
+		return db.Variable{}, err
+	}
 	if arg.Name == artifact.PathVariable {
 		return db.Variable{}, ErrArtifactPathReserved
 	}
@@ -153,6 +159,9 @@ func (r *Repository) UpdateVariableKeepValue(
 	ctx context.Context,
 	arg db.UpdateVariableKeepValueParams,
 ) (db.Variable, error) {
+	if err := validateVariableName(arg.Name); err != nil {
+		return db.Variable{}, err
+	}
 	if arg.Name == artifact.PathVariable {
 		return db.Variable{}, ErrArtifactPathReserved
 	}

@@ -43,7 +43,7 @@ func TestNestedObjectsMustBelongToURLProject(t *testing.T) {
 	}
 	variable, err := repo.CreateVariable(ctx, db.CreateVariableParams{
 		ProjectID: projectB.ID,
-		Name:      "project-b-secret",
+		Name:      "project_b_secret",
 		Value:     sql.NullString{String: "secret", Valid: true},
 		Secret:    1,
 	})

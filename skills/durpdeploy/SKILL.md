@@ -319,6 +319,11 @@ or refresh; recreate their steps and create a new release (`409` on launch).
    `null`) for Unscoped. On projects bound to a lifecycle, create and update
    accept only its stage environments; other IDs return `422`. Projects
    without a lifecycle can use any environment.
+   Use 1–255 ASCII letters, digits, or underscores for project and lifecycle variable names.
+   Start each name with a letter or underscore.
+   Unsupported nonempty project names return `422` on creation and updates.
+   Empty project names retain their `400` validation response.
+   `ARTIFACT_PATH`, `DURPDEPLOY_STAGE_DIR`, and `DURPDEPLOY_APPROVED_DIR` remain reserved.
 5. **Release** (snapshot of current steps + variables)
    `POST /api/v1/projects/$PID/releases` `{"version":"1.2.0"}` → `id`.
    A duplicate version returns `409` with an instruction to enter a different version.

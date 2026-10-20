@@ -20,6 +20,7 @@ func ArtifactErrorStatus(err error) int {
 		errors.Is(err, artifact.ErrInvalid),
 		errors.Is(err, verification.ErrInvalid),
 		errors.Is(err, containerenv.ErrReserved),
+		errors.Is(err, repository.ErrVariableName),
 		errors.Is(err, artifact.ErrChecksum),
 		errors.Is(err, repository.ErrArtifactPathReserved):
 		return http.StatusUnprocessableEntity
@@ -36,6 +37,9 @@ func writeArtifactError(w http.ResponseWriter, err error) bool {
 	status := ArtifactErrorStatus(err)
 	if status == 0 {
 		return false
+	}
+	if errors.Is(err, repository.ErrVariableName) {
+		SetToastError(w, err.Error())
 	}
 	http.Error(w, err.Error(), status)
 	return true

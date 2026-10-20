@@ -14,7 +14,7 @@ import (
 
 var (
 	ErrVariableName = errors.New(
-		"use a variable name of 1–255 letters, digits or underscores, starting with a letter or underscore",
+		"use a variable name of 1-255 ASCII letters, digits or underscores, starting with a letter or underscore",
 	)
 	ErrLifecycleVariableScope = errors.New(
 		"environment is not in this lifecycle",
@@ -27,14 +27,21 @@ type LifecycleVariableInput struct {
 	db.CreateLifecycleVariableParams
 }
 
+func validateVariableName(name string) error {
+	if len(name) > 255 || !variableNamePattern.MatchString(name) {
+		return ErrVariableName
+	}
+	return nil
+}
+
 // SaveLifecycleVariable shares validation and encryption between API and web.
 // A blank value keeps an existing secret, atomically with its metadata update.
 func (r *Repository) SaveLifecycleVariable(
 	ctx context.Context, input LifecycleVariableInput,
 ) (db.LifecycleVariable, error) {
 	input.Name = strings.TrimSpace(input.Name)
-	if len(input.Name) > 255 || !variableNamePattern.MatchString(input.Name) {
-		return db.LifecycleVariable{}, ErrVariableName
+	if err := validateVariableName(input.Name); err != nil {
+		return db.LifecycleVariable{}, err
 	}
 	if input.Name == artifact.PathVariable {
 		return db.LifecycleVariable{}, ErrArtifactPathReserved

@@ -105,9 +105,9 @@ func TestRelease_SecretMaskAcrossRoles(t *testing.T) {
 	tstAddMember(t, h, p.ID, admin.ID, "admin")
 
 	const secretValue = "release-plaintext-secret"
-	tstSeedVar(t, h, p.ID, "rel-secret", secretValue, true)
+	tstSeedVar(t, h, p.ID, "rel_secret", secretValue, true)
 	const openValue = "plain-open-value"
-	tstSeedVar(t, h, p.ID, "rel-open", openValue, false)
+	tstSeedVar(t, h, p.ID, "rel_open", openValue, false)
 
 	// Snapshots are immutable and role-independent, so creating them
 	// at the repository layer makes every role a pure reader — which
@@ -185,7 +185,7 @@ func TestRelease_SecretMaskAcrossRoles(t *testing.T) {
 					)
 				}
 				switch vname {
-				case "rel-secret":
+				case "rel_secret":
 					if val != "" {
 						t.Fatalf(
 							"secret snapshot not masked: %q", val,
@@ -194,7 +194,7 @@ func TestRelease_SecretMaskAcrossRoles(t *testing.T) {
 					if flag != 1 {
 						t.Fatal("secret flag lost")
 					}
-				case "rel-open":
+				case "rel_open":
 					if val != openValue {
 						t.Fatalf(
 							"non-secret snapshot changed: %q", val,
@@ -207,7 +207,7 @@ func TestRelease_SecretMaskAcrossRoles(t *testing.T) {
 					t.Fatalf("unexpected snapshot name: %q", vname)
 				}
 			}
-			if !seen["rel-secret"] || !seen["rel-open"] {
+			if !seen["rel_secret"] || !seen["rel_open"] {
 				t.Fatalf(
 					"seeded variables missing: %v", seen,
 				)
@@ -229,8 +229,8 @@ func TestRelease_SecretOnlySnapshotHasNoValue(t *testing.T) {
 	p := seedProject(t, h.repo)
 	tstAddMember(t, h, p.ID, admin.ID, "admin")
 
-	tstSeedVar(t, h, p.ID, "only-secret", "only-secret-value", true)
-	tstSeedVar(t, h, p.ID, "only-open", "", false)
+	tstSeedVar(t, h, p.ID, "only_secret", "only-secret-value", true)
+	tstSeedVar(t, h, p.ID, "only_open", "", false)
 
 	release, err := handler.CreateReleaseSnapshot(
 		context.Background(), h.repo, p.ID, "v-only",
@@ -272,7 +272,7 @@ func TestRelease_SecretOnlySnapshotHasNoValue(t *testing.T) {
 			)
 		}
 		switch name {
-		case "only-secret":
+		case "only_secret":
 			onlySecreted = true
 			flag, flagOK := vv["secret"].(float64)
 			if !flagOK {
@@ -281,7 +281,7 @@ func TestRelease_SecretOnlySnapshotHasNoValue(t *testing.T) {
 			if flag != 1 {
 				t.Fatal("secret flag lost")
 			}
-		case "only-open":
+		case "only_open":
 			onlyOpened = true
 			flag, flagOK := vv["secret"].(float64)
 			if !flagOK {
@@ -333,7 +333,7 @@ func TestRelease_CrossProjectIDORConcealsSnapshot(t *testing.T) {
 		if member == "idor-a" {
 			tokenA = token
 		} else {
-			tstSeedVar(t, h, proj.ID, "idor-secret", secretValue, true)
+			tstSeedVar(t, h, proj.ID, "idor_secret", secretValue, true)
 		}
 	}
 
