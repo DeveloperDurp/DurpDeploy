@@ -37,7 +37,8 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 		if IsUniqueViolation(err) {
 			h.renderReleaseCreateError(w, r, pages.ReleaseFormState{
 				ProjectID: projectID, Version: version,
-				Error: "A release with this version already exists",
+				Error: "A release with this version already exists. " +
+					"Enter a different version to create a new release.",
 			})
 			return
 		}

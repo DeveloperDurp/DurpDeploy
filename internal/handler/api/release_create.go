@@ -69,7 +69,8 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 			RespondError(
 				w,
 				http.StatusConflict,
-				"A release with this version already exists",
+				"A release with this version already exists. "+
+					"Enter a different version to create a new release.",
 			)
 			return
 		}

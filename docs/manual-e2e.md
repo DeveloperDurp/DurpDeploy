@@ -64,6 +64,27 @@ bash scripts/go_test.sh -tags=e2e -race -count=1 -run '^TestProjectPanelScopeAPI
 bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestProjectPanelScopeBrowserE2E$' ./internal/handler/api
 ```
 
+## Duplicate release recovery (A12)
+
+Create a disposable project and a release named `edge-v1`.
+Open the releases page at phone and desktop widths.
+Submit `edge-v1` again.
+Confirm that the error retains `edge-v1` and instructs you to enter a different version.
+Confirm that the page shows error feedback and creates no duplicate release.
+Change the version and submit again.
+Confirm that the new release appears beside the original release.
+Post the original version through `POST /api/v1/projects/{id}/releases`.
+Expect `409` with the same recovery instruction.
+Change the API version before retrying.
+Expect `201` and a new release ID.
+Confirm that the original release snapshot remains unchanged.
+Keep all examples for repeat checks.
+These checks require no schedules.
+
+```bash
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestReleaseDuplicateRecovery(APIWeb|Browser)E2E$' ./internal/handler/api
+```
+
 ## Release variable guidance (A11)
 
 Create a disposable project with a lifecycle and a stage environment.

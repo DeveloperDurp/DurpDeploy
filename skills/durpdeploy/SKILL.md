@@ -321,6 +321,8 @@ or refresh; recreate their steps and create a new release (`409` on launch).
    without a lifecycle can use any environment.
 5. **Release** (snapshot of current steps + variables)
    `POST /api/v1/projects/$PID/releases` `{"version":"1.2.0"}` → `id`.
+   A duplicate version returns `409` with an instruction to enter a different version.
+   Change `version` before retrying.
    With an attached package repository, creation freezes its source, URL and
    version without downloading. Missing versions and unreachable repositories
    do not block creation. The artifact endpoint returns `pending: true`, an
