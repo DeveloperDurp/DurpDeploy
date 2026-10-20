@@ -231,11 +231,15 @@ func TestProjectTokensBrowserE2E(t *testing.T) {
  const form = document.querySelector('form[action="/settings/tokens"]');
  form.requestSubmit(); return true;
 })()`)
-	b.wait(
-		t,
-		`document.querySelector('.alert-error')?.textContent.includes('Select a valid role and accessible projects')`,
-	)
+	b.assertTokenProjectError(t,
+		`document.querySelector('form[action="/settings/tokens"]')`, "viewer")
 	b.waitTokenSettingsReady(t)
+	if string(b.evaluate(
+		t,
+		`document.querySelector('#token-name').value === 'empty-selection'`,
+	)) != "true" {
+		t.Fatal("missing selection discarded the token name")
+	}
 	b.captureNavigation(t, "project-token-empty-selection")
 	// Replace the scope through the owner session without redisplaying the secret.
 	b.evaluate(
@@ -253,6 +257,19 @@ func TestProjectTokensBrowserE2E(t *testing.T) {
 		t.Fatal("scope edit controls are clipped or squeezed on mobile")
 	}
 	b.screenshot(t, "project-token-mobile-edit")
+	editForm := fmt.Sprintf(
+		`(%s).querySelector('form[data-token-scope-edit]')`, row)
+	b.chooseTokenProjects(t, editForm)
+	b.evaluate(t, fmt.Sprintf(`(() => {
+ const form=%s; form.elements.role.value='maintainer';
+ form.requestSubmit(); return true;
+})()`, editForm))
+	b.assertTokenProjectError(t, editForm, "maintainer")
+	b.waitTokenSettingsReady(t)
+	if string(b.evaluate(t,
+		`!document.querySelector('#new-token-projects-error')`)) != "true" {
+		t.Fatal("scope edit marked the create form invalid")
+	}
 	b.chooseTokenProjects(t,
 		fmt.Sprintf(`(%s).querySelector('form[data-token-scope-edit]')`, row),
 		projects[1])
@@ -277,6 +294,24 @@ func TestProjectTokensBrowserE2E(t *testing.T) {
 		t.Fatal("editing scope redisplayed a bearer credential")
 	}
 	b.captureNavigation(t, "project-token-edited-scope")
+}
+
+func (b *packageBrowser) assertTokenProjectError(
+	t *testing.T, form, role string,
+) {
+	t.Helper()
+	b.wait(t, fmt.Sprintf(`(() => {
+ const form=%s; if (!form) return false;
+ const button=form.querySelector('[aria-haspopup=dialog]');
+ const error=form.querySelector('[role=alert]');
+ return error?.textContent==='Select at least one project'
+   && error.getBoundingClientRect().height > 0
+   && button.getAttribute('aria-invalid')==='true'
+   && button.getAttribute('aria-describedby').split(' ').includes(error.id)
+   && form.elements.scope.value==='scoped' && form.elements.role.value===%q
+   && !form.querySelector('input[name=project_ids]:checked')
+   && !document.querySelector('.alert code');
+})()`, form, role))
 }
 
 func (b *packageBrowser) waitTokenSettingsReady(t *testing.T) {

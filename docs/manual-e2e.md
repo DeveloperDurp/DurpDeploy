@@ -400,6 +400,20 @@ Close the picker and confirm that focus returns to **Choose projects**.
 Select **All accessible projects** in the new token form.
 Confirm that the project control disappears and the permission selector stays visible.
 Select **Selected projects** and confirm that the project control returns.
+Enter a token name and leave the project selection empty.
+Select **Create token**.
+Confirm that `Select at least one project` appears beside **Choose projects**.
+Confirm that the name, scope, and role remain selected.
+Select an accessible project and submit again.
+Confirm that the bearer value appears once.
+Reload the page and confirm that the bearer value disappears.
+Edit the token scope and clear its project selection.
+Select **Save scope**.
+Confirm that the same error appears beside that token's **Choose projects** control.
+Confirm that the edit stays open and retains the submitted role.
+Confirm that `GET /api/v1/tokens` shows unchanged saved grants after the rejected edit.
+Repeat empty selections with `POST /api/v1/tokens` and `PATCH /api/v1/tokens/{token_id}`.
+Expect `422` with `select at least one project` for an otherwise valid scoped request.
 
 Call `GET /api/v1/projects` with each token.
 Expect only selected projects and matching pagination totals.

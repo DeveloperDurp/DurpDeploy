@@ -67,7 +67,11 @@ templ TokensSettings(
 								required
 							/>
 						</div>
-						@TokenGrantFields(view.Form, view.Projects, "new-token")
+						if view.FormTokenID == "" {
+							@TokenGrantFields(view.Form, view.Projects, "new-token", view.MissingProjects)
+						} else {
+							@TokenGrantFields(repository.TokenScope{Scope: "global", Role: "viewer"}, view.Projects, "new-token", false)
+						}
 						<div class="flex sm:justify-end">
 							<button type="submit" class="btn btn-primary w-full sm:w-auto">Create token</button>
 						</div>
@@ -171,10 +175,10 @@ templ tokenMobileCard(t db.ListApiTokensByUserRow, view TokenSettingsView) {
 templ tokenActions(t db.ListApiTokensByUserRow, view TokenSettingsView, prefix string) {
 	if CanWrite(ctx) && !t.RevokedAt.Valid {
 		<div class="flex flex-wrap items-start gap-2">
-			<details class="open:w-full">
+			<details class="open:w-full" open?={ view.FormTokenID == t.ID }>
 				<summary class="btn btn-sm min-h-11 xl:btn-xs xl:min-h-0">Edit scope</summary>
 				<form method="post" action={ "/settings/tokens/" + t.ID + "/scope" } class="grid min-w-0 gap-4 rounded-lg bg-base-100 p-3 mt-3 whitespace-normal" data-token-scope-edit={ t.ID }>
-					@TokenGrantFields(repository.TokenScope{Scope: t.Scope, Role: t.TokenRole, ProjectIDs: view.Selections[t.ID]}, view.Projects, prefix)
+					@TokenGrantFields(view.tokenForm(t), view.Projects, prefix, view.MissingProjects && view.FormTokenID == t.ID)
 					<button type="submit" class="btn btn-primary btn-sm min-h-11 xl:min-h-0">Save scope</button>
 				</form>
 			</details>
@@ -288,7 +292,7 @@ templ TokenScopeLabel(scope string, role string, ids []int64, projects []db.Proj
 	}
 }
 
-templ TokenGrantFields(grant repository.TokenScope, projects []db.Project, prefix string) {
+templ TokenGrantFields(grant repository.TokenScope, projects []db.Project, prefix string, missingProjects bool) {
 	<div class="grid min-w-0 gap-4" x-data="tokenGrantFields" data-scope={ grant.Scope }>
 	<div class="form-control min-w-0">
 		<label class="label" for={ prefix + "-scope" }><span class="label-text">Scope</span></label>
@@ -310,10 +314,20 @@ templ TokenGrantFields(grant repository.TokenScope, projects []db.Project, prefi
 	</div>
 	<div class="form-control min-w-0" x-cloak x-show="scope === 'scoped'">
 		<label class="label" for={ prefix + "-projects" }><span class="label-text">Projects</span></label>
-		<button id={ prefix + "-projects" } type="button" class="btn btn-outline min-h-12 w-full justify-between" x-ref="projectButton" x-on:click="openProjects" x-bind:disabled="scope !== 'scoped'" aria-haspopup="dialog" aria-controls={ prefix + "-project-picker" } aria-describedby={ prefix + "-help" }>
+		<button id={ prefix + "-projects" } type="button" class="btn btn-outline min-h-12 w-full justify-between" x-ref="projectButton" x-on:click="openProjects" x-bind:disabled="scope !== 'scoped'" aria-haspopup="dialog" aria-controls={ prefix + "-project-picker" }
+			if missingProjects {
+				aria-invalid="true"
+				aria-describedby={ prefix + "-help " + prefix + "-projects-error" }
+			} else {
+				aria-describedby={ prefix + "-help" }
+			}
+		>
 			<span>Choose projects</span>
 			<span class="badge badge-ghost" x-text="selectionLabel">{ strconv.Itoa(len(grant.ProjectIDs)) } selected</span>
 		</button>
+		if missingProjects {
+			<p id={ prefix + "-projects-error" } class="text-error text-sm mt-1" role="alert">Select at least one project</p>
+		}
 		<p class="mt-2 text-sm [overflow-wrap:anywhere]" data-token-project-summary x-text="selectedNames">{ tokenProjectNames(grant.ProjectIDs, projects) }</p>
 		<p id={ prefix + "-help" } class="text-xs opacity-70 mt-1">For selected-project tokens, choose one or more projects. The role limits the owner's current permissions.</p>
 		<p class="text-xs opacity-70 mt-1">Deployer runs existing releases. Maintainer also authors content. Explicit token roles cannot manage API tokens.</p>

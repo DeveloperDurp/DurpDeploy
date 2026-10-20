@@ -9,10 +9,22 @@ import (
 )
 
 type TokenSettingsView struct {
-	Projects   []db.Project
-	Selections map[string][]int64
-	Form       repository.TokenScope
-	Name       string
+	Projects        []db.Project
+	Selections      map[string][]int64
+	Form            repository.TokenScope
+	Name            string
+	FormTokenID     string
+	MissingProjects bool
+}
+
+func (v TokenSettingsView) tokenForm(
+	token db.ListApiTokensByUserRow,
+) repository.TokenScope {
+	if token.ID == v.FormTokenID {
+		return v.Form
+	}
+	return repository.TokenScope{Scope: token.Scope, Role: token.TokenRole,
+		ProjectIDs: v.Selections[token.ID]}
 }
 
 func tokenProjectNames(ids []int64, projects []db.Project) string {

@@ -107,6 +107,7 @@ The permission selector defaults to `viewer` for either scope.
 Select **Selected projects** to set a project selection.
 Use `{"name":"ci-reader","scope":"global","role":"viewer"}` to create an all-project reader through the API.
 Explicit scoped requests reject empty selections, invalid roles, and inaccessible projects.
+For an otherwise valid scoped request without projects, token creation and scope updates return `422` with `select at least one project`.
 
 Replace scope with `PATCH /api/v1/tokens/{token_id}` using `scope`, `role`, and `project_ids`.
 Provide an explicit `scope` on updates.

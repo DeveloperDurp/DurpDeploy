@@ -70,7 +70,7 @@ func (h *TokensHandler) MyTokens(w http.ResponseWriter, r *http.Request) {
 		// renders the plain list — the token was already shown once.
 	}
 
-	h.renderTokenSettings(w, r, newToken, newName, "", http.StatusOK)
+	h.renderTokenSettings(w, r, newToken, newName, "", http.StatusOK, false)
 }
 
 // consumeTokenFlash atomically reads and deletes the flash record for
@@ -134,7 +134,7 @@ func (h *TokensHandler) MyTokensPost(w http.ResponseWriter, r *http.Request) {
 	}
 	grant, err := h.repo.ValidateTokenScope(r.Context(), *user, request)
 	if err != nil {
-		h.renderCreateError(w, r, "Select a valid role and accessible projects")
+		h.renderScopeError(w, r, err)
 		return
 	}
 	full, prefix, hash, err := auth.MintApiToken()
@@ -220,7 +220,8 @@ func (h *TokensHandler) renderCreateError(
 	r *http.Request,
 	msg string,
 ) {
-	h.renderTokenSettings(w, r, "", "", msg, http.StatusUnprocessableEntity)
+	h.renderTokenSettings(w, r, "", "", msg, http.StatusUnprocessableEntity,
+		false)
 }
 
 // MyTokensRevoke handles POST /settings/tokens/{id}/revoke. Revokes

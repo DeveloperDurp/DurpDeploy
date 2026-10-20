@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -48,7 +49,7 @@ func (h *TokensHandler) tokenSelections(
 
 func (h *TokensHandler) renderTokenSettings(
 	w http.ResponseWriter, r *http.Request,
-	newToken, newName, message string, status int,
+	newToken, newName, message string, status int, missingProjects bool,
 ) {
 	user := auth.UserFromContext(r.Context())
 	if user == nil {
@@ -88,7 +89,8 @@ func (h *TokensHandler) renderTokenSettings(
 		form = repository.TokenScope{Scope: "global", Role: "viewer"}
 	}
 	view := pages.TokenSettingsView{Projects: projects, Selections: selections,
-		Form: form, Name: r.FormValue("name")}
+		Form: form, Name: r.FormValue("name"),
+		FormTokenID: chi.URLParam(r, "id"), MissingProjects: missingProjects}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.WriteHeader(status)
@@ -96,6 +98,18 @@ func (h *TokensHandler) renderTokenSettings(
 		"/settings/tokens", view).Render(r.Context(), w); err != nil {
 		http.Error(w, "Could not render tokens", http.StatusInternalServerError)
 	}
+}
+
+func (h *TokensHandler) renderScopeError(
+	w http.ResponseWriter, r *http.Request, err error,
+) {
+	missing := errors.Is(err, repository.ErrTokenProjectsRequired)
+	message := "Select a valid role and accessible projects"
+	if missing {
+		message = "Select at least one project"
+	}
+	h.renderTokenSettings(w, r, "", "", message,
+		http.StatusUnprocessableEntity, missing)
 }
 
 func (h *TokensHandler) MyTokensScope(w http.ResponseWriter, r *http.Request) {
@@ -117,7 +131,7 @@ func (h *TokensHandler) MyTokensScope(w http.ResponseWriter, r *http.Request) {
 	}
 	grant, err := h.repo.ValidateTokenScope(r.Context(), *user, request)
 	if err != nil {
-		h.renderCreateError(w, r, "Select a valid role and accessible projects")
+		h.renderScopeError(w, r, err)
 		return
 	}
 	previous, err := h.repo.ReplaceTokenScope(r.Context(), id, grant)

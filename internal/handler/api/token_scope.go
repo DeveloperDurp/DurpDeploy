@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"slices"
 
@@ -98,6 +99,12 @@ func (h *APITokenHandler) UpdateScope(w http.ResponseWriter, r *http.Request) {
 	}
 	grant, err := h.repo.ValidateTokenScope(r.Context(), *user, request)
 	if err != nil || request.Scope == "" {
+		if request.Scope != "" &&
+			errors.Is(err, repository.ErrTokenProjectsRequired) {
+			RespondError(w, http.StatusUnprocessableEntity,
+				repository.ErrTokenProjectsRequired.Error())
+			return
+		}
 		RespondError(w, http.StatusUnprocessableEntity,
 			"provide an explicit valid scope, role, and accessible projects")
 		return

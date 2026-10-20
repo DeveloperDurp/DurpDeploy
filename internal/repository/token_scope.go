@@ -21,6 +21,7 @@ type TokenScope struct {
 }
 
 var ErrTokenScope = errors.New("invalid token scope")
+var ErrTokenProjectsRequired = errors.New("select at least one project")
 
 // ReplaceTokenScope returns the grants replaced by this committed edit.
 func (r *Repository) ReplaceTokenScope(
@@ -92,9 +93,11 @@ func (r *Repository) ValidateTokenScope(
 		grant.ProjectIDs = []int64{}
 		return grant, nil
 	}
-	if grant.Scope != "scoped" || len(grant.ProjectIDs) == 0 ||
-		!roles.Valid(grant.Role) {
+	if grant.Scope != "scoped" || !roles.Valid(grant.Role) {
 		return grant, ErrTokenScope
+	}
+	if len(grant.ProjectIDs) == 0 {
+		return grant, errors.Join(ErrTokenScope, ErrTokenProjectsRequired)
 	}
 	grant.ProjectIDs = slices.Clone(grant.ProjectIDs)
 	slices.Sort(grant.ProjectIDs)

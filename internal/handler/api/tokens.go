@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -179,6 +180,11 @@ func (h *APITokenHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 	}
 	grant, err := h.repo.ValidateTokenScope(ctx, *user, requested)
 	if err != nil {
+		if errors.Is(err, repository.ErrTokenProjectsRequired) {
+			RespondError(w, http.StatusUnprocessableEntity,
+				repository.ErrTokenProjectsRequired.Error())
+			return
+		}
 		RespondError(w, http.StatusUnprocessableEntity,
 			"select a valid token role and accessible projects")
 		return
