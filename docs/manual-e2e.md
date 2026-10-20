@@ -1328,6 +1328,45 @@ bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestLifec
 
 The backend checks run concurrent API and web appends on SQLite, PostgreSQL, and SQL Server.
 
+## Stale-form permission navigation (V02)
+
+Use a disposable project with a release, environment, and Maintainer test account.
+Keep the deployment history empty before this check.
+Use the same account in two browser tabs.
+
+1. In the first tab, open the project Edit dialog.
+2. Enter an unsaved description.
+3. In the second tab, open the project and select Deploy.
+4. Select a release and environment.
+5. With a separate administrator session, change the account's project role to Viewer.
+6. Submit both stale forms.
+7. Expect error messages, a retained description draft, and no deployment.
+8. Reload the deployment page.
+9. Select Go back and record the URL and page.
+10. If the denial repeats, select Go back again.
+11. Restore the project role to Maintainer.
+12. Repeat with the global role changed to Viewer.
+13. Restore both roles to Maintainer.
+14. Save the retained draft and confirm the saved description through the API.
+
+The verified sequence adds two deployment-form history entries when release selection reloads the page.
+The first Go back revisits `/projects/{id}/deploy` and repeats the denial.
+The second Go back reaches `/projects/{id}`.
+A fresh denial with one deployment-form history entry reaches the project after one Go back.
+These checks did not reproduce a persistent navigation loop.
+
+Call `POST /api/v1/projects/{id}/deployments` with the Viewer token and valid release and environment IDs.
+Expect `403`.
+Call `GET /api/v1/projects/{id}/deployments` with an administrator token.
+Expect `total: 0`.
+Keep the project, release, environment, account, and deployment history available for repeat checks.
+
+Run the isolated browser and API regression:
+
+```bash
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestStaleFormBackBrowserE2E$' ./internal/handler/api
+```
+
 ## Database TLS policy
 
 Use a disposable database when changing TLS settings for this check.
