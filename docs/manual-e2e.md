@@ -1182,6 +1182,24 @@ Project administrators with global Maintainer permission can retain or remove an
 As a Maintainer, create or update a project with a new lifecycle ID.
 Confirm a 403 response without a project change.
 
+## Empty deployment filters
+
+1. Open Deployments for an account with deployment history.
+2. Select a project and a status without matching deployments.
+3. Select Filter.
+4. Confirm `No deployments match these filters` appears beside a visible Clear link.
+5. On a phone, keep the filter panel closed and select the nearby Clear link.
+6. Confirm the deployment history returns and the filter fields reset.
+7. Use Tab and Enter to activate Clear with the keyboard.
+8. Repeat with an unmatched environment and date range.
+9. Use an account without accessible deployment history.
+10. Open Deployments without filters.
+11. Confirm `No deployments yet. Deploy a release to see results here.` appears.
+
+The public `GET /api/v1/deployments` endpoint returns empty `items` and zero `total` for unmatched filters.
+Clear removes the filters and preserves deployment records.
+These checks create no schedules.
+
 ## Lifecycle stage ordering
 
 Create a lifecycle and at least three disposable environments.

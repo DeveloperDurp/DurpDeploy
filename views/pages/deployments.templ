@@ -132,7 +132,12 @@ templ DeploymentsList(view DeploymentsView, appendRows bool) {
 		<div id="deployments-content">
 			if len(view.Items) == 0 {
 				<div class="card bg-base-200 p-8 text-center">
-					<p class="text-gray-400">No deployments yet. Deploy a release to see results here.</p>
+					if view.FilterProject.Valid || view.FilterEnv.Valid || view.FilterStatus.Valid || view.FilterFrom.Valid || view.FilterTo.Valid || view.Total > 0 {
+						<p>No deployments match these filters</p>
+						<a href="/deployments" class="btn mt-4 self-center">Clear</a>
+					} else {
+						<p class="text-gray-400">No deployments yet. Deploy a release to see results here.</p>
+					}
 				</div>
 			} else {
 				@DeploymentListCards(view)

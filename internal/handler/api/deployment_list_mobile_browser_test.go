@@ -115,8 +115,35 @@ func TestDeploymentListMobileBrowserE2E(t *testing.T) {
 	)
 	b.captureNavigation(t, "mobile-deployment-list-filtered")
 	b.navigateBackTest(t, f.baseURL+"/deployments?status=pending")
-	b.wait(t, `document.body.textContent.includes('No deployments yet.')`)
+	b.wait(
+		t,
+		`document.querySelector('#deployments-content').textContent.includes('No deployments match these filters') && !document.body.textContent.includes('No deployments yet.')`,
+	)
 	b.captureNavigation(t, "mobile-deployment-list-empty")
+	if string(b.evaluate(t, `(() => {
+ const clear = document.querySelector('#deployments-content a[href="/deployments"]');
+ const box = clear?.getBoundingClientRect();
+ return box && box.height >= 44 && box.width > 0 && clear.textContent.trim() === 'Clear';
+})()`)) != "true" {
+		t.Fatal("empty filters have no visible phone Clear control")
+	}
+	b.evaluate(
+		t,
+		`document.querySelector('#deployments-content a[href="/deployments"]').focus(); true`,
+	)
+	b.call(t, "Input.dispatchKeyEvent", map[string]any{
+		"type": "keyDown", "key": "Enter", "code": "Enter",
+		"windowsVirtualKeyCode": 13,
+	}, &struct{}{})
+	b.call(t, "Input.dispatchKeyEvent", map[string]any{
+		"type": "keyUp", "key": "Enter", "code": "Enter",
+		"windowsVirtualKeyCode": 13,
+	}, &struct{}{})
+	b.wait(
+		t,
+		`location.search === '' && document.querySelectorAll('#deployments-tbody [data-deployment-id]').length === 3 && document.querySelector('select[name="status"]').value === ''`,
+	)
+	b.captureNavigation(t, "mobile-deployment-list-cleared")
 }
 
 func assertDeploymentListMobile(t *testing.T, b *packageBrowser) {
