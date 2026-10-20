@@ -38,29 +38,40 @@ func (r *Repository) CreateLifecycleStage(
 			if err != nil {
 				return err
 			}
-			next := int64(1)
-			for _, existing := range stages {
-				if existing.EnvironmentID == params.EnvironmentID {
-					return ErrLifecycleEnvironmentExists
-				}
-				if params.SortOrder > 0 &&
-					existing.SortOrder == params.SortOrder {
-					return ErrLifecycleSortOrderConflict
-				}
-				if params.SortOrder <= 0 && existing.SortOrder >= next {
-					if existing.SortOrder == math.MaxInt64 {
-						return ErrLifecycleSortOrderConflict
-					}
-					next = existing.SortOrder + 1
-				}
+			position, err := lifecycleStagePosition(params, stages)
+			if err != nil {
+				return err
 			}
 			create := params
-			if create.SortOrder <= 0 {
-				create.SortOrder = next
-			}
+			create.SortOrder = position
 			stage, err = q.CreateLifecycleStage(ctx, create)
 			return err
 		})
 		return stage, err
 	})
+}
+
+func lifecycleStagePosition(
+	params db.CreateLifecycleStageParams,
+	stages []db.LifecycleStage,
+) (int64, error) {
+	next := int64(1)
+	for _, existing := range stages {
+		if existing.EnvironmentID == params.EnvironmentID {
+			return 0, ErrLifecycleEnvironmentExists
+		}
+		if params.SortOrder > 0 && existing.SortOrder == params.SortOrder {
+			return 0, ErrLifecycleSortOrderConflict
+		}
+		if params.SortOrder <= 0 && existing.SortOrder >= next {
+			if existing.SortOrder == math.MaxInt64 {
+				return 0, ErrLifecycleSortOrderConflict
+			}
+			next = existing.SortOrder + 1
+		}
+	}
+	if params.SortOrder > 0 {
+		return params.SortOrder, nil
+	}
+	return next, nil
 }

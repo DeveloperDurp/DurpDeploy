@@ -11,6 +11,8 @@ import (
 	"durpdeploy/internal/repository"
 )
 
+const lifecycleNotFoundMessage = "Lifecycle not found"
+
 type LifecycleHandler struct {
 	repo *repository.Repository
 }
@@ -36,7 +38,7 @@ func (h *LifecycleHandler) DeleteLifecycle(
 	}
 	if _, err := h.repo.Queries.GetLifecycle(r.Context(), id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "Lifecycle not found")
+			RespondError(w, http.StatusNotFound, lifecycleNotFoundMessage)
 		} else {
 			RespondError(w, 500, "Could not read lifecycle")
 		}
@@ -246,7 +248,7 @@ func (h *LifecycleHandler) GetLifecycle(
 	lc, err := h.repo.Queries.GetLifecycle(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "Lifecycle not found")
+			RespondError(w, http.StatusNotFound, lifecycleNotFoundMessage)
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -419,7 +421,7 @@ func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 				"environment_id or sort_order is already in this lifecycle",
 			)
 		case errors.Is(err, sql.ErrNoRows):
-			RespondError(w, http.StatusNotFound, "Lifecycle not found")
+			RespondError(w, http.StatusNotFound, lifecycleNotFoundMessage)
 		default:
 			RespondError(w, http.StatusInternalServerError, err.Error())
 		}
