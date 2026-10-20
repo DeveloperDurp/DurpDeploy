@@ -416,8 +416,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/release_create.go",
-    "line": "58",
-    "source_sha256": "3c0f40e944787c2021c41d8e1a66a6d012dcd5b07593f642ea2f067b821d7a97",
+    "line": "59",
+    "source_sha256": "202ae2bf3bfb345572e83fad3e849dd808abb7354ebcdce0937feaf1b5636d08",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Creation redirect retains the existing fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. No user-controlled host or path is accepted. Evidence: release_create.go CreateRelease/renderCreatedRelease, project.go parseProjectID, TestReleaseDeferredPackageAPIWebE2E."
