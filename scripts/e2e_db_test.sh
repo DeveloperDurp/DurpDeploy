@@ -373,6 +373,13 @@ done
 END=$(date +%s)
 ELAPSED=$((END - START))
 
+if ! echo "$STATUS_BODY" | grep -q 'failed' || [[ $ELAPSED -ge 25 ]]; then
+  echo "=== Timeout deployment #$TIMEOUT_DEP: redacted log export ===" >&2
+  curl_body --fail --show-error --max-time 10 \
+      "$BASE/deployments/$TIMEOUT_DEP/logs.txt" >&2 || \
+      echo "WARN: timeout deployment log export unavailable" >&2
+fi
+
 echo "$STATUS_BODY" | grep -q 'failed' || { echo "FAIL: timeout deploy did not fail, got status: $STATUS_BODY"; exit 1; }
 [[ $ELAPSED -lt 25 ]] || { echo "FAIL: timeout deploy took ${ELAPSED}s, expected <25s"; exit 1; }
 echo "  Per-step timeout killed long sleep: OK (failed in ${ELAPSED}s)"
