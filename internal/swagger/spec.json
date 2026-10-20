@@ -3906,6 +3906,7 @@
     },
     "/lifecycles/{id}/stages": {
       "post": {
+        "description": "Positive sort_order values select an unoccupied position, including gaps.\nOmitted, zero, and negative sort_order values append after the highest position.",
         "consumes": [
           "application/json"
         ],
@@ -3960,6 +3961,12 @@
             "description": "Forbidden error response.",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
             }
           },
           "409": {
@@ -4137,6 +4144,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
             }
           },
           "413": {

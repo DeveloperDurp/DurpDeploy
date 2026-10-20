@@ -349,6 +349,8 @@ func (h *LifecycleHandler) SaveLifecycle(
 // swagger:route POST /lifecycles/{id}/stages lifecycles addLifecycleStage
 //
 // Add a stage to a lifecycle. Global admin only.
+// Positive sort_order values select an unoccupied position, including gaps.
+// Omitted, zero, and negative sort_order values append after the highest position.
 //
 //	Consumes:
 //	- application/json
@@ -367,6 +369,7 @@ func (h *LifecycleHandler) SaveLifecycle(
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  409: body:ConflictError
+//	  404: body:NotFoundError
 //	  500: body:ServerError
 func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 	id, err := parseParamInt(r, "id")
@@ -385,28 +388,9 @@ func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stages, err := h.repo.Queries.ListLifecycleStages(r.Context(), id)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	for _, s := range stages {
-		if s.EnvironmentID == *req.EnvironmentID {
-			RespondError(
-				w,
-				http.StatusConflict,
-				"Environment already in this lifecycle",
-			)
-			return
-		}
-	}
-
 	sortOrder := int64(0)
-	if req.SortOrder != nil && *req.SortOrder > 0 {
+	if req.SortOrder != nil {
 		sortOrder = *req.SortOrder
-	}
-	if sortOrder <= 0 {
-		sortOrder = nextLifecycleSortOrder(stages)
 	}
 
 	requiresApproval := int64(0)
@@ -414,7 +398,7 @@ func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 		requiresApproval = 1
 	}
 
-	stage, err := h.repo.Queries.CreateLifecycleStage(
+	stage, err := h.repo.CreateLifecycleStage(
 		r.Context(),
 		db.CreateLifecycleStageParams{
 			LifecycleID:      id,
@@ -424,7 +408,21 @@ func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
+		switch {
+		case errors.Is(err, repository.ErrLifecycleEnvironmentExists),
+			errors.Is(err, repository.ErrLifecycleSortOrderConflict):
+			RespondError(w, http.StatusConflict, err.Error())
+		case handler.IsUniqueViolation(err):
+			RespondError(
+				w,
+				http.StatusConflict,
+				"environment_id or sort_order is already in this lifecycle",
+			)
+		case errors.Is(err, sql.ErrNoRows):
+			RespondError(w, http.StatusNotFound, "Lifecycle not found")
+		default:
+			RespondError(w, http.StatusInternalServerError, err.Error())
+		}
 		return
 	}
 
@@ -581,6 +579,7 @@ func (h *LifecycleHandler) ReorderStages(
 //	  401: body:UnauthorizedError
 //	  403: body:ForbiddenError
 //	  404: body:NotFoundError
+//	  409: body:ConflictError
 //	  500: body:ServerError
 func (h *LifecycleHandler) UpdateStage(w http.ResponseWriter, r *http.Request) {
 	stageID, err := parseParamInt(r, "stageId")
@@ -630,7 +629,15 @@ func (h *LifecycleHandler) UpdateStage(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
+		if handler.IsUniqueViolation(err) {
+			RespondError(
+				w,
+				http.StatusConflict,
+				"environment_id or sort_order is already in this lifecycle",
+			)
+		} else {
+			RespondError(w, http.StatusInternalServerError, err.Error())
+		}
 		return
 	}
 
@@ -667,14 +674,4 @@ func (h *LifecycleHandler) DeleteStage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func nextLifecycleSortOrder(stages []db.LifecycleStage) int64 {
-	next := int64(1)
-	for _, s := range stages {
-		if s.SortOrder >= next {
-			next = s.SortOrder + 1
-		}
-	}
-	return next
 }

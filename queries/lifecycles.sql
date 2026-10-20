@@ -18,6 +18,9 @@ SELECT COUNT(*) FROM lifecycles;
 -- name: GetLifecycle :one
 SELECT * FROM lifecycles WHERE id = ?;
 
+-- name: LockLifecycle :execrows
+UPDATE lifecycles SET name = name WHERE id = ?; -- NOSONAR: intentional write lock
+
 -- name: CreateLifecycle :one
 INSERT INTO lifecycles (name, description) VALUES (?, ?) RETURNING *;
 

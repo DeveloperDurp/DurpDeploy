@@ -6,6 +6,7 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
     make agent-rollout-gate
     bash scripts/go_test.sh -race -count=1 ./internal/artifact
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=3m -run '^Test(PermissionGuidance(Deployment)?|ProjectPanelScope|UsersPhone|UsersDefaultRole|UsersFormAccessibility)APIWebE2E$' ./internal/handler/api
+    bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestLifecycleStageOrderAPIWebE2E$' ./internal/handler
     (
     export DURPDEPLOY_CONTAINER_RUNTIME=docker
     bash scripts/go_test.sh -tags=e2e -count=1 -run '^(TestReleaseDeferredPackageAPIWebE2E|TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E|TestDeploymentStagingCleanupE2E|TestDeploymentStepResourcesE2E|TestDeploymentStagingFailureAPIWebE2E|TestDeploymentStepLogsAPIWebE2E|TestDeploymentStepLogOutcomesAPIWebE2E|TestPageNavigationHTTPAPIWebE2E|TestLifecycleVariablesAPIWebE2E|TestLifecycleVariableScopeChangesApplyToExistingReleaseE2E)$' ./internal/handler/api
@@ -34,7 +35,7 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
     bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -run '^TestBrowserContextIsolationE2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^Test(SwaggerInstance|ReleaseDeferredPackage|ReleaseRefreshConflictStaysOnPage|ThemeStyles|PackageRepository|PackageRepositoryBack|BackNavigation|BackHistory|PageNavigation|PageNavigationExpiredSession|OIDCNavigation)BrowserE2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^Test(DeploymentMobile|DeploymentListMobile|ResourceListMobile|HomeMobile|HomeRunningPoll|HomeChartTimer|SchedulePages|MainPagePattern)BrowserE2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^Test(LifecycleVariables|LifecycleLiveScope|LifecyclePageNavigation|VariableScopesBeforeDeployment|NotificationCredentialForms|NotificationValidationPreservesForm|SMTPPlaintextWarning)BrowserE2E$' ./internal/handler/api
+    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^Test(LifecycleVariables|LifecycleLiveScope|LifecyclePageNavigation|LifecycleStageOrder|VariableScopesBeforeDeployment|NotificationCredentialForms|NotificationValidationPreservesForm|SMTPPlaintextWarning)BrowserE2E$' ./internal/handler/api
     ;;
   browser-resources)
     bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestPromotionGuidance(APIWeb|Browser)E2E$' ./internal/handler/api

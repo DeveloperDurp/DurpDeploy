@@ -2,6 +2,7 @@ package handler
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -277,38 +278,27 @@ func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stages, err := h.repo.Queries.ListLifecycleStages(r.Context(), id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	for _, s := range stages {
-		if s.EnvironmentID == envID {
-			http.Error(
-				w,
-				"Environment already in this lifecycle",
-				http.StatusBadRequest,
-			)
-			return
-		}
-	}
-
-	nextOrder := int64(1)
-	for _, s := range stages {
-		if s.SortOrder >= nextOrder {
-			nextOrder = s.SortOrder + 1
-		}
-	}
-
-	if _, err := h.repo.Queries.CreateLifecycleStage(
+	if _, err := h.repo.CreateLifecycleStage(
 		r.Context(),
 		db.CreateLifecycleStageParams{
 			LifecycleID:   id,
 			EnvironmentID: envID,
-			SortOrder:     nextOrder,
 		},
 	); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		switch {
+		case errors.Is(err, repository.ErrLifecycleEnvironmentExists),
+			errors.Is(err, repository.ErrLifecycleSortOrderConflict),
+			IsUniqueViolation(err):
+			http.Error(
+				w,
+				"environment_id or sort_order is already in this lifecycle",
+				http.StatusBadRequest,
+			)
+		case errors.Is(err, sql.ErrNoRows):
+			http.Error(w, "Lifecycle not found", http.StatusNotFound)
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 

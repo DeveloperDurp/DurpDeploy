@@ -22,6 +22,7 @@ func (q *Queries) CountLifecycles(ctx context.Context) (int64, error) {
 }
 
 const createLifecycle = `-- name: CreateLifecycle :one
+
 INSERT INTO lifecycles (name, description) VALUES (?, ?) RETURNING id, name, description, created_at
 `
 
@@ -30,6 +31,7 @@ type CreateLifecycleParams struct {
 	Description sql.NullString `json:"description"`
 }
 
+// NOSONAR: intentional write lock
 func (q *Queries) CreateLifecycle(ctx context.Context, arg CreateLifecycleParams) (Lifecycle, error) {
 	row := q.db.QueryRowContext(ctx, createLifecycle, arg.Name, arg.Description)
 	var i Lifecycle
@@ -304,6 +306,18 @@ func (q *Queries) ListLifecyclesWithStageCounts(ctx context.Context) ([]ListLife
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockLifecycle = `-- name: LockLifecycle :execrows
+UPDATE lifecycles SET name = name WHERE id = ?
+`
+
+func (q *Queries) LockLifecycle(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockLifecycle, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const updateLifecycle = `-- name: UpdateLifecycle :one

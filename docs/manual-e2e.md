@@ -1182,6 +1182,42 @@ Project administrators with global Maintainer permission can retain or remove an
 As a Maintainer, create or update a project with a new lifecycle ID.
 Confirm a 403 response without a project change.
 
+## Lifecycle stage ordering
+
+Create a lifecycle and at least three disposable environments.
+Call `POST /api/v1/lifecycles/{id}/stages` with an `environment_id` and `sort_order: 10`.
+Expect `201` with position 10.
+Add another environment with position 5.
+Expect `201` with position 5, without renumbering position 10.
+Add another environment without `sort_order`.
+Expect position 11.
+Zero and negative positions also append after the highest position.
+
+Add a different environment at an occupied position.
+Expect `409` with `sort_order` in the response and no stage change.
+Add an environment that already belongs to the lifecycle.
+Expect `409` with `environment_id` in the response and no stage change.
+Conflicting stage updates also return `409`.
+
+Open the lifecycle page and add an available environment through its form.
+Expect an append after the highest position.
+If another client adds the selected environment first, submit the stale form.
+Expect the existing `400` validation response and no duplicate stage.
+Reload the page to see the committed stage.
+
+Call `POST /api/v1/lifecycles/{id}/stages/reorder` with every stage ID in `stage_ids`.
+Expect consecutive positions from one in the requested sequence.
+Keep all schedules disabled during these checks.
+
+Run the isolated backend and browser checks:
+
+```bash
+bash scripts/go_test.sh -tags=e2e -race -count=1 -run '^TestLifecycleStageOrderAPIWebE2E$' ./internal/handler
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestLifecycleStageOrderBrowserE2E$' ./internal/handler/api
+```
+
+The backend checks run concurrent API and web appends on SQLite, PostgreSQL, and SQL Server.
+
 ## Database TLS policy
 
 Use a disposable database when changing TLS settings for this check.

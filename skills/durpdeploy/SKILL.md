@@ -507,6 +507,13 @@ Enforced identically on web and API (source: `internal/gate/gate.go`):
 - **Lifecycle stages**: adding, updating, reordering, or removing stages is
   global-admin only (`403` otherwise). Restoring a removed stage reactivates
   its retained scoped shared values for assigned projects.
+  Create a stage with `POST /api/v1/lifecycles/{id}/stages` and `environment_id`.
+  A positive `sort_order` selects an unused position and can leave gaps.
+  Omitted, zero, and negative `sort_order` values append after the highest position.
+  An occupied position or duplicate environment returns `409` without a stage change.
+  A conflicting stage update also returns `409` and identifies `environment_id` or `sort_order`.
+  Use `POST /api/v1/lifecycles/{id}/stages/reorder` with every stage ID in `stage_ids`.
+  Reordering assigns consecutive positions from one in the requested sequence.
 - **Cross-project release**: deploying a release id under the wrong
   project → `400`.
 
