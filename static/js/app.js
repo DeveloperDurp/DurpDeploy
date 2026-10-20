@@ -393,6 +393,12 @@ Alpine.data('stepPlacement', (executionTarget = 'local', agentLabel = '', agentE
 	},
 }));
 
+Alpine.data('runbookRetry', () => ({
+	confirm(event) {
+		if (!window.confirm(this.$el.dataset.confirm)) event.preventDefault();
+	},
+}));
+
 Alpine.data('runbookEditor', () => ({
 	steps: [],
 	nextStepID: 0,

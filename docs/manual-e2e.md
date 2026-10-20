@@ -1,5 +1,27 @@
 # Manual checks after `make e2e-test`
 
+## Saved version for runbook Retry (A17)
+
+1. Execute a failing runbook version 1.
+2. Save version 2 with a different marker and a successful exit.
+3. Execute version 2 and wait for success.
+4. Open the original failed execution at 375, 390, 768, and 1280 pixels.
+5. Select **Retry**.
+6. Confirm that the prompt names saved runbook version 1 and excludes later edits.
+7. Cancel the prompt and confirm that no execution was created.
+8. Select **Retry** again and accept the prompt.
+9. Read the new execution through the public API.
+10. Confirm that version 1 runs with its original marker and fails.
+11. Confirm that the original execution and logs remain unchanged.
+12. Repeat the read check as a project Viewer and confirm that Retry is absent.
+13. Retain both versions and all executions for repeat checks.
+
+This check creates no schedules.
+
+```sh
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestRunbookRetryVersion(APIWeb|Browser)E2E$' ./internal/handler/api
+```
+
 ## Phone runbook execution history (A16)
 
 1. Create a runbook with a step that exits with an error.
