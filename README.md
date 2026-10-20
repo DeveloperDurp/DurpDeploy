@@ -1,5 +1,10 @@
 # DurpDeploy
 
+> **Development status:** Active development takes place on [GitLab](https://gitlab.durp.info/durfy/apps/durpdeploy).
+> GitHub mirrors the `main` branch.
+>
+> DurpDeploy is under active development and does not have a stable release yet.
+
 Read [software versions and build numbers](docs/versioning.md) for CLI, API, container, and upgrade diagnostics.
 
 A single-binary deployment tool for Bash, PowerShell, and Python scripts.
