@@ -5,6 +5,7 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 BASE="${DURPDEPLOY_BASE_URL:-http://localhost:8080}"
 BASE="${BASE%/}"
+readonly FAILED_STATUS='failed'
 curl_options=()
 if [[ "$BASE" == https://* ]]; then
     if [[ -n "${DURPDEPLOY_E2E_CA_FILE:-}" ]]; then
@@ -373,14 +374,14 @@ done
 END=$(date +%s)
 ELAPSED=$((END - START))
 
-if ! echo "$STATUS_BODY" | grep -q 'failed' || [[ $ELAPSED -ge 25 ]]; then
+if ! echo "$STATUS_BODY" | grep -q "$FAILED_STATUS" || [[ $ELAPSED -ge 25 ]]; then
   echo "=== Timeout deployment #$TIMEOUT_DEP: redacted log export ===" >&2
   curl_body --fail --show-error --max-time 10 \
       "$BASE/deployments/$TIMEOUT_DEP/logs.txt" >&2 || \
       echo "WARN: timeout deployment log export unavailable" >&2
 fi
 
-echo "$STATUS_BODY" | grep -q 'failed' || { echo "FAIL: timeout deploy did not fail, got status: $STATUS_BODY"; exit 1; }
+echo "$STATUS_BODY" | grep -q "$FAILED_STATUS" || { echo "FAIL: timeout deploy did not fail, got status: $STATUS_BODY"; exit 1; }
 [[ $ELAPSED -lt 25 ]] || { echo "FAIL: timeout deploy took ${ELAPSED}s, expected <25s"; exit 1; }
 echo "  Per-step timeout killed long sleep: OK (failed in ${ELAPSED}s)"
 
@@ -400,7 +401,7 @@ for i in {1..100}; do
   if echo "$RERUN_STATUS" | grep -qE 'failed|succeeded|cancelled'; then break; fi
   sleep 0.2
 done
-echo "$RERUN_STATUS" | grep -q 'failed' || { echo "FAIL: re-run deploy did not fail, got status: $RERUN_STATUS"; exit 1; }
+echo "$RERUN_STATUS" | grep -q "$FAILED_STATUS" || { echo "FAIL: re-run deploy did not fail, got status: $RERUN_STATUS"; exit 1; }
 echo "  Re-run deployment failed as expected: OK"
 
 # The new deployment's note should record the lineage.
@@ -435,7 +436,7 @@ for i in {1..100}; do
   if echo "$RETRY_STATUS" | grep -qE 'failed|succeeded|cancelled'; then break; fi
   sleep 0.2
 done
-echo "$RETRY_STATUS" | grep -q 'failed' || { echo "FAIL: retry deploy did not fail, got status: $RETRY_STATUS"; exit 1; }
+echo "$RETRY_STATUS" | grep -q "$FAILED_STATUS" || { echo "FAIL: retry deploy did not fail, got status: $RETRY_STATUS"; exit 1; }
 
 LOG_LINES=$(db_query "SELECT line FROM deployment_logs WHERE deployment_id=$RETRY_DEP ORDER BY id;")
 echo "$LOG_LINES" | grep -q "attempt 1" || { echo "FAIL: retry log missing attempt 1"; exit 1; }
