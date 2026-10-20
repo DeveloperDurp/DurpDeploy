@@ -60,13 +60,7 @@ func TestQueuedCancellationLogsAcrossDatabases(t *testing.T) {
 		if err != nil || len(logs) != 2 {
 			t.Fatalf("persisted cancellation records=%+v error=%v", logs, err)
 		}
-		for i, log := range logs {
-			if log.StepIndex.Int64 != int64(i) || !log.StepIndex.Valid ||
-				log.StepName.String != "duplicate" ||
-				log.StepState.String != "cancelled" || log.Line != QueuedCancellationLogLine {
-				t.Fatalf("cancellation record=%+v", log)
-			}
-		}
+		assertQueuedCancellationLogs(t, logs)
 		states, err := restarted.Queries.ListDeploymentLogStateMetadata(
 			t.Context(),
 			db.ListDeploymentLogStateMetadataParams{
@@ -84,6 +78,17 @@ func TestQueuedCancellationLogsAcrossDatabases(t *testing.T) {
 			t.Fatalf("owner changed=%+v error=%v", active, err)
 		}
 	})
+}
+
+func assertQueuedCancellationLogs(t *testing.T, logs []db.DeploymentLog) {
+	t.Helper()
+	for i, log := range logs {
+		if log.StepIndex.Int64 != int64(i) || !log.StepIndex.Valid ||
+			log.StepName.String != "duplicate" ||
+			log.StepState.String != "cancelled" || log.Line != QueuedCancellationLogLine {
+			t.Fatalf("cancellation record=%+v", log)
+		}
+	}
 }
 
 func TestQueuedCancellationLogFailureRollsBack(t *testing.T) {
