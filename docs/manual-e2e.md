@@ -1316,14 +1316,16 @@ Confirm a 403 response without a project change.
 4. Confirm the request.
 5. Wait for the re-run to finish.
 6. Open Deployments or the project's Deployment history link.
-7. Confirm the original card shows the complete incident note.
+7. Confirm the original card shows at most two lines of its incident note.
 8. Confirm the re-run card shows `Re-run of #` with the original deployment ID.
 9. Use Load more when the original record is on another page.
 10. Confirm appended cards show their saved notes.
 11. Repeat at phone and desktop widths with a long note containing line breaks and markup.
-12. Confirm notes wrap and display markup as plain text.
+12. Confirm note previews use at most two lines and display markup as plain text.
 13. Confirm deployments without notes have no empty Note field.
-14. Repeat with a Viewer assigned to the project.
+14. Open a card with a shortened note.
+15. Confirm the deployment details show the complete note with its original line breaks.
+16. Repeat with a Viewer assigned to the project.
 
 Public deployment list endpoints include the same saved `note` values.
 History does not change notes, deployment statuses, or project access.

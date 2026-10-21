@@ -27,7 +27,8 @@ func newDeploymentNotes(t *testing.T) deploymentNotesFixture {
 	}, 201)
 	release := verificationRelease(t, f, "incident-v1")
 	note := "incident-failure <img src=x onerror=alert(1)>\n" +
-		strings.Repeat("long-incident-note-", 24)
+		strings.Repeat("long-incident-note-", 24) +
+		"\nFull deployment details retain this line.\nfinal-note-marker"
 	f.web(t, "POST", fmt.Sprintf("/projects/%d/deploy", f.project.ID),
 		url.Values{
 			"release_id":     {fmt.Sprint(release.ID)},
@@ -105,5 +106,27 @@ func TestDeploymentNotesAPIWebE2E(t *testing.T) {
 			strings.Contains(body, "<img src=x") {
 			t.Fatal("history hides saved notes or renders note markup")
 		}
+		checkDeploymentNoteDetail(t, actor, fixture.incident)
+	}
+}
+
+func checkDeploymentNoteDetail(
+	t *testing.T,
+	actor *artifactE2E,
+	incident db.Deployment,
+) {
+	t.Helper()
+	detail := actor.web(t, "GET", fmt.Sprintf(
+		"/deployments/%d", incident.ID), nil, 200)
+	if !strings.Contains(detail, html.EscapeString(incident.Note.String)) ||
+		!strings.Contains(detail, "data-deployment-note-full") ||
+		strings.Contains(detail, "<img src=x") {
+		t.Fatal("deployment details lost full saved note text or escaping")
+	}
+	var saved db.Deployment
+	decodeStepLogTest(t, actor.api(t, "GET", fmt.Sprintf(
+		"/api/v1/deployments/%d", incident.ID), nil, 200), &saved)
+	if saved.Note != incident.Note {
+		t.Fatal("note previews changed the public deployment API value")
 	}
 }

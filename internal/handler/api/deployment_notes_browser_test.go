@@ -45,15 +45,34 @@ func TestDeploymentNotesBrowserE2E(t *testing.T) {
 			if string(b.evaluate(t, fmt.Sprintf(`(() => {
  const note = document.querySelector('[data-deployment-id="%d"] [data-deployment-note]');
  const box = note?.getBoundingClientRect();
+ const line = parseFloat(getComputedStyle(note).lineHeight);
  return note?.textContent === %q && box.height > 0 &&
+ box.height <= 2 * line + 1 &&
+ (note.textContent.includes('final-note-marker') ? note.scrollHeight > note.clientHeight : true) &&
  note.scrollWidth <= note.clientWidth &&
  getComputedStyle(note).whiteSpace === 'pre-wrap' &&
  !document.querySelector('img[src=x]');
 })()`, deployment.id, deployment.note))) != "true" {
 				t.Fatal(
-					"history notes are missing, clipped, or interpreted as markup",
+					"history note previews exceed two lines or lose saved text/escaping",
 				)
 			}
+		}
+	})
+	b.evaluate(t, fmt.Sprintf(
+		`document.querySelector('[data-deployment-id="%d"] a').click(); true`,
+		fixture.incident.ID,
+	))
+	b.wait(t, `document.querySelector('[data-deployment-note-full]')`)
+	b.captureNavigation(t, "deployment-note-full", func() {
+		if string(b.evaluate(t, fmt.Sprintf(`(() => {
+ const note = document.querySelector('[data-deployment-note-full]');
+ const line = parseFloat(getComputedStyle(note).lineHeight);
+ return note.textContent.trim() === %q && note.clientHeight > 2 * line &&
+ note.scrollHeight <= note.clientHeight && note.scrollWidth <= note.clientWidth &&
+ getComputedStyle(note).whiteSpace === 'pre-wrap' && !document.querySelector('img[src=x]');
+})()`, fixture.incident.Note.String))) != "true" {
+			t.Fatal("opening a history card lost the complete readable note")
 		}
 	})
 }
