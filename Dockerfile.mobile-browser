@@ -1,7 +1,7 @@
 # syntax=harbor.durp.info/dockerhub/docker/dockerfile:1
 # Go 1.26.10 is copied into Playwright's pinned runtime image so its bundled
 # Chromium and Linux dependencies match package-lock.json's Playwright 1.61.1.
-FROM harbor.durp.info/dockerhub/library/golang:1.26.10-bookworm@sha256:5b1f78db1f54cc8cb46e652c51d3f854441c4310a449161b6fe9fb553edab505 AS go
+FROM harbor.durp.info/dockerhub/library/golang@sha256:5b1f78db1f54cc8cb46e652c51d3f854441c4310a449161b6fe9fb553edab505 AS go
 
 FROM harbor.durp.info/microsoft/playwright:v1.61.1-noble
 
