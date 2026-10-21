@@ -3,6 +3,7 @@
 package api_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -110,6 +111,7 @@ func checkPermissionGuidanceBrowser(
 			t,
 			`document.querySelector('#project-menu-dialog').innerText.includes('Settings are read-only')`,
 		)
+		checkReadOnlyMenuNote(t, b, actor, width)
 	}
 	b.evaluate(
 		t,
@@ -123,6 +125,44 @@ func checkPermissionGuidanceBrowser(
 		return
 	}
 	checkReadOnlyGuidanceBrowser(t, b, f, actor, path, width)
+}
+
+func checkReadOnlyMenuNote(
+	t *testing.T,
+	b *packageBrowser,
+	actor permissionGuidanceActor,
+	width int,
+) {
+	t.Helper()
+	const note = `[...document.querySelectorAll('#project-menu-dialog p')]
+ .find(e => e.textContent.startsWith('Settings are read-only'))`
+	b.evaluate(
+		t,
+		`Promise.all(document.querySelector('.project-menu-panel')
+ .getAnimations().map(a => a.finished)).then(() => true)`,
+	)
+	var point struct{ X, Y float64 }
+	raw := b.evaluate(t, `(() => {
+ const note = `+note+`;
+ note.scrollIntoView({block:'center'});
+ const box = note.getBoundingClientRect();
+ return {X:box.left + box.width / 2, Y:box.top + box.height / 2};
+})()`)
+	if err := json.Unmarshal(raw, &point); err != nil {
+		t.Fatal(err)
+	}
+	b.call(t, "Input.dispatchMouseEvent", map[string]any{
+		"type": "mouseMoved", "x": point.X, "y": point.Y,
+	}, &struct{}{})
+	b.wait(t, `(() => {
+ const note = `+note+`;
+ return note.matches(':hover') && !note.closest('.menu') &&
+  note.tabIndex < 0 && !note.querySelector('a, button, [tabindex]') &&
+  getComputedStyle(note).backgroundColor === 'rgba(0, 0, 0, 0)' &&
+  getComputedStyle(note).cursor !== 'pointer';
+})()`)
+	b.screenshot(t, fmt.Sprintf("read-only-menu-%s-%s-%d",
+		actor.user.Role, actor.member, width))
 }
 
 func checkReadOnlyGuidanceBrowser(

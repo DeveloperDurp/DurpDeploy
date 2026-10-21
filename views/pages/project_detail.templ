@@ -44,10 +44,10 @@ templ ProjectMenuDialog(project db.Project) {
 					<li class="menu-title">Settings</li>
 					<li><a href={ fmt.Sprintf("/projects/%d/notifications", project.ID) }>Notifications</a></li>
 					<li><a href={ fmt.Sprintf("/projects/%d/edit#project-members", project.ID) }>Members</a></li>
-					if !CanWrite(ctx) {
-						<li><p class="text-sm">Settings are read-only. Maintainer or Admin access is required to change them.</p></li>
-					}
 				</ul>
+				if !CanWrite(ctx) {
+					<p class="px-4 text-sm">Settings are read-only. Maintainer or Admin access is required to change them.</p>
+				}
 			</nav>
 		</div>
 		<form method="dialog" class="modal-backdrop" @submit.prevent="close"><button type="submit" aria-label="Dismiss project menu"></button></form>
