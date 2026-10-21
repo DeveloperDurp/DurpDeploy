@@ -139,7 +139,15 @@ try {
   await page.getByRole("button", { name: "Retry" }).click();
   await page.waitForURL(/\/runbooks\/executions\/\d+$/);
   await page.goto(`${base}/projects/${projectID}/runbooks?offset=1`);
-  assert.equal(await page.getByRole("columnheader", { name: "Created" }).count(), 2);
+  const savedBook = page.locator(`[data-resource-card] a[href="/projects/${projectID}/runbooks/${runbookID}"]`);
+  assert.equal(await savedBook.isVisible(), true);
+  const executionCards = page.locator("[data-runbook-execution-id] [data-resource-card]");
+  assert.ok(await executionCards.count() > 0);
+  for (const card of await executionCards.all()) {
+    assert.equal(await card.locator("[data-execution-created]").isVisible(), true);
+    assert.ok((await card.locator("[data-execution-created]").innerText()).trim());
+    assert.match(await card.locator("a").getAttribute("href"), /\/runbooks\/executions\/\d+$/);
+  }
   await page.getByRole("link", { name: "Previous" }).click();
   await page.waitForURL(new RegExp(`/projects/${projectID}/runbooks\\?offset=0$`));
   await page.goto(`${base}/projects/${projectID}/runbooks/${runbookID}`);

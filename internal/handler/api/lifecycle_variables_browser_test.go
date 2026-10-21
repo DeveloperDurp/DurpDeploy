@@ -101,7 +101,7 @@ func TestLifecycleVariablesBrowserE2E(t *testing.T) {
 	)
 	b.wait(
 		t,
-		`document.querySelector('#shared-variables [role=alert]')?.textContent.includes('already exists')`,
+		`[...document.querySelectorAll('#shared-variables [role=alert]')].some(alert => alert.getClientRects().length && alert.textContent.includes('already exists'))`,
 	)
 	b.captureNavigation(t, "lifecycle-validation")
 	if string(
