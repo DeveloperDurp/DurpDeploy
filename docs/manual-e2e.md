@@ -71,6 +71,30 @@ Run the focused API and browser regressions with:
 bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestRunbookHistoryPhone(APIWeb|Browser)E2E$' ./internal/handler/api
 ```
 
+## Add Step ordering (A15 follow-up)
+
+Open a disposable project's Steps page at phone and desktop widths.
+Add two steps through the modal.
+Confirm that their order values are 0 and 1.
+Submit an empty name before saving the second step.
+Confirm that validation retains the form and does not create a step.
+Move the second step up and down.
+
+Create a release before adding another step.
+Add a step through the API with `sort_order: 0`.
+Confirm that it appends after the current steps.
+Confirm that the saved release retains its original steps.
+Run a disposable release whose first step fails.
+Confirm that later steps have no execution output.
+
+The saved deployment shows State unavailable when a step has no recorded state event.
+This label does not claim that the step ran or succeeded.
+Existing deployment snapshots and logs must stay unchanged.
+
+```bash
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestStep(AddOrderAPIWeb|AddPreservesSavedFailureAPIWeb|AddModalBrowser|EditModalBrowser)E2E$' ./internal/handler/api
+```
+
 ## Queued cancellation step explanations (A15)
 
 1. Create a release with at least two steps.

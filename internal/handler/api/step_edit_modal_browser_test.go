@@ -74,6 +74,7 @@ func TestStepAddModalBrowserE2E(t *testing.T) {
 			ID     int64
 			Name   string
 			Script string `json:"script_body"`
+			Order  int64  `json:"sort_order"`
 		}
 	}
 	decodeStepLogTest(t, f.api(t, "GET", api, nil, 200), &list)
@@ -125,6 +126,40 @@ func TestStepAddModalBrowserE2E(t *testing.T) {
 		t.Fatal("added step differs from API contract")
 	}
 	f.api(t, "GET", fmt.Sprintf("%s/%d", api, list.Items[0].ID), nil, 200)
+	open()
+	b.wait(t, `!document.querySelector('.htmx-settling, .htmx-request')`)
+	b.evaluate(t, `(() => {
+ const form = document.querySelector('#step-edit-content form');
+ form.querySelector('[name=name]').value = 'appended-step';
+ form.querySelector('[name=script_body]').value = 'echo appended';
+ form.querySelector('[name=container_image]').value = 'harbor.durp.info/dockerhub/library/alpine:3.20';
+ form.querySelector('[type=submit]').click();
+ return true;
+})()`)
+	b.wait(
+		t,
+		`!document.querySelector('#step-edit-dialog').open && document.querySelector('#step-list').textContent.includes('appended-step')`,
+	)
+	decodeStepLogTest(t, f.api(t, "GET", api, nil, 200), &list)
+	if len(list.Items) != 2 || list.Items[0].Name != "modal-created-step" ||
+		list.Items[0].Order != 0 || list.Items[1].Name != "appended-step" ||
+		list.Items[1].Order != 1 {
+		t.Fatalf(
+			"Add Step did not append after the existing step: %+v",
+			list.Items,
+		)
+	}
+	b.captureNavigation(t, "step-appended-order", func() {
+		if string(b.evaluate(t, `(() => {
+ const rows = [...document.querySelectorAll('#step-list tbody tr')];
+ const cards = [...document.querySelectorAll('[data-mobile-step]')];
+ return rows.length === 2 && rows[0].cells[0].textContent === '0' &&
+ rows[1].cells[0].textContent === '1' &&
+ cards[0].textContent.includes('Step 0') && cards[1].textContent.includes('Step 1');
+})()`)) != "true" {
+			t.Fatal("step table and mobile cards disagree with API ordering")
+		}
+	})
 }
 
 func TestStepEditModalBrowserE2E(t *testing.T) {

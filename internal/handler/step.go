@@ -451,11 +451,13 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var sortOrder int64
-	if v := r.FormValue("sort_order"); v != "" {
-		sortOrder, _ = strconv.ParseInt(v, 10, 64)
-	} else {
-		steps, _ := h.repo.Queries.ListStepsByProject(r.Context(), projectID)
+	sortOrder, _ := strconv.ParseInt(r.FormValue("sort_order"), 10, 64)
+	if sortOrder <= 0 {
+		steps, err := h.repo.Queries.ListStepsByProject(r.Context(), projectID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		for _, s := range steps {
 			if s.SortOrder >= sortOrder {
 				sortOrder = s.SortOrder + 1
