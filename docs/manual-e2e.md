@@ -474,6 +474,7 @@ Confirm that editing scope does not display the bearer value again.
 
 Check the page at widths of 375, 430, 540, 768, 980, and 1280 pixels.
 Confirm that each form control fills its row without overlap.
+Confirm that Projects appears directly below Scope and above Token role in the new and edit forms.
 Below 1280 pixels, confirm that token cards show names, access details, and actions.
 Open **Edit scope** on a phone and save a changed selection.
 Confirm that **Choose projects** opens a full-screen picker on the phone.

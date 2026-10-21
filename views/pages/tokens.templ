@@ -301,17 +301,6 @@ templ TokenGrantFields(grant repository.TokenScope, projects []db.Project, prefi
 			<option value="global" if grant.Scope == "global" || grant.Scope == "" { selected }>All accessible projects</option>
 		</select>
 	</div>
-		<div class="form-control min-w-0">
-			<label class="label" for={ prefix + "-role" }><span class="label-text">Token role</span></label>
-			<select id={ prefix + "-role" } name="role" class="select select-bordered">
-				if grant.Scope == "global" && grant.Role == "" {
-					<option value="" selected>Owner permissions</option>
-				}
-				for _, role := range []string{"viewer", "deployer", "maintainer", "admin"} {
-					<option value={ role } if grant.Role == role { selected }>{ role }</option>
-			}
-		</select>
-	</div>
 	<div class="form-control min-w-0" x-cloak x-show="scope === 'scoped'">
 		<label class="label" for={ prefix + "-projects" }><span class="label-text">Projects</span></label>
 		<button id={ prefix + "-projects" } type="button" class="btn btn-outline min-h-12 w-full justify-between" x-ref="projectButton" x-on:click="openProjects" x-bind:disabled="scope !== 'scoped'" aria-haspopup="dialog" aria-controls={ prefix + "-project-picker" }
@@ -362,6 +351,17 @@ templ TokenGrantFields(grant repository.TokenScope, projects []db.Project, prefi
 				</div>
 			</div>
 		</dialog>
+	</div>
+		<div class="form-control min-w-0">
+			<label class="label" for={ prefix + "-role" }><span class="label-text">Token role</span></label>
+			<select id={ prefix + "-role" } name="role" class="select select-bordered">
+				if grant.Scope == "global" && grant.Role == "" {
+					<option value="" selected>Owner permissions</option>
+				}
+				for _, role := range []string{"viewer", "deployer", "maintainer", "admin"} {
+					<option value={ role } if grant.Role == role { selected }>{ role }</option>
+			}
+		</select>
 	</div>
 	</div>
 }

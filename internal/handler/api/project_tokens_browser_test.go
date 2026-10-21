@@ -288,7 +288,14 @@ func (b *packageBrowser) checkTokenSettingsLayouts(t *testing.T, row string) {
  const fields = [...form.querySelectorAll('#token-name,#new-token-scope,#new-token-role,#new-token-projects')].map(field=>field.getBoundingClientRect()).filter(field=>field.width);
  const bounds = form.getBoundingClientRect();
  const record = %s;
+ const ordered = grant => {
+   const scope = grant.querySelector('[name=scope]').closest('.form-control');
+   const projects = grant.querySelector('[x-ref=projectButton]').closest('.form-control');
+   const role = grant.querySelector('[name=role]').closest('.form-control');
+   return scope.nextElementSibling === projects && projects.nextElementSibling === role;
+ };
  return fields.every((field,index)=>field.width >= bounds.width - 2 && field.left >= 0 && field.right <= innerWidth && (!index || field.top >= fields[index-1].bottom))
+   && ordered(form) && ordered(record.querySelector('form[data-token-scope-edit]'))
    && record.tagName === (innerWidth < 1280 ? 'ARTICLE' : 'TR');
 })()`, row))) != "true" {
 			t.Fatalf(
