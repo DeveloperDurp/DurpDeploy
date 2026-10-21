@@ -9,5 +9,5 @@ export function handleBoostedError(event) {
 	}
 	const message = xhr.getResponseHeader('Content-Type')?.startsWith('text/plain')
 		? xhr.responseText.trim() : 'The request failed. Please try again.';
-	window.showToast(message, 'error');
+	window.showToast(message, 'error', event.detail.elt);
 }

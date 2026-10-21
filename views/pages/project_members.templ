@@ -54,7 +54,7 @@ templ ProjectMembersSection(project db.Project, members []db.ListProjectMembersR
 												<option value="admin" selected?={ m.Role == "admin" }>admin</option>
 											</select>
 										</form>
-										<p x-show="error" x-text="error" x-cloak role="alert" class="text-error text-sm mt-1"></p>
+										<p x-ref="roleError" x-show="error" x-text="error" x-cloak role="alert" tabindex="-1" class="text-error text-sm mt-1"></p>
 									</div>
 								}
 							</td>

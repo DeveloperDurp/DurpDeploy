@@ -252,6 +252,24 @@ Alpine.data('toast', () => ({
 	beforeRequestListener: null,
 	afterRequestListener: null,
 	requestToasts: new WeakMap(),
+	showModalError(dialog, message, keepExisting = false) {
+		if (!dialog?.open) return false;
+		this.visible = false;
+		let error = dialog.querySelector('[data-form-error], [data-modal-error]');
+		if (!error) {
+			error = document.createElement('p');
+			error.dataset.modalError = '';
+			error.className = 'alert alert-error mb-4 shrink-0';
+			const container = dialog.querySelector('form:not([method="dialog"])') ||
+				dialog.querySelector('.modal-box') || dialog;
+			container.prepend(error);
+		}
+		if (!keepExisting || !error.textContent.trim()) error.textContent = message;
+		error.setAttribute('role', 'alert');
+		error.setAttribute('tabindex', '-1');
+		error.focus();
+		return true;
+	},
 	show(msg, type = 'success') {
 		if (this.timeout) clearTimeout(this.timeout);
 		this.message = String(msg);
@@ -273,19 +291,26 @@ Alpine.data('toast', () => ({
 	},
 	init() {
 		this.showToastListener = (e) => {
-			const { message, type } = e.detail;
+			const { message, type, source } = e.detail;
+			if (type === 'error' && this.showModalError(source?.closest('dialog[open]'), message)) return;
 			this.show(message, type);
 		};
 		this.makeToastListener = (e) => {
+			if (e.defaultPrevented) { this.visible = false; return; }
 			const { level, message } = e.detail;
 			const type = level === 'danger' ? 'error' : level;
+			if (type === 'error' && this.showModalError(e.target.closest('dialog[open]'), message)) return;
 			this.show(message, type);
 		};
 		this.beforeRequestListener = (e) => {
 			const trigger = e.detail.elt;
+			const dialog = trigger.closest('dialog[open]');
+			dialog?.querySelector('[data-modal-error]')?.remove();
 			this.requestToasts.set(e.detail.xhr, {
 				success: trigger.getAttribute('data-toast-success'),
 				error: trigger.getAttribute('data-toast-error'),
+				dialog,
+				formError: dialog?.querySelector('[data-form-error]'),
 			});
 		};
 		this.afterRequestListener = (e) => {
@@ -295,6 +320,10 @@ Alpine.data('toast', () => ({
 			const triggers = e.detail.xhr.getResponseHeader('HX-Trigger')?.trim();
 			if (triggers?.startsWith('{') && JSON.parse(triggers).makeToast) return;
 			const status = e.detail.xhr.status;
+			if ((status >= 400 || status === 0) && this.showModalError(
+				messages.dialog, messages.error || 'The request failed. Please try again.',
+				messages.formError !== messages.dialog?.querySelector('[data-form-error]'),
+			)) return;
 			
 			if (status >= 200 && status < 400 && messages.success) {
 				this.show(messages.success, 'success');
@@ -332,12 +361,13 @@ Alpine.data('toast', () => ({
 Alpine.data('projectSaveFeedback', () => ({
 	error: '',
 	notify(event) {
+		if (event.target.closest('dialog[open]')) return;
 		if (event.detail.level === 'danger') this.error = event.detail.message;
 	},
 }));
 
-window.showToast = (msg, type = 'success') => {
-	window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type } }));
+window.showToast = (msg, type = 'success', source) => {
+	window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type, source } }));
 };
 
 Alpine.data('navbar', () => ({
@@ -565,6 +595,10 @@ Alpine.data('memberRoleEditor', () => ({
 	notify(event) {
 		if (this.editing && event.detail.level === 'danger') {
 			this.error = event.detail.message;
+			if (event.target.closest('dialog[open]')) {
+				event.preventDefault();
+				this.$nextTick(() => requestAnimationFrame(() => this.$refs.roleError.focus()));
+			}
 		}
 	},
 }));
@@ -577,7 +611,7 @@ Alpine.data('formDialogHost', () => ({
 		const title = this.$refs.content.querySelector('.page-header h1')?.textContent.trim();
 		if (title) this.$refs.dialog.setAttribute('aria-label', title);
 		if (!this.$refs.dialog.open) this.$refs.dialog.showModal();
-		const error = this.$refs.content.querySelector('#form-error');
+		const error = this.$refs.content.querySelector('[data-form-error]');
 		if (error) error.focus();
 		else focusFormField(this.$refs.content.querySelector('input[name="email"], input[name="name"]'));
 	},
@@ -625,7 +659,11 @@ Alpine.data('stepFormHost', () => ({
 			this.editOpener = this.$refs.addStepButton;
 		}
 		if (!dialog.open) dialog.showModal();
-		this.$nextTick(() => focusFormField(this.$refs.stepEditContent.querySelector('input[name="name"]')));
+		this.$nextTick(() => {
+			const error = this.$refs.stepEditContent.querySelector('[data-form-error]');
+			if (error) error.focus();
+			else focusFormField(this.$refs.stepEditContent.querySelector('input[name="name"]'));
+		});
 	},
 	editClosed(event) {
 		if (event.target !== this.$refs.stepEditDialog || this.$refs.stepEditDialog.open) return;

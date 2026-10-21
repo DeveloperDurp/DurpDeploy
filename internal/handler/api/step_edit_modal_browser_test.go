@@ -90,6 +90,7 @@ func TestStepAddModalBrowserE2E(t *testing.T) {
 		t,
 		`document.querySelector('#step-edit-dialog').open && document.querySelector('#step-edit-content').textContent.includes('Name is required')`,
 	)
+	assertSingleModalError(t, b, "#step-edit-dialog", "Name is required")
 	if string(
 		b.evaluate(
 			t,
@@ -242,6 +243,7 @@ func TestStepEditModalBrowserE2E(t *testing.T) {
 		t,
 		`document.querySelector('#step-edit-dialog').open && document.querySelector('#step-edit-content').textContent.includes('Name is required')`,
 	)
+	assertSingleModalError(t, b, "#step-edit-dialog", "Name is required")
 	if string(
 		b.evaluate(
 			t,

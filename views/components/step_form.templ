@@ -141,7 +141,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 				</label>
 				<input id={ stepInputID(step, isNew, "name") } type="text" name="name" value={ step.Name } class="input input-bordered"/>
 				if errorMsg != "" {
-					<span class="text-error text-sm mt-1">{ errorMsg }</span>
+					<span class="text-error text-sm mt-1" data-form-error role="alert" tabindex="-1">{ errorMsg }</span>
 				}
 			</div>
 			if !isNew && stepLegacyHostStep(step) {
@@ -326,7 +326,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 					</label>
 					<input id={ fmt.Sprintf("step-%d-name", step.ID) } type="text" name="name" value={ step.Name } class="input input-bordered input-sm"/>
 					if errorMsg != "" {
-						<span class="text-error text-sm mt-1">{ errorMsg }</span>
+						<span class="text-error text-sm mt-1" data-form-error role="alert" tabindex="-1">{ errorMsg }</span>
 					}
 				</div>
 				<div class="form-control min-w-0">

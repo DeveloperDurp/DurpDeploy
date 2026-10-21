@@ -113,7 +113,7 @@ templ LifecycleListRow(row LifecycleRow) {
 				</label>
 				<input type="text" name="name" class="input input-bordered" value={ lc.Name } required/>
 				if errorMsg != "" {
-					<span class="text-error text-sm mt-1">{ errorMsg }</span>
+					<span class="text-error text-sm mt-1" data-form-error role="alert" tabindex="-1">{ errorMsg }</span>
 				}
 			</div>
 			<div class="form-control">

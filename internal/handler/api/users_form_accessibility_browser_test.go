@@ -343,8 +343,10 @@ func assertUserFormErrorFocus(
 	t.Helper()
 	b.wait(t, fmt.Sprintf(`(() => {
  const error=document.querySelector('#form-error');
+ const toast=Alpine.$data(document.querySelector('[x-data=toast]'));
  return error?.textContent.includes(%q) && error.getAttribute('role') === 'alert' &&
- document.activeElement === error && document.querySelectorAll('#form-error').length === 1;
+ document.activeElement === error && document.querySelectorAll('#form-error').length === 1 &&
+ !toast.visible && document.querySelectorAll('[data-modal-error]').length === 0;
 })()`, message))
 }
 

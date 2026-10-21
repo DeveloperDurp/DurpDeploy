@@ -60,12 +60,16 @@ window.staleSaveForm.querySelector('[role=alert]')?.getClientRects().length > 0`
 	result := b.evaluate(t, fmt.Sprintf(`(() => {
 const toast = Alpine.$data(document.querySelector('[x-data="toast"]'));
 const error = window.staleSaveForm.querySelector('[role=alert]');
+const notification = JSON.parse(window.staleSaveResult.trigger).makeToast;
 return {
  status: window.staleSaveResult.status,
- serverError: JSON.parse(window.staleSaveResult.trigger).makeToast.level,
+ serverError: notification.level,
  toastVisible: toast.visible, toastType: toast.type, message: toast.message,
  inlineError: error?.getClientRects().length > 0 &&
-  error.textContent === toast.message,
+  error.textContent === notification.message,
+ singleModalError: !window.staleSaveForm.closest('dialog') ||
+  (!toast.visible && window.staleSaveForm.closest('dialog')
+   .querySelectorAll('[role=alert]').length === 1),
  formRetained: document.querySelector('[data-project-form] form') ===
   window.staleSaveForm,
  draftRetained: window.staleSaveForm.querySelector('[name=description]').value
@@ -77,10 +81,11 @@ return {
 	if string(b.evaluate(t, fmt.Sprintf(`(() => {
 const result = %s;
 return result.status === 200 && result.serverError === 'danger' &&
- result.toastVisible && result.toastType === 'error' && result.message &&
+ (%t ? result.singleModalError :
+  result.toastVisible && result.toastType === 'error' && result.message) &&
  result.inlineError &&
  result.formRetained && result.draftRetained && result.pathRetained;
-})()`, result))) != "true" {
+})()`, result, modal))) != "true" {
 		t.Fatal("denied save showed success or discarded the draft")
 	}
 	f.assertDescription(t, f.project.Description.String)

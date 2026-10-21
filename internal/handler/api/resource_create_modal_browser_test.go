@@ -97,6 +97,12 @@ func TestResourceCreateModalBrowserE2E(t *testing.T) {
 				t,
 				`document.querySelector('#project-edit-dialog').open && document.querySelector('#project-edit-content .text-error')?.textContent.includes('already exists')`,
 			)
+			assertSingleModalError(
+				t,
+				b,
+				"#project-edit-dialog",
+				"already exists",
+			)
 			if string(
 				b.evaluate(
 					t,
@@ -249,6 +255,12 @@ func TestResourceEditModalBrowserE2E(t *testing.T) {
 			b.wait(
 				t,
 				`document.querySelector('#project-edit-dialog').open && document.querySelector('#project-edit-content .text-error')?.textContent.includes('already exists')`,
+			)
+			assertSingleModalError(
+				t,
+				b,
+				"#project-edit-dialog",
+				"already exists",
 			)
 			if string(
 				b.evaluate(

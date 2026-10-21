@@ -82,7 +82,7 @@ templ UserFormContent(user *db.User, errorMsg string, isNew bool) {
 		</div>
 		<div class="min-h-0 overflow-y-auto" data-user-form-body>
 			if errorMsg != "" {
-				<div class="alert alert-error mb-4" id="form-error" role="alert" aria-atomic="true" tabindex="-1" x-data x-init="$nextTick(() => $el.focus())">
+				<div class="alert alert-error mb-4" id="form-error" data-form-error role="alert" aria-atomic="true" tabindex="-1" x-data x-init="$nextTick(() => $el.focus())">
 					<span>{ errorMsg }</span>
 				</div>
 			}

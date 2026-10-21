@@ -87,7 +87,10 @@ return true;
 				tab.wait(t, `denial.status === 200 && denial.toast === 'danger'
  && denial.swap === 'none' && denial.push === 'false' && (() => {
 const toast = Alpine.$data(document.querySelector('[x-data=toast]'));
-return toast.visible && toast.type === 'error';
+const dialog = document.querySelector('dialog[open]');
+return dialog ? !toast.visible &&
+ dialog.querySelectorAll('[role=alert]').length === 1 :
+ toast.visible && toast.type === 'error';
 })()`)
 			}
 			b.wait(t, `staleForm.isConnected &&
