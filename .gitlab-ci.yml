@@ -33,7 +33,7 @@ variables:
   FF_GIT_URLS_WITHOUT_TOKENS: "true"
   GOFLAGS: -mod=readonly -p=2
   GOMAXPROCS: "2"
-  GOTOOLCHAIN: go1.26.9
+  GOTOOLCHAIN: go1.26.10
   GOMODCACHE: /opt/go-mod
   GOCACHE: /opt/go-build
   TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: harbor.durp.info/dockerhub

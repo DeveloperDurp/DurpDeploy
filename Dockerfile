@@ -5,7 +5,7 @@
 # Docker and Podman clients used by the embedded agent.
 
 # Stage 1: builder
-FROM harbor.durp.info/dockerhub/library/golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0 AS builder
+FROM harbor.durp.info/dockerhub/library/golang:1.26.10-alpine@sha256:9ce231b28998b32e116927c61aa5c406183061d4f3f2d61b292c88e7f6bdf7ca AS builder
 
 # Install build tooling (npm for Tailwind/esbuild, make for the Makefile, git
 # and ca-certificates for Go module proxy / npm registry HTTPS fetches).

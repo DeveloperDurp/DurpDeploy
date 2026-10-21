@@ -6,7 +6,7 @@ The job runs the shared `scripts/mobile-browser-container.sh` entrypoint.
 The ordinary lint and Go test jobs do not run this suite.
 
 The image uses `harbor.durp.info/microsoft/playwright:v1.61.1-noble`, which matches Playwright 1.61.1 in `package-lock.json`.
-It copies Go 1.26.9 and builds templ from `go.mod` and `go.sum` with `-mod=readonly`.
+It copies Go 1.26.10 and builds templ from `go.mod` and `go.sum` with `-mod=readonly`.
 It installs Node dependencies with `npm ci --ignore-scripts`.
 It supplies the locked Chromium and its OS dependencies.
 When you change Playwright, keep the image and lockfile versions aligned.
