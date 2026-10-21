@@ -171,12 +171,15 @@ Change the project's current script and variable name after creating the release
 Open the release at 375, 390, 768, and 1280 pixels.
 Select View full script below each step.
 Confirm that the full saved script wraps within the page.
-Select View full variable name below each variable.
-Confirm that the full saved name is readable.
-Press Tab to focus each disclosure control.
-Press Enter to close and reopen each disclosure.
+Confirm that each complete saved variable name appears once in its table cell.
+
+Confirm that long names wrap without horizontal scrolling.
+Confirm that variable names have no disclosure controls.
+Press Tab to focus each script disclosure control.
+Press Enter to close and reopen each script disclosure.
 Repeat these checks with a Viewer account.
 Confirm that secret values remain masked.
+
 Read the same release through the public API.
 Confirm that scripts and names match the saved release content.
 Keep the release for repeat checks.

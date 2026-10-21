@@ -283,7 +283,7 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 					} else {
 						for index, v := range variables {
 							<tr>
-								<td class="font-medium truncate">{ v.Name }</td>
+								<td class="font-medium break-all whitespace-normal" data-release-variable-name data-release-variable-index={ strconv.Itoa(index) }>{ v.Name }</td>
 								<td class="truncate">
 									if v.Secret != 0 {
 										<span class="text-gray-500 italic">••••••••</span>
@@ -303,14 +303,6 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 									} else {
 										<span class="text-gray-500">Unscoped</span>
 									}
-								</td>
-							</tr>
-							<tr>
-								<td colspan="3">
-									<details class="min-w-0" data-release-variable-name data-release-variable-index={ strconv.Itoa(index) }>
-										<summary class="cursor-pointer text-primary min-h-12 py-3">View full variable name</summary>
-										<p class="mt-2 break-all font-mono" data-release-full-content>{ v.Name }</p>
-									</details>
 								</td>
 							</tr>
 						}

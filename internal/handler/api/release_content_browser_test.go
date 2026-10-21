@@ -28,7 +28,7 @@ func TestReleaseContentBrowserE2E(t *testing.T) {
 				f.baseURL+strings.TrimPrefix(fixture.path, "/api/v1"))
 			if string(b.evaluate(
 				t,
-				`document.querySelectorAll('details[data-release-script]').length === 2 && document.querySelectorAll('details[data-release-variable-name]').length === 2 && !document.querySelector('details[data-release-script][open], details[data-release-variable-name][open]')`,
+				`document.querySelectorAll('details[data-release-script]').length === 2 && !document.querySelector('details[data-release-script][open], details[data-release-variable-name]') && !document.body.textContent.includes('View full variable name')`,
 			)) != "true" {
 				t.Fatal("full release content has no closed disclosures")
 			}
@@ -39,15 +39,7 @@ func TestReleaseContentBrowserE2E(t *testing.T) {
 				checkReleaseDisclosure(t, b, selector, fixture.scripts[index])
 			}
 			for index, name := range fixture.names {
-				checkReleaseDisclosure(
-					t,
-					b,
-					fmt.Sprintf(
-						"[data-release-variable-index='%d']",
-						index,
-					),
-					name,
-				)
+				checkReleaseVariableName(t, b, index, len(fixture.names), name)
 			}
 			if string(
 				b.evaluate(
@@ -62,6 +54,24 @@ func TestReleaseContentBrowserE2E(t *testing.T) {
 		}
 	}
 	fixture.checkAPI(t)
+}
+
+func checkReleaseVariableName(
+	t *testing.T, b *packageBrowser, index, count int, name string,
+) {
+	t.Helper()
+	if string(b.evaluate(t, fmt.Sprintf(`(() => {
+ const cells = document.querySelectorAll('[data-release-variable-name]');
+ const cell = document.querySelector('[data-release-variable-index="%d"]');
+ return cells.length === %d && cell.tagName === 'TD' &&
+  cell.textContent === %q && cell.getClientRects().length > 0 &&
+  cell.scrollWidth <= cell.clientWidth && cell.scrollHeight <= cell.clientHeight &&
+  getComputedStyle(cell).whiteSpace !== 'nowrap' &&
+  !cell.querySelector('details, summary, button, a') &&
+  [...document.querySelectorAll('td')].filter(e => e.textContent === %q).length === 1;
+})()`, index, count, name, name))) != "true" {
+		t.Fatal("saved variable name is repeated, clipped, or hidden")
+	}
 }
 
 func checkReleaseDisclosure(
