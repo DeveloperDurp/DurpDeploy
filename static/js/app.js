@@ -366,7 +366,8 @@ Alpine.data('projectSaveFeedback', () => ({
 	},
 }));
 
-window.showToast = (msg, type = 'success', source) => {
+window.showToast = (msg, type, source) => {
+	if (type === undefined) type = 'success';
 	window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type, source } }));
 };
 

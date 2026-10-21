@@ -35,6 +35,7 @@ func TestUserModalPermissionFeedbackBrowserE2E(t *testing.T) {
 	_, adminToken := seedAPIToken(t, f.h.repo, f.users[3].ID)
 	b := startPackageBrowser(t)
 	b.setBackTestSession(t, f.server.URL, f.session)
+	checkToastWrapperBrowser(t, b, f.server.URL)
 	for _, isNew := range []bool{true, false} {
 		t.Run(fmt.Sprintf("new=%t", isNew), func(t *testing.T) {
 			b.navigateBackTest(t, f.server.URL+"/admin/users")
@@ -108,6 +109,39 @@ func TestUserModalPermissionFeedbackBrowserE2E(t *testing.T) {
 			}
 		})
 	}
+}
+
+func checkToastWrapperBrowser(t *testing.T, b *packageBrowser, origin string) {
+	t.Helper()
+	b.navigateBackTest(t, origin+"/admin/users")
+	for _, args := range []string{"", ", undefined", ", null", ", 'warning'"} {
+		result := b.evaluate(t, fmt.Sprintf(`(() => {
+ let notification;
+ window.addEventListener('show-toast', e => { notification = e.detail; },
+  {once:true});
+ window.showToast('Wrapper feedback'%s);
+ const toast = Alpine.$data(document.querySelector('[x-data=toast]'));
+ return notification.message === 'Wrapper feedback' &&
+  toast.visible && toast.message === notification.message &&
+  notification.type === %s && toast.type === notification.type;
+})()`, args, map[string]string{
+			"":            "'success'",
+			", undefined": "'success'",
+			", null":      "null",
+			", 'warning'": "'warning'",
+		}[args]))
+		if string(result) != "true" {
+			t.Fatalf("toast wrapper changed arguments %q", args)
+		}
+	}
+	b.evaluate(t, `document.querySelector('a[hx-get="/admin/users/new"]')
+ .click(); true`)
+	b.wait(t, `document.querySelector('#project-edit-dialog')
+ ?.matches(':modal') && document.querySelector('#user-name')`)
+	b.evaluate(t, `window.showToast('Wrapper modal error', 'error',
+ document.querySelector('#user-name')); true`)
+	assertSingleModalError(t, b, "#project-edit-dialog", "Wrapper modal error")
+	b.screenshot(t, "toast-wrapper-modal-error")
 }
 
 func TestMemberModalErrorFeedbackBrowserE2E(t *testing.T) {
