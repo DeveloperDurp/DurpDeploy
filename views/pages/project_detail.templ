@@ -301,12 +301,13 @@ templ VariablesPreviewSection(project db.Project, vars []db.Variable, envs []db.
 			<h2 class="text-xl font-bold">Variables</h2>
 			<a href={ fmt.Sprintf("/projects/%d/variables", project.ID) } class="btn btn-ghost btn-sm">Manage →</a>
 		</div>
-		<div class="card bg-base-200 p-4 space-y-4">
+		<div class="card bg-base-200 p-4 space-y-4" data-project-variable-preview>
 			if len(filterUnscoped(vars)) == 0 && len(filterScoped(vars)) == 0 {
 				<p class="text-gray-500 italic text-sm">No variables yet.</p>
 			}
 			@VariablesPreviewTable(project, "Unscoped", filterUnscoped(vars), envs, len(vars) > variablesPreviewCap)
 			@VariablesPreviewTable(project, "Environment-scoped", filterScoped(vars), envs, len(vars) > variablesPreviewCap)
+			{ children... }
 		</div>
 	</div>
 }
@@ -320,7 +321,10 @@ templ VariablesPreviewTable(project db.Project, label string, vars []db.Variable
 					<tr>
 						<th class="w-1/3">Name</th>
 						<th class="w-1/2">Value</th>
-						<th class="w-1/6">Environment</th>
+						<th class="w-1/6">
+							<abbr class="sm:hidden" title="Environment">Env.</abbr>
+							<span class="hidden sm:inline">Environment</span>
+						</th>
 					</tr>
 				</thead>
 				<tbody>

@@ -233,6 +233,27 @@ These checks require no schedules.
 bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestReleaseDuplicateRecovery(APIWeb|Browser)E2E$' ./internal/handler/api
 ```
 
+## Connected project variable previews (A11 follow-up)
+
+Open a project with local variables and inherited lifecycle variables.
+Confirm that both sections share one card.
+Confirm that a divider separates the inherited section.
+Repeat at 375, 390, 768, and 1280 pixels.
+Repeat with a Viewer account.
+Confirm that secret values stay masked.
+
+Select Manage to open the project Variables page.
+Confirm that inherited variables retain their separate card and permitted actions.
+Repeat with a project that has only inherited variables.
+Repeat with a project that has only local variables.
+Repeat with an empty project.
+Confirm that no empty inherited section or divider appears without inherited variables.
+
+```bash
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestLifecycleVariables(APIWeb|Browser)E2E$' ./internal/handler/api
+bash scripts/go_test.sh -race -count=1 -run '^TestVariablesPreview_' ./internal/handler
+```
+
 ## Release variable guidance (A11)
 
 Create a disposable project with a lifecycle and a stage environment.

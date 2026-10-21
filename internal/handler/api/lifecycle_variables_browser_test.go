@@ -175,10 +175,39 @@ func TestLifecycleVariablesBrowserE2E(t *testing.T) {
 	)
 	b.captureNavigation(t, "project-reset")
 	b.assertRetainedScope(t, f, lc.ID)
-	b.navigateBackTest(
-		t,
-		fmt.Sprintf("%s/projects/%d", f.baseURL, f.project.ID),
-	)
-	b.captureNavigation(t, "project-overview")
+	b.assertConnectedVariablePreview(t, f)
 	b.assertLifecyclePermissions(t, f, lc.ID)
+}
+
+func (b *packageBrowser) assertConnectedVariablePreview(
+	t *testing.T, f *artifactE2E,
+) {
+	t.Helper()
+	f.api(t, "POST", f.base()+"/variables", map[string]string{
+		"name": "LOCAL_PREVIEW", "value": "project-local-preview",
+	}, 201)
+	for _, width := range []int{375, 390, 768, 1280} {
+		b.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
+			"width": width, "height": 844, "deviceScaleFactor": 1,
+			"mobile": false,
+		}, &struct{}{})
+		b.navigateBackTest(t,
+			fmt.Sprintf("%s/projects/%d", f.baseURL, f.project.ID))
+		if string(b.evaluate(t, `(() => {
+ const group = document.querySelector('[data-project-variable-preview]');
+ const inherited = group?.querySelector('[data-inherited-variables]');
+ const manage = [...document.querySelectorAll('a')].find(a => a.textContent === 'Manage →');
+ return group?.classList.contains('card') && inherited &&
+  inherited.closest('.card') === group && !inherited.classList.contains('card') &&
+  parseFloat(getComputedStyle(inherited).borderTopWidth) > 0 &&
+  group.textContent.includes('LOCAL_PREVIEW') && group.textContent.includes('project-local-preview') &&
+  inherited.textContent.includes('REGION') && inherited.textContent.includes('shared-default') &&
+  inherited.textContent.includes('••••••••') && !inherited.querySelector('button') &&
+  manage?.href.endsWith('/variables') && document.documentElement.scrollWidth <= innerWidth &&
+  !document.body.innerHTML.includes('browser-secret-sentinel');
+})()`)) != "true" {
+			t.Fatal("project and inherited variable previews are not connected")
+		}
+		b.screenshot(t, fmt.Sprintf("connected-project-variables-%d", width))
+	}
 }

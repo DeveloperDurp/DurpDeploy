@@ -53,8 +53,9 @@ templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable
 			</p>
 			@ProjectPermissionSummary()
 			@LifecyclePanelSection(project, panel)
-			@VariablesPreviewSection(project, vars, envs)
-			@InheritedVariablesSection(project.ID, panel.Inheritance, envs, false)
+			@VariablesPreviewSection(project, vars, envs) {
+				@InheritedVariablesSection(project.ID, panel.Inheritance, envs, false)
+			}
 			if CanWrite(ctx) {
 				@ResourceFormDialog("Edit Project", "[data-project-form]")
 			}

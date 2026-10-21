@@ -200,9 +200,32 @@ func TestLifecycleVariablesAPIWebE2E(t *testing.T) {
 		strings.Contains(page, "lifecycle-secret-sentinel") {
 		t.Fatal("project inheritance UI missing or exposes secret")
 	}
+	assertConnectedVariablePreview(t, f)
 	assertLifecycleRunbookSnapshots(t, f, lc.ID)
 	assertLifecycleRetainedScopeAndDuplicateReset(t, f, lc.ID)
 	assertLifecycleAssignmentAccess(t, f, lc.ID)
+}
+
+func assertConnectedVariablePreview(t *testing.T, f *artifactE2E) {
+	t.Helper()
+	page := f.web(t, "GET", fmt.Sprintf("/projects/%d", f.project.ID), nil, 200)
+	groups := dashboardElements(
+		dashboardDocument(t, page), "data-project-variable-preview", "",
+	)
+	if len(groups) != 1 {
+		t.Fatal("project overview has no single variable preview group")
+	}
+	inherited := dashboardElements(groups[0], "data-inherited-variables", "")
+	if len(inherited) != 1 ||
+		!strings.Contains(dashboardText(inherited[0]), "from-web") ||
+		strings.Contains(page, "lifecycle-secret-sentinel") {
+		t.Fatal("connected inherited preview is missing or exposes a secret")
+	}
+	response := f.api(t, "GET", f.base()+"/variables/inherited", nil, 200)
+	if !strings.Contains(string(response), "from-web") ||
+		strings.Contains(string(response), "lifecycle-secret-sentinel") {
+		t.Fatal("inherited variables API disagrees with the connected preview")
+	}
 }
 
 func decodeLifecycleTest(t *testing.T, data []byte, target any) {
