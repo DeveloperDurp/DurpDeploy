@@ -87,11 +87,11 @@ templ ProjectMembersSection(project db.Project, members []db.ListProjectMembersR
 				hx-post={ fmt.Sprintf("/projects/%d/members", project.ID) }
 				class="flex flex-wrap gap-2 mt-4 items-end"
 			>
-				<div class="form-control">
+				<div class="form-control min-w-0 max-w-full overflow-hidden">
 					<label class="label">
 						<span class="label-text">User</span>
 					</label>
-					<select name="user_id" class="select select-bordered md:select-sm max-w-full">
+					<select name="user_id" class="select select-bordered md:select-sm w-full max-w-full truncate">
 						for _, u := range availableUsers {
 							<option value={ fmt.Sprintf("%d", u.ID) }>{ u.Name } ({ u.Email })</option>
 						}

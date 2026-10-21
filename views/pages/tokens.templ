@@ -332,7 +332,7 @@ templ TokenGrantFields(grant repository.TokenScope, projects []db.Project, prefi
 		<p id={ prefix + "-help" } class="text-xs opacity-70 mt-1">For selected-project tokens, choose one or more projects. The role limits the owner's current permissions.</p>
 		<p class="text-xs opacity-70 mt-1">Deployer runs existing releases. Maintainer also authors content. Explicit token roles cannot manage API tokens.</p>
 		<dialog id={ prefix + "-project-picker" } class="modal p-0" x-ref="projectDialog" x-on:close="projectsClosed" aria-labelledby={ prefix + "-project-picker-title" } data-token-project-dialog>
-			<div class="modal-box flex h-dvh max-h-dvh w-full max-w-none flex-col gap-4 overflow-hidden rounded-none p-4 sm:h-auto sm:max-h-[85dvh] sm:max-w-lg sm:rounded-box sm:p-6">
+			<div class="modal-box flex h-dvh w-full max-w-none flex-col gap-4 overflow-hidden rounded-none p-4 sm:h-auto sm:max-w-lg sm:rounded-box sm:p-6">
 				<div class="flex shrink-0 items-center justify-between gap-4">
 					<h3 id={ prefix + "-project-picker-title" } class="text-lg font-semibold">Choose projects</h3>
 					<button type="button" class="btn btn-ghost min-h-11" x-on:click="closeProjects">Close</button>

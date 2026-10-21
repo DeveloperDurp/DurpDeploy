@@ -26,6 +26,8 @@ func TestStepAddModalBrowserE2E(t *testing.T) {
 		)
 	}
 	open()
+	assertModalKeyboardViewport(t, b, "#step-edit-dialog",
+		"form > .overflow-y-auto", "[name=max_retries]")
 	b.captureNavigation(t, "step-add-modal", func() {
 		b.wait(
 			t,
@@ -156,6 +158,8 @@ func TestStepEditModalBrowserE2E(t *testing.T) {
 		)
 	}
 	open()
+	assertModalKeyboardViewport(t, b, "#step-edit-dialog",
+		"form > .overflow-y-auto", "[name=max_retries]")
 	b.captureNavigation(t, "step-edit-modal", func() {
 		b.wait(
 			t,

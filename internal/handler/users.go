@@ -54,6 +54,13 @@ func (h *UsersHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 
 // NewUserForm renders the create-user form at /admin/users/new.
 func (h *UsersHandler) NewUserForm(w http.ResponseWriter, r *http.Request) {
+	if isFragmentRequest(r) {
+		if err := pages.UserFormFragment(nil, "", true).
+			Render(r.Context(), w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
 	if err := pages.UserFormPage(nil, "", r.URL.Path, true).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -157,6 +164,13 @@ func (h *UsersHandler) EditUserForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if isFragmentRequest(r) {
+		if err := pages.UserFormFragment(&u, "", false).
+			Render(r.Context(), w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
 	if err := pages.UserFormPage(&u, "", r.URL.Path, false).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

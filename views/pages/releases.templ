@@ -174,7 +174,7 @@ templ ReleaseDetailPage(project db.Project, release db.Release, variables []db.R
 			{Label: "Releases", Href: fmt.Sprintf("/projects/%d/releases", project.ID)},
 			{Label: release.Version},
 		})
-		@ReleaseDetail(project, release, variables, environments,artifact,active)
+		@ReleaseDetail(project, release, variables, environments, artifact, active)
 	}
 }
 
@@ -325,13 +325,15 @@ templ ReleaseDeleteControl(projectID int64, release db.Release, active bool, siz
 	<div x-data>
 		<button type="button" class={ "btn btn-error whitespace-nowrap " + size } x-on:click="$refs.confirmDelete.showModal()">Delete</button>
 		<dialog x-ref="confirmDelete" class="modal" aria-labelledby={ fmt.Sprintf("release-delete-%d-title", release.ID) } aria-describedby={ fmt.Sprintf("release-delete-%d-description", release.ID) }>
-			<div class="modal-box bg-base-200">
-				<h2 id={ fmt.Sprintf("release-delete-%d-title", release.ID) } class="text-lg font-bold">Delete release { release.Version }?</h2>
-				<p id={ fmt.Sprintf("release-delete-%d-description", release.ID) } class="mt-2 text-sm">This permanently deletes the release, its schedules, deployment history, and logs.</p>
-				if active {
-					<p class="alert alert-warning mt-4 text-sm">This release has an active or unconfirmed deployment. Active deployments must finish or be cancelled. Unconfirmed outcomes require operator inspection and recovery before deletion.</p>
-				}
-				<div class="modal-action">
+			<div class="modal-box flex min-h-0 flex-col overflow-hidden bg-base-200">
+				<h2 id={ fmt.Sprintf("release-delete-%d-title", release.ID) } class="shrink-0 text-lg font-bold">Delete release?</h2>
+				<div class="min-h-0 overflow-y-auto" data-modal-scroll-body>
+					<p id={ fmt.Sprintf("release-delete-%d-description", release.ID) } class="mt-2 text-sm"><span class="block font-medium break-all mb-2">Version: { release.Version }</span> This permanently deletes the release, its schedules, deployment history, and logs.</p>
+					if active {
+						<p class="alert alert-warning mt-4 text-sm">This release has an active or unconfirmed deployment. Active deployments must finish or be cancelled. Unconfirmed outcomes require operator inspection and recovery before deletion.</p>
+					}
+				</div>
+				<div class="modal-action shrink-0">
 					<form method="dialog"><button type="submit" class="btn btn-ghost" autofocus>Cancel</button></form>
 					if !active {
 						<button type="button" class="btn btn-error" hx-delete={ fmt.Sprintf("/projects/%d/releases/%d", projectID, release.ID) } data-toast-success="Release deleted" data-toast-error="Failed to delete release">Confirm delete</button>

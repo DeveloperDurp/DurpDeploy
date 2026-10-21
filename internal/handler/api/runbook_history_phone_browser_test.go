@@ -79,17 +79,18 @@ func assertRunbookHistoryPhone(
 		check := fmt.Sprintf(
 			`(() => {
  const row = document.querySelector('[data-runbook-execution-id="%d"]');
- const link = row?.querySelector('a');
+ const card = row?.querySelector('[data-resource-card]');
+ const link = card?.querySelector('a');
  const fields = ['version','environment','status','created'].map(name => row?.querySelector('[data-execution-'+name+']'));
  const expected = [%q, %q, %q, %q];
- if (!row || link?.textContent !== %q || link.getAttribute('href') !== %q ||
+ if (!card || card.querySelector('h2')?.textContent !== %q || link?.getAttribute('href') !== %q ||
  fields.some((field,i) => !field || field.textContent !== expected[i] || !field.getClientRects().length)) return false;
- const mobile = innerWidth < 640;
- if (getComputedStyle(row).display !== (mobile ? 'grid' : 'table-row')) return false;
- if (!mobile) return true;
- const cells = [...row.children];
+ const cells = fields.map(field => field.parentElement);
+ const target = link.getBoundingClientRect();
+ const bounds = card.getBoundingClientRect();
  const overlap = (a,b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
- return link.getBoundingClientRect().height >= 44 && cells.every((cell,i) => {
+ return target.height >= 44 && Math.abs(target.width-bounds.width) <= 2 &&
+ Math.abs(target.height-bounds.height) <= 2 && cells.every((cell,i) => {
   const box = cell.getBoundingClientRect();
   return cell.scrollWidth <= cell.clientWidth && box.left >= 0 && box.right <= innerWidth &&
    cells.slice(i+1).every(other => !overlap(box,other.getBoundingClientRect()));

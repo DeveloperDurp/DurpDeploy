@@ -63,6 +63,8 @@ func TestRunbookEditorBrowserE2E(t *testing.T) {
 		t,
 		`document.querySelector('dialog').matches(':modal') && document.querySelector('dialog [name=step_selectors]').value === 'canary'`,
 	)
+	assertModalKeyboardViewport(t, b, "dialog[open]",
+		"[data-runbook-step-fields]", "[name=step_variable_names]")
 	b.evaluate(
 		t,
 		`document.querySelector('dialog [name=step_name]').value = 'discarded'; document.querySelector('dialog [name=step_name]').dispatchEvent(new Event('input')); document.querySelector('dialog button.btn-ghost').click(); true`,

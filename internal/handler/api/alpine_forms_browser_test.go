@@ -123,6 +123,11 @@ func TestAlpineDialogsBrowserE2E(t *testing.T) {
 			)
 			b.wait(t, `!!document.querySelector('dialog[open]')`)
 			b.assertAlpineDialogName(t, "Script Body")
+			assertDialogKeyboardBounds(
+				t,
+				b,
+				"dialog[data-fullscreen-dialog][open]",
+			)
 		})
 		b.call(t, "Input.dispatchKeyEvent", map[string]any{
 			"type": "keyDown", "key": "Escape", "code": "Escape",
@@ -145,6 +150,7 @@ func TestAlpineDialogsBrowserE2E(t *testing.T) {
 	))
 	b.wait(t, `!!document.querySelector('dialog[open]')`)
 	b.assertAlpineDialogName(t, "Notification Event")
+	assertDialogKeyboardBounds(t, b, "dialog[open]")
 	b.captureNavigation(t, "notification-dialog")
 	b.evaluate(
 		t,

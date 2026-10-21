@@ -31,6 +31,14 @@ func TestVariableNamesBrowserE2E(t *testing.T) {
 				"Name field does not explain or apply the identifier policy",
 			)
 		}
+		b.evaluate(
+			t,
+			`document.querySelector('#variables-content form').requestSubmit(); true`,
+		)
+		b.wait(t, `(() => {
+ const error = document.querySelector('#variables-content [data-variable-name-error]');
+ return error?.getClientRects().length && error.textContent.includes('Invalid variable name');
+})()`)
 		// Bypass native validation to verify the HTTP boundary and draft retention.
 		b.evaluate(
 			t,
@@ -94,10 +102,17 @@ func checkVariableNameEdit(
  input.value = '1BAD';
  if (!input.validity.patternMismatch || !input.title.includes('ASCII')) throw new Error('edit has no name policy');
  form.elements.namedItem('value').value = 'keep-edit-draft';
- form.noValidate = true;
  form.requestSubmit();
  return true;
 })()`)
+	b.wait(t, `(() => {
+ const input = window.namesEditForm.elements.namedItem('name');
+ return input.parentElement.querySelector('[data-variable-name-error]')?.getClientRects().length;
+})()`)
+	b.evaluate(
+		t,
+		`window.namesEditForm.noValidate = true; window.namesEditForm.requestSubmit(); true`,
+	)
 	b.wait(
 		t,
 		`Alpine.$data(document.querySelector('[x-data=toast]')).message.includes('starting with a letter or underscore')`,

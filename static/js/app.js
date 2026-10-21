@@ -7,6 +7,18 @@ import { registerLogComponents } from './deployment-logs.js'
 window.Alpine = Alpine
 window.htmx = htmx
 
+// The keyboard can shrink the visible viewport without resizing the page.
+if (window.visualViewport) {
+	const viewport = window.visualViewport;
+	const updateDialogViewport = () => {
+		document.documentElement.style.setProperty('--dialog-viewport-height', `${viewport.height}px`);
+		document.documentElement.style.setProperty('--dialog-viewport-top', `${viewport.offsetTop}px`);
+	};
+	viewport.addEventListener('resize', updateDialogViewport);
+	viewport.addEventListener('scroll', updateDialogViewport);
+	updateDialogViewport();
+}
+
 function focusFormField(field) {
 	// Touch users choose when to open the on-screen keyboard.
 	if (!matchMedia('(pointer: coarse)').matches) field?.focus();
@@ -565,7 +577,9 @@ Alpine.data('formDialogHost', () => ({
 		const title = this.$refs.content.querySelector('.page-header h1')?.textContent.trim();
 		if (title) this.$refs.dialog.setAttribute('aria-label', title);
 		if (!this.$refs.dialog.open) this.$refs.dialog.showModal();
-		focusFormField(this.$refs.content.querySelector('input[name="name"]'));
+		const error = this.$refs.content.querySelector('#form-error');
+		if (error) error.focus();
+		else focusFormField(this.$refs.content.querySelector('input[name="email"], input[name="name"]'));
 	},
 	beforeSwap(event) {
 		if (!this.$refs.dialog?.open || event.detail.xhr.status !== 422 ||

@@ -40,6 +40,7 @@ func TestResourceCreateModalBrowserE2E(t *testing.T) {
 				)
 			}
 			open()
+			assertDialogKeyboardBounds(t, b, "#project-edit-dialog")
 			b.captureNavigation(t, resource+"-create-modal", func() {
 				b.wait(
 					t,
@@ -196,6 +197,7 @@ func TestResourceEditModalBrowserE2E(t *testing.T) {
 				)
 			}
 			open()
+			assertDialogKeyboardBounds(t, b, "#project-edit-dialog")
 			b.captureNavigation(t, resource+"-edit-modal", func() {
 				b.wait(
 					t,

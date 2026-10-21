@@ -10,6 +10,7 @@ const variableNameGuidance = "Use 1–255 ASCII letters, digits, or underscores.
 
 templ VariableNameHelp() {
 	<p class="text-sm opacity-70 mt-1 break-words" data-variable-name-help>{ variableNameGuidance }</p>
+	<p class="hidden text-error text-sm mt-1 peer-user-invalid:block" role="alert" data-variable-name-error>Invalid variable name. Follow the format above.</p>
 }
 
 func filterUnscoped(vars []db.Variable) []db.Variable {
@@ -75,7 +76,7 @@ templ VariableForm(projectID int64, environments VariableEnvironments, errorMsg 
 				<label class="label">
 					<span class="label-text">Name</span>
 				</label>
-				<input type="text" name="name" class="input input-bordered" required pattern="[A-Za-z_][A-Za-z0-9_]*" maxlength="255" title={ variableNameGuidance } aria-label="Name" aria-description={ variableNameGuidance }/>
+				<input type="text" name="name" class="peer input input-bordered" required pattern="[A-Za-z_][A-Za-z0-9_]*" maxlength="255" title={ variableNameGuidance } aria-label="Name" aria-description={ variableNameGuidance }/>
 				@VariableNameHelp()
 				if errorMsg != "" {
 					<span class="text-error text-sm mt-1">{ errorMsg }</span>
@@ -256,7 +257,7 @@ templ VariableQuickEditForm(projectID int64, variable db.Variable, environments 
 	>
 		<div class="form-control">
 			<label class="label"><span class="label-text">Name</span></label>
-			<input type="text" name="name" value={ variable.Name } class="input input-bordered input-sm w-full" required pattern="[A-Za-z_][A-Za-z0-9_]*" maxlength="255" title={ variableNameGuidance } aria-label="Name" aria-description={ variableNameGuidance }/>
+			<input type="text" name="name" value={ variable.Name } class="peer input input-bordered input-sm w-full" required pattern="[A-Za-z_][A-Za-z0-9_]*" maxlength="255" title={ variableNameGuidance } aria-label="Name" aria-description={ variableNameGuidance }/>
 			@VariableNameHelp()
 		</div>
 		<div class="form-control">
@@ -380,7 +381,7 @@ templ VariableEditRow(projectID int64, variable db.Variable, environments Variab
 				data-toast-success="Variable updated"
 				data-toast-error="Failed to update variable"
 			></form>
-			<input type="text" name="name" value={ variable.Name } form={ fmt.Sprintf("variable-edit-form-%d", variable.ID) } class="input input-bordered input-sm w-full" required pattern="[A-Za-z_][A-Za-z0-9_]*" maxlength="255" title={ variableNameGuidance } aria-label="Name" aria-description={ variableNameGuidance }/>
+			<input type="text" name="name" value={ variable.Name } form={ fmt.Sprintf("variable-edit-form-%d", variable.ID) } class="peer input input-bordered input-sm w-full" required pattern="[A-Za-z_][A-Za-z0-9_]*" maxlength="255" title={ variableNameGuidance } aria-label="Name" aria-description={ variableNameGuidance }/>
 			@VariableNameHelp()
 			if errorMsg != "" {
 				<span class="text-error text-sm mt-1">{ errorMsg }</span>

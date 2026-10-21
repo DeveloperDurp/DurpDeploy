@@ -189,25 +189,27 @@ templ PasskeyDeleteConfirmationDialog(credential db.WebauthnCredential) {
 		aria-describedby={ securityPasskeyDeleteDialogID(credential.CredentialID) + "-description" }
 		data-passkey-delete-confirmation-dialog
 	>
-		<div class="modal-box w-11/12 max-w-lg bg-base-200">
-			<h2 id={ securityPasskeyDeleteDialogID(credential.CredentialID) + "-title" } class="text-lg font-bold">
+		<div class="modal-box flex min-h-0 flex-col overflow-hidden w-11/12 max-w-lg bg-base-200">
+			<h2 id={ securityPasskeyDeleteDialogID(credential.CredentialID) + "-title" } class="shrink-0 text-lg font-bold">
 				Delete passkey
 			</h2>
-			<p id={ securityPasskeyDeleteDialogID(credential.CredentialID) + "-description" } class="mt-2 text-sm opacity-70">
-				This permanently removes the passkey named { credential.Name } from your account.
-			</p>
-			<form
-				id={ securityPasskeyDeleteDialogID(credential.CredentialID) + "-form" }
-				method="post"
-				action="/settings/security/passkeys/delete"
-				data-passkey-delete-confirmation
-			>
-				if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
-					<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
-				}
-				<input type="hidden" name="credential_id" value={ securityCredentialID(credential.CredentialID) }/>
-			</form>
-			<div class="modal-action">
+			<div class="min-h-0 overflow-y-auto" data-modal-scroll-body>
+				<p id={ securityPasskeyDeleteDialogID(credential.CredentialID) + "-description" } class="mt-2 text-sm opacity-70">
+					This permanently removes the passkey named { credential.Name } from your account.
+				</p>
+				<form
+					id={ securityPasskeyDeleteDialogID(credential.CredentialID) + "-form" }
+					method="post"
+					action="/settings/security/passkeys/delete"
+					data-passkey-delete-confirmation
+				>
+					if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
+						<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
+					}
+					<input type="hidden" name="credential_id" value={ securityCredentialID(credential.CredentialID) }/>
+				</form>
+			</div>
+			<div class="modal-action shrink-0">
 				<form method="dialog">
 					<button type="submit" class="btn btn-ghost" autofocus>Cancel</button>
 				</form>
@@ -235,24 +237,26 @@ templ SecurityDisableConfirmationDialog() {
 		aria-describedby="security-disable-mfa-dialog-description"
 		data-security-disable-confirmation-dialog
 	>
-		<div class="modal-box w-11/12 max-w-lg bg-base-200">
-			<h2 id="security-disable-mfa-dialog-title" class="text-lg font-bold">
+		<div class="modal-box flex min-h-0 flex-col overflow-hidden w-11/12 max-w-lg bg-base-200">
+			<h2 id="security-disable-mfa-dialog-title" class="shrink-0 text-lg font-bold">
 				Disable MFA
 			</h2>
-			<p id="security-disable-mfa-dialog-description" class="mt-2 text-sm opacity-70">
-				This permanently removes all of your factors and recovery codes. You will need to enroll MFA again.
-			</p>
-			<form
-				id="security-disable-mfa-form"
-				method="post"
-				action="/settings/security/disable"
-				data-security-disable-confirmation
-			>
-				if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
-					<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
-				}
-			</form>
-			<div class="modal-action">
+			<div class="min-h-0 overflow-y-auto" data-modal-scroll-body>
+				<p id="security-disable-mfa-dialog-description" class="mt-2 text-sm opacity-70">
+					This permanently removes all of your factors and recovery codes. You will need to enroll MFA again.
+				</p>
+				<form
+					id="security-disable-mfa-form"
+					method="post"
+					action="/settings/security/disable"
+					data-security-disable-confirmation
+				>
+					if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
+						<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
+					}
+				</form>
+			</div>
+			<div class="modal-action shrink-0">
 				<form method="dialog">
 					<button type="submit" class="btn btn-ghost" autofocus>Cancel</button>
 				</form>

@@ -29,7 +29,6 @@ templ UserFormPage(user *db.User, errorMsg string, currentPath string, isNew boo
 	} else {
 		@layouts.Base(formTitle(isNew), currentPath) {
 			<div class="max-w-xl">
-				<h1 class="text-3xl font-bold mb-4">{ formTitle(isNew) }</h1>
 				<div class="card bg-base-200 shadow">
 					<div class="card-body">
 						@UserFormContent(user, errorMsg, isNew)
@@ -56,143 +55,189 @@ templ UserFormFragment(user *db.User, errorMsg string, isNew bool) {
 	@UserFormContent(user, errorMsg, isNew)
 }
 
+templ UserFormDialog() {
+	<dialog x-ref="dialog" id="project-edit-dialog" class="modal" aria-label="User form" x-on:close="closed" x-on:click.capture="backClicked" hx-headers={ `{"X-Form-Dialog":"true"}` } hx-target="#project-edit-content" hx-select="[data-user-form]" hx-swap="innerHTML" hx-boost="false">
+		<div class="modal-box flex min-h-0 flex-col overflow-hidden w-full max-w-4xl">
+			<div id="project-edit-content" x-ref="content" class="flex min-h-0 flex-col"></div>
+		</div>
+		<form method="dialog" class="modal-backdrop"><button type="submit" aria-label="Close user form"></button></form>
+	</dialog>
+}
+
 templ UserFormContent(user *db.User, errorMsg string, isNew bool) {
-	if errorMsg != "" {
-		<div class="alert alert-error mb-4" id="form-error" role="alert" aria-atomic="true" tabindex="-1" x-data x-init="$nextTick(() => $el.focus())">
-			<span>{ errorMsg }</span>
-		</div>
-	}
-	if !isNew && user != nil {
-		<div class="text-sm opacity-70 mb-2">
-			Editing <span class="font-mono">{ user.Email }</span>
-		</div>
-	}
-	<form
-		id={ userFormID(user, isNew) }
-		if errorMsg != "" {
-			aria-describedby="form-error"
-		}
-		if isNew {
-			method="post"
-			action="/admin/users"
-		} else {
-			hx-put={ fmt.Sprintf("/admin/users/%d", user.ID) }
-			hx-target="#form-container"
-			hx-swap="innerHTML"
-			data-toast-success="User updated"
-			data-toast-error="Failed to update user"
-		}
-		class="space-y-4"
-	>
-		if isNew {
-			<div class="form-control">
-				<label class="label" for="user-email">
-					<span class="label-text">Email</span>
-				</label>
-				<input
-					id="user-email"
-					type="email"
-					name="email"
-					value={ fieldValue(user, "email") }
-					class="input input-bordered"
-					required
-				/>
-			</div>
-		}
-		<div class="form-control">
-			<label class="label" for="user-name">
-				<span class="label-text">Name</span>
-			</label>
-			<input
-				id="user-name"
-				type="text"
-				name="name"
-				value={ fieldValue(user, "name") }
-				class="input input-bordered"
-				required
-			/>
-		</div>
-		<div class="form-control">
-			<label class="label" for="user-role">
-				<span class="label-text">Role</span>
-			</label>
-			<select id="user-role" name="role" class="select select-bordered" aria-describedby="user-role-help" required>
-				for _, role := range userRoleOptions(user) {
-					<option value={ role } if selectedRole(user) == role { selected }>{ role }</option>
-				}
-			</select>
-			<p id="user-role-help" class="text-xs opacity-70 mt-1">Viewer reads. Deployer runs existing releases. Maintainer authors content. Admin manages the instance.</p>
-		</div>
-		<div class="form-control">
-			<label class="label" for="user-password">
-				<span class="label-text">
+	<div class="group/user-form flex min-h-0 flex-col" data-user-form>
+		<div class="page-header shrink-0 bg-base-100 py-2">
+			<h1 class="text-3xl font-bold">{ formTitle(isNew) }</h1>
+			<div class="flex flex-wrap gap-2">
+				<button type="submit" form={ userFormID(user, isNew) } class="btn btn-primary">
 					if isNew {
-						Password
+						Create user
 					} else {
-						New password <span class="text-xs opacity-60">(blank = keep current)</span>
+						Save changes
 					}
-				</span>
-			</label>
-			<input
-				id="user-password"
-				type="password"
-				name="password"
-				class="input input-bordered"
-				if isNew {
-					required
-				}
-				autocomplete="new-password"
-			/>
-		</div>
-		<div class="form-control">
-			<label class="label" for="user-password-confirmation">
-				<span class="label-text">
-					if isNew {
-						Confirm password
-					} else {
-						Confirm new password
-					}
-				</span>
-			</label>
-			<input
-				id="user-password-confirmation"
-				type="password"
-				name="password_confirmation"
-				class="input input-bordered"
-				if isNew {
-					required
-				}
-				autocomplete="new-password"
-			/>
-		</div>
-	</form>
-	if !isNew && user != nil {
-		<div class="mt-6 pt-4 border-t border-base-300 flex items-center justify-between">
-			<div>
-				<div class="font-medium">Delete this user</div>
-				<div class="text-sm text-gray-500">Removes the account and invalidates all of their sessions.</div>
+				</button>
+				<a href="/admin/users" class="btn btn-ghost" x-data="backNavigation" x-on:click="back">Cancel</a>
 			</div>
-			<button
-				class="btn btn-error"
-				hx-delete={ fmt.Sprintf("/admin/users/%d", user.ID) }
-				hx-confirm="Delete this user? They will be unable to log in."
-				data-toast-success="User deleted"
-				data-toast-error="Failed to delete user"
-			>
-				Delete user
-			</button>
+			<p id="user-validation-error" class="hidden basis-full text-error text-sm group-has-[:user-invalid]/user-form:block" role="alert" aria-atomic="true">Cannot save this user. Check the highlighted fields below.</p>
 		</div>
-	}
-	<div class="mt-6 pt-4 border-t border-base-300 flex gap-2 justify-end">
-		<button type="submit" form={ userFormID(user, isNew) } class="btn btn-primary">
-			if isNew {
-				Create user
-			} else {
-				Save changes
+		<div class="min-h-0 overflow-y-auto" data-user-form-body>
+			if errorMsg != "" {
+				<div class="alert alert-error mb-4" id="form-error" role="alert" aria-atomic="true" tabindex="-1" x-data x-init="$nextTick(() => $el.focus())">
+					<span>{ errorMsg }</span>
+				</div>
 			}
-		</button>
-		<a href="/admin/users" class="btn btn-ghost">Cancel</a>
+			if !isNew && user != nil {
+				<div class="text-sm opacity-70 mb-2">
+					Editing <span class="font-mono">{ user.Email }</span>
+				</div>
+			}
+			<form
+				id={ userFormID(user, isNew) }
+				if errorMsg != "" {
+					aria-describedby="user-validation-error form-error"
+				} else {
+					aria-describedby="user-validation-error"
+				}
+				if isNew {
+					method="post"
+					action="/admin/users"
+					hx-post="/admin/users"
+					hx-target="#form-container"
+					hx-swap="innerHTML"
+					data-toast-success="User created"
+					data-toast-error="Failed to create user"
+				} else {
+					hx-put={ fmt.Sprintf("/admin/users/%d", user.ID) }
+					hx-target="#form-container"
+					hx-swap="innerHTML"
+					data-toast-success="User updated"
+					data-toast-error="Failed to update user"
+				}
+				class="space-y-4"
+			>
+				if isNew {
+					<div class="form-control">
+						<label class="label" for="user-email">
+							<span class="label-text">Email</span>
+						</label>
+						<input
+							id="user-email"
+							type="email"
+							name="email"
+							value={ fieldValue(user, "email") }
+							class="peer input input-bordered user-invalid:input-error"
+							aria-describedby="user-email-error"
+							required
+						/>
+						@UserFieldError("user-email", "Enter a valid email address.")
+					</div>
+				}
+				<div class="form-control">
+					<label class="label" for="user-name">
+						<span class="label-text">Name</span>
+					</label>
+					<input
+						id="user-name"
+						type="text"
+						name="name"
+						value={ fieldValue(user, "name") }
+						class="peer input input-bordered user-invalid:input-error"
+						aria-describedby="user-name-error"
+						required
+					/>
+					@UserFieldError("user-name", "Enter a name.")
+				</div>
+				<div class="form-control">
+					<label class="label" for="user-role">
+						<span class="label-text">Role</span>
+					</label>
+					<select id="user-role" name="role" class="peer select select-bordered user-invalid:select-error" aria-describedby="user-role-help user-role-error" required>
+						for _, role := range userRoleOptions(user) {
+							<option
+								value={ role }
+								if selectedRole(user) == role {
+									selected
+								}
+							>{ role }</option>
+						}
+					</select>
+					<p id="user-role-help" class="text-xs opacity-70 mt-1">Viewer reads. Deployer runs existing releases. Maintainer authors content. Admin manages the instance.</p>
+					@UserFieldError("user-role", "Select a role.")
+				</div>
+				<div class="form-control">
+					<label class="label" for="user-password">
+						<span class="label-text">
+							if isNew {
+								Password
+							} else {
+								New password <span class="text-xs opacity-60">(blank = keep current)</span>
+							}
+						</span>
+					</label>
+					<input
+						id="user-password"
+						type="password"
+						name="password"
+						class="peer input input-bordered user-invalid:input-error"
+						if isNew {
+							required
+							aria-describedby="user-password-error"
+						}
+						autocomplete="new-password"
+					/>
+					if isNew {
+						@UserFieldError("user-password", "Enter a password.")
+					}
+				</div>
+				<div class="form-control">
+					<label class="label" for="user-password-confirmation">
+						<span class="label-text">
+							if isNew {
+								Confirm password
+							} else {
+								Confirm new password
+							}
+						</span>
+					</label>
+					<input
+						id="user-password-confirmation"
+						type="password"
+						name="password_confirmation"
+						class="peer input input-bordered user-invalid:input-error"
+						if isNew {
+							required
+							aria-describedby="user-password-confirmation-error"
+						}
+						autocomplete="new-password"
+					/>
+					if isNew {
+						@UserFieldError("user-password-confirmation", "Confirm the password.")
+					}
+				</div>
+			</form>
+			if !isNew && user != nil {
+				<div class="mt-6 pt-4 border-t border-base-300 flex items-center justify-between">
+					<div>
+						<div class="font-medium">Delete this user</div>
+						<div class="text-sm text-gray-500">Removes the account and invalidates all of their sessions.</div>
+					</div>
+					<button
+						class="btn btn-error"
+						hx-delete={ fmt.Sprintf("/admin/users/%d", user.ID) }
+						hx-confirm="Delete this user? They will be unable to log in."
+						data-toast-success="User deleted"
+						data-toast-error="Failed to delete user"
+					>
+						Delete user
+					</button>
+				</div>
+			}
+		</div>
 	</div>
+}
+
+templ UserFieldError(fieldID string, message string) {
+	<p id={ fieldID + "-error" } class="hidden text-error text-sm mt-1 peer-user-invalid:block">{ message }</p>
 }
 
 func formTitle(isNew bool) string {
@@ -203,7 +248,7 @@ func formTitle(isNew bool) string {
 }
 
 // userFormID is the form's id attribute. The submit button rendered
-// below the form uses the same id via form= so clicking Save changes
+// above the form uses the same id via form= so clicking Save changes
 // actually submits the form. Pattern matches projectFormID.
 func userFormID(user *db.User, isNew bool) string {
 	if isNew {

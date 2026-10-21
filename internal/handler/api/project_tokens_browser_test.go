@@ -450,6 +450,7 @@ func (b *packageBrowser) checkTokenPickerLayout(t *testing.T, width int) {
 		t.Fatalf("project picker or Done button is clipped at %dpx", width)
 	}
 	b.screenshot(t, fmt.Sprintf("project-token-picker-%d", width))
+	assertDialogKeyboardBounds(t, b, "[data-token-project-dialog][open]")
 	b.call(t, "Input.dispatchKeyEvent", map[string]any{
 		"type": "keyDown", "key": "Escape", "code": "Escape",
 		"windowsVirtualKeyCode": 27,

@@ -4,6 +4,8 @@ package api_test
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -15,6 +17,7 @@ func TestUsersFormAccessibilityAPIWebE2E(t *testing.T) {
 	f := newUsersPhoneFixture(t)
 	assertUserFormLabels(t, f.request(t, "GET", "/admin/users/new", "",
 		"", f.session, false, 200), true)
+	assertUserFormFragment(t, f, "/admin/users/new", true)
 	body := url.Values{
 		"email": {"accessible-user@example.test"},
 		"name":  {`Accessible <user> & name`}, "role": {"maintainer"},
@@ -55,6 +58,7 @@ func TestUsersFormAccessibilityAPIWebE2E(t *testing.T) {
 	path := fmt.Sprintf("/admin/users/%d", user.ID)
 	assertUserFormLabels(t, f.request(t, "GET", path+"/edit", "",
 		"", f.session, false, 200), false)
+	assertUserFormFragment(t, f, path+"/edit", false)
 	body.Set("name", "")
 	body.Set("password_confirmation", "mismatch")
 	for _, hx := range []bool{false, true} {
@@ -64,6 +68,37 @@ func TestUsersFormAccessibilityAPIWebE2E(t *testing.T) {
 	}
 	if saved := userWithRole(t, f, user.Email, "maintainer"); saved.Name != user.Name {
 		t.Fatal("rejected edit changed the account")
+	}
+}
+
+func assertUserFormFragment(
+	t *testing.T,
+	f usersPhoneFixture,
+	path string,
+	isNew bool,
+) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), "GET",
+		f.server.URL+path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.AddCookie(&http.Cookie{Name: "session", Value: f.session})
+	req.Header.Set("HX-Request", "true")
+	response, err := f.server.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	fragment, err := io.ReadAll(response.Body)
+	if err != nil || response.StatusCode != http.StatusOK {
+		t.Fatalf("edit fragment: status %d, read error %v",
+			response.StatusCode, err)
+	}
+	assertUserFormLabels(t, fragment, isNew)
+	if strings.Contains(string(fragment), "<html") ||
+		!strings.Contains(string(fragment), "data-user-form") {
+		t.Fatal("modal did not return a form fragment")
 	}
 }
 
@@ -93,6 +128,19 @@ func assertUserFormLabels(t *testing.T, page []byte, isNew bool) {
 		if id == "" || len(labels) != 1 ||
 			strings.TrimSpace(dashboardText(labels[0])) == "" {
 			t.Fatalf("field %s has no associated label", name)
+		}
+		for _, description := range strings.Fields(
+			userFormAttribute(fields[0], "aria-describedby"),
+		) {
+			messages := dashboardElements(document, "id", description)
+			if len(messages) != 1 ||
+				strings.TrimSpace(dashboardText(messages[0])) == "" {
+				t.Fatalf(
+					"field %s has a missing description %s",
+					name,
+					description,
+				)
+			}
 		}
 	}
 }

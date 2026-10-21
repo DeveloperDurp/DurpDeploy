@@ -33,39 +33,34 @@ templ RunbooksPage(project db.Project, books []db.Runbook, executions []db.ListR
 					<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 				</div>
 			</div>
-			<div class="card bg-base-200 p-4">
+			<div class="space-y-3">
 				<h2 class="text-xl font-bold mb-3">Saved procedures</h2>
-				<table class="table table-zebra table-fixed w-full">
-					<thead><tr><th class="w-full sm:w-1/4">Name</th><th class="hidden sm:table-cell w-auto">Description</th><th class="hidden sm:table-cell w-1/4">Created</th></tr></thead>
-					<tbody>
-						for _, book := range books {
-							<tr><td class="truncate"><a class="link link-primary" href={ fmt.Sprintf("/projects/%d/runbooks/%d", project.ID, book.ID) }>{ book.Name }</a></td><td class="hidden sm:table-cell truncate">{ book.Description }</td><td class="hidden sm:table-cell whitespace-nowrap">{ formatUnixTime(book.CreatedAt) }</td></tr>
+				for _, book := range books {
+					@ResourceCard(book.Name, fmt.Sprintf("/projects/%d/runbooks/%d", project.ID, book.ID)) {
+						if book.Description != "" {
+							<p class="opacity-70">{ book.Description }</p>
 						}
-					</tbody>
-				</table>
+						<p class="text-xs opacity-70">Created { formatUnixTime(book.CreatedAt) }</p>
+					}
+				}
 				if len(books) == 0 {
 					<p class="text-sm opacity-70 mt-3">No runbooks saved yet.</p>
 				}
 			</div>
-			<div class="card bg-base-200 p-4">
+			<div class="space-y-3">
 				<h2 class="text-xl font-bold mb-3">Execution history</h2>
-				<table class="table table-zebra table-fixed w-full block! sm:table!">
-					<thead class="hidden sm:table-header-group"><tr><th class="w-1/5">Execution</th><th class="w-1/5">Version</th><th class="w-1/5">Environment</th><th class="w-1/5">Status</th><th class="w-1/5">Created</th></tr></thead>
-					<tbody class="block sm:table-row-group">
-						for _, execution := range executions {
-							<tr data-runbook-execution-id={ strconv.FormatInt(execution.ID, 10) } class="grid grid-cols-2 gap-3 sm:table-row max-sm:p-3 max-sm:mb-3 max-sm:rounded-box max-sm:bg-base-100">
-								<td class="col-span-2 min-w-0 break-all sm:truncate">
-									<span class="block sm:hidden text-xs opacity-70 mb-1">Execution</span>
-									<a class="link link-primary block min-h-11 sm:min-h-0" href={ fmt.Sprintf("/projects/%d/runbooks/executions/%d", project.ID, execution.ID) }>#{ strconv.FormatInt(execution.ID, 10) } — { execution.RunbookName }</a>
-								</td>
-								<td class="min-w-0 break-all"><span class="block sm:hidden text-xs opacity-70 mb-1">Version</span><span data-execution-version>{ strconv.FormatInt(execution.Version, 10) }</span></td>
-								<td class="min-w-0 break-all sm:truncate"><span class="block sm:hidden text-xs opacity-70 mb-1">Environment</span><span data-execution-environment>{ execution.EnvironmentName }</span></td>
-								<td class="min-w-0 break-all"><span class="block sm:hidden text-xs opacity-70 mb-1">Status</span><span data-execution-status>{ execution.Status }</span></td>
-								<td class="min-w-0 break-words sm:whitespace-nowrap"><span class="block sm:hidden text-xs opacity-70 mb-1">Created</span><span data-execution-created>{ formatUnixTime(execution.CreatedAt) }</span></td>
-							</tr>
+				for _, execution := range executions {
+					<div data-runbook-execution-id={ strconv.FormatInt(execution.ID, 10) }>
+						@ResourceCard(fmt.Sprintf("#%d — %s", execution.ID, execution.RunbookName), fmt.Sprintf("/projects/%d/runbooks/executions/%d", project.ID, execution.ID)) {
+							<dl class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+								<div class="min-w-0"><dt class="text-xs opacity-70 mb-1">Version</dt><dd data-execution-version>{ strconv.FormatInt(execution.Version, 10) }</dd></div>
+								<div class="min-w-0"><dt class="text-xs opacity-70 mb-1">Environment</dt><dd data-execution-environment>{ execution.EnvironmentName }</dd></div>
+								<div class="min-w-0"><dt class="text-xs opacity-70 mb-1">Status</dt><dd data-execution-status>{ execution.Status }</dd></div>
+								<div class="min-w-0"><dt class="text-xs opacity-70 mb-1">Created</dt><dd data-execution-created>{ formatUnixTime(execution.CreatedAt) }</dd></div>
+							</dl>
 						}
-					</tbody>
-				</table>
+					</div>
+				}
 				if len(executions) == 0 {
 					<p class="text-sm opacity-70 mt-3">No runbook executions yet.</p>
 				}
@@ -95,27 +90,31 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, art
 			})
 			<div class="space-y-6" x-data="runbookEditor" data-steps={ stepsJSON }>
 				<div class="page-header">
-				<h1 class="text-3xl font-bold">
-					if book.ID == 0 {
-						New runbook
-					} else {
-						New version of { book.Name }
-					}
-				</h1>
-				<div class="flex gap-2"><button type="submit" form="runbook-version-form" class="btn btn-primary btn-sm">Create new version</button><a class="btn btn-ghost btn-sm" href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) } x-data="backNavigation" @click="back">Back</a></div>
+					<h1 class="text-3xl font-bold">
+						if book.ID == 0 {
+							New runbook
+						} else {
+							New version of { book.Name }
+						}
+					</h1>
+					<div class="flex gap-2"><button type="submit" form="runbook-version-form" class="btn btn-primary btn-sm">Create new version</button><a class="btn btn-ghost btn-sm" href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) } x-data="backNavigation" @click="back">Back</a></div>
 				</div>
 				if errorMessage != "" {
 					<div class="alert alert-error">{ errorMessage }</div>
 				}
 				<form method="post" action={ runbookSaveURL(project.ID, book.ID) } id="runbook-version-form" class="space-y-4">
-					<label class="form-control"><span class="label-text">Package from project release</span><select name="artifact_release_id" class="select select-bordered"><option value="0" selected?={ selectedArtifactReleaseID==0 }>No package</option>
-					if selectedArtifactReleaseID==-1 {
-						<option value="-1" selected>Keep current pinned package (source release deleted)</option>
-					}
-					for _, release := range artifactReleases {
-						<option value={ strconv.FormatInt(release.ID,10) } selected?={ selectedArtifactReleaseID==release.ID }>{ release.Version }</option>
-					}
-					</select></label>
+					<label class="form-control">
+						<span class="label-text">Package from project release</span>
+						<select name="artifact_release_id" class="select select-bordered">
+							<option value="0" selected?={ selectedArtifactReleaseID==0 }>No package</option>
+							if selectedArtifactReleaseID==-1 {
+								<option value="-1" selected>Keep current pinned package (source release deleted)</option>
+							}
+							for _, release := range artifactReleases {
+								<option value={ strconv.FormatInt(release.ID, 10) } selected?={ selectedArtifactReleaseID==release.ID }>{ release.Version }</option>
+							}
+						</select>
+					</label>
 					<p class="text-sm opacity-70">Required when the project has a package repository selected. This runbook version keeps its own copy of the chosen release's artifact pin.</p>
 					if book.ID == 0 {
 						<label class="form-control"><span class="label-text">Name</span><input name="name" class="input input-bordered" required/></label>
@@ -141,29 +140,31 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, art
 					<button type="button" class="btn btn-secondary" @click="addStep">Add step</button>
 				</form>
 				<dialog x-ref="stepDialog" class="modal" aria-labelledby="runbook-step-title" @close="stepClosed">
-					<div class="modal-box w-11/12 max-w-5xl p-6">
+					<div class="modal-box flex min-h-0 flex-col overflow-hidden w-11/12 max-w-5xl p-6">
 						<template x-if="draft">
-							<form class="space-y-4" @submit.prevent="saveStep">
-								<div class="page-header sticky -top-6 z-10 bg-base-200 py-2">
+							<form class="flex min-h-0 flex-col" @submit.prevent="saveStep">
+								<div class="page-header shrink-0 bg-base-200 py-2">
 									<h2 id="runbook-step-title" class="text-xl font-bold" x-text="editingID === null ? 'Add Step' : 'Edit Step'"></h2>
 									<div class="flex gap-2"><button type="submit" class="btn btn-primary md:btn-sm">Save</button><button type="button" class="btn btn-ghost md:btn-sm" @click="$refs.stepDialog.close()">Cancel</button></div>
 								</div>
-							<label class="form-control"><span class="label-text">Step name</span><input name="step_name" class="input input-bordered" x-model="draft.name" required/></label>
-							<label class="form-control"><span class="label-text">Script</span><textarea name="step_script" class="textarea textarea-bordered font-mono min-h-36" x-model="draft.script_body" required></textarea></label>
-							<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-								<label class="form-control"><span class="label-text">Interpreter</span><select name="step_interpreter" class="select select-bordered" x-model="draft.interpreter"><option value="bash">Bash</option><option value="pwsh">PowerShell</option><option value="python3">Python</option></select></label>
-								<label class="form-control"><span class="label-text">Timeout (seconds)</span><input name="step_timeout" type="number" min="0" class="input input-bordered" x-model="draft.timeout_seconds"/></label>
-								<label class="form-control"><span class="label-text">Retries</span><input name="step_retries" type="number" min="0" class="input input-bordered" x-model="draft.max_retries"/></label>
-								<label class="form-control"><span class="label-text">Execution target</span><select name="step_target" class="select select-bordered" x-model="draft.execution_target" @change="changeTarget"><option value="local">Server container</option><option value="agent">Agent</option></select></label>
-							</div>
-							<label class="form-control" x-show="draft.execution_target === 'agent'"><span class="label-text">Agent labels (comma separated)</span><input name="step_selectors" class="input input-bordered" x-model="draft.agent_selectors_text" x-bind:disabled="draft.execution_target !== 'agent'"/></label>
-							<input name="step_selectors" type="hidden" value="" x-bind:disabled="draft.execution_target === 'agent'"/>
-							<label class="form-control" x-show="draft.execution_target === 'agent'"><span class="label-text">Agent execution mode</span><select name="step_agent_mode" class="select select-bordered" x-model="draft.agent_execution_mode" :disabled="draft.execution_target !== 'agent'"><option value="host">Host</option><option value="container">Container</option></select></label>
-							<p class="text-sm opacity-70" x-show="draft.execution_target === 'agent'">Containers require agent/3 and a ready Docker or Podman runtime.</p>
-							<label class="form-control" x-show="usesContainer(draft)"><span class="label-text">Container image</span><input name="step_image" class="input input-bordered" x-model="draft.container_image" :disabled="!usesContainer(draft)" :required="usesContainer(draft)"/></label>
-							<label class="form-control" x-show="draft.execution_target === 'local'"><span class="label-text">Container network</span><select name="step_network" class="select select-bordered" x-model="draft.network_mode" :disabled="draft.execution_target !== 'local'"><option value="">Isolated (default)</option><option value="none">Isolated</option><option value="bridge">Network access</option></select></label>
-							<label class="form-control"><span class="label-text">Limit variables (optional)</span><input name="step_variable_names" class="input input-bordered" x-model="draft.variable_names_text" placeholder="Empty passes all; or DB_HOST, API_TOKEN"/></label>
-								<div x-show="editingID !== null" class="border-t border-base-300 pt-4"><button type="button" class="btn btn-error btn-sm" @click="deleteStep" :disabled="steps.length === 1">Remove step</button></div>
+								<div class="min-h-0 overflow-y-auto space-y-4" data-runbook-step-fields>
+									<label class="form-control"><span class="label-text">Step name</span><input name="step_name" class="input input-bordered" x-model="draft.name" required/></label>
+									<label class="form-control"><span class="label-text">Script</span><textarea name="step_script" class="textarea textarea-bordered font-mono min-h-36" x-model="draft.script_body" required></textarea></label>
+									<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+										<label class="form-control"><span class="label-text">Interpreter</span><select name="step_interpreter" class="select select-bordered" x-model="draft.interpreter"><option value="bash">Bash</option><option value="pwsh">PowerShell</option><option value="python3">Python</option></select></label>
+										<label class="form-control"><span class="label-text">Timeout (seconds)</span><input name="step_timeout" type="number" min="0" class="input input-bordered" x-model="draft.timeout_seconds"/></label>
+										<label class="form-control"><span class="label-text">Retries</span><input name="step_retries" type="number" min="0" class="input input-bordered" x-model="draft.max_retries"/></label>
+										<label class="form-control"><span class="label-text">Execution target</span><select name="step_target" class="select select-bordered" x-model="draft.execution_target" @change="changeTarget"><option value="local">Server container</option><option value="agent">Agent</option></select></label>
+									</div>
+									<label class="form-control" x-show="draft.execution_target === 'agent'"><span class="label-text">Agent labels (comma separated)</span><input name="step_selectors" class="input input-bordered" x-model="draft.agent_selectors_text" x-bind:disabled="draft.execution_target !== 'agent'"/></label>
+									<input name="step_selectors" type="hidden" value="" x-bind:disabled="draft.execution_target === 'agent'"/>
+									<label class="form-control" x-show="draft.execution_target === 'agent'"><span class="label-text">Agent execution mode</span><select name="step_agent_mode" class="select select-bordered" x-model="draft.agent_execution_mode" :disabled="draft.execution_target !== 'agent'"><option value="host">Host</option><option value="container">Container</option></select></label>
+									<p class="text-sm opacity-70" x-show="draft.execution_target === 'agent'">Containers require agent/3 and a ready Docker or Podman runtime.</p>
+									<label class="form-control" x-show="usesContainer(draft)"><span class="label-text">Container image</span><input name="step_image" class="input input-bordered" x-model="draft.container_image" :disabled="!usesContainer(draft)" :required="usesContainer(draft)"/></label>
+									<label class="form-control" x-show="draft.execution_target === 'local'"><span class="label-text">Container network</span><select name="step_network" class="select select-bordered" x-model="draft.network_mode" :disabled="draft.execution_target !== 'local'"><option value="">Isolated (default)</option><option value="none">Isolated</option><option value="bridge">Network access</option></select></label>
+									<label class="form-control"><span class="label-text">Limit variables (optional)</span><input name="step_variable_names" class="input input-bordered" x-model="draft.variable_names_text" placeholder="Empty passes all; or DB_HOST, API_TOKEN"/></label>
+									<div x-show="editingID !== null" class="border-t border-base-300 pt-4"><button type="button" class="btn btn-error btn-sm" @click="deleteStep" :disabled="steps.length === 1">Remove step</button></div>
+								</div>
 							</form>
 						</template>
 					</div>

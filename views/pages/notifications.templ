@@ -27,21 +27,21 @@ templ NotificationsPage(entries []db.ListNotificationEventsRow, currentPath stri
 		} else {
 			<div x-data="{}">
 				<table class="hidden xl:table table-zebra table-fixed w-full">
-						<thead>
-							<tr>
-								<th class="w-32 sm:w-44">Time</th>
-								<th class="hidden sm:table-cell w-32">Event</th>
-								<th class="hidden md:table-cell w-32">Project</th>
-								<th class="hidden md:table-cell w-32">Environment</th>
-								<th class="w-auto">Message</th>
-								<th class="w-24 sm:w-56">Delivery</th>
-							</tr>
-						</thead>
-						<tbody>
-							for _, entry := range entries {
-								@NotificationEventRow(entry)
-							}
-						</tbody>
+					<thead>
+						<tr>
+							<th class="w-32 sm:w-44">Time</th>
+							<th class="hidden sm:table-cell w-32">Event</th>
+							<th class="hidden md:table-cell w-32">Project</th>
+							<th class="hidden md:table-cell w-32">Environment</th>
+							<th class="w-auto">Message</th>
+							<th class="w-24 sm:w-56">Delivery</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, entry := range entries {
+							@NotificationEventRow(entry)
+						}
+					</tbody>
 				</table>
 				<ol class="space-y-3 xl:hidden" data-mobile-notification-list>
 					for _, entry := range entries {
@@ -145,9 +145,9 @@ templ NotificationEventModal(entry db.ListNotificationEventsRow) {
 		class="modal"
 		aria-labelledby={ fmt.Sprintf("notification-title-%d", entry.ID) }
 	>
-		<div class="modal-box w-11/12 max-w-2xl rounded-2xl shadow-2xl border border-base-300 bg-base-200">
-			<h3 id={ fmt.Sprintf("notification-title-%d", entry.ID) } class="text-lg font-bold mb-4">Notification Event</h3>
-			<dl class="grid grid-cols-1 sm:grid-cols-[8rem_1fr] gap-y-2 text-sm">
+		<div class="modal-box flex min-h-0 flex-col overflow-hidden w-11/12 max-w-2xl rounded-2xl shadow-2xl border border-base-300 bg-base-200">
+			<h3 id={ fmt.Sprintf("notification-title-%d", entry.ID) } class="shrink-0 text-lg font-bold mb-4">Notification Event</h3>
+			<dl class="min-h-0 overflow-y-auto grid grid-cols-1 sm:grid-cols-[8rem_1fr] gap-y-2 text-sm" data-modal-scroll-body>
 				<dt class="text-gray-500">Time</dt>
 				<dd>{ formatUnixTime(entry.CreatedAt) }</dd>
 				<dt class="text-gray-500">Event</dt>
@@ -181,7 +181,7 @@ templ NotificationEventModal(entry db.ListNotificationEventsRow) {
 					</div>
 				</dd>
 			</dl>
-			<div class="modal-action">
+			<div class="modal-action shrink-0">
 				<form method="dialog">
 					<button class="btn">Close</button>
 				</form>

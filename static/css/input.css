@@ -127,6 +127,19 @@ html:has(#home-deployments)::view-transition-group(*) {
 }
 
 @layer utilities {
+  dialog.modal, dialog[data-fullscreen-dialog] {
+    top: var(--dialog-viewport-top, 0px);
+    bottom: auto;
+    height: var(--dialog-viewport-height, 100dvh);
+  }
+  dialog.modal:not(.project-menu-dialog) > .modal-box {
+    max-height: var(--dialog-viewport-height, 100dvh);
+  }
+  @media (width >= 40rem) {
+    dialog.modal:not(.project-menu-dialog) > .modal-box {
+      max-height: calc(var(--dialog-viewport-height, 100dvh) - 5em);
+    }
+  }
   [data-theme="light"] :is([data-artifact-gates], [aria-label="Step logs"]) .text-success {
     color: color-mix(in oklab, var(--color-success), var(--color-base-content) 55%);
   }
@@ -136,9 +149,9 @@ html:has(#home-deployments)::view-transition-group(*) {
   [data-theme="light"] :is([data-artifact-gates], [aria-label="Step logs"]) .text-warning {
     color: color-mix(in oklab, var(--color-warning), var(--color-base-content) 55%);
   }
-  .project-menu-dialog {
-    top: var(--project-menu-top);
-    height: calc(100dvh - var(--project-menu-top));
+  dialog.project-menu-dialog {
+    top: max(var(--project-menu-top), var(--dialog-viewport-top, 0px));
+    height: calc(var(--dialog-viewport-height, 100dvh) - max(0px, var(--project-menu-top) - var(--dialog-viewport-top, 0px)));
     align-items: stretch;
     justify-items: end;
     padding: 0;

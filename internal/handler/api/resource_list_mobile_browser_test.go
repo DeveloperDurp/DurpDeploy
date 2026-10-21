@@ -140,6 +140,7 @@ func TestResourceListMobileBrowserE2E(t *testing.T) {
 			t.Fatal("project drawer does not enter from the right")
 		}
 		b.captureNavigation(t, "project-deployment-history", func() {
+			assertDialogKeyboardBounds(t, b, "#project-menu-dialog")
 			b.wait(t, fmt.Sprintf(`(() => {
  const link = document.querySelector('nav[aria-label="Project sections"] a[href=%q]');
  if (!link || link.textContent !== 'Deployment history') return false;

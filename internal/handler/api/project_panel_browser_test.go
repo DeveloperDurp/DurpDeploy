@@ -116,7 +116,7 @@ func checkProjectPanelBrowser(
 	)
 	if string(b.evaluate(t, fmt.Sprintf(`(() => {
  const row = [...document.querySelectorAll('#project-detail tbody tr')]
-   .find(row => row.querySelector('td.font-medium')?.textContent === %q);
+   .find(row => row.querySelector('[data-project-environment-name]')?.textContent === %q);
  if (!row || !row.innerText.includes('own-success') || !row.innerText.includes('own-attempt') ||
  row.textContent.includes('No successful deploys') || row.textContent.includes('foreign-version')) return false;
  const dots = [...row.querySelectorAll('span.w-2')].map(dot => dot.title);

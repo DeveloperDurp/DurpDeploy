@@ -99,6 +99,8 @@ func checkUsersPhoneActions(
 		t.Fatal("MFA confirmation lost or clipped its target identity")
 	}
 	b.screenshot(t, "users-phone-mfa-target")
+	assertDialogKeyboardBounds(t, b,
+		fmt.Sprintf("#mfa-reset-dialog-%d", user.ID))
 	b.evaluate(
 		t,
 		fmt.Sprintf(
@@ -121,11 +123,19 @@ func checkUsersPhoneActions(
 	b.wait(
 		t,
 		fmt.Sprintf(
-			`location.pathname === '/admin/users/%d/edit' && document.querySelector('input[name="name"]')?.value === %q && document.querySelector('select[name="role"]')?.value === %q`,
-			user.ID,
+			`location.pathname === '/admin/users' && document.querySelector('#project-edit-dialog').matches(':modal') && document.querySelector('input[name="name"]')?.value === %q && document.querySelector('select[name="role"]')?.value === %q`,
 			user.Name,
 			user.Role,
 		),
+	)
+	b.evaluate(
+		t,
+		`document.querySelector('#project-edit-dialog .page-header a').click(); true`,
+	)
+	b.wait(
+		t,
+		fmt.Sprintf(`!document.querySelector('#project-edit-dialog').open &&
+ document.activeElement?.matches('%s a')`, row),
 	)
 	b.navigateBackTest(t, f.server.URL+"/admin/users")
 	user = f.users[0]

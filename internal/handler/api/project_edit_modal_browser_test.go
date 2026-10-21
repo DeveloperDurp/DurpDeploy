@@ -4,6 +4,7 @@ package api_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -17,6 +18,8 @@ func TestProjectEditModalBrowserE2E(t *testing.T) {
 		201,
 	)
 	member := seedAPIUser(t, f.h.repo, "modal-member@example.test", "deployer")
+	seedAPIUser(t, f.h.repo,
+		strings.Repeat("modal-member-", 10)+"@example.test", "deployer")
 	b := startPackageBrowser(t)
 	b.setBackTestSession(t, f.baseURL, f.session)
 	path := fmt.Sprintf("/projects/%d", f.project.ID)
@@ -34,6 +37,7 @@ func TestProjectEditModalBrowserE2E(t *testing.T) {
 		)
 	}
 	open()
+	assertDialogKeyboardBounds(t, b, "#project-edit-dialog")
 	b.captureNavigation(t, "project-edit-modal", func() {
 		b.wait(
 			t,

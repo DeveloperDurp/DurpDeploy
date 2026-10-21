@@ -13,44 +13,49 @@ templ UsersListPage(
 	currentPath string,
 ) {
 	@layouts.Base("Users", currentPath) {
-		<div class="flex justify-between items-center mb-4">
-			<h1 class="text-3xl font-bold">Users</h1>
-			if CanWrite(ctx) {
-				<a href="/admin/users/new" class="btn btn-primary btn-sm">New user</a>
-			}
-		</div>
-		if len(users) == 0 {
-			<div class="card bg-base-200 p-8 text-center">
-				<p class="text-gray-400">No users yet.</p>
+		<div x-data="formDialogHost" x-on:htmx:after-settle.camel="afterSettle" x-on:htmx:before-swap.camel="beforeSwap">
+			<div class="flex justify-between items-center mb-4">
+				<h1 class="text-3xl font-bold">Users</h1>
+				if CanWrite(ctx) {
+					<a href="/admin/users/new" hx-get="/admin/users/new" hx-target="#project-edit-content" hx-select="[data-user-form]" hx-swap="innerHTML" hx-push-url="false" hx-boost="false" x-on:click="rememberOpener" class="btn btn-primary btn-sm">New user</a>
+				}
 			</div>
-		} else {
-			<div class="overflow-x-auto">
-				<table class="table table-zebra table-fixed w-full block! lg:table!">
-					<thead class="hidden lg:table-header-group">
-						<tr>
-							<th class="w-1/4">Email</th>
-							<th class="w-1/8">Name</th>
-							<th class="w-1/8">Role</th>
-							<th class="w-1/8">Created</th>
-							<th class="w-1/8">Last login</th>
-							<th class="w-1/4">Actions</th>
-						</tr>
-					</thead>
-					<tbody class="block lg:table-row-group">
-						for _, u := range users {
-							@usersListRow(u, currentUser)
+			if len(users) == 0 {
+				<div class="card bg-base-200 p-8 text-center">
+					<p class="text-gray-400">No users yet.</p>
+				</div>
+			} else {
+				<div class="overflow-x-auto">
+					<table class="table table-zebra table-fixed w-full block! lg:table!">
+						<thead class="hidden lg:table-header-group">
+							<tr>
+								<th class="w-1/4">Email</th>
+								<th class="w-1/8">Name</th>
+								<th class="w-1/8">Role</th>
+								<th class="w-1/8">Created</th>
+								<th class="w-1/8">Last login</th>
+								<th class="w-1/4">Actions</th>
+							</tr>
+						</thead>
+						<tbody class="block lg:table-row-group">
+							for _, u := range users {
+								@usersListRow(u, currentUser)
+							}
+						</tbody>
+					</table>
+				</div>
+				if CanWrite(ctx) {
+					for _, u := range users {
+						if currentUser == nil || currentUser.ID != u.ID {
+							@MFAResetConfirmationDialog(u)
 						}
-					</tbody>
-				</table>
-			</div>
-			if CanWrite(ctx) {
-				for _, u := range users {
-					if currentUser == nil || currentUser.ID != u.ID {
-						@MFAResetConfirmationDialog(u)
 					}
 				}
 			}
-		}
+			if CanWrite(ctx) {
+				@UserFormDialog()
+			}
+		</div>
 	}
 }
 
@@ -83,7 +88,7 @@ templ usersListRow(u db.ListUsersRow, currentUser *db.User) {
 		<td class="col-span-2">
 			if CanWrite(ctx) {
 				<div class="flex flex-wrap lg:flex-nowrap gap-2">
-					<a href={ fmt.Sprintf("/admin/users/%d/edit", u.ID) } class="btn btn-ghost btn-sm min-h-11 lg:btn-xs lg:min-h-0 whitespace-nowrap">Edit</a>
+					<a href={ fmt.Sprintf("/admin/users/%d/edit", u.ID) } hx-get={ fmt.Sprintf("/admin/users/%d/edit", u.ID) } hx-target="#project-edit-content" hx-select="[data-user-form]" hx-swap="innerHTML" hx-push-url="false" hx-boost="false" x-on:click="rememberOpener" class="btn btn-ghost btn-sm min-h-11 lg:btn-xs lg:min-h-0 whitespace-nowrap">Edit</a>
 					if currentUser == nil || currentUser.ID != u.ID {
 						<form
 							method="post"
@@ -127,28 +132,31 @@ templ MFAResetConfirmationDialog(u db.ListUsersRow) {
 		aria-describedby={ fmt.Sprintf("mfa-reset-description-%d", u.ID) }
 		data-mfa-reset-confirmation-dialog
 	>
-		<div class="modal-box w-11/12 max-w-lg bg-base-200">
-			<h2 id={ fmt.Sprintf("mfa-reset-title-%d", u.ID) } class="text-lg font-bold break-all">
-				Reset MFA for { u.Name }
+		<div class="modal-box flex min-h-0 flex-col overflow-hidden w-11/12 max-w-lg bg-base-200">
+			<h2 id={ fmt.Sprintf("mfa-reset-title-%d", u.ID) } class="shrink-0 text-lg font-bold break-all">
+				Reset MFA
 			</h2>
-			<p id={ fmt.Sprintf("mfa-reset-description-%d", u.ID) } class="mt-2 text-sm opacity-70">
-				This removes the user's authenticator factors and recovery codes. They will need to enroll MFA again.
-			</p>
-			<p class="mt-4 text-sm">
-				Target: <span class="font-mono break-all">{ u.Email }</span>
-			</p>
-			<form
-				id={ fmt.Sprintf("mfa-reset-confirm-form-%d", u.ID) }
-				method="post"
-				action={ fmt.Sprintf("/admin/users/%d/mfa-reset", u.ID) }
-				data-mfa-reset-confirmation
-			>
-				if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
-					<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
-				}
-				<input type="hidden" name="reason" value="administrative_reset"/>
-			</form>
-			<div class="modal-action">
+			<div class="min-h-0 overflow-y-auto" data-modal-scroll-body>
+				<p id={ fmt.Sprintf("mfa-reset-description-%d", u.ID) } class="mt-2 text-sm opacity-70">
+					<span class="block font-medium break-all mb-2">Reset MFA for { u.Name }</span>
+					This removes the user's authenticator factors and recovery codes. They will need to enroll MFA again.
+				</p>
+				<p class="mt-4 text-sm">
+					Target: <span class="font-mono break-all">{ u.Email }</span>
+				</p>
+				<form
+					id={ fmt.Sprintf("mfa-reset-confirm-form-%d", u.ID) }
+					method="post"
+					action={ fmt.Sprintf("/admin/users/%d/mfa-reset", u.ID) }
+					data-mfa-reset-confirmation
+				>
+					if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
+						<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
+					}
+					<input type="hidden" name="reason" value="administrative_reset"/>
+				</form>
+			</div>
+			<div class="modal-action shrink-0">
 				<form method="dialog">
 					<button type="submit" class="btn btn-ghost" autofocus>Cancel</button>
 				</form>

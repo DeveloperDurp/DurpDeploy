@@ -132,10 +132,14 @@ func projectPanelEnvironmentRow(
 	page, environment string,
 ) *html.Node {
 	t.Helper()
-	for _, node := range dashboardElements(dashboardDocument(t, page), "class", "font-medium") {
-		if node.Data == "td" &&
-			strings.TrimSpace(dashboardText(node)) == environment {
-			return node.Parent
+	nodes := dashboardElements(
+		dashboardDocument(t, page),
+		"data-project-environment-name",
+		"",
+	)
+	for _, node := range nodes {
+		if strings.TrimSpace(dashboardText(node)) == environment {
+			return node.Parent.Parent
 		}
 	}
 	t.Fatalf("environment %q is missing from project detail", environment)

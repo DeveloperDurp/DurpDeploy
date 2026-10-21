@@ -14,11 +14,49 @@ func TestUsersFormAccessibilityBrowserE2E(t *testing.T) {
 	for _, width := range []int{390, 1280} {
 		t.Run(fmt.Sprint(width), func(t *testing.T) {
 			b.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
-				"width": width, "height": 900, "deviceScaleFactor": 1,
+				"width": width, "height": 520, "deviceScaleFactor": 1,
 				"mobile": false,
 			}, &struct{}{})
-			b.navigateBackTest(t, f.server.URL+"/admin/users/new")
+			b.navigateBackTest(t, f.server.URL+"/admin/users")
+			b.evaluate(
+				t,
+				`document.querySelector('a[hx-get="/admin/users/new"]').click(); true`,
+			)
+			b.wait(
+				t,
+				`document.querySelector('#project-edit-dialog').matches(':modal') &&
+ document.activeElement?.id === 'user-email'`,
+			)
+			b.evaluate(
+				t,
+				`document.querySelector('#user-name').value='Discarded draft';
+ document.querySelector('#project-edit-dialog .page-header a').click(); true`,
+			)
+			b.wait(t, `!document.querySelector('#project-edit-dialog').open &&
+ !document.querySelector('#project-edit-content').hasChildNodes() &&
+ document.activeElement?.matches('a[hx-get="/admin/users/new"]')`)
+			b.evaluate(
+				t,
+				`document.querySelector('a[hx-get="/admin/users/new"]').click(); true`,
+			)
+			b.wait(
+				t,
+				`document.querySelector('#project-edit-dialog').matches(':modal') &&
+ !document.querySelector('#user-name').value`,
+			)
+			if string(b.evaluate(t, `location.pathname === '/admin/users' &&
+ document.querySelector('#project-edit-dialog').getAttribute('aria-label') === 'New user' &&
+ document.querySelector('#user-role').value === 'viewer' &&
+ !document.querySelector('#project-edit-dialog [hx-delete]')`)) != "true" {
+				t.Fatal(
+					"new user modal lost its title, default role, or list URL",
+				)
+			}
 			assertUserFormAX(t, b, true)
+			assertUserModalScroll(t, b)
+			assertModalKeyboardViewport(t, b, "#project-edit-dialog",
+				"[data-user-form-body]", "#user-password-confirmation")
+			assertUserNativeRejection(t, b, true, width)
 			b.evaluate(
 				t,
 				`document.querySelector('label[for="user-email"]').click(); true`,
@@ -41,6 +79,11 @@ func TestUsersFormAccessibilityBrowserE2E(t *testing.T) {
 			fillDefaultRoleUser(t, b, email, "mismatch")
 			assertUserFormErrorFocus(t, b, "Passwords do not match")
 			assertUserFormAX(t, b, true)
+			assertUserModalScroll(t, b)
+			b.wait(
+				t,
+				`document.querySelector('#project-edit-dialog').matches(':modal')`,
+			)
 			if string(b.evaluate(t, fmt.Sprintf(`(() => {
  const form=document.querySelector('#user-form-new');
  return form.elements.email.value === %q &&
@@ -59,9 +102,84 @@ func TestUsersFormAccessibilityBrowserE2E(t *testing.T) {
 				`document.querySelector('[data-user-id]') && !document.querySelector('#user-form-new')`,
 			)
 			user := userWithRole(t, f, email, "maintainer")
-			b.navigateBackTest(t, fmt.Sprintf("%s/admin/users/%d/edit",
-				f.server.URL, user.ID))
+			b.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
+				"width": width, "height": 520, "deviceScaleFactor": 1,
+				"mobile": false,
+			}, &struct{}{})
+			open := fmt.Sprintf(`[data-user-id="%d"] a[hx-get]`, user.ID)
+			for _, closeAction := range []string{
+				`document.querySelector('#project-edit-dialog .page-header a').click()`,
+				`document.querySelector('#project-edit-dialog .modal-backdrop button').click()`,
+			} {
+				b.evaluate(
+					t,
+					fmt.Sprintf(
+						`document.querySelector('%s').click(); true`,
+						open,
+					),
+				)
+				b.wait(
+					t,
+					`document.querySelector('#project-edit-dialog').matches(':modal') &&
+ document.querySelector('#user-name') === document.activeElement`,
+				)
+				b.evaluate(t, closeAction+`; true`)
+				b.wait(
+					t,
+					fmt.Sprintf(
+						`!document.querySelector('#project-edit-dialog').open &&
+ !document.querySelector('#project-edit-content').hasChildNodes() &&
+ document.activeElement?.matches('%s')`,
+						open,
+					),
+				)
+			}
+			b.evaluate(
+				t,
+				fmt.Sprintf(`document.querySelector('%s').click(); true`, open),
+			)
+			b.wait(
+				t,
+				`document.querySelector('#project-edit-dialog').matches(':modal')`,
+			)
+			b.call(t, "Input.dispatchKeyEvent", map[string]any{
+				"type": "keyDown", "key": "Escape", "code": "Escape",
+				"windowsVirtualKeyCode": 27,
+			}, &struct{}{})
+			b.call(t, "Input.dispatchKeyEvent", map[string]any{
+				"type": "keyUp", "key": "Escape", "code": "Escape",
+				"windowsVirtualKeyCode": 27,
+			}, &struct{}{})
+			b.wait(
+				t,
+				fmt.Sprintf(
+					`!document.querySelector('#project-edit-dialog').open &&
+ document.activeElement?.matches('%s')`,
+					open,
+				),
+			)
+			b.evaluate(
+				t,
+				fmt.Sprintf(`document.querySelector('%s').click(); true`, open),
+			)
+			b.wait(
+				t,
+				`document.querySelector('#project-edit-dialog').matches(':modal')`,
+			)
+			if string(b.evaluate(t, `(() => {
+ const box=document.querySelector('#project-edit-dialog .modal-box');
+ const bounds=box.getBoundingClientRect();
+ return location.pathname === '/admin/users' && box.scrollWidth <= box.clientWidth &&
+ bounds.left >= 0 && bounds.right <= innerWidth &&
+ document.querySelectorAll('#user-name').length === 1;
+})()`)) != "true" {
+				t.Fatal("user modal overflowed or changed the list URL")
+			}
 			assertUserFormAX(t, b, false)
+			assertUserModalScroll(t, b)
+			assertModalKeyboardViewport(t, b, "#project-edit-dialog",
+				"[data-user-form-body]", "#user-password-confirmation")
+			assertUserNativeRejection(t, b, false, width)
 			b.evaluate(t, `(() => {
  const form=document.querySelector('form[hx-put]');
  form.elements.name.value='Retained accessible edit';
@@ -71,7 +189,12 @@ func TestUsersFormAccessibilityBrowserE2E(t *testing.T) {
  return true;
 })()`)
 			assertUserFormErrorFocus(t, b, "Passwords do not match")
+			b.wait(
+				t,
+				`document.querySelector('#project-edit-dialog').matches(':modal')`,
+			)
 			assertUserFormAX(t, b, false)
+			assertUserModalScroll(t, b)
 			if string(b.evaluate(t, `(() => {
  const form=document.querySelector('form[hx-put]');
  return form.elements.name.value === 'Retained accessible edit' &&
@@ -99,6 +222,95 @@ func TestUsersFormAccessibilityBrowserE2E(t *testing.T) {
 				t.Fatal("corrected browser edit did not persist")
 			}
 		})
+	}
+}
+
+func assertUserNativeRejection(
+	t *testing.T,
+	b *packageBrowser,
+	isNew bool,
+	width int,
+) {
+	t.Helper()
+	b.evaluate(t, `window.userValidationWrites=0;
+ document.addEventListener('htmx:beforeRequest', event => {
+ if (event.detail.requestConfig.verb !== 'get') window.userValidationWrites++;
+ });
+ window.userValidationName=document.querySelector('#user-name').value;
+ document.querySelector('#user-name').value='';
+ document.querySelector('[data-user-form] .page-header button').click(); true`)
+	b.wait(
+		t,
+		`document.querySelector('#user-validation-error').getClientRects().length &&
+ document.querySelector('#user-name-error').getClientRects().length &&
+ document.querySelector('#user-name').validity.valueMissing`,
+	)
+	if isNew {
+		b.wait(
+			t,
+			`['user-email','user-password','user-password-confirmation'].every(id =>
+ document.querySelector('#'+id+'-error').getClientRects().length)`,
+		)
+		b.evaluate(t, `const form=document.querySelector('#user-form-new');
+ form.elements.name.value='Native draft';
+ form.elements.email.value='not-an-email';
+ form.elements.password.value='Native-valid-pass-1';
+ form.elements.password_confirmation.value='Native-valid-pass-1';
+ document.querySelector('[data-user-form] .page-header button').click(); true`)
+		b.wait(
+			t,
+			`document.querySelector('#user-email').validity.typeMismatch &&
+ document.querySelector('#user-email-error').getClientRects().length`,
+		)
+	}
+	if string(b.evaluate(t, `(() => {
+ const error=document.querySelector('#user-validation-error');
+ const bounds=error.getBoundingClientRect();
+ return error.getAttribute('role') === 'alert' && bounds.top >= 0 &&
+ bounds.bottom <= innerHeight && window.userValidationWrites === 0;
+})()`)) != "true" {
+		t.Fatal(
+			"native validation did not show a visible warning or sent a write",
+		)
+	}
+	b.screenshot(t, fmt.Sprintf("user-native-error-%t-%d", isNew, width))
+	b.evaluate(t, fmt.Sprintf(`document.querySelector('#user-name').value=%q;
+ const email=document.querySelector('#user-email');
+ if (email) email.value='native-corrected@example.test'; true`, "Corrected name"))
+	b.wait(
+		t,
+		`!document.querySelector('#user-validation-error').getClientRects().length &&
+ !document.querySelector('#user-name-error').getClientRects().length`,
+	)
+	if !isNew {
+		b.evaluate(
+			t,
+			`document.querySelector('#user-name').value=window.userValidationName; true`,
+		)
+	}
+}
+
+func assertUserModalScroll(t *testing.T, b *packageBrowser) {
+	t.Helper()
+	if string(b.evaluate(t, `(() => {
+ const dialog=document.querySelector('#project-edit-dialog');
+ const box=dialog.querySelector('.modal-box');
+ const body=dialog.querySelector('[data-user-form-body]');
+ const header=dialog.querySelector('.page-header');
+ const before=header.getBoundingClientRect();
+ body.scrollTop=body.scrollHeight;
+ const after=header.getBoundingClientRect();
+ const bounds=body.getBoundingClientRect();
+ const last=(body.querySelector('[hx-delete]') ||
+ body.querySelector('[name="password_confirmation"]')).getBoundingClientRect();
+ const result=body.scrollTop > 0 && getComputedStyle(body).overflowY === 'auto' &&
+ Math.abs(before.top-after.top) < 1 && after.top >= 0 && after.bottom <= bounds.top &&
+ last.top >= bounds.top && last.bottom <= bounds.bottom+1 &&
+ box.scrollTop === 0 && box.getBoundingClientRect().bottom <= innerHeight;
+ body.scrollTop=0;
+ return result;
+})()`)) != "true" {
+		t.Fatal("user fields did not scroll beneath the fixed modal header")
 	}
 }
 

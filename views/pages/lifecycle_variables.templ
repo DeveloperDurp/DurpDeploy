@@ -136,7 +136,7 @@ templ SharedVariableForm(data LifecycleVariables) {
 		}
 		x-data={ fmt.Sprintf("{ secret: %t }", data.Editing.Secret != 0) }
 	>
-		<div class="form-control"><label for="shared-name" class="label">Name</label><input id="shared-name" name="name" class="input input-bordered w-full" value={ data.Editing.Name } pattern="[A-Za-z_][A-Za-z0-9_]*" maxlength="255" required title={ variableNameGuidance } aria-description={ variableNameGuidance }/>@VariableNameHelp()</div>
+		<div class="form-control"><label for="shared-name" class="label">Name</label><input id="shared-name" name="name" class="peer input input-bordered w-full" value={ data.Editing.Name } pattern="[A-Za-z_][A-Za-z0-9_]*" maxlength="255" required title={ variableNameGuidance } aria-description={ variableNameGuidance }/>@VariableNameHelp()</div>
 		<div class="form-control">
 			<label for="shared-value" class="label">Value</label><input id="shared-value" name="value" class="input input-bordered w-full" :type="secret ? 'password' : 'text'" autocomplete="off" value={ sharedVariableEditValue(data.Editing) }/>
 			if data.Editing.Secret != 0 {
