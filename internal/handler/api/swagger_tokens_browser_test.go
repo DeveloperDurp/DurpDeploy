@@ -24,6 +24,7 @@ func TestSwaggerTokensBrowserE2E(t *testing.T) {
 	decodeStepLogTest(t, f.api(t, "POST", f.base()+"/releases",
 		map[string]string{"version": "swagger-v1"}, 201), &release)
 	token := mintProjectToken(t, f, "viewer", other.ID, f.project.ID)
+	projectsURL := f.baseURL + "/api/v1/projects?sort=name"
 	b := startPackageBrowser(t, true)
 	b.call(t, "Page.navigate", map[string]string{
 		"url": f.baseURL + "/api/swagger/",
@@ -57,7 +58,7 @@ return true;
 			Total int
 		}
 		decodeStepLogTest(t, b.swaggerTokenRequest(t, "projects-listProjects",
-			f.baseURL+"/api/v1/projects", "", "", 200), &page)
+			projectsURL, "", "", 200), &page)
 		if page.Total != total || len(page.Items) != total {
 			t.Fatal("Swagger project list did not match current token grants")
 		}
@@ -115,7 +116,7 @@ return true;
 	}
 	f.api(t, "DELETE", "/api/v1/tokens/"+token.TokenID, nil, 204)
 	b.swaggerTokenRequest(t, "projects-listProjects",
-		f.baseURL+"/api/v1/projects", "", "", 401)
+		projectsURL, "", "", 401)
 	b.swaggerTokenRequest(t, "deployments-createDeployment",
 		f.baseURL+f.base()+"/deployments", fmt.Sprint(f.project.ID),
 		string(body), 401)

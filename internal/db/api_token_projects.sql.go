@@ -81,7 +81,7 @@ func (q *Queries) ListApiTokenProjectIDs(ctx context.Context, tokenID string) ([
 }
 
 const listTokenProjectsPaginated = `-- name: ListTokenProjectsPaginated :many
-SELECT p.id, p.name, p.description, p.created_at, p.lifecycle_id, p.slack_webhook_url, p.notify_emails, p.gotify_url, p.gotify_token, p.discord_webhook_url FROM projects p JOIN api_token_projects tp ON tp.project_id = p.id
+SELECT p.id, p.name, p.description, p.created_at, p.lifecycle_id, p.slack_webhook_url, p.notify_emails, p.gotify_url, p.gotify_token, p.discord_webhook_url, p.group_id FROM projects p JOIN api_token_projects tp ON tp.project_id = p.id
 WHERE tp.token_id = ?1
 AND (CAST(?2 AS INTEGER) = 1 OR EXISTS (
     SELECT 1 FROM project_members pm
@@ -124,6 +124,7 @@ func (q *Queries) ListTokenProjectsPaginated(ctx context.Context, arg ListTokenP
 			&i.GotifyUrl,
 			&i.GotifyToken,
 			&i.DiscordWebhookUrl,
+			&i.GroupID,
 		); err != nil {
 			return nil, err
 		}

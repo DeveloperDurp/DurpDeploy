@@ -55,7 +55,7 @@ func captureResourceLists(
 			}
 			if role == "viewer" && string(b.evaluate(
 				t,
-				`!document.querySelector('main a[href$="/new"], main a[href$="/edit"], main button, main form') && ![...document.querySelectorAll('main a')].some(a => a.textContent === 'Edit')`,
+				`[...document.querySelectorAll('main a[href$="/new"], main a[href$="/edit"], main button, main form')].every(el => el.closest('form[data-project-filters][method="get"]') || el.matches('button[type="button"][data-project-filter-toggle][aria-controls="project-filters"]')) && ![...document.querySelectorAll('main a')].some(a => a.textContent === 'Edit')`,
 			)) != "true" {
 				t.Fatal("viewer sees write controls")
 			}

@@ -111,6 +111,77 @@
 /* Keep dialog scroll locking without daisyUI's perpetual scroll animation. */
 html { scrollbar-gutter: stable; }
 
+[data-theme="mocha"] #projects-list {
+  --color-base-content: var(--color-text);
+  color: var(--color-text);
+}
+
+.modal-box:has(> #project-edit-content > [data-group-dialog="true"]) {
+  height: min(48rem, calc(var(--dialog-viewport-height, 100dvh) - 2rem));
+  display: flex;
+  overflow: hidden;
+}
+.modal-box:has(> #project-edit-content > [data-group-dialog="true"]) > #project-edit-content {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+[data-group-dialog="true"] {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+[data-group-dialog="true"] > .page-header {
+  position: static;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0 0 1rem;
+}
+[data-group-dialog="true"] > [data-group-workspace-body] {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+@media (width >= 40rem) {
+  .modal-box:has(> #project-edit-content > [data-group-dialog="true"]) {
+    height: min(48rem, calc(var(--dialog-viewport-height, 100dvh) - 5rem));
+  }
+}
+
+.project-group-panel {
+  --project-group-tone: color-mix(in oklab, var(--color-base-content) 40%, var(--color-base-100));
+  border: 1px solid color-mix(in oklab, var(--project-group-tone) 20%, var(--color-base-300));
+  background: color-mix(in oklab, var(--project-group-tone) 4%, var(--color-base-100));
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+.project-group-panel[data-group-tone="0"] { --project-group-tone: var(--color-primary); }
+.project-group-panel[data-group-tone="1"] { --project-group-tone: var(--color-secondary); }
+.project-group-panel[data-group-tone="2"] { --project-group-tone: var(--color-accent); }
+.project-group-panel > summary::-webkit-details-marker { display: none; }
+.project-group-dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: var(--project-group-tone);
+  opacity: 0.65;
+}
+.project-group-panel:not([open]) .project-group-chevron { transform: rotate(-90deg); }
+.project-group-panel [data-resource-card] {
+  height: 100%;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  border-color: color-mix(in oklab, var(--color-base-content) 12%, var(--color-base-100));
+  background: color-mix(in oklab, var(--color-base-content) 6%, var(--color-base-100));
+}
+[data-theme="light"] .project-group-panel [data-resource-card] { background: var(--color-base-100); }
+.project-group-panel [data-resource-card] > a { border-radius: inherit; }
+
 html:has(#home-deployments) { view-transition-name: none; }
 #home-running { view-transition-name: home-running; }
 #home-waiting { view-transition-name: home-waiting; }

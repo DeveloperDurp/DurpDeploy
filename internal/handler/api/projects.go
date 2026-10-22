@@ -46,6 +46,7 @@ type projectResponse struct {
 	Description                 string `json:"description"`
 	CreatedAt                   int64  `json:"created_at"`
 	LifecycleID                 *int64 `json:"lifecycle_id"`
+	GroupID                     *int64 `json:"group_id"`
 	SlackWebhookURL             string `json:"slack_webhook_url"`
 	NotifyEmails                string `json:"notify_emails"`
 	GotifyURL                   string `json:"gotify_url"`
@@ -55,6 +56,10 @@ type projectResponse struct {
 
 func toProjectResponse(p db.Project) projectResponse {
 	var lcID *int64
+	var groupID *int64
+	if p.GroupID.Valid {
+		groupID = &p.GroupID.Int64
+	}
 	if p.LifecycleID.Valid {
 		lcID = &p.LifecycleID.Int64
 	}
@@ -64,6 +69,7 @@ func toProjectResponse(p db.Project) projectResponse {
 		Description:                 p.Description.String,
 		CreatedAt:                   p.CreatedAt,
 		LifecycleID:                 lcID,
+		GroupID:                     groupID,
 		SlackWebhookURL:             "",
 		SlackWebhookURLConfigured:   p.SlackWebhookUrl.String != "",
 		NotifyEmails:                p.NotifyEmails.String,
@@ -132,91 +138,30 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-	limit, offset, ok := parsePagination(w, r)
-	if !ok {
+	options, err := handler.ParseProjectCatalogOptions(r.URL.Query())
+	if err != nil {
+		RespondError(w, 400, err.Error())
 		return
 	}
-
-	var items []any
-	var total int64
-	if tokenID := auth.ScopedTokenID(r.Context()); tokenID != "" {
-		rows, err := h.repo.Queries.ListTokenProjectsPaginated(r.Context(),
-			db.ListTokenProjectsPaginatedParams{TokenID: tokenID,
-				UserID: user.ID, IsAdmin: tokenOwnerAdmin(r),
-				PageLimit: limit, PageOffset: offset})
-		if err != nil {
-			RespondError(
-				w,
-				http.StatusInternalServerError,
-				"could not list projects",
-			)
-			return
-		}
-		total, err = h.repo.Queries.CountTokenProjects(r.Context(),
-			db.CountTokenProjectsParams{TokenID: tokenID,
-				UserID: user.ID, IsAdmin: tokenOwnerAdmin(r)})
-		if err != nil {
-			RespondError(
-				w,
-				http.StatusInternalServerError,
-				"could not count projects",
-			)
-			return
-		}
-		items = make([]any, len(rows))
-		for i, project := range rows {
-			items[i] = toProjectResponse(project)
-		}
-	} else if user.Role == "admin" {
-		rows, err := h.repo.Queries.ListProjectsPaginated(
-			r.Context(),
-			db.ListProjectsPaginatedParams{
-				Limit:  limit,
-				Offset: offset,
-			},
-		)
-		if err != nil {
-			RespondError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		total, err = h.repo.Queries.CountProjects(r.Context())
-		if err != nil {
-			RespondError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		items = make([]any, len(rows))
-		for i, p := range rows {
-			items[i] = toProjectResponse(p)
-		}
-	} else {
-		rows, err := h.repo.Queries.ListProjectsForUserPaginated(
-			r.Context(),
-			db.ListProjectsForUserPaginatedParams{
-				UserID: user.ID,
-				Limit:  limit,
-				Offset: offset,
-			},
-		)
-		if err != nil {
-			RespondError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		total, err = h.repo.Queries.CountProjectsForUser(r.Context(), user.ID)
-		if err != nil {
-			RespondError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		items = make([]any, len(rows))
-		for i, p := range rows {
-			items[i] = toProjectResponse(p)
-		}
+	rows, total, err := h.repo.ProjectCatalog(
+		r.Context(),
+		handler.ProjectCatalogAccess(r),
+		options,
+	)
+	if err != nil {
+		RespondError(w, 500, "could not list projects")
+		return
+	}
+	items := make([]any, len(rows))
+	for i, project := range rows {
+		items[i] = toProjectResponse(project)
 	}
 
 	RespondJSON(w, http.StatusOK, PaginatedResponse{
 		Items:  items,
 		Total:  total,
-		Limit:  limit,
-		Offset: offset,
+		Limit:  options.Limit,
+		Offset: options.Offset,
 	})
 }
 

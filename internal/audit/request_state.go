@@ -13,6 +13,7 @@ import (
 type requestStateKey struct{}
 
 type requestState struct {
+	projectGroupChange map[string]any
 	deletedRunbook     db.Runbook
 	suppress           bool
 	overridden         *actionOverride
@@ -22,6 +23,22 @@ type requestState struct {
 	tokenID            string
 	tokenScope         repository.TokenScope
 	previousTokenScope *repository.TokenScope
+}
+
+// SetProjectGroupChange supplies non-secret group metadata to the audit middleware.
+func SetProjectGroupChange(
+	r *http.Request,
+	id int64,
+	name string,
+	groupID *int64,
+) {
+	if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {
+		state.projectGroupChange = map[string]any{
+			"id":       id,
+			"name":     name,
+			"group_id": groupID,
+		}
+	}
 }
 
 // SetTokenChange records only non-secret token identifiers and grants.

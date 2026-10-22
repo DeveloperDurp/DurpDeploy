@@ -398,7 +398,12 @@ type swaggerTokenScopeResponse struct {
 // swagger:model ProjectListResponse
 //
 //nolint:unused // Used by Swagger specification generation.
-type swaggerProjectListResponse []swaggerProjectResponse
+type swaggerProjectListResponse struct {
+	Items  []swaggerProjectResponse `json:"items"`
+	Total  int64                    `json:"total"`
+	Limit  int64                    `json:"limit"`
+	Offset int64                    `json:"offset"`
+}
 
 // ProjectResponse is the JSON shape for a project.
 // swagger:model ProjectResponse
@@ -413,11 +418,15 @@ type swaggerProjectResponse struct {
 	Description                 string `json:"description"`
 	CreatedAt                   int64  `json:"created_at"`
 	LifecycleID                 *int64 `json:"lifecycle_id"`
-	SlackWebhookURL             string `json:"slack_webhook_url"`
-	NotifyEmails                string `json:"notify_emails"`
-	GotifyURL                   string `json:"gotify_url"`
-	GotifyToken                 string `json:"gotify_token"`
-	DiscordWebhookURL           string `json:"discord_webhook_url"`
+	// Extensions:
+	// ---
+	// x-nullable: true
+	GroupID           *int64 `json:"group_id"`
+	SlackWebhookURL   string `json:"slack_webhook_url"`
+	NotifyEmails      string `json:"notify_emails"`
+	GotifyURL         string `json:"gotify_url"`
+	GotifyToken       string `json:"gotify_token"`
+	DiscordWebhookURL string `json:"discord_webhook_url"`
 }
 
 // ProjectNotificationResponse is the notification settings for a project.

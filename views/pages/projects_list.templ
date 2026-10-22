@@ -2,33 +2,46 @@ package pages
 
 import (
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/auth"
 	"durpdeploy/views/components"
 	"durpdeploy/views/layouts"
 	"fmt"
 )
 
-templ ProjectsList(projects []db.Project, panels []LifecyclePanel) {
-	<div id="projects-list" x-data="formDialogHost" x-on:htmx:after-settle.camel="afterSettle" x-on:htmx:before-swap.camel="beforeSwap" x-on:form-saved="saved">
+templ ProjectsList(projects []db.Project, panels []LifecyclePanel, state ProjectListState) {
+	<div id="projects-list" x-data="formDialogHost" x-on:htmx:after-settle.camel="afterSettle" x-on:htmx:before-swap.camel="beforeSwap" x-on:form-saved="saved" x-on:project-groups-changed.window="groupsDirty = true">
 		<div class="page-header">
 			<h1 class="text-3xl font-bold">Projects</h1>
-			if CanWrite(ctx) {
-				@NewResourceButton("/projects/new", "New Project")
-			}
+			<div class="flex flex-wrap gap-2">
+				if CanWrite(ctx) {
+					@NewResourceButton("/projects/new", "New Project")
+				}
+				if CanWrite(ctx) && auth.CanAuthor(ctx) {
+					<a class="btn btn-sm" href="/project-groups" hx-get="/project-groups" hx-target="#project-edit-content" hx-select="[data-group-workspace]" hx-swap="innerHTML" hx-push-url="false" hx-boost="false" hx-headers={ `{"X-Group-Dialog":"true"}` } @click="rememberOpener" data-manage-groups>Manage Groups</a>
+				}
+			</div>
 		</div>
+		@ProjectCatalogControls(state)
 		if len(projects) == 0 {
 			<div class="card bg-base-200 p-8 text-center">
-				<p class="text-gray-400 mb-4">No projects yet. Create your first project to get started.</p>
+				<p class="text-base-content/70 mb-4">No matching projects.</p>
 				if CanWrite(ctx) {
 					@NewResourceButton("/projects/new", "New Project")
 				}
 			</div>
 		} else {
-			<div class="space-y-3">
-				for i, p := range projects {
-					@ProjectsListRow(p, panels[i])
+			<div class="space-y-5">
+				for _, group := range state.Groups {
+					if count := projectPageGroupCount(projects, group.ID); count > 0 {
+						@ProjectCatalogGroup(group.ID, group.Name, count, projects, panels)
+					}
+				}
+				if count := projectPageGroupCount(projects, 0); count > 0 {
+					@ProjectCatalogGroup(0, "Ungrouped", count, projects, panels)
 				}
 			</div>
 		}
+		@ProjectCatalogPagination(state)
 		if CanWrite(ctx) {
 			@ResourceFormDialog("New Project", "[data-project-form]")
 		}
@@ -53,12 +66,12 @@ templ ProjectsListRow(p db.Project, panel LifecyclePanel) {
 templ ProjectsListDeployments(panel LifecyclePanel) {
 	if len(panel.Stages) == 0 {
 		if panel.HasEnvironments {
-			<span class="text-gray-500 italic text-sm">No deployments yet</span>
+			<span class="text-base-content/70 italic text-sm">No deployments yet</span>
 		} else {
-			<span class="text-gray-500 italic text-sm">No environments</span>
+			<span class="text-base-content/70 italic text-sm">No environments</span>
 		}
 	} else {
-		<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 min-w-0" data-project-environment-grid>
+		<div class="grid gap-3 sm:grid-cols-2 min-w-0" data-project-environment-grid>
 			for _, s := range panel.Stages {
 				<div class="min-w-0 space-y-1">
 					<div class="break-all text-xs font-medium opacity-70" title={ s.Environment.Name }>{ s.Environment.Name }</div>
@@ -89,12 +102,12 @@ templ VersionPill(d db.Deployment, version string) {
 	><span class="min-w-0">{ version }</span></span>
 }
 
-templ ProjectsListPage(projects []db.Project, panels []LifecyclePanel, currentPath string) {
+templ ProjectsListPage(projects []db.Project, panels []LifecyclePanel, state ProjectListState, currentPath string) {
 	@layouts.Base("Projects", currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
 			{Label: "Home", Href: "/"},
 			{Label: "Projects"},
 		})
-		@ProjectsList(projects, panels)
+		@ProjectsList(projects, panels, state)
 	}
 }

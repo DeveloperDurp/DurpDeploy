@@ -495,6 +495,17 @@ type listReleasesQueryParam struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type listProjectsQueryParam struct {
+	// Search project names and descriptions. Matching ignores ASCII case.
+	// in: query
+	Query string `json:"q"`
+	// Omit for all groups. Use 0 for Ungrouped or a positive group ID.
+	// in: query
+	GroupID int64 `json:"group_id"`
+	// Name A-Z by default. Use newest for creation time or name_desc for reverse name order.
+	// in: query
+	// enum: newest,name,name_desc
+	// default: name
+	Sort string `json:"sort"`
 	// in: query
 	Limit int64 `json:"limit"`
 	// in: query

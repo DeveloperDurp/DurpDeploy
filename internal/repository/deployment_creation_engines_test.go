@@ -122,10 +122,13 @@ func openDeploymentCreationEngine(
 func seedDeploymentCreationRace(t *testing.T, repo *Repository) {
 	t.Helper()
 	ctx := context.Background()
-	project, err := repo.Queries.CreateProject(
+	// Historical migration fixtures do not have every current project column.
+	var project db.Project
+	err := repo.DB.QueryRowContext(
 		ctx,
-		db.CreateProjectParams{Name: "creation-race"},
-	)
+		"INSERT INTO projects(name) VALUES(?) RETURNING id",
+		"creation-race",
+	).Scan(&project.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

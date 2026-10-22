@@ -118,6 +118,11 @@ func Middleware(repo *repository.Repository) func(http.Handler) http.Handler {
 			if action == "" {
 				return
 			}
+			// HTMX permission denials return 200 without a mutation.
+			if entityType == "project_group" &&
+				state.projectGroupChange == nil {
+				return
+			}
 
 			var userID sql.NullInt64
 			if u := auth.UserFromContext(r.Context()); u != nil {
@@ -262,31 +267,10 @@ func buildDetails(r *http.Request, outcome requestOutcome) string {
 		details["name"] = name
 	}
 	addRunbookDeletionDetails(r, details)
-	if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok &&
-		state.tokenID != "" {
-		details["token_id"] = state.tokenID
-		details["scope"] = state.tokenScope.Scope
-		details["token_role"] = state.tokenScope.Role
-		details["project_ids"] = state.tokenScope.ProjectIDs
-		if state.previousTokenScope != nil {
-			details["previous_scope"] = state.previousTokenScope
-		}
-	}
 	if strings.Contains(outcome.action, "agent") {
 		details["agent_id"] = chi.URLParam(r, "id")
-		if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {
-			if state.agentLabel != "" {
-				details["label"] = state.agentLabel
-			}
-			if state.agentEnvironmentID != 0 {
-				details["environment_id"] = state.agentEnvironmentID
-			}
-		}
 	}
-	if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok &&
-		state.agentActor != "" {
-		details["agent_id"] = state.agentActor
-	}
+	addRequestStateDetails(r, outcome.action, details)
 	if outcome.action == "mfa_admin_reset" {
 		reason := outcome.reason
 		if reason == "" {
@@ -299,4 +283,38 @@ func buildDetails(r *http.Request, outcome requestOutcome) string {
 		return ""
 	}
 	return string(b)
+}
+
+func addRequestStateDetails(
+	r *http.Request,
+	action string,
+	details map[string]any,
+) {
+	state, ok := r.Context().Value(requestStateKey{}).(*requestState)
+	if !ok {
+		return
+	}
+	if state.projectGroupChange != nil {
+		details["project_group_change"] = state.projectGroupChange
+	}
+	if state.tokenID != "" {
+		details["token_id"] = state.tokenID
+		details["scope"] = state.tokenScope.Scope
+		details["token_role"] = state.tokenScope.Role
+		details["project_ids"] = state.tokenScope.ProjectIDs
+		if state.previousTokenScope != nil {
+			details["previous_scope"] = state.previousTokenScope
+		}
+	}
+	if strings.Contains(action, "agent") {
+		if state.agentLabel != "" {
+			details["label"] = state.agentLabel
+		}
+		if state.agentEnvironmentID != 0 {
+			details["environment_id"] = state.agentEnvironmentID
+		}
+	}
+	if state.agentActor != "" {
+		details["agent_id"] = state.agentActor
+	}
 }

@@ -126,22 +126,7 @@ func TokenScopeMiddleware() func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			allowed := strings.HasPrefix(path, "/projects/") ||
-				strings.HasPrefix(path, "/deployments/")
-			if r.Method == http.MethodGet {
-				allowed = allowed || slices.Contains([]string{
-					"/version", "/users/me", "/projects", "/deployments",
-					"/environments", "/lifecycles",
-				}, path) || strings.HasPrefix(path, "/environments/") ||
-					strings.HasPrefix(path, "/lifecycles/")
-			}
-			// Shared definitions and credentials have no project write boundary.
-			if strings.Contains(path, "/templates") ||
-				strings.HasPrefix(path, "/lifecycles/") &&
-					strings.Contains(path, "/variables") {
-				allowed = false
-			}
-			if !allowed {
+			if !scopedTokenPathAllowed(r.Method, path) {
 				RenderJSONError(w, http.StatusForbidden,
 					"token is restricted to selected projects")
 				return
@@ -149,4 +134,23 @@ func TokenScopeMiddleware() func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func scopedTokenPathAllowed(method, path string) bool {
+	allowed := strings.HasPrefix(path, "/projects/") ||
+		strings.HasPrefix(path, "/deployments/")
+	if method == http.MethodGet {
+		allowed = allowed || slices.Contains([]string{
+			"/version", "/users/me", "/projects", "/deployments",
+			"/environments", "/lifecycles", "/project-groups",
+		}, path) || strings.HasPrefix(path, "/environments/") ||
+			strings.HasPrefix(path, "/lifecycles/")
+	}
+	// Shared definitions and credentials have no project write boundary.
+	if strings.Contains(path, "/templates") ||
+		strings.HasPrefix(path, "/lifecycles/") &&
+			strings.Contains(path, "/variables") {
+		allowed = false
+	}
+	return allowed
 }

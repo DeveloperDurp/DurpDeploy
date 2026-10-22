@@ -44,6 +44,7 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
     bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^Test(LifecycleVariables|LifecycleLiveScope|LifecyclePageNavigation|LifecycleStageOrder|VariableScopesBeforeDeployment|NotificationCredentialForms|NotificationValidationPreservesForm|SMTPPlaintextWarning)BrowserE2E$' ./internal/handler/api
     ;;
   browser-resources)
+    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestProjectGroups.*E2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestProjectTemplates.*(APIWeb|Browser)E2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestPromotionGuidance(APIWeb|Browser)E2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestRunbookRetryVersion(APIWeb|Browser)E2E$' ./internal/handler/api
@@ -58,7 +59,7 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
     bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^Test(PermissionGuidance(Deployment)?|UsersFormAccessibility|UsersDefaultRole|UsersPhone|ProjectStaleSave|ProjectMemberRoles|UserModalPermissionFeedback|MemberModalErrorFeedback|ProjectPanelScope|ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|MobileFormFocus|RunbookEditor|RunbookDeletion|AlpineEditForms|AlpineDialogs|RunningServer|ProjectTokens|RolePermissions)BrowserE2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=10m -v -run '^TestRunbookDeletion.*APIWebE2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=10m -v -run '^Test(ProjectTokens.*|PermissionRolesExecution.*)(API|APIWeb)E2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=3m -run '^Test((Deployment|Runbook)LogHistoryPages|OpenLogStreamRevocation|StalledSMTPDelivery|SMTPPlaintextWarning|BackupHealthRecovery)APIWebE2E$' ./internal/handler/api
+    bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=10m -run '^Test((Deployment|Runbook)LogHistoryPages|OpenLogStreamRevocation|StalledSMTPDelivery|SMTPPlaintextWarning|BackupHealthRecovery)APIWebE2E$' ./internal/handler/api
     ;;
   browser-execution)
     bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=3m -v -run '^TestQueuedCancellation(APIWeb|Browser)E2E$' ./internal/handler/api

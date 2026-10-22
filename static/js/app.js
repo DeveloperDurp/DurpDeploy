@@ -547,6 +547,127 @@ Alpine.data('projectMenu', () => ({
 	},
 }));
 
+Alpine.data('projectGroupWorkspace', () => ({
+	selected: [],
+	projectIDs: [],
+	destination: null,
+	error: '',
+	busy: false,
+	moved: 0,
+	total: 0,
+	opener: null,
+	request: null,
+	disposed: false,
+	init() {
+		this.projectIDs = [...this.$el.querySelectorAll('[data-project-move]')]
+			.map(input => input.value);
+		if (matchMedia('(max-width: 767px)').matches) {
+			this.$nextTick(() => this.$el.querySelector('[aria-current="page"]')
+				?.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
+		}
+	},
+	get allSelected() {
+		return this.projectIDs.length > 0 && this.selected.length === this.projectIDs.length;
+	},
+	get partlySelected() { return this.selected.length > 0 && !this.allSelected; },
+	get selectionLabel() {
+		return `${this.selected.length} project${this.selected.length === 1 ? '' : 's'} selected`;
+	},
+	get moveLabel() { return this.busy ? `Moving ${this.moved} of ${this.total}…` : 'Move projects'; },
+	selectAll(event) { this.selected = event.currentTarget.checked ? [...this.projectIDs] : []; },
+	clearSelection() {
+		this.selected = [];
+		this.$nextTick(() => this.$refs.selectAll?.focus());
+	},
+	showDialog(name, field) {
+		this.opener = document.activeElement;
+		if (this.$refs.groupActions?.open) {
+			this.$refs.groupActions.open = false;
+			this.opener = this.$refs.groupActions.querySelector('summary');
+		}
+		this.$refs[name].showModal();
+		focusFormField(this.$refs[field]);
+	},
+	openMove() {
+		this.destination = null;
+		this.error = '';
+		this.showDialog('moveDialog');
+	},
+	closeDialog(event) {
+		if (!this.busy) event.currentTarget.closest('dialog').close();
+	},
+	dialogClosed(event) {
+		if (!event.target.open && this.opener?.isConnected) {
+			this.opener.focus({ preventScroll: true });
+		}
+	},
+	cancelMove(event) { if (this.busy) event.preventDefault(); },
+	closeWorkspace() { if (!this.busy) this.$el.closest('dialog').close(); },
+	groupSaved(event) {
+		this.$dispatch('project-groups-changed');
+		this.reloadProjects(event.detail.url);
+	},
+	groupFailed(event) {
+		const error = event.detail.elt.querySelector('[data-group-error]');
+		if (!error) return;
+		error.textContent = event.detail.xhr.status === 409
+			? 'A group with this name already exists.'
+			: 'Could not save this group. Check the name and try again.';
+		error.hidden = false;
+		error.focus();
+	},
+	reloadProjects(url = this.$root.dataset.workspaceUrl) {
+		if (this.$root.dataset.groupDialog === 'true') {
+			void htmx.ajax('GET', url, {
+				target: '#project-edit-content',
+				select: '[data-group-workspace]',
+				swap: 'innerHTML',
+				headers: { 'X-Group-Dialog': 'true' },
+			});
+		} else window.location.reload();
+	},
+	async moveProjects() {
+		if (this.busy || this.destination === null || this.selected.length === 0) return;
+		this.busy = true;
+		this.error = '';
+		this.moved = 0;
+		this.total = this.selected.length;
+		this.request = new AbortController();
+		this.$dispatch('project-groups-changed');
+		for (const id of this.selected) {
+			if (this.disposed) break;
+			try {
+				const response = await fetch(`/projects/${id}/group`, {
+					method: 'POST',
+					signal: this.request.signal,
+					headers: {
+						'HX-Request': 'true',
+						'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content,
+					},
+					body: new URLSearchParams({ group_id: this.destination }),
+				});
+				if (response.status !== 204) throw new Error('Move not confirmed');
+			} catch {
+				if (!this.disposed) {
+					this.error = `Moved ${this.moved} of ${this.total} projects. The remaining moves could not be confirmed. Reload projects to check their groups.`;
+				}
+				break;
+			}
+			this.selected = this.selected.filter(value => value !== id);
+			this.moved++;
+		}
+		this.busy = false;
+		if (this.disposed) return;
+		if (this.selected.length === 0) this.reloadProjects();
+		else this.$nextTick(() => this.$refs.moveError.focus());
+	},
+	destroy() {
+		this.disposed = true;
+		this.request?.abort();
+		for (const dialog of this.$el.querySelectorAll('dialog')) dialog.close();
+	},
+}));
+
 Alpine.data('tokenGrantFields', () => ({
 	scope: 'global',
 	projects: [],
@@ -606,6 +727,7 @@ Alpine.data('memberRoleEditor', () => ({
 
 Alpine.data('formDialogHost', () => ({
 	opener: null,
+	groupsDirty: false,
 	rememberOpener(event) { this.opener = event.currentTarget; },
 	afterSettle(event) {
 		if (event.detail?.target?.id !== 'project-edit-content') return;
@@ -635,6 +757,12 @@ Alpine.data('formDialogHost', () => ({
 		this.$refs.content.replaceChildren();
 		(this.opener?.isConnected ? this.opener : this.$refs.editButton)?.focus();
 		this.opener = null;
+		if (this.groupsDirty) {
+			this.groupsDirty = false;
+			void htmx.ajax('GET', location.pathname + location.search, {
+				target: '#projects-list', select: '#projects-list', swap: 'outerHTML',
+			}).then(() => document.querySelector('[data-manage-groups]')?.focus());
+		}
 	},
 	saved() { this.$refs.editButton?.focus(); },
 	destroy() { this.$refs.dialog?.close(); },

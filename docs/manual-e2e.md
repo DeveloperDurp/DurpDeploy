@@ -1430,6 +1430,76 @@ History does not change notes, deployment statuses, or project access.
 Keep the incident and re-run records for manual checks.
 These checks create no schedules.
 
+## Project groups
+
+Run `make e2e-test` against the running server.
+Use the printed grouped-project and Ungrouped-project links.
+The suite retains projects, groups, memberships, and a disposable group for repeated deletion checks.
+
+1. As a global administrator, open `/project-groups`.
+2. Select New Group and create a group with a unique name.
+3. Open Group actions and select Rename group.
+4. Select projects with their checkboxes and select Move to group.
+5. Select a destination and confirm the move.
+6. Use Select all to select editable projects on the current page.
+7. Clear one checkbox and confirm Select all shows a mixed state.
+8. Clear the selection and confirm the action toolbar disappears.
+9. Change the group, search, or page and confirm the selection resets.
+10. Use Group actions to delete the disposable group.
+11. Confirm its projects remain accessible under Ungrouped.
+12. If a move fails, read the completed count before you reload projects.
+
+Moves run one project at a time.
+Successful moves remain saved if a later move fails.
+Each move checks current permissions and records its own audit event.
+
+Repeat the browsing checks:
+
+Group panels use faint tints and soft borders.
+Project cards use two columns on wider screens and one column on phones.
+Group counts show only projects on the current page.
+
+1. Open `/projects`.
+2. Select the group heading with Tab.
+3. Press Enter to collapse or expand the group.
+4. Confirm assistive technology reports the expanded state.
+5. Repeat browsing at a viewport width of 375 pixels.
+6. Select Filters to expand the mobile filter panel.
+7. Search for part of a project name or description.
+8. Select a group, Name A–Z, and Per page of 1.
+9. Select Filter.
+10. Follow Next and Previous.
+11. Confirm the filters remain selected and the mobile Filters button shows Active.
+12. Select Clear and confirm all filters and pagination reset.
+13. Open Manage Groups and repeat the filter checks inside the modal.
+14. At desktop widths, confirm the filter controls stay visible.
+
+Projects and Manage Groups default to Name A–Z.
+Clear restores this default.
+Manage Groups keeps the Projects URL and filters behind the modal.
+The modal keeps its size when you select another group.
+The project list scrolls below the top Cancel and New Group controls.
+The Projects page uses the Catppuccin Mocha text and accent colors in the Mocha theme.
+Use New Group to create a group.
+Use Cancel or Escape to close the modal.
+Changes save when you apply them.
+Cancel does not undo changes.
+After a change, confirm the Projects list refreshes when you close the modal.
+
+As a Viewer, browse the printed accessible project.
+Expect no group-management or project-move controls.
+Expect group counts to exclude inaccessible projects.
+As a Maintainer, open Manage Groups to move authorized projects between visible groups.
+Expect project permissions and deployment links to remain unchanged.
+
+Use `GET /api/v1/project-groups` to inspect authorized groups and counts.
+Use `PUT /api/v1/projects/{id}/group` with `{"group_id":null}` to clear an assignment.
+Use `GET /api/v1/projects?group_id=0` to inspect Ungrouped projects.
+Use the public Swagger UI for group CRUD and project search, sorting, filtering, and pagination.
+Expect invalid names to return `422` and duplicate names to return `409`.
+Expect inaccessible assignment destinations to return `404`.
+Inspect `/admin/audit` for successful group and assignment changes.
+
 ## Empty deployment filters
 
 1. Open Deployments for an account with deployment history.

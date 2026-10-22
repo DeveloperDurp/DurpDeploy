@@ -43,6 +43,69 @@ Treat `plaintext_allowed`, `tls_unverified`, `tls_ca_verified`, and `tls_pinned`
 `tls_verified` requires server verification.
 `local` identifies SQLite or PostgreSQL Unix-socket transport.
 
+## Project groups
+
+Project groups organize projects without changing access permissions.
+Each project response includes a nullable `group_id`.
+Existing projects remain in Ungrouped until assigned.
+
+Call `GET /api/v1/project-groups` to list visible groups and their accessible `project_count` values.
+The response contains `items`, `total`, `limit`, and `offset`.
+Only global administrators using global access can see empty groups.
+Scoped tokens see only groups containing selected, accessible projects.
+
+Use a global administrator with a global Admin token to manage groups.
+Legacy global administrator tokens without a ceiling also work.
+Create a group with `POST /api/v1/project-groups` and `{"name":"Team"}`.
+Rename a group with `PUT /api/v1/project-groups/$GROUP_ID` and the same body shape.
+Delete a group with `DELETE /api/v1/project-groups/$GROUP_ID`.
+Deletion returns `204` and moves projects to Ungrouped.
+
+Names contain 1 to 100 characters after trimming.
+Names must be unique without case differences.
+Control characters and the name `Ungrouped` are invalid.
+Invalid names return `422`.
+Duplicate names return `409`.
+
+Assign a project with `PUT /api/v1/projects/$PID/group` and `{"group_id":12}`.
+Move a project to Ungrouped with `{"group_id":null}`.
+Always include `group_id` in assignment requests.
+The global role, project membership, and token ceiling must each permit Maintainer access.
+The destination group must be visible to the caller.
+Unknown or inaccessible destinations return `404`.
+
+Use Manage Groups in the web interface to change project assignments.
+Manage Groups opens a modal above the Projects list.
+Use New Group to create a group.
+Use Cancel to close the modal.
+Changes save when you apply them.
+Cancel does not undo changes.
+Project Maintainers can move authorized projects there.
+Select projects with checkboxes before you select Move to group.
+Select all includes only editable projects on the current page.
+Moves run one project at a time with the existing assignment endpoint.
+Successful moves remain saved if a later move fails.
+Only global administrators can create, rename, or delete groups.
+
+Search projects with `GET /api/v1/projects?q=application`.
+Search matches project names and descriptions.
+ASCII case does not affect search.
+Search treats wildcard characters as literal characters.
+Filter with `group_id=12`, or use `group_id=0` for Ungrouped.
+Omit `group_id` to include all accessible groups.
+Set `sort` to `newest`, `name`, or `name_desc`.
+The default sort is `name`, which sorts project names from A to Z.
+Creation time and project ID resolve equal names in descending order.
+Use `limit` and `offset` to paginate matching projects.
+The default limit is 100 and the maximum is 1000.
+
+The web list uses the same project filters and pagination.
+Group headings appear alphabetically, followed by Ungrouped.
+Sorting controls project order within each displayed group.
+Pagination selects projects before the web list adds group headings.
+A group can appear on more than one page.
+Changing a filter starts from the first page.
+
 ## CLI
 
 Run on the host with the server's database (matching `DURPDEPLOY_DB`):

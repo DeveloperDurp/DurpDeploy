@@ -4641,6 +4641,284 @@
         ]
       }
     },
+    "/project-groups": {
+      "get": {
+        "description": "Scoped tokens see only groups containing selected, accessible projects.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "project-groups"
+        ],
+        "summary": "List groups containing accessible projects. Global administrators also see empty groups.",
+        "operationId": "listProjectGroups",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "Limit",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "Offset",
+            "name": "offset",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/ProjectGroupListResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "description": "Names are trimmed, case-insensitively unique, and limited to 100 characters. Ungrouped is reserved.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "project-groups"
+        ],
+        "summary": "Create a shared group. Requires a global administrator and a global token with an Admin ceiling.",
+        "operationId": "createProjectGroup",
+        "parameters": [
+          {
+            "name": "Body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ProjectGroupRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/ProjectGroup"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/project-groups/{id}": {
+      "put": {
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "project-groups"
+        ],
+        "summary": "Rename a shared group. Requires a global administrator and a global token with an Admin ceiling.",
+        "operationId": "updateProjectGroup",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "Body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ProjectGroupRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/ProjectGroup"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "project-groups"
+        ],
+        "summary": "Delete a group and move its projects to Ungrouped. Requires a global administrator and global Admin token.",
+        "operationId": "deleteProjectGroup",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/project-templates": {
       "get": {
         "tags": [
@@ -4696,6 +4974,34 @@
         "summary": "List projects the authenticated user can access.",
         "operationId": "listProjects",
         "parameters": [
+          {
+            "type": "string",
+            "x-go-name": "Query",
+            "description": "Search project names and descriptions. Matching ignores ASCII case.",
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "GroupID",
+            "description": "Omit for all groups. Use 0 for Ungrouped or a positive group ID.",
+            "name": "group_id",
+            "in": "query"
+          },
+          {
+            "enum": [
+              "newest",
+              "name",
+              "name_desc"
+            ],
+            "type": "string",
+            "default": "name",
+            "x-go-name": "Sort",
+            "description": "Name A-Z by default. Use newest for creation time or name_desc for reverse name order.",
+            "name": "sort",
+            "in": "query"
+          },
           {
             "type": "integer",
             "format": "int64",
@@ -5200,6 +5506,89 @@
             "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
             "schema": {
               "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/projects/{id}/group": {
+      "put": {
+        "description": "Requires project authoring permission. Group membership does not grant project access.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "projects"
+        ],
+        "summary": "Assign a project to a visible group, or send group_id null for Ungrouped.",
+        "operationId": "moveProjectGroup",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "Body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ProjectGroupAssignment"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ProjectResponse is the JSON shape for a project.",
+            "schema": {
+              "$ref": "#/definitions/ProjectResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
             }
           },
           "422": {
@@ -11639,11 +12028,121 @@
       "x-go-name": "swaggerPairAgentResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "ProjectGroup": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        }
+      },
+      "x-go-name": "projectGroupResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "ProjectGroupAssignment": {
+      "type": "object",
+      "required": [
+        "group_id"
+      ],
+      "properties": {
+        "group_id": {
+          "description": "Send null to move the project to Ungrouped. This field is required.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "GroupID",
+          "x-nullable": true
+        }
+      },
+      "x-go-name": "projectGroupAssignment",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "ProjectGroupListResponse": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "format": "int64",
+                "x-go-name": "ID"
+              },
+              "name": {
+                "type": "string",
+                "x-go-name": "Name"
+              },
+              "project_count": {
+                "type": "integer",
+                "format": "int64",
+                "x-go-name": "ProjectCount"
+              }
+            }
+          },
+          "x-go-name": "Items"
+        },
+        "limit": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Limit"
+        },
+        "offset": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Offset"
+        },
+        "total": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Total"
+        }
+      },
+      "x-go-name": "projectGroupListResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "ProjectGroupRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        }
+      },
+      "x-go-name": "projectGroupRequest",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
     "ProjectListResponse": {
-      "type": "array",
+      "type": "object",
       "title": "ProjectListResponse is a list of projects.",
-      "items": {
-        "$ref": "#/definitions/ProjectResponse"
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProjectResponse"
+          },
+          "x-go-name": "Items"
+        },
+        "limit": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Limit"
+        },
+        "offset": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Offset"
+        },
+        "total": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Total"
+        }
       },
       "x-go-name": "swaggerProjectListResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
@@ -11899,6 +12398,12 @@
         "gotify_url": {
           "type": "string",
           "x-go-name": "GotifyURL"
+        },
+        "group_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "GroupID",
+          "x-nullable": true
         },
         "id": {
           "type": "integer",

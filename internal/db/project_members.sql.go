@@ -198,7 +198,7 @@ func (q *Queries) ListProjectMembersPaginated(ctx context.Context, arg ListProje
 }
 
 const listProjectsForUser = `-- name: ListProjectsForUser :many
-SELECT p.id, p.name, p.description, p.created_at, p.lifecycle_id, p.slack_webhook_url, p.notify_emails, p.gotify_url, p.gotify_token, p.discord_webhook_url FROM projects p
+SELECT p.id, p.name, p.description, p.created_at, p.lifecycle_id, p.slack_webhook_url, p.notify_emails, p.gotify_url, p.gotify_token, p.discord_webhook_url, p.group_id FROM projects p
 JOIN project_members pm ON pm.project_id = p.id
 WHERE pm.user_id = ?
 ORDER BY p.created_at DESC
@@ -224,6 +224,7 @@ func (q *Queries) ListProjectsForUser(ctx context.Context, userID int64) ([]Proj
 			&i.GotifyUrl,
 			&i.GotifyToken,
 			&i.DiscordWebhookUrl,
+			&i.GroupID,
 		); err != nil {
 			return nil, err
 		}
@@ -239,7 +240,7 @@ func (q *Queries) ListProjectsForUser(ctx context.Context, userID int64) ([]Proj
 }
 
 const listProjectsForUserPaginated = `-- name: ListProjectsForUserPaginated :many
-SELECT p.id, p.name, p.description, p.created_at, p.lifecycle_id, p.slack_webhook_url, p.notify_emails, p.gotify_url, p.gotify_token, p.discord_webhook_url FROM projects p
+SELECT p.id, p.name, p.description, p.created_at, p.lifecycle_id, p.slack_webhook_url, p.notify_emails, p.gotify_url, p.gotify_token, p.discord_webhook_url, p.group_id FROM projects p
 JOIN project_members pm ON pm.project_id = p.id
 WHERE pm.user_id = ?
 ORDER BY p.created_at DESC
@@ -272,6 +273,7 @@ func (q *Queries) ListProjectsForUserPaginated(ctx context.Context, arg ListProj
 			&i.GotifyUrl,
 			&i.GotifyToken,
 			&i.DiscordWebhookUrl,
+			&i.GroupID,
 		); err != nil {
 			return nil, err
 		}

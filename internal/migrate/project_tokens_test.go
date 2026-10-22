@@ -46,7 +46,7 @@ func TestProjectTokenUpgradeAndRollbackRefusal(t *testing.T) {
 	if row.Scope != "global" || row.TokenRole != "" {
 		t.Fatal("migration changed existing global permissions")
 	}
-	if err := goose.DownTo(conn, ".", 62); err == nil {
+	if err := goose.Down(conn, "."); err == nil {
 		t.Fatal("unsafe token migration rollback succeeded")
 	}
 	version, err := goose.GetDBVersion(conn)

@@ -230,6 +230,12 @@ func newRouter(
 		pr.Get("/projects", ph.ListProjects)
 		pr.Get("/projects/new", ph.NewProject)
 		pr.Post("/projects", ph.CreateProject)
+		pr.With(auth.RequireRole("admin", "maintainer")).
+			Get("/project-groups", ph.ManageProjectGroups)
+		pr.With(auth.RequireRole("admin")).
+			Post("/project-groups", ph.SaveProjectGroup)
+		pr.With(auth.RequireRole("admin")).
+			Post("/project-groups/{id}/delete", ph.DeleteProjectGroup)
 		projectTemplatesH := handler.NewProjectTemplateHandler(repo)
 		pr.Get("/project-templates", projectTemplatesH.List)
 
@@ -417,6 +423,7 @@ func newRouter(
 			ppr.Post("/projects/{id}/package-repository/test", artifactH.Test)
 
 			ppr.Get("/projects/{id}", ph.GetProject)
+			ppr.Post("/projects/{id}/group", ph.MoveProjectGroup)
 			ppr.Get("/projects/{id}/edit", ph.EditProject)
 			ppr.Put("/projects/{id}", ph.UpdateProject)
 			ppr.Delete("/projects/{id}", ph.DeleteProject)
@@ -685,6 +692,13 @@ func newRouter(
 		apiProjH := api.NewProjectHandler(repo)
 		ar.Get("/projects", apiProjH.ListProjects)
 		ar.Post("/projects", apiProjH.CreateProject)
+		ar.Get("/project-groups", apiProjH.ListProjectGroups)
+		ar.With(auth.RequireRole("admin")).
+			Post("/project-groups", apiProjH.CreateProjectGroup)
+		ar.With(auth.RequireRole("admin")).
+			Put("/project-groups/{id}", apiProjH.UpdateProjectGroup)
+		ar.With(auth.RequireRole("admin")).
+			Delete("/project-groups/{id}", api.EmptyBody(apiProjH.DeleteProjectGroup))
 		apiProjectTemplatesH := api.NewProjectTemplateHandler(repo)
 		ar.Get("/project-templates", apiProjectTemplatesH.List)
 
@@ -826,6 +840,7 @@ func newRouter(
 			)
 
 			par.Get("/projects/{id}", apiProjH.GetProject)
+			par.Put("/projects/{id}/group", apiProjH.MoveProjectGroup)
 			par.Put("/projects/{id}", apiProjH.UpdateProject)
 			par.Delete("/projects/{id}", api.EmptyBody(apiProjH.DeleteProject))
 			par.Get(

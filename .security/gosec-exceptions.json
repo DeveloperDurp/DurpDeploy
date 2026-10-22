@@ -56,8 +56,8 @@
   {
     "rule": "G101",
     "file": "internal/audit/routes.go",
-    "line": "6-193",
-    "source_sha256": "d28b5531d0d85d9774a87f1aa0e14a4e196000c7db149f298b8d093b75328e04",
+    "line": "6-200",
+    "source_sha256": "951c8afc7e5fb372f5e4ee255c7ef7e02de36810617a41e90ad77c555dc85e51",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie name or audit action/route metadata, not a credential value. Evidence: passkey binding readers/setters or internal/audit/audit.go consumers."
@@ -452,8 +452,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/project.go",
-    "line": "479",
-    "source_sha256": "f37d50dcbf57a5134582609a349960beb2665aa3a54a02f8ed10450b553c6e9c",
+    "line": "501",
+    "source_sha256": "b653ea10e2c937a8d100ae8b2db201389a209d6a375f688b4b61eee02b0ec8b4",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "The redirect uses a fixed /projects/ path prefix and an ID parsed as int64 by parseProjectID. The destination remains on the same origin. Evidence: ProjectHandler.UpdateProject and parseProjectID."
@@ -461,8 +461,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/project.go",
-    "line": "280",
-    "source_sha256": "f37d50dcbf57a5134582609a349960beb2665aa3a54a02f8ed10450b553c6e9c",
+    "line": "302",
+    "source_sha256": "b653ea10e2c937a8d100ae8b2db201389a209d6a375f688b4b61eee02b0ec8b4",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "The redirect uses a fixed /projects/ path prefix and an ID parsed as int64 by parseProjectID. The destination remains on the same origin. Evidence: ProjectHandler.UpdateProjectNotifications and parseProjectID."

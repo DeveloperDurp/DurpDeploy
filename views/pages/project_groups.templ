@@ -1,0 +1,378 @@
+package pages
+
+import (
+	"database/sql"
+	"durpdeploy/internal/auth"
+	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
+	"durpdeploy/views/layouts"
+	"fmt"
+	"net/url"
+	"strconv"
+)
+
+type ProjectListState struct {
+	Path string
+	Options repository.ProjectCatalogOptions
+	Groups []db.ListAccessibleProjectGroupsRow
+	Total int64
+	CanMove map[int64]bool
+	Ungrouped int64
+	Modal bool
+}
+
+func (s ProjectListState) GroupURL(id int64) string {
+	s.Options.GroupID = id
+	return s.PageURL(0)
+}
+
+func (s ProjectListState) GroupTitle() string {
+	if s.Options.GroupID < 0 { return "All projects" }
+	return s.GroupName(db.Project{GroupID: sql.NullInt64{Int64: s.Options.GroupID, Valid: s.Options.GroupID > 0}})
+}
+
+func (s ProjectListState) AllProjectCount() int64 {
+	total := s.Ungrouped
+	for _, group := range s.Groups { total += group.ProjectCount }
+	return total
+}
+
+func (s ProjectListState) HasMovableProjects() bool {
+	for _, allowed := range s.CanMove { if allowed { return true } }
+	return false
+}
+
+func (s ProjectListState) HasSelectedGroup() bool {
+	for _, group := range s.Groups {
+		if group.ID == s.Options.GroupID { return true }
+	}
+	return false
+}
+
+func (s ProjectListState) GroupFilterValue() string {
+	if s.Options.GroupID < 0 { return "" }
+	return strconv.FormatInt(s.Options.GroupID, 10)
+}
+
+func (s ProjectListState) FilterID() string {
+	if s.Modal { return "project-group-filters" }
+	return "project-filters"
+}
+
+func (s ProjectListState) PageURL(offset int64) string {
+	v := url.Values{"q": {s.Options.Query}, "sort": {s.Options.Sort},
+		"limit": {strconv.FormatInt(s.Options.Limit, 10)}, "offset": {strconv.FormatInt(offset, 10)}}
+	if s.Options.GroupID >= 0 { v.Set("group_id", strconv.FormatInt(s.Options.GroupID, 10)) }
+	return s.Path + "?" + v.Encode()
+}
+
+templ GroupCSRF() {
+	if session := auth.SessionFromContext(ctx); session != nil {
+		<input type="hidden" name="csrf_token" value={ session.CsrfToken }/>
+	}
+}
+
+templ ProjectGroupsPage(projects []db.Project, state ProjectListState, currentPath string) {
+	if !CanWrite(ctx) || !auth.CanAuthor(ctx) {
+		@RoleForbiddenMessage("Project Groups", "manage", "project groups", "/projects", currentPath, "maintainer")
+	} else {
+		@layouts.Base("Project Groups", currentPath) {
+			@ProjectGroupWorkspace(projects, state, currentPath)
+		}
+	}
+}
+
+templ ProjectGroupWorkspace(projects []db.Project, state ProjectListState, currentPath string) {
+	if !CanWrite(ctx) || !auth.CanAuthor(ctx) {
+		@RoleForbiddenMessage("Project Groups", "manage", "project groups", "/projects", currentPath, "maintainer")
+	} else {
+		<div x-data="projectGroupWorkspace" data-group-workspace data-group-dialog={ strconv.FormatBool(state.Modal) } data-workspace-url={ state.PageURL(state.Options.Offset) } x-on:project-group-saved="groupSaved" x-on:htmx:response-error.camel="groupFailed"
+			if state.Modal {
+				hx-headers={ `{"X-Group-Dialog":"true"}` }
+			}>
+			<div class="page-header">
+				<div><h1 class="text-3xl font-bold">Manage Groups</h1><p class="text-sm opacity-70">Groups organize projects without changing permissions.</p></div>
+				<div class="flex flex-wrap gap-2">
+					if state.Modal {
+						<button type="button" class="btn btn-ghost btn-sm" @click="closeWorkspace" :disabled="busy" data-group-workspace-cancel>Cancel</button>
+					} else {
+						<a class="btn btn-ghost btn-sm" href="/projects">Projects</a>
+					}
+					if auth.RoleFromContext(ctx) == "admin" {
+						<button class="btn btn-primary btn-sm" type="button" @click="showDialog('createDialog', 'createName')" :disabled="busy" data-group-create-button>New Group</button>
+					}
+				</div>
+			</div>
+			if state.Modal {
+				<p class="text-xs opacity-70 mb-4 shrink-0">Changes save as you apply them.</p>
+			}
+			<div class="grid grid-cols-1 md:grid-cols-[12rem_minmax(0,1fr)] content-start gap-6" data-group-workspace-body>
+				<nav class="flex gap-2 overflow-x-auto pb-2 md:block md:space-y-1 md:border-r md:border-base-300 md:pr-4" aria-label="Project groups">
+					@ProjectGroupNavigation(state, -1, "All projects", state.AllProjectCount())
+					for _, group := range state.Groups {
+						@ProjectGroupNavigation(state, group.ID, group.Name, group.ProjectCount)
+					}
+					@ProjectGroupNavigation(state, 0, "Ungrouped", state.Ungrouped)
+				</nav>
+				<section class="min-w-0">
+					<div class="flex items-center justify-between gap-3 mb-4">
+						<h2 class="text-xl font-semibold break-all" data-active-group>{ state.GroupTitle() }</h2>
+						if auth.RoleFromContext(ctx) == "admin" && state.Options.GroupID > 0 && state.HasSelectedGroup() {
+							<details class="dropdown dropdown-end" x-ref="groupActions">
+								<summary class="btn btn-ghost btn-sm" aria-label="Group actions">•••</summary>
+								<ul class="dropdown-content menu bg-base-200 rounded-box border border-base-300 p-2 shadow z-10 w-44">
+									<li><button type="button" @click="showDialog('renameDialog', 'renameName')" data-group-rename-button>Rename group</button></li>
+									<li><button type="button" class="text-error" @click="showDialog('deleteDialog')" data-group-delete-button>Delete group</button></li>
+								</ul>
+							</details>
+						}
+					</div>
+					@ProjectCatalogControls(state)
+					<div class="flex items-center justify-between gap-3 border-b border-base-300 py-3 mb-2">
+						if state.HasMovableProjects() {
+							<label class="flex items-center gap-3 min-h-11 cursor-pointer text-sm">
+								<input class="checkbox checkbox-sm" type="checkbox" x-ref="selectAll" @change="selectAll($event)" :checked="allSelected" x-effect="$el.indeterminate = partlySelected" :disabled="busy" aria-label="Select all editable projects on this page" data-project-select-all/>
+								<span>Select all</span>
+							</label>
+						} else {
+							<span class="text-sm">Projects</span>
+						}
+						<span class="text-xs opacity-70">{ strconv.Itoa(len(projects)) } shown</span>
+					</div>
+					if state.HasMovableProjects() {
+						<div class="flex flex-wrap items-center justify-between gap-3 rounded-box bg-primary/10 border border-primary/30 p-3 mb-3" x-cloak x-show="selected.length > 0" data-project-selection>
+							<span class="text-sm" x-text="selectionLabel" aria-live="polite"></span>
+							<div class="flex gap-2">
+								<button type="button" class="btn btn-ghost btn-sm" @click="clearSelection" :disabled="busy">Cancel</button>
+								<button type="button" class="btn btn-primary btn-sm" @click="openMove" x-ref="moveButton" :disabled="busy">Move to group</button>
+							</div>
+						</div>
+					}
+					<div class="divide-y divide-base-300">
+						for _, project := range projects {
+							<div class="flex items-center gap-3 py-4 min-w-0" data-project-assignment={ strconv.FormatInt(project.ID, 10) }>
+								if CanWrite(ctx) && state.CanMove[project.ID] {
+									<input class="checkbox checkbox-sm shrink-0" type="checkbox" value={ strconv.FormatInt(project.ID, 10) } x-model="selected" :disabled="busy" aria-label={ "Select " + project.Name } data-project-move/>
+								}
+								<div class="min-w-0 flex-1">
+									<a class="link font-medium block break-all md:truncate" href={ templ.SafeURL(fmt.Sprintf("/projects/%d", project.ID)) } title={ project.Name }>{ project.Name }</a>
+									if project.Description.Valid {
+										<p class="text-xs opacity-70 truncate" title={ project.Description.String }>{ project.Description.String }</p>
+									}
+								</div>
+								if state.Options.GroupID < 0 {
+									<span class="badge badge-outline text-xs max-w-32 truncate" title={ state.GroupName(project) }>{ state.GroupName(project) }</span>
+								}
+								if !state.CanMove[project.ID] {
+									<span class="text-xs opacity-60">Read-only</span>
+								}
+							</div>
+						}
+					</div>
+					if len(projects) == 0 {
+						<p class="py-6">No matching projects.</p>
+					}
+					@ProjectCatalogPagination(state)
+				</section>
+			</div>
+			if state.HasMovableProjects() {
+				@ProjectGroupMoveDialog(state)
+			}
+			if auth.RoleFromContext(ctx) == "admin" {
+				@ProjectGroupNameDialog("New group", "createDialog", "createName", "", 0, state.Modal)
+				if state.Options.GroupID > 0 && state.HasSelectedGroup() {
+					@ProjectGroupNameDialog("Rename group", "renameDialog", "renameName", state.GroupTitle(), state.Options.GroupID, state.Modal)
+					<dialog class="modal" x-ref="deleteDialog" @close="dialogClosed" aria-label="Delete group">
+						<div class="modal-box space-y-4">
+							<h2 class="text-xl font-semibold">Delete { state.GroupTitle() }?</h2>
+							<p>Projects will move to Ungrouped. Their permissions and deployment history will stay unchanged.</p>
+							<form method="post" action={ fmt.Sprintf("/project-groups/%d/delete", state.Options.GroupID) } hx-boost="false" data-group-delete
+								if state.Modal {
+									hx-post={ fmt.Sprintf("/project-groups/%d/delete", state.Options.GroupID) }
+									hx-swap="none"
+								}>
+								@GroupCSRF()
+								<p hidden data-group-error tabindex="-1" role="alert" class="text-error text-sm"></p>
+								<div class="modal-action"><button class="btn btn-ghost" type="button" @click="closeDialog">Cancel</button><button class="btn btn-error" type="submit">Delete group</button></div>
+							</form>
+						</div>
+					</dialog>
+				}
+			}
+		</div>
+	}
+}
+
+templ ProjectGroupNavigation(state ProjectListState, id int64, name string, count int64) {
+	<a href={ templ.SafeURL(state.GroupURL(id)) } hx-boost="false" class={ "flex items-center justify-between gap-3 shrink-0 rounded-lg px-3 py-3 md:w-full text-sm", templ.KV("bg-primary/15 text-primary", state.Options.GroupID == id), templ.KV("hover:bg-base-200", state.Options.GroupID != id) } aria-current={ groupCurrent(state.Options.GroupID == id) } data-group-manage={ strconv.FormatInt(id, 10) } title={ name }
+		if state.Modal {
+			hx-get={ state.GroupURL(id) }
+			hx-target="#project-edit-content"
+			hx-select="[data-group-workspace]"
+			hx-swap="innerHTML"
+			hx-push-url="false"
+		}>
+		<span class="truncate max-w-40">{ name }</span><span class="text-xs opacity-70">{ strconv.FormatInt(count, 10) }</span>
+	</a>
+}
+
+func groupCurrent(active bool) string {
+	if active { return "page" }
+	return "false"
+}
+
+func (s ProjectListState) GroupName(project db.Project) string {
+	if !project.GroupID.Valid { return "Ungrouped" }
+	for _, group := range s.Groups { if group.ID == project.GroupID.Int64 { return group.Name } }
+	return "Unavailable group"
+}
+
+templ ProjectGroupNameDialog(title string, dialogRef string, nameRef string, value string, id int64, modal bool) {
+	<dialog class="modal" x-ref={ dialogRef } @close="dialogClosed" aria-label={ title }>
+		<div class="modal-box space-y-4">
+			<h2 class="text-xl font-semibold">{ title }</h2>
+			<form method="post" action="/project-groups" hx-boost="false" data-group-create?={ id == 0 } data-group-rename?={ id > 0 }
+				if modal {
+					hx-post="/project-groups"
+					hx-swap="none"
+				}
+			>
+				@GroupCSRF()
+				if id > 0 {
+					<input type="hidden" name="id" value={ strconv.FormatInt(id, 10) }/>
+				}
+				<label class="form-control"><span class="label-text mb-1">Group name</span><input class="input input-bordered w-full" x-ref={ nameRef } name="name" value={ value } required maxlength="100"/></label>
+				<p hidden data-group-error tabindex="-1" role="alert" class="text-error text-sm"></p>
+				<div class="modal-action"><button type="button" class="btn btn-ghost" @click="closeDialog">Cancel</button><button class="btn btn-primary" type="submit">Save group</button></div>
+			</form>
+		</div>
+	</dialog>
+}
+
+templ ProjectGroupMoveDialog(state ProjectListState) {
+	<dialog class="modal" x-ref="moveDialog" @close="dialogClosed" @cancel="cancelMove" aria-label="Move projects">
+		<div class="modal-box">
+			<h2 class="text-xl font-semibold mb-2">Move projects</h2>
+			<p class="text-sm opacity-70 mb-4" x-text="selectionLabel"></p>
+			<form @submit.prevent="moveProjects" data-project-bulk-move>
+				<div class="space-y-2">
+					<label class="flex items-center gap-3 border border-base-300 rounded-lg p-3 cursor-pointer"><input type="radio" name="group_id" value="" x-model="destination" :disabled="busy" required class="radio radio-sm"/><span>Ungrouped</span></label>
+					for _, group := range state.Groups {
+						<label class="flex items-center gap-3 border border-base-300 rounded-lg p-3 cursor-pointer"><input type="radio" name="group_id" value={ strconv.FormatInt(group.ID, 10) } x-model="destination" :disabled="busy" required class="radio radio-sm"/><span class="break-all">{ group.Name }</span></label>
+					}
+				</div>
+				<p class="alert alert-error mt-4 text-sm" x-cloak x-show="error" x-text="error" x-ref="moveError" tabindex="-1" role="alert"></p>
+				<div class="modal-action flex-wrap">
+					<button type="button" class="btn btn-ghost" @click="closeDialog" :disabled="busy">Cancel</button>
+					<button type="button" class="btn" x-cloak x-show="error" @click="reloadProjects()">Reload projects</button>
+					<button type="submit" class="btn btn-primary" :disabled="busy || selected.length === 0" x-text="moveLabel">Move projects</button>
+				</div>
+			</form>
+		</div>
+	</dialog>
+}
+
+templ ProjectCatalogControls(state ProjectListState) {
+	<div x-data="{ open: false }" class="space-y-2 mb-4">
+		<button type="button" class="btn btn-ghost md:hidden" @click="open = !open" aria-expanded="false" :aria-expanded="open" aria-controls={ state.FilterID() } data-project-filter-toggle>
+			<span x-text="open ? 'Hide filters' : 'Filters'">Filters</span>
+			if state.Options.Query != "" || state.Options.GroupID >= 0 || state.Options.Sort != "name" || state.Options.Limit != 100 {
+				<span class="badge badge-primary">Active</span>
+			}
+		</button>
+	<form id={ state.FilterID() } method="get" action={ state.Path } hx-boost="false" class="hidden grid grid-cols-2 md:!flex md:flex-wrap gap-2 items-end" :class="{ hidden: !open }" data-project-filters
+		if state.Modal {
+			hx-get={ state.Path }
+			hx-target="#project-edit-content"
+			hx-select="[data-group-workspace]"
+			hx-swap="innerHTML"
+			hx-push-url="false"
+		}>
+		<label class="form-control min-w-0 col-span-2 md:col-span-1"><span class="label-text">Search projects</span><input class="input input-bordered md:input-sm w-full" type="search" name="q" value={ state.Options.Query }/></label>
+		if state.Path == "/project-groups" {
+			<input type="hidden" name="group_id" value={ state.GroupFilterValue() }/>
+		} else {
+		<label class="form-control min-w-0 col-span-2 md:col-span-1"><span class="label-text">Group</span><select class="select select-bordered md:select-sm w-full" name="group_id">
+			<option value="" selected?={ state.Options.GroupID < 0 }>All groups</option>
+			<option value="0" selected?={ state.Options.GroupID == 0 }>Ungrouped</option>
+			if state.Options.GroupID > 0 && !state.HasSelectedGroup() {
+				<option value={ strconv.FormatInt(state.Options.GroupID, 10) } selected>Unavailable group</option>
+			}
+			for _, group := range state.Groups {
+				<option value={ strconv.FormatInt(group.ID, 10) } selected?={ state.Options.GroupID == group.ID }>{ group.Name }</option>
+			}
+		</select></label>
+		}
+		<label class="form-control min-w-0 col-span-2 md:col-span-1"><span class="label-text">Sort projects</span><select class="select select-bordered md:select-sm w-full" name="sort">
+			<option value="newest" selected?={ state.Options.Sort == "newest" }>Newest first</option>
+			<option value="name" selected?={ state.Options.Sort == "name" }>Name A–Z</option>
+			<option value="name_desc" selected?={ state.Options.Sort == "name_desc" }>Name Z–A</option>
+		</select></label>
+		<label class="form-control min-w-0"><span class="label-text">Per page</span><input class="input input-bordered md:input-sm w-24 max-w-full" type="number" name="limit" min="1" max="1000" value={ strconv.FormatInt(state.Options.Limit, 10) }/></label>
+		<button type="submit" class="btn md:btn-sm btn-primary">Filter</button>
+		<a href={ templ.SafeURL(state.Path) } hx-boost="false" class="btn md:btn-sm btn-ghost"
+		if state.Modal {
+			hx-get={ state.Path }
+			hx-target="#project-edit-content"
+			hx-select="[data-group-workspace]"
+			hx-swap="innerHTML"
+			hx-push-url="false"
+		}>Clear</a>
+	</form>
+	</div>
+	<p class="text-sm mb-4" data-project-total>Matching projects: { strconv.FormatInt(state.Total, 10) }. Counts include only accessible projects.</p>
+}
+
+templ ProjectCatalogGroup(id int64, name string, count int, projects []db.Project, panels []LifecyclePanel) {
+	<details open class="project-group-panel min-w-0" data-project-group={ strconv.FormatInt(id, 10) }
+		if id > 0 {
+			data-group-tone={ strconv.FormatInt(id%3, 10) }
+		}>
+		<summary class="flex items-center gap-2 cursor-pointer list-none min-h-8 text-sm font-medium text-base-content/75">
+			<svg class="project-group-chevron w-3 h-3 shrink-0 opacity-60" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 6 4 4 4-4"></path></svg>
+			<span class="project-group-dot shrink-0" aria-hidden="true"></span>
+			<span class="min-w-0 break-all" data-project-group-name>{ name }</span>
+			<span class="ml-auto shrink-0 text-xs font-normal text-base-content/75" title="Projects shown on this page">{ strconv.Itoa(count) } shown</span>
+		</summary>
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3" data-project-group-cards>
+			for i, p := range projects {
+				if p.GroupID.Int64 == id {
+					<div class="min-w-0" data-group-project={ strconv.FormatInt(p.ID, 10) }>
+						@ProjectsListRow(p, panels[i])
+					</div>
+				}
+			}
+		</div>
+	</details>
+}
+
+func projectPageGroupCount(projects []db.Project, id int64) int {
+	count := 0
+	for _, p := range projects { if p.GroupID.Int64 == id { count++ } }
+	return count
+}
+
+templ ProjectCatalogPagination(state ProjectListState) {
+	<nav aria-label="Project pagination" class="flex flex-wrap gap-3 items-center mt-4">
+		if state.Options.Offset > 0 {
+			<a class="btn btn-sm" href={ templ.SafeURL(state.PageURL(max(0, state.Options.Offset-state.Options.Limit))) }
+				if state.Modal {
+					hx-get={ state.PageURL(max(0, state.Options.Offset-state.Options.Limit)) }
+					hx-target="#project-edit-content"
+					hx-select="[data-group-workspace]"
+					hx-swap="innerHTML"
+					hx-push-url="false"
+				}>Previous</a>
+		}
+		if state.Options.Offset < state.Total && state.Options.Limit < state.Total-state.Options.Offset {
+			<a class="btn btn-sm" href={ templ.SafeURL(state.PageURL(state.Options.Offset+state.Options.Limit)) }
+				if state.Modal {
+					hx-get={ state.PageURL(state.Options.Offset+state.Options.Limit) }
+					hx-target="#project-edit-content"
+					hx-select="[data-group-workspace]"
+					hx-swap="innerHTML"
+					hx-push-url="false"
+				}>Next</a>
+		}
+	</nav>
+}

@@ -18,6 +18,9 @@ import (
 	"durpdeploy/views/pages"
 )
 
+const projectsPath = "/projects"
+const hxRedirectHeader = "HX-Redirect"
+
 type ProjectHandler struct {
 	repo *repository.Repository
 }
@@ -32,35 +35,7 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// renderProjectsList is the shared render path used by the GET handler and
-// by the post-update/post-delete HX responses. Loads the project list,
-// builds per-project panels, and writes the table (or full page) HTML.
-func (h *ProjectHandler) renderProjectsList(
-	w http.ResponseWriter,
-	r *http.Request,
-) error {
-	projects, err := h.projectsForUser(r)
-	if err != nil {
-		return err
-	}
-	panels := make([]pages.LifecyclePanel, len(projects))
-	for i, p := range projects {
-		panel, perr := h.buildPanelForProject(r, p, true)
-		if perr != nil {
-			return perr
-		}
-		panels[i] = panel
-	}
-	if isFragmentRequest(r) {
-		return pages.ProjectsList(projects, panels).Render(r.Context(), w)
-	}
-	return pages.ProjectsListPage(projects, panels, r.URL.Path).
-		Render(r.Context(), w)
-}
-
-// projectsForUser returns all projects for a global admin, or only the
-// projects the user is a member of for any other role. P1-1: non-admins
-// no longer see every project in the system.
+// projectsForUser also serves the project-template source picker.
 func (h *ProjectHandler) projectsForUser(
 	r *http.Request,
 ) ([]db.Project, error) {
@@ -72,6 +47,52 @@ func (h *ProjectHandler) projectsForUser(
 		return h.repo.Queries.ListProjects(r.Context())
 	}
 	return h.repo.Queries.ListProjectsForUser(r.Context(), user.ID)
+}
+
+// renderProjectsList is the shared render path used by the GET handler and
+// by the post-update/post-delete HX responses. Loads the project list,
+// builds per-project panels, and writes the table (or full page) HTML.
+func (h *ProjectHandler) renderProjectsList(
+	w http.ResponseWriter,
+	r *http.Request,
+) error {
+	options, err := ParseProjectCatalogOptions(r.URL.Query())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return nil
+	}
+	access := ProjectCatalogAccess(r)
+	projects, total, err := h.repo.ProjectCatalog(r.Context(), access, options)
+	if err != nil {
+		return err
+	}
+	groups, err := h.repo.Queries.ListAccessibleProjectGroups(
+		r.Context(),
+		access,
+	)
+	if err != nil {
+		return err
+	}
+	state := pages.ProjectListState{
+		Options: options,
+		Groups:  groups,
+		Total:   total,
+		Path:    projectsPath,
+	}
+	panels := make([]pages.LifecyclePanel, len(projects))
+	for i, p := range projects {
+		panel, perr := h.buildPanelForProject(r, p, true)
+		if perr != nil {
+			return perr
+		}
+		panels[i] = panel
+	}
+	if isFragmentRequest(r) {
+		return pages.ProjectsList(projects, panels, state).
+			Render(r.Context(), w)
+	}
+	return pages.ProjectsListPage(projects, panels, state, r.URL.Path).
+		Render(r.Context(), w)
 }
 
 func (h *ProjectHandler) NewProject(w http.ResponseWriter, r *http.Request) {
@@ -193,14 +214,15 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if retargetFormDialog(w, r, "#projects-list") {
+		w.Header().Set("HX-Push-Url", r.URL.Path)
 		h.ListProjects(w, r)
 		return
 	}
 	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("HX-Redirect", "/projects")
+		w.Header().Set(hxRedirectHeader, projectsPath)
 		return
 	}
-	http.Redirect(w, r, "/projects", http.StatusSeeOther)
+	http.Redirect(w, r, projectsPath, http.StatusSeeOther)
 }
 
 // UpdateProjectNotifications saves the project's Slack webhook URL,
@@ -472,7 +494,7 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		// HX-Redirect tells HTMX to do a full navigation rather than a
 		// fragment swap, which would render the project page inside the
 		// form's #form-container.
-		w.Header().Set("HX-Redirect", fmt.Sprintf("/projects/%d", id))
+		w.Header().Set(hxRedirectHeader, fmt.Sprintf("/projects/%d", id))
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -565,11 +587,11 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	// detail page), so callers from the project page expect a
 	// navigation, not an in-place swap.
 	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("HX-Redirect", "/projects")
+		w.Header().Set(hxRedirectHeader, projectsPath)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	http.Redirect(w, r, "/projects", http.StatusSeeOther)
+	http.Redirect(w, r, projectsPath, http.StatusSeeOther)
 }
 
 func parseProjectID(r *http.Request) (int64, error) {

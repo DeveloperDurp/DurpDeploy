@@ -442,11 +442,18 @@ type Project struct {
 	GotifyUrl         sql.NullString `json:"gotify_url"`
 	GotifyToken       sql.NullString `json:"gotify_token"`
 	DiscordWebhookUrl sql.NullString `json:"discord_webhook_url"`
+	GroupID           sql.NullInt64  `json:"group_id"`
 }
 
 type ProjectArtifactRepository struct {
 	ProjectID    int64 `json:"project_id"`
 	RepositoryID int64 `json:"repository_id"`
+}
+
+type ProjectGroup struct {
+	ID      int64  `json:"id"`
+	Name    string `json:"name"`
+	NameKey string `json:"name_key"`
 }
 
 type ProjectMember struct {

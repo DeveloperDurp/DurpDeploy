@@ -61,6 +61,25 @@ Lifecycle assignment can expose shared secrets.
 Only global administrators create or change lifecycle assignments.
 Authorized project administrators can retain or remove an existing assignment.
 
+## Project groups
+
+Project groups organize the project list without changing project permissions.
+Each project can belong to one group.
+Projects without a group appear in Ungrouped.
+Deleting a group preserves its projects.
+
+Only global administrators can create, rename, or delete shared groups.
+Project Maintainers and administrators can move authorized projects into visible groups or Ungrouped.
+Use Manage Groups for all group management and project assignments.
+The Projects page provides browsing controls.
+The global role, project membership, and token ceiling must each permit authoring.
+Viewers and Deployers cannot change groups or assignments.
+
+Group lists and counts include only accessible projects.
+Only global administrators using global access see empty groups.
+Scoped tokens see only groups containing selected, accessible projects.
+Scoped tokens cannot create, rename, or delete shared groups.
+
 ## API tokens
 
 Both `global` and `scoped` tokens support all four permission ceilings.

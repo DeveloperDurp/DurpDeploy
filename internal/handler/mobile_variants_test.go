@@ -269,7 +269,7 @@ func TestMobile_RenderedHTML_preserves_disclosures_and_containment_when_authenti
 			name: "project environment grid",
 			path: "/projects",
 			patterns: []string{
-				`(?s)<div[^>]*class="[^"]*grid[^"]*lg:grid-cols-4[^"]*"[^>]*data-project-environment-grid`,
+				`(?s)<div[^>]*class="[^"]*grid[^"]*sm:grid-cols-2[^"]*"[^>]*data-project-environment-grid`,
 			},
 		},
 		{

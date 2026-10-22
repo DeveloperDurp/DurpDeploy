@@ -81,7 +81,7 @@ return operation.querySelector('.live-responses-table tbody .response-col_status
 				`document.querySelector('#operations-health-healthzAPI .live-responses-table .microlight')?.textContent.includes('"ok": true')`,
 			)
 			b.screenshot(t, "swagger-health-"+scheme)
-			execute("projects-listProjects", "/projects", 401)
+			execute("projects-listProjects", "/projects?sort=name", 401)
 			// Exercise the unchanged raw-token interceptor without logging secrets.
 			b.evaluate(
 				t,
@@ -89,7 +89,7 @@ return operation.querySelector('.live-responses-table tbody .response-col_status
 name: 'bearer', schema: {type: 'apiKey', in: 'header', name: 'Authorization'},
 value: %q}}); true`, token),
 			)
-			execute("projects-listProjects", "/projects", 200)
+			execute("projects-listProjects", "/projects?sort=name", 200)
 			b.wait(
 				t,
 				fmt.Sprintf(

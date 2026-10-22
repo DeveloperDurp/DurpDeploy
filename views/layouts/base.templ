@@ -39,12 +39,13 @@ templ Base(title string, currentPath string) {
 					var meta = document.querySelector('meta[name="csrf-token"]');
 					if (meta) { evt.detail.headers['X-CSRF-Token'] = meta.content; }
 				});
-				// Inject a hidden csrf_token input into any form that
+				// Inject a hidden csrf_token input into write forms that
 				// doesn't already have one. Capture phase so the input is
 				// appended before HTMX or the browser reads the form.
 				document.addEventListener('submit', function(evt) {
 					var form = evt.target;
 					if (!form || form.tagName !== 'FORM') return;
+					if (form.method === 'get') return;
 					if (form.querySelector('input[name="csrf_token"]')) return;
 					var meta = document.querySelector('meta[name="csrf-token"]');
 					if (!meta) return;
