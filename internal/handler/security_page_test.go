@@ -50,10 +50,10 @@ func TestSecurityPage_renders_own_factor_state_for_every_role(t *testing.T) {
 		}
 		for _, text := range []string{
 			"Security",
-			"No factors enrolled",
+			"MFA is not enabled",
 			"Set up authenticator",
 			"Add passkey",
-			"Reauthenticate",
+			"Confirm identity",
 		} {
 			if !strings.Contains(string(body), text) {
 				t.Errorf("security page omitted %q", text)
@@ -116,7 +116,7 @@ func TestSecurityPage_renders_enrolled_factor_metadata(t *testing.T) {
 		t.Fatalf("security page status = %d, want 200", response.StatusCode)
 	}
 	for _, text := range []string{
-		"MFA is enabled with 2 factor(s).",
+		"MFA enabled · 2 factors",
 		"Authenticator app enrolled",
 		"1 passkey(s)",
 		"primary",
@@ -215,11 +215,15 @@ func TestSecurityPage_renders_factor_specific_enrollment_actions(t *testing.T) {
 					t.Errorf("security page omitted factor state %q", state)
 				}
 			}
+			totpLabel := "Set up authenticator"
+			if test.totp {
+				totpLabel = "Configured"
+			}
 			if got := strings.Contains(
 				enrollmentButton(
 					content,
 					"/settings/security/totp/begin",
-					"Set up authenticator",
+					totpLabel,
 				),
 				"disabled",
 			); got != test.totpDisabled {

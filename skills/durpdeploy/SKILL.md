@@ -74,6 +74,21 @@ api_post() { curl -s -H "Authorization: Bearer $TOKEN" -H "Content-Type: applica
 api_get "$BASE/api/v1/users/me"    # sanity check: who am I
 ```
 
+Use `POST /api/v1/users/me/password` to change your own local password.
+Send an unrestricted global bearer token and these JSON fields:
+`current_password`, `new_password`, and `password_confirmation`.
+Use matching new passwords with at least eight characters.
+New passwords must leave room for all password fields, email, and CSRF in the 64 KiB encoded form limit.
+Do not include line breaks in new passwords.
+The operation supports every user role, including Viewer.
+Project-scoped tokens and tokens with a permission ceiling receive `403`.
+Invalid credentials or password fields receive `422`.
+Success returns `204` and invalidates all browser sessions and pending MFA challenges.
+API tokens and enrolled MFA factors remain valid.
+Sign in again with the new password.
+For SSO-only accounts, change the password with the identity provider.
+Forgotten-password recovery is unavailable.
+
 - No CSRF, no cookies. Errors are JSON envelopes (`400/401/404/422`).
 - Global tokens cover all projects available to the owner.
 - Both scopes support a `viewer`, `deployer`, `maintainer`, or `admin` permission ceiling.

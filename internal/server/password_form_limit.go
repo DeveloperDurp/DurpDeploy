@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+
+	"durpdeploy/internal/handler"
 )
 
 // ponytail: 64 KiB leaves room for legacy credentials while keeping queued
 // password forms negligible beside the two active 64 MiB Argon2 hashes.
-const maxPasswordFormBodyBytes int64 = 64 << 10
+const maxPasswordFormBodyBytes = handler.MaxPasswordFormBodyBytes
 
 func passwordFormBodyLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

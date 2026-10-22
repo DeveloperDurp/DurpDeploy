@@ -56,8 +56,8 @@
   {
     "rule": "G101",
     "file": "internal/audit/routes.go",
-    "line": "6-191",
-    "source_sha256": "bba6db862e32d45993d9aacf6219bc9aee7ad533ff721c0fdf0a0a12c532d273",
+    "line": "6-193",
+    "source_sha256": "d28b5531d0d85d9774a87f1aa0e14a4e196000c7db149f298b8d093b75328e04",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie name or audit action/route metadata, not a credential value. Evidence: passkey binding readers/setters or internal/audit/audit.go consumers."
@@ -272,8 +272,8 @@
   {
     "rule": "G120",
     "file": "internal/server/request_body_limit.go",
-    "line": "68",
-    "source_sha256": "2384074068f7c05d76a71b4d6b5243e71b97c406d719b274daf410c7d715d461",
+    "line": "71",
+    "source_sha256": "90a84625a6d3e8cef9fa8f37fa99482a253ab9aa94ace2e524c9b85fafbe65fe",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Entire encoded body is capped (16MiB or 64KiB) before ParseMultipartForm, including unknown lengths; temporary files removed. Evidence: server/request_body_limit.go and handler/request_body_web_test.go."

@@ -7,7 +7,7 @@
   ],
   "swagger": "2.0",
   "info": {
-    "description": "JSON request bodies are limited to 4 MiB of encoded bytes and must contain\nexactly one object matching the endpoint schema. Unknown fields, null, and\ntrailing data return 400. Oversized bodies return 413 before mutation.\nControl actions accept an empty body or an empty JSON object.\n\nPermission order: viewer \u003c deployer \u003c maintainer \u003c admin.\nDeployers can start existing releases, retry, re-run, and cancel deployments.\nMaintainers can author content and execute runbooks within admin boundaries.\nProject membership and token ceilings also limit each operation.\nExplicit-role tokens cannot manage API tokens.\n\nRequests use the host, port, and scheme that serve this specification.",
+    "description": "JSON request bodies are limited to 4 MiB of encoded bytes and must contain\nexactly one object matching the endpoint schema. Unknown fields, null, and\ntrailing data return 400. Oversized bodies return 413 before mutation.\nControl actions accept an empty body or an empty JSON object.\n\nPermission order: viewer \u003c deployer \u003c maintainer \u003c admin.\nDeployers can start existing releases, retry, re-run, and cancel deployments.\nMaintainers can author content and execute runbooks within admin boundaries.\nProject membership and token ceilings also limit each operation.\nExplicit-role tokens cannot manage API tokens.\nUnrestricted global tokens can change their owner's local password with\ncurrent-password verification, including for Viewer and Deployer owners.\n\nRequests use the host, port, and scheme that serve this specification.",
     "title": "durpdeploy REST API.",
     "version": "1.0.0"
   },
@@ -9772,6 +9772,70 @@
             "bearer": []
           }
         ]
+      }
+    },
+    "/users/me/password": {
+      "post": {
+        "description": "Require an unrestricted global bearer token and the current password.\nAll roles can change their own password. Project-scoped and explicit-role\ntokens cannot use this operation. Browser sessions and pending MFA challenges\nare invalidated atomically. API tokens and enrolled factors remain valid.\nSSO-only accounts must change their password with their identity provider.\nNew passwords must leave room for all three password fields, email, and CSRF\nwithin the 64 KiB encoded browser form limit. Line breaks are not allowed.",
+        "tags": [
+          "users"
+        ],
+        "summary": "Change the authenticated local user's password.",
+        "operationId": "changeOwnPassword",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "current_password",
+                "new_password",
+                "password_confirmation"
+              ],
+              "properties": {
+                "current_password": {
+                  "type": "string",
+                  "format": "password"
+                },
+                "new_password": {
+                  "type": "string",
+                  "format": "password",
+                  "minLength": 8
+                },
+                "password_confirmation": {
+                  "type": "string",
+                  "format": "password"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Password changed. Sign in again in all browsers."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "401": {
+            "description": "Missing, invalid, expired, or revoked bearer token."
+          },
+          "403": {
+            "description": "Token has a project scope or permission ceiling."
+          },
+          "413": {
+            "description": "Request body exceeds the encoded byte ceiling."
+          },
+          "422": {
+            "description": "Invalid current password, missing local password, or invalid new password."
+          },
+          "500": {
+            "description": "Password update failed. The transaction preserves the original state."
+          }
+        }
       }
     },
     "/version": {

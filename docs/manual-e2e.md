@@ -1,5 +1,40 @@
 # Manual checks after `make e2e-test`
 
+## Change your own password (#141)
+
+Use a disposable local-password account for each role.
+Retain the accounts for repeat checks.
+This check creates no schedules.
+
+1. Sign in and open **Security** from the account menu.
+2. If required, select **Confirm identity** and complete the password and configured factor checks.
+3. Expand **Password** in **Sign-in methods**.
+4. Enter an incorrect current password and matching new passwords.
+5. Select **Change password**.
+6. Confirm that the form stays expanded, shows an inline error, and clears every password field.
+7. Select **Cancel** and confirm that the form closes and clears its error.
+8. Expand **Password** again.
+9. Repeat with mismatched confirmation and confirm that the password remains unchanged.
+10. Enter the correct current password and matching new passwords with at least eight characters.
+11. Select **Change password** and confirm that the login page opens.
+12. Confirm that all previous browser sessions require a new sign-in.
+13. Confirm that the old password fails and the new password succeeds.
+14. Repeat as Viewer, Deployer, Maintainer, and Admin.
+15. Check labels, Tab order, scrolling, and error focus at phone and desktop widths.
+16. At tablet and desktop widths, confirm that **Sign-in methods** and **MFA & recovery** appear in separate columns.
+17. At phone width, confirm that the groups stack without horizontal scrolling.
+18. For an SSO-only account, confirm that Security shows identity-provider guidance instead of the password form.
+19. Send the same credentials to `POST /api/v1/users/me/password` with an unrestricted global bearer token.
+20. Confirm a `204` response and confirm that the bearer token remains valid.
+21. Confirm that project-scoped tokens and tokens with permission ceilings receive `403`.
+22. Confirm that invalid credentials receive `422` and cannot change another account.
+
+Run the focused API and browser regressions:
+
+```sh
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestSelfPasswordChange' ./internal/handler/api
+```
+
 ## Reusable project templates (#76)
 
 The running-server suite retains a source project, template, destination project, frozen release, and restricted token metadata.

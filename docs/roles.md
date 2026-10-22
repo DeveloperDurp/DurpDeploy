@@ -20,6 +20,9 @@ Deployers cannot execute, retry, or cancel runbooks.
 Deployers cannot request rollback or approve deployments and artifacts.
 
 Viewers and Deployers can log out and manage their own Security settings.
+Every role can change its own local password after current-password verification.
+The public password-change API requires an unrestricted global token and the current password.
+It rejects project-scoped tokens and tokens with a permission ceiling.
 These browser actions require the existing CSRF and reauthentication checks.
 Only Maintainers and administrators can manage their own API tokens.
 The server CLI can provision tokens for restricted users.

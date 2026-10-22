@@ -37,6 +37,9 @@ func webRequestBodyLimit(next http.Handler) http.Handler {
 			return
 		}
 		limit := handler.MaxFormBodyBytes
+		if r.URL.Path == "/settings/security/password" {
+			limit = maxPasswordFormBodyBytes
+		}
 		if strings.Contains(r.URL.Path, "/package-repository") {
 			limit = 64 << 10
 		}

@@ -10,6 +10,8 @@
 // Maintainers can author content and execute runbooks within admin boundaries.
 // Project membership and token ceilings also limit each operation.
 // Explicit-role tokens cannot manage API tokens.
+// Unrestricted global tokens can change their owner's local password with
+// current-password verification, including for Viewer and Deployer owners.
 //
 // Requests use the host, port, and scheme that serve this specification.
 //

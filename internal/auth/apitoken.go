@@ -64,6 +64,11 @@ func RenderRequestError(
 func WriteBlockMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost &&
+				r.URL.Path == "/api/v1/users/me/password" {
+				servePasswordChangeWrite(w, r, next)
+				return
+			}
 			switch r.Method {
 			case http.MethodPost,
 				http.MethodPut,
@@ -89,6 +94,18 @@ func WriteBlockMiddleware() func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func servePasswordChangeWrite(
+	w http.ResponseWriter, r *http.Request, next http.Handler,
+) {
+	token := TokenFromContext(r.Context())
+	if token == nil || token.Scope != "global" || token.Role != "" {
+		RenderJSONError(w, http.StatusForbidden,
+			"an unrestricted global token is required")
+		return
+	}
+	next.ServeHTTP(w, r)
 }
 
 // ApiTokenMiddleware reads a Bearer token from the Authorization header,

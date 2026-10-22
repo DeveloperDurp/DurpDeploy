@@ -240,6 +240,7 @@ func newRouter(
 		pr.Post("/settings/tokens/{id}/revoke", tokensH.MyTokensRevoke)
 
 		pr.Get("/settings/security", authHandler.SecurityGet)
+		pr.Post("/settings/security/password", authHandler.SecurityPasswordPost)
 		pr.Get("/settings/version", handler.Version)
 		pr.Get("/settings/security/reauth", authHandler.SecurityReauthGet)
 		pr.Post("/settings/security/reauth", authHandler.SecurityReauthPost)
@@ -985,6 +986,7 @@ func newRouter(
 		// other users.
 		apiUserH := api.NewUserHandler(repo)
 		ar.Get("/users/me", apiUserH.GetCurrentUser)
+		ar.Post("/users/me/password", authHandler.SecurityPasswordAPI)
 	})
 
 	swaggerH := api.NewSwaggerHandler()

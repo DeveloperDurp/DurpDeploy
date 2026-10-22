@@ -382,7 +382,7 @@ async function passkeyLogin(page, url) {
 	await page.waitForURL(`${url}/`);
 }
 
-async function configuredPasskeyContract(page, url) {
+async function configuredPasskeyContract(page, url, artifactDir) {
 	await reauthenticate(page, url);
 	const rename = page.locator('form[action="/settings/security/passkeys/rename"]').first();
 	const nameInput = rename.locator('[name="name"]');
@@ -415,21 +415,25 @@ async function configuredPasskeyContract(page, url) {
 			`authenticator enrollment card is missing at ${width}px`,
 		);
 		await check(
-			await page.getByRole("heading", { name: "Add passkey" }).isVisible(),
-			`passkey enrollment card is missing at ${width}px`,
+			await page.getByRole("heading", { name: "Passkeys", exact: true }).isVisible(),
+			`passkey section is missing at ${width}px`,
 		);
 		await check(
 			!(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)),
 			`security page clips at ${width}px`,
 		);
+		const mfa = page.getByRole("region", { name: "MFA & recovery" });
+		check(await mfa.getByText("Not set up", { exact: true }).isVisible(), "authenticator setup state is missing");
+		check(await mfa.getByRole("button", { name: "Regenerate recovery codes" }).isVisible(), "recovery action is outside the MFA panel");
+		await page.screenshot({ path: join(artifactDir, `security-mfa-unconfigured-${width}.png`), fullPage: true });
 	}
 	await check(
 		await page.getByRole("heading", { name: "Authenticator app" }).isVisible(),
 		"authenticator enrollment card is missing",
 	);
 	await check(
-		await page.getByRole("heading", { name: "Add passkey" }).isVisible(),
-		"passkey enrollment card is missing",
+		await page.getByRole("heading", { name: "Passkeys", exact: true }).isVisible(),
+		"passkey section is missing",
 	);
 	await check(
 		!(await page.getByRole("button", { name: "Set up authenticator" }).isDisabled()),
@@ -555,8 +559,18 @@ async function run() {
 		await deployerPage.locator("[data-webauthn-status]").waitFor();
 		check(new URL(deployerPage.url()).pathname === "/login/mfa", "wrong origin accepted a passkey");
 		await passkeyLogin(deployerPage, app.url);
-		await configuredPasskeyContract(deployerPage, app.url);
+		await configuredPasskeyContract(deployerPage, app.url, artifactDir);
 		const deployerTOTPSeed = await enrollTOTP(deployerPage, app.url);
+		for (const width of [375, 768, 1280]) {
+			await deployerPage.setViewportSize({ height: 900, width });
+			await deployerPage.goto(`${app.url}/settings/security`);
+			const mfa = deployerPage.getByRole("region", { name: "MFA & recovery" });
+			check(await mfa.getByText("Enrolled", { exact: true }).isVisible(), "authenticator enrollment state is missing");
+			check(await mfa.getByRole("button", { name: "Configured", exact: true }).isDisabled(), "configured authenticator enrollment is enabled");
+			check(await mfa.getByRole("button", { name: "Regenerate recovery codes" }).isVisible(), "recovery action is missing for an enrolled account");
+			check(!(await deployerPage.evaluate(() => document.documentElement.scrollWidth > innerWidth)), `enrolled MFA panel clips at ${width}px`);
+			await deployerPage.screenshot({ path: join(artifactDir, `security-mfa-enrolled-${width}.png`), fullPage: true });
+		}
 		await passkeyDeleteConfirmationContract(
 			deployerPage,
 			app.url,

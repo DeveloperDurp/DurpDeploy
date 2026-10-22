@@ -11,10 +11,21 @@ import (
 )
 
 func (h *AuthHandler) SecurityGet(w http.ResponseWriter, r *http.Request) {
+	h.renderSecurityPage(w, r, "")
+}
+
+func (h *AuthHandler) renderSecurityPage(
+	w http.ResponseWriter, r *http.Request, passwordError string,
+) {
 	setNoStore(w)
 	user, session, ok := h.securityIdentity(r)
 	if !ok {
 		http.Error(w, "unauthenticated", http.StatusUnauthorized)
+		return
+	}
+	stored, err := h.repo.Queries.GetUserByID(r.Context(), user.ID)
+	if err != nil {
+		http.Error(w, "load account", http.StatusInternalServerError)
 		return
 	}
 
@@ -37,11 +48,16 @@ func (h *AuthHandler) SecurityGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if passwordError != "" {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+	}
 	if err := pages.SecurityPage(
 		credentials,
 		hasTOTP,
 		len(credentials) > 0,
 		factorCount,
+		stored.PasswordHash != "",
+		passwordError,
 		auth.IsRecentlyAuthenticated(session),
 		r.URL.Path,
 	).Render(r.Context(), w); err != nil {

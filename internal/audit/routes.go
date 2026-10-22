@@ -174,6 +174,8 @@ var actionMap = map[string]string{
 	"POST /settings/tokens/{id}/scope":                     "update_api_token_scope",
 	"POST /settings/tokens/{id}/revoke":                    "revoke_api_token",
 	"POST /settings/security/reauth":                       "reauthenticate",
+	"POST /settings/security/password":                     "change_password",
+	"POST /api/v1/users/me/password":                       "change_password",
 	"POST /settings/security/reauth/totp":                  "reauthenticate",
 	"POST /settings/security/reauth/recovery":              "mfa_recovery_use",
 	"POST /settings/security/reauth/webauthn/begin":        "",

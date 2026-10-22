@@ -19,6 +19,8 @@ const (
 
 var ErrSessionAuditRequired = errors.New("final session audit is required")
 
+var ErrPasswordChanged = errors.New("password changed during verification")
+
 // BrowserSessionIssue holds trusted request metadata for a final browser login.
 type BrowserSessionIssue struct {
 	UserID    int64
@@ -31,6 +33,8 @@ type BrowserSessionIssue struct {
 type PasswordChange struct {
 	UserID   int64
 	Password string
+	// ExpectedHash prevents a verified password from overwriting a newer change.
+	ExpectedHash string
 }
 
 // IssueBrowserSession atomically creates a new final browser session and marks
@@ -112,6 +116,18 @@ func UpdatePassword(
 		return fmt.Errorf("hash password: %w", err)
 	}
 	if err := repo.WithTx(ctx, func(queries *db.Queries) error {
+		if change.ExpectedHash != "" {
+			if _, err := queries.LockMFAUser(ctx, change.UserID); err != nil {
+				return err
+			}
+			user, err := queries.GetUserByID(ctx, change.UserID)
+			if err != nil {
+				return err
+			}
+			if user.PasswordHash != change.ExpectedHash {
+				return ErrPasswordChanged
+			}
+		}
 		if err := queries.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{
 			ID:           change.UserID,
 			PasswordHash: hash,

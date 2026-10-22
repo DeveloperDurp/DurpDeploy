@@ -13,8 +13,9 @@ import (
 
 // Limits count encoded bytes, including script escaping and form overhead.
 const (
-	MaxJSONBodyBytes int64 = 4 << 20
-	MaxFormBodyBytes int64 = 16 << 20
+	MaxJSONBodyBytes         int64 = 4 << 20
+	MaxFormBodyBytes         int64 = 16 << 20
+	MaxPasswordFormBodyBytes int64 = 64 << 10
 )
 
 var errInvalidJSONBody = errors.New("invalid JSON body")

@@ -128,6 +128,30 @@ factors: `/api/v1/*` does not prompt for MFA, and MFA disablement or an
 administrator reset does not revoke API tokens. Revoke API tokens separately
 when their bearer value may have leaked.
 
+### Change your password
+
+Open **Security** from the account menu.
+If your security session is stale, select **Confirm identity** before you change your password.
+For accounts with MFA, complete the configured factor check.
+Enter your current password and matching new passwords of at least eight characters.
+Select **Change password**.
+Sign in again with your new password.
+
+Every role, including Viewer, can change its own local password.
+Validation failures keep the password unchanged and clear all password fields.
+A successful change removes all browser sessions and pending MFA challenges in one transaction.
+Enrolled MFA factors and API tokens remain valid.
+Revoke API tokens separately if their values may have leaked.
+For SSO-only accounts, change the password with the identity provider.
+
+Use `POST /api/v1/users/me/password` for the corresponding public API operation.
+Send an unrestricted global bearer token and a JSON object with `current_password`, `new_password`, and `password_confirmation`.
+The API requires the current password for every role.
+The API rejects project-scoped tokens and tokens with a permission ceiling.
+The API returns `204` after success and `422` for invalid credentials or password fields.
+New passwords must leave room for all password fields, email, and CSRF in the existing 64 KiB encoded form limit.
+The API rejects oversized new passwords and new passwords with line breaks before changing credentials.
+
 Users enroll or recover factors from **Security**. An administrator may reset
 another user's MFA only after fresh reauthentication. That reset removes the
 target's factors, recovery codes, browser sessions, and pending challenges.
@@ -395,7 +419,7 @@ values:
 |-----|------|---------|
 | **Container runtime compromise** | The embedded agent's socket can control the Docker or Podman host; container escape remains possible on a shared kernel | Use a dedicated host or disable the embedded agent and use standalone agents |
 | **Audit log retention / integrity** | Pruning is opt-in through `audit prune` and an operator-managed schedule; no tamper-proofing | Operator setup; integrity remains future work |
-| **Password reset flow** | No self-service reset. Administrators reset passwords through Admin → Users → Edit | Self-service recovery remains future work |
+| **Password reset flow** | Signed-in local users change their password under Security. Administrators can reset passwords through Admin → Users → Edit. | Forgotten-password recovery remains future work. |
 
 ---
 
