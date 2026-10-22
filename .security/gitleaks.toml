@@ -27,3 +27,14 @@ condition = "AND"
 targetRules = ["aws-access-token"]
 paths = ['''^internal/runner/scrubber_test\.go$''']
 regexes = ['''^AKIAABCDEFGHIJKLMNOP$''']
+
+[[allowlists]]
+description = "Reviewed inert GitLab-format canary in provenance rejection tests"
+condition = "AND"
+targetRules = ["gitlab-pat"]
+paths = ['''^internal/provenance/source_test\.go$''']
+regexTarget = "line"
+regexes = [
+  '''^\s*"gitlab token":\s*\{ArtifactRef: "glpat-1234567890abcdefghijkl"\},$''',
+  '''^\s*"encoded token":\s*\{CIRunURL: "https://ci\.example\.test/(%67|g)lpat-1234567890abcdefghijkl"\},$''',
+]

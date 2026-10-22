@@ -8,8 +8,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"durpdeploy/internal/audit"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
+	"durpdeploy/internal/provenance"
 	"durpdeploy/internal/repository"
 )
 
@@ -23,6 +25,7 @@ func NewReleaseHandler(repo *repository.Repository) *ReleaseHandler {
 
 // releaseWithVariables is the JSON shape returned by GetRelease.
 type releaseWithVariables struct {
+	provenance.Source
 	ID        int64                 `json:"id"`
 	ProjectID int64                 `json:"project_id"`
 	Version   string                `json:"version"`
@@ -177,6 +180,7 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondJSON(w, http.StatusOK, releaseWithVariables{
+		Source:    provenance.FromRelease(release),
 		ID:        release.ID,
 		ProjectID: release.ProjectID,
 		Version:   release.Version,
@@ -302,5 +306,6 @@ func (h *ReleaseHandler) RefreshRelease(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	audit.SetReleaseProvenance(r, updated)
 	RespondJSON(w, http.StatusOK, updated)
 }

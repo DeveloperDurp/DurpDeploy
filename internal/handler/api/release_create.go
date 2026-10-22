@@ -2,7 +2,9 @@ package api
 
 import (
 	"database/sql"
+	"durpdeploy/internal/audit"
 	"durpdeploy/internal/handler"
+	"durpdeploy/internal/provenance"
 	"github.com/go-chi/chi/v5"
 	"net/http"
 	"strconv"
@@ -49,6 +51,7 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 
 	var body struct {
 		Version string `json:"version"`
+		provenance.Source
 	}
 	if !readJSONBool(w, r, &body) {
 		return
@@ -58,10 +61,21 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	release, err := handler.CreateReleaseSnapshot(
-		r.Context(), h.repo, projectID, body.Version,
+	if err := body.Validate(); err != nil {
+		RespondError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	request, ok := creationIdempotency(w, r, projectID, "release", body)
+	if !ok || replayCreation(w, r, h.repo, request) {
+		return
+	}
+	release, err := handler.CreateReleaseWithProvenance(
+		r.Context(), h.repo, projectID, body.Version, body.Source, request,
 	)
 	if err != nil {
+		if replayCreation(w, r, h.repo, request) {
+			return
+		}
 		if writeArtifactError(w, err) {
 			return
 		}
@@ -78,5 +92,6 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	audit.SetReleaseProvenance(r, release)
 	RespondJSON(w, http.StatusCreated, release)
 }

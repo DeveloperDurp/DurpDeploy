@@ -47,7 +47,11 @@ func TestProjectGroupsUpgradeAndRollback(t *testing.T) {
 				},
 			)
 			requireNoError(t, err, "assign migrated project")
-			requireNoError(t, goose.Down(conn, "."), "remove project groups")
+			requireNoError(
+				t,
+				goose.DownTo(conn, ".", fixture.baselineVersion),
+				"remove project groups",
+			)
 			var name string
 			err = conn.QueryRowContext(t.Context(), "SELECT name FROM projects WHERE id = ?", projectID).
 				Scan(&name)

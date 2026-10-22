@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/gate"
@@ -356,6 +357,7 @@ func (h *DeploymentHandler) ScheduleDeployment(
 		forcedFlag = 1
 	}
 
+	audit.SetReleaseProvenance(r, release)
 	result, err := h.repo.CreateDeployment(
 		r.Context(),
 		db.CreateDeploymentParams{

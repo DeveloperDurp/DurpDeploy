@@ -87,6 +87,15 @@ type AgentStepCapability struct {
 	Interpreter   string `json:"interpreter"`
 }
 
+type ApiIdempotency struct {
+	UserID       int64  `json:"user_id"`
+	ProjectID    int64  `json:"project_id"`
+	Operation    string `json:"operation"`
+	KeyHash      string `json:"key_hash"`
+	RequestHash  string `json:"request_hash"`
+	ResponseJson string `json:"response_json"`
+}
+
 type ApiToken struct {
 	ID          string        `json:"id"`
 	UserID      int64         `json:"user_id"`
@@ -481,6 +490,10 @@ type Release struct {
 	CreatedAt      int64  `json:"created_at"`
 	Kind           string `json:"kind"`
 	SnapshotLocked int64  `json:"snapshot_locked"`
+	RepositoryUrl  string `json:"repository_url"`
+	CommitSha      string `json:"commit_sha"`
+	ArtifactRef    string `json:"artifact_ref"`
+	CiRunUrl       string `json:"ci_run_url"`
 }
 
 type ReleaseArtifact struct {

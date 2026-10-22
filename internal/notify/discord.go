@@ -31,6 +31,9 @@ func (d *DiscordNotifier) Notify(
 	ctx context.Context,
 	event events.Event,
 ) (bool, error) {
+	if event.DiscordWebhookURL != "" && len(event.Message) > 2000 {
+		return false, d.notifyAttachment(ctx, event)
+	}
 	if event.DiscordWebhookURL == "" {
 		return true, nil
 	}

@@ -10,10 +10,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/gate"
 	"durpdeploy/internal/httpstream"
+	"durpdeploy/internal/provenance"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 )
@@ -89,6 +91,10 @@ func (h *DeploymentHandler) CreateDeployment(
 		)
 		return
 	}
+	request, ok := creationIdempotency(w, r, projectID, "deployment", req)
+	if !ok || replayCreation(w, r, h.repo, request) {
+		return
+	}
 
 	release, err := h.repo.Queries.GetDeploymentRelease(
 		r.Context(),
@@ -140,15 +146,19 @@ func (h *DeploymentHandler) CreateDeployment(
 		status = "pending_approval"
 	}
 
-	result, err := h.repo.CreateDeployment(
+	result, err := h.repo.CreateDeploymentIdempotent(
 		r.Context(),
 		db.CreateDeploymentParams{
 			ReleaseID:     req.ReleaseID,
 			EnvironmentID: req.EnvironmentID,
 			Status:        status,
 		},
+		request,
 	)
 	if err != nil {
+		if replayCreation(w, r, h.repo, request) {
+			return
+		}
 		if writeArtifactError(w, err) {
 			return
 		}
@@ -170,6 +180,7 @@ func (h *DeploymentHandler) CreateDeployment(
 
 	h.startLocalDeployment(result)
 
+	audit.SetReleaseProvenance(r, release)
 	RespondJSON(w, http.StatusCreated, result.Deployment)
 }
 
@@ -407,10 +418,20 @@ func (h *DeploymentHandler) GetDeployment(
 		return
 	}
 	deployment.Status = queue.Status
+	release, err := h.repo.Queries.GetRelease(r.Context(), deployment.ReleaseID)
+	if err != nil {
+		RespondError(
+			w,
+			http.StatusInternalServerError,
+			"Cannot read release provenance",
+		)
+		return
+	}
 	RespondJSON(w, http.StatusOK, struct {
 		db.Deployment
 		auth.DeploymentQueueInfo
-	}{deployment, queue})
+		Provenance provenance.Source `json:"provenance"`
+	}{deployment, queue, provenance.FromRelease(release)})
 }
 
 // GetDeploymentStatus returns the current deployment status.

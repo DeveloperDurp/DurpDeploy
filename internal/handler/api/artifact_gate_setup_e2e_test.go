@@ -147,6 +147,8 @@ func TestArtifactGateFailureDoesNotUseGlobalNotifiersE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.h.runner.Run(t.Context(), deployment.ID, release.ID, f.environment.ID)
+	// Restore reads after the runner's injected failure so the API can inspect it.
+	f.h.repo.Queries = db.New(f.h.repo.DB)
 	var stored db.Deployment
 	if err := json.Unmarshal(
 		f.api(

@@ -1,5 +1,9 @@
 # Notifications
 
+Discord limits message content to 2,000 characters.
+For longer messages, DurpDeploy sends a short summary and attaches the complete message as `deployment-notification.txt`.
+The attachment preserves all release provenance fields.
+
 Deployment start, success, and failure events appear at `/admin/notifications`.
 External delivery uses project settings or administrator-managed global channels:
 

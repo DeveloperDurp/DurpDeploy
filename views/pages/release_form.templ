@@ -3,11 +3,13 @@ package pages
 import (
 	"fmt"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/provenance"
 	"durpdeploy/views/components"
 	"durpdeploy/views/layouts"
 )
 
 type ReleaseFormState struct {
+	Source provenance.Source
 	ProjectID int64
 	Version string
 	Error string
@@ -38,6 +40,23 @@ templ ReleaseCreationForm(state ReleaseFormState) {
 					<p id="release-create-error" class="text-error text-sm mt-1 break-words" role="alert">{ state.Error }</p>
 				}
 			</div>
+			<fieldset class="w-full min-w-0 space-y-3">
+				<legend class="font-medium">Source provenance (optional)</legend>
+				<p class="text-sm opacity-70">Use public identifiers without credentials. Source provenance cannot change after release creation.</p>
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+					for _, field := range []struct{ Name, Label, Value string }{
+						{"repository_url", "Repository URL", state.Source.RepositoryURL},
+						{"commit_sha", "Commit SHA", state.Source.CommitSHA},
+						{"artifact_ref", "Artifact reference", state.Source.ArtifactRef},
+						{"ci_run_url", "CI run URL", state.Source.CIRunURL},
+					} {
+						<div class="form-control min-w-0">
+							<label class="label" for={ "release-" + field.Name }><span class="label-text">{ field.Label }</span></label>
+							<input id={ "release-" + field.Name } name={ field.Name } value={ field.Value } type="text" maxlength="2048" autocomplete="off" spellcheck="false" class="input input-bordered w-full"/>
+						</div>
+					}
+				</div>
+			</fieldset>
 			<button type="submit" class="btn btn-primary">Create Release</button>
 		</form>
 	</div>

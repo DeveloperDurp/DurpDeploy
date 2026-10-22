@@ -75,6 +75,8 @@ func loadReleaseViews(
 				ID: rel.ID, ProjectID: rel.ProjectID, Version: rel.Version,
 				StepsJson: rel.StepsJson, CreatedAt: rel.CreatedAt, Kind: rel.Kind,
 				SnapshotLocked: rel.SnapshotLocked,
+				RepositoryUrl:  rel.RepositoryUrl, CommitSha: rel.CommitSha,
+				ArtifactRef: rel.ArtifactRef, CiRunUrl: rel.CiRunUrl,
 			},
 			Active: rel.Active != 0,
 		}

@@ -45,6 +45,13 @@ func (r *Repository) CreateDeployment(
 	ctx context.Context,
 	arg db.CreateDeploymentParams,
 ) (DeploymentResult, error) {
+	return r.CreateDeploymentIdempotent(ctx, arg, IdempotencyRequest{})
+}
+
+func (r *Repository) CreateDeploymentIdempotent(
+	ctx context.Context, arg db.CreateDeploymentParams,
+	request IdempotencyRequest,
+) (DeploymentResult, error) {
 	if err := r.MaintainArtifactGates(ctx); err != nil {
 		return DeploymentResult{}, err
 	}
@@ -54,9 +61,15 @@ func (r *Repository) CreateDeployment(
 		return r.withQueueTx(
 			ctx,
 			func(ctx context.Context, q *db.Queries) error {
+				if err := request.Claim(ctx, q); err != nil {
+					return err
+				}
 				var createErr error
 				result, createErr = r.createDeployment(ctx, q, arg)
-				return createErr
+				if createErr != nil {
+					return createErr
+				}
+				return request.Complete(ctx, q, result.Deployment)
 			},
 		)
 	})

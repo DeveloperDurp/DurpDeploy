@@ -398,8 +398,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/release_refresh.go",
-    "line": "89",
-    "source_sha256": "558afd600f23448494f2712490e1a118d81fe989cab62402e823bca4466db3ff",
+    "line": "91",
+    "source_sha256": "c3bc13676e6eaac6c02eb567efd43a016be0e86741b49c0c545227e65fa955d2",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
@@ -407,8 +407,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/release.go",
-    "line": "188",
-    "source_sha256": "0a218afff24d4624adca4ca0e0f2ef31012259c7094263703e22bd61cc91dbd6",
+    "line": "190",
+    "source_sha256": "31d3618b34335da380cded3d7eed940dff39c3ba9d5e53548ffa3cfccaa24625",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Existing delete redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. Extracting release creation moved this redirect without changing its destination. Evidence: release.go DeleteRelease, project.go parseProjectID, release deletion/E2E tests."
@@ -416,8 +416,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/release_create.go",
-    "line": "59",
-    "source_sha256": "202ae2bf3bfb345572e83fad3e849dd808abb7354ebcdce0937feaf1b5636d08",
+    "line": "77",
+    "source_sha256": "3e0dabc69e11ac92bca22d6507f78a2e19bb2d6d0e0482e17a3ebd70d1bd304f",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Creation redirect retains the existing fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. No user-controlled host or path is accepted. Evidence: release_create.go CreateRelease/renderCreatedRelease, project.go parseProjectID, TestReleaseDeferredPackageAPIWebE2E."

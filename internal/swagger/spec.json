@@ -5469,6 +5469,13 @@
             "schema": {
               "$ref": "#/definitions/DeploymentScheduleRequest"
             }
+          },
+          {
+            "type": "string",
+            "x-go-name": "Key",
+            "description": "Optional key containing 1 to 255 visible ASCII characters.\nKeys are scoped to the user, project, and operation, with no expiry.\nMatching retries return the original 201 response and Idempotency-Replayed: true.\nReuse with different input returns 409. Failed creations do not consume keys.",
+            "name": "Idempotency-Key",
+            "in": "header"
           }
         ],
         "responses": {
@@ -6702,6 +6709,13 @@
             "schema": {
               "$ref": "#/definitions/ReleaseRequest"
             }
+          },
+          {
+            "type": "string",
+            "x-go-name": "Key",
+            "description": "Optional key containing 1 to 255 visible ASCII characters.\nKeys are scoped to the user, project, and operation, with no expiry.\nMatching retries return the original 201 response and Idempotency-Replayed: true.\nReuse with different input returns 409. Failed creations do not consume keys.",
+            "name": "Idempotency-Key",
+            "in": "header"
           }
         ],
         "responses": {
@@ -10844,6 +10858,9 @@
           "type": "string",
           "x-go-name": "Note"
         },
+        "provenance": {
+          "$ref": "#/definitions/ReleaseSource"
+        },
         "queue_position": {
           "type": "integer",
           "format": "int64",
@@ -12665,6 +12682,20 @@
       "type": "object",
       "title": "Release is a refreshable snapshot of project steps and variables.",
       "properties": {
+        "artifact_ref": {
+          "description": "Public HTTPS URL or artifact identifier, including OCI SHA-256 references.",
+          "type": "string",
+          "x-go-name": "ArtifactRef"
+        },
+        "ci_run_url": {
+          "type": "string",
+          "x-go-name": "CIRunURL"
+        },
+        "commit_sha": {
+          "description": "Full hexadecimal SHA-1 or SHA-256 commit identifier.",
+          "type": "string",
+          "x-go-name": "CommitSHA"
+        },
         "created_at": {
           "type": "integer",
           "format": "int64",
@@ -12679,6 +12710,10 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "ProjectID"
+        },
+        "repository_url": {
+          "type": "string",
+          "x-go-name": "RepositoryURL"
         },
         "snapshot_locked": {
           "description": "Deprecated: retained for compatibility; does not prevent refresh.",
@@ -12755,6 +12790,24 @@
       "type": "object",
       "title": "ReleaseRequest is the body for create release.",
       "properties": {
+        "artifact_ref": {
+          "description": "Public HTTPS URL or artifact identifier, including OCI SHA-256 references.",
+          "type": "string",
+          "x-go-name": "ArtifactRef"
+        },
+        "ci_run_url": {
+          "type": "string",
+          "x-go-name": "CIRunURL"
+        },
+        "commit_sha": {
+          "description": "Full hexadecimal SHA-1 or SHA-256 commit identifier.",
+          "type": "string",
+          "x-go-name": "CommitSHA"
+        },
+        "repository_url": {
+          "type": "string",
+          "x-go-name": "RepositoryURL"
+        },
         "version": {
           "description": "Attached packages are downloaded and pinned on the first deployment pull.",
           "type": "string",
@@ -12762,6 +12815,33 @@
         }
       },
       "x-go-name": "swaggerReleaseRequest",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "ReleaseSource": {
+      "description": "URL fields require HTTPS without userinfo, query parameters, or fragments.\nFields accept at most 2048 bytes without whitespace or control characters.\nCredentials and recognized secret formats are rejected.",
+      "type": "object",
+      "title": "ReleaseSource contains optional, immutable public source identifiers.",
+      "properties": {
+        "artifact_ref": {
+          "description": "Public HTTPS URL or artifact identifier, including OCI SHA-256 references.",
+          "type": "string",
+          "x-go-name": "ArtifactRef"
+        },
+        "ci_run_url": {
+          "type": "string",
+          "x-go-name": "CIRunURL"
+        },
+        "commit_sha": {
+          "description": "Full hexadecimal SHA-1 or SHA-256 commit identifier.",
+          "type": "string",
+          "x-go-name": "CommitSHA"
+        },
+        "repository_url": {
+          "type": "string",
+          "x-go-name": "RepositoryURL"
+        }
+      },
+      "x-go-name": "swaggerReleaseSource",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "ReleaseVariableResponse": {
@@ -12803,6 +12883,20 @@
       "type": "object",
       "title": "ReleaseWithVariablesResponse is the detailed release payload.",
       "properties": {
+        "artifact_ref": {
+          "description": "Public HTTPS URL or artifact identifier, including OCI SHA-256 references.",
+          "type": "string",
+          "x-go-name": "ArtifactRef"
+        },
+        "ci_run_url": {
+          "type": "string",
+          "x-go-name": "CIRunURL"
+        },
+        "commit_sha": {
+          "description": "Full hexadecimal SHA-1 or SHA-256 commit identifier.",
+          "type": "string",
+          "x-go-name": "CommitSHA"
+        },
         "created_at": {
           "type": "integer",
           "format": "int64",
@@ -12817,6 +12911,10 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "ProjectID"
+        },
+        "repository_url": {
+          "type": "string",
+          "x-go-name": "RepositoryURL"
         },
         "steps_json": {
           "type": "string",

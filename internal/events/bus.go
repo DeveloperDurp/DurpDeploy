@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/provenance"
 	"durpdeploy/internal/repository"
 )
 
@@ -125,6 +126,17 @@ func (b *Bus) Publish(ctx context.Context, evt Event) {
 			evt.Message = strings.Replace(evt.Message,
 				fmt.Sprintf("Deployment #%d", evt.DeploymentID),
 				fmt.Sprintf("Runbook execution #%d", execution.ID), 1)
+		} else if release, err := b.repo.Queries.GetRelease(
+			ctx, deployment.ReleaseID); err == nil {
+			source := provenance.FromRelease(release)
+			for _, field := range []struct{ name, value string }{
+				{"Repository", source.RepositoryURL}, {"Commit", source.CommitSHA},
+				{"Artifact", source.ArtifactRef}, {"CI run", source.CIRunURL},
+			} {
+				if field.value != "" {
+					evt.Message += "\n" + field.name + ": " + field.value
+				}
+			}
 		}
 	}
 	if evt.ProjectID == 0 {

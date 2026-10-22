@@ -421,6 +421,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 			@DeploymentActions(deployment, false)
 		</div>
 		<div hx-get={ fmt.Sprintf("/deployments/%d/artifact-gates", deployment.ID) } hx-trigger="load" hx-swap="outerHTML" data-artifact-gates aria-live="polite"></div>
+		@ReleaseProvenance(release)
 		<section class="space-y-4" aria-label="Step logs">
 			<h2 class="text-xl font-bold">Step logs</h2>
 			@LogHistoryNavigation(fmt.Sprintf("/deployments/%d", deployment.ID), fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID))

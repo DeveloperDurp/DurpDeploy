@@ -47,6 +47,10 @@ WHERE id = ?;
 INSERT INTO releases (project_id, version, steps_json)
 VALUES (?, ?, ?) RETURNING *;
 
+-- name: CreateReleaseWithProvenance :one
+INSERT INTO releases (project_id, version, steps_json, repository_url, commit_sha, artifact_ref, ci_run_url)
+VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *;
+
 -- name: UpdateRelease :one
 UPDATE releases SET project_id = ?, version = ?, steps_json = ?
 WHERE id = ? RETURNING *;

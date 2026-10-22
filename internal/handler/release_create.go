@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"strings"
 
+	"durpdeploy/internal/audit"
+	"durpdeploy/internal/provenance"
+	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
 )
 
@@ -21,22 +24,36 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 	}
 
 	version := strings.TrimSpace(r.FormValue("version"))
-
-	if version == "" {
+	source := provenance.Source{
+		RepositoryURL: r.FormValue("repository_url"),
+		CommitSHA:     r.FormValue("commit_sha"),
+		ArtifactRef:   r.FormValue("artifact_ref"),
+		CIRunURL:      r.FormValue("ci_run_url"),
+	}
+	if err := source.Validate(); err != nil {
+		// Discard rejected metadata so credentials cannot enter rendered errors.
 		h.renderReleaseCreateError(w, r, pages.ReleaseFormState{
-			ProjectID: projectID, Error: "Version is required",
+			ProjectID: projectID, Version: version, Error: err.Error(),
 		})
 		return
 	}
 
-	_, err = CreateReleaseSnapshot(r.Context(), h.repo, projectID, version)
+	if version == "" {
+		h.renderReleaseCreateError(w, r, pages.ReleaseFormState{
+			ProjectID: projectID, Source: source, Error: "Version is required",
+		})
+		return
+	}
+
+	release, err := CreateReleaseWithProvenance(r.Context(), h.repo,
+		projectID, version, source, repository.IdempotencyRequest{})
 	if err != nil {
 		if writeArtifactError(w, err) {
 			return
 		}
 		if IsUniqueViolation(err) {
 			h.renderReleaseCreateError(w, r, pages.ReleaseFormState{
-				ProjectID: projectID, Version: version,
+				ProjectID: projectID, Version: version, Source: source,
 				Error: "A release with this version already exists. " +
 					"Enter a different version to create a new release.",
 			})
@@ -47,6 +64,7 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	audit.SetReleaseProvenance(r, release)
 	h.renderCreatedRelease(w, r, projectID)
 }
 

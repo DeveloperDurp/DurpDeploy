@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"durpdeploy/internal/audit"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
 )
@@ -86,6 +87,7 @@ func (h *ReleaseHandler) RefreshRelease(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	audit.SetReleaseProvenance(r, release)
 	http.Redirect(
 		w,
 		r,

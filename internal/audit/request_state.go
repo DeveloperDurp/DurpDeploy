@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/provenance"
 	"durpdeploy/internal/repository"
 
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
@@ -13,6 +14,8 @@ import (
 type requestStateKey struct{}
 
 type requestState struct {
+	releaseID          int64
+	releaseSource      *provenance.Source
 	projectGroupChange map[string]any
 	deletedRunbook     db.Runbook
 	suppress           bool
@@ -23,6 +26,15 @@ type requestState struct {
 	tokenID            string
 	tokenScope         repository.TokenScope
 	previousTokenScope *repository.TokenScope
+}
+
+// SetReleaseProvenance supplies only persisted public source metadata.
+func SetReleaseProvenance(r *http.Request, release db.Release) {
+	if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {
+		source := provenance.FromRelease(release)
+		state.releaseID = release.ID
+		state.releaseSource = &source
+	}
 }
 
 // SetProjectGroupChange supplies non-secret group metadata to the audit middleware.

@@ -1,5 +1,33 @@
 # Manual checks after `make e2e-test`
 
+## Release provenance and CI retries (#18)
+
+1. Open a disposable project's **Releases** page as a Maintainer or administrator.
+2. Enter a unique version and optional public source identifiers.
+3. Use HTTPS URLs without credentials, query parameters, or fragments.
+4. Select **Create Release**.
+5. Open the release and confirm all source identifiers.
+6. Refresh the release and confirm that provenance stays unchanged.
+7. Deploy the release and confirm its provenance on the deployment page.
+8. Check the deployment notification and creation audit details.
+9. Repeat creation through the API with an `Idempotency-Key` header.
+10. Retry the same request and confirm the original `201` response and resource ID.
+11. Confirm the `Idempotency-Replayed: true` response header.
+12. Restart the server and repeat the same request.
+13. Change one request field and confirm a `409` response.
+14. Submit a credential-bearing URL and confirm rejection without echoing credentials.
+15. Confirm that a Viewer can read provenance but cannot create releases.
+16. Check the form and detail pages at phone and desktop widths.
+
+These checks create no schedules.
+Keep the project, releases, and deployment history for repeat checks.
+
+Run the backend, API, web, and browser checks:
+
+```sh
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=6m -v -run '^TestReleaseProvenance.*E2E$' ./internal/handler/api
+```
+
 ## Change your own password (#141)
 
 Use a disposable local-password account for each role.

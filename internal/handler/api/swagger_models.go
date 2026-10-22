@@ -118,6 +118,7 @@ type swaggerStepTemplateVersion struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerRelease struct {
+	swaggerReleaseSource
 	ID        int64  `json:"id"`
 	ProjectID int64  `json:"project_id"`
 	Version   string `json:"version"`
@@ -132,18 +133,20 @@ type swaggerRelease struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerDeployment struct {
-	QueuePosition      int64   `json:"queue_position"`
-	ActiveDeploymentID int64   `json:"active_deployment_id,omitempty"`
-	ActiveWorkURL      string  `json:"active_work_url,omitempty"`
-	ID                 int64   `json:"id"`
-	ReleaseID          int64   `json:"release_id"`
-	EnvironmentID      int64   `json:"environment_id"`
-	Status             string  `json:"status"`
-	StartedAt          *int64  `json:"started_at"`
-	FinishedAt         *int64  `json:"finished_at"`
-	CreatedAt          int64   `json:"created_at"`
-	Forced             int64   `json:"forced"`
-	Note               *string `json:"note"`
+	// Present on the deployment detail response.
+	Provenance         *swaggerReleaseSource `json:"provenance,omitempty"`
+	QueuePosition      int64                 `json:"queue_position"`
+	ActiveDeploymentID int64                 `json:"active_deployment_id,omitempty"`
+	ActiveWorkURL      string                `json:"active_work_url,omitempty"`
+	ID                 int64                 `json:"id"`
+	ReleaseID          int64                 `json:"release_id"`
+	EnvironmentID      int64                 `json:"environment_id"`
+	Status             string                `json:"status"`
+	StartedAt          *int64                `json:"started_at"`
+	FinishedAt         *int64                `json:"finished_at"`
+	CreatedAt          int64                 `json:"created_at"`
+	Forced             int64                 `json:"forced"`
+	Note               *string               `json:"note"`
 }
 
 // DeploymentListItem is the enriched row returned by ListDeployments.
@@ -616,6 +619,7 @@ type swaggerVariableResponse struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerReleaseRequest struct {
+	swaggerReleaseSource
 	// Attached packages are downloaded and pinned on the first deployment pull.
 	Version string `json:"version"`
 }
@@ -625,6 +629,7 @@ type swaggerReleaseRequest struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerReleaseWithVariablesResponse struct {
+	swaggerReleaseSource
 	ID        int64                            `json:"id"`
 	ProjectID int64                            `json:"project_id"`
 	Version   string                           `json:"version"`

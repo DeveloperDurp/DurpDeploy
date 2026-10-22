@@ -487,6 +487,18 @@ or refresh; recreate their steps and create a new release (`409` on launch).
    `ARTIFACT_PATH`, `DURPDEPLOY_STAGE_DIR`, and `DURPDEPLOY_APPROVED_DIR` remain reserved.
 5. **Release** (snapshot of current steps + variables)
    `POST /api/v1/projects/$PID/releases` `{"version":"1.2.0"}` → `id`.
+   Optionally supply `repository_url`, `commit_sha`, `artifact_ref`, and `ci_run_url` as top-level JSON fields.
+   Use HTTPS URLs without credentials, query parameters, or fragments.
+   Use a full hexadecimal SHA-1 or SHA-256 value for `commit_sha`.
+   Use a public HTTPS URL or artifact identifier for `artifact_ref`.
+   OCI references can include an `@sha256:` digest.
+   Each field accepts at most 2048 bytes without whitespace or control characters.
+   Never include secrets in provenance fields.
+   Recognized credential formats are rejected with `422`.
+   Provenance stays unchanged during refresh.
+   Release reads include these fields.
+   Deployment detail reads include a `provenance` object.
+   Release and deployment pages, notifications, and creation audit details also show provenance.
    A duplicate version returns `409` with an instruction to enter a different version.
    Change `version` before retrying.
    With an attached package repository, creation freezes its source, URL and
@@ -515,6 +527,20 @@ or refresh; recreate their steps and create a new release (`409` on launch).
 6. **Deploy**
    `POST /api/v1/projects/$PID/deployments`
    `{"release_id":$RID,"environment_id":$EID}` → `201` with deployment `id`.
+   For either creation endpoint, optionally send an `Idempotency-Key` header.
+   Use 1 to 255 visible ASCII characters without spaces.
+   Keep the same key and JSON field values when retrying a request.
+   JSON field order and insignificant JSON whitespace do not affect matching.
+   Matching retries return the original `201` response with `Idempotency-Replayed: true`.
+   Reuse with different field values returns `409`.
+   Keys are scoped to the authenticated user, project, and creation operation.
+   Another token for the same user can retry the request.
+   Each retry must pass current authentication and authorization checks.
+   Keys survive restarts and concurrent requests without an expiry.
+   Failed creation transactions do not consume keys.
+   Deleted results remain replayable while the owning user and project exist.
+   A replay never recreates a resource or starts deployment execution.
+   Use a new key for each intended creation.
 7. **Poll** until terminal or operator action is required:
 
 ```bash

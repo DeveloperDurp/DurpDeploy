@@ -139,9 +139,11 @@ func seedDeploymentCreationRace(t *testing.T, repo *Repository) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
-		ProjectID: project.ID, Version: "v1", StepsJson: "[]",
-	}); err != nil {
+	// Historical fixtures must not read columns added after their schema version.
+	if _, err := repo.DB.ExecContext(ctx,
+		`INSERT INTO releases(project_id, version, steps_json)
+		 VALUES (?, ?, ?)`, project.ID, "v1", "[]",
+	); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repo.DB.ExecContext(

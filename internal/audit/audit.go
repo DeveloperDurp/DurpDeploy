@@ -297,6 +297,10 @@ func addRequestStateDetails(
 	if state.projectGroupChange != nil {
 		details["project_group_change"] = state.projectGroupChange
 	}
+	if state.releaseSource != nil {
+		details["release_id"] = state.releaseID
+		details["provenance"] = state.releaseSource
+	}
 	if state.tokenID != "" {
 		details["token_id"] = state.tokenID
 		details["scope"] = state.tokenScope.Scope

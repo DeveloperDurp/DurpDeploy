@@ -1,0 +1,28 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"durpdeploy/internal/provenance"
+)
+
+templ ReleaseProvenance(release db.Release) {
+	{{ source := provenance.FromRelease(release) }}
+	if source != (provenance.Source{}) {
+		<section class="card bg-base-200 p-4 min-w-0" aria-label="Source provenance" data-release-provenance>
+			<h2 class="text-xl font-bold mb-4">Source provenance</h2>
+			<dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+				for _, field := range []struct{ Name, Value string }{
+					{"Repository URL", source.RepositoryURL}, {"Commit SHA", source.CommitSHA},
+					{"Artifact reference", source.ArtifactRef}, {"CI run URL", source.CIRunURL},
+				} {
+					if field.Value != "" {
+						<div class="min-w-0">
+							<dt class="opacity-70">{ field.Name }</dt>
+							<dd class="break-all"><code>{ field.Value }</code></dd>
+						</div>
+					}
+				}
+			</dl>
+		</section>
+	}
+}
