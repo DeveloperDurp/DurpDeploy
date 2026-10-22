@@ -232,11 +232,19 @@ Browser and agent evidence remains available for seven days.
 Publication requires the latest successful matching merge request pipeline.
 It checks the latest image and retention jobs, source tree, source references, archive hash, and AMD64 platform metadata.
 Squash merge commit identifiers can differ when their source trees match.
+Fast-forward merges use the verified merge request source tip without squashing commits.
 Missing, expired, failed, or mismatched artifacts stop publication.
+
 The publisher separately verifies the current pipeline archive and embedded build identity.
 It publishes the scanned image bytes without rebuilding them.
 Image publication must succeed in both registries before chart publication starts.
 Chart publication must succeed in both registries before its job passes.
+
+Before final verification, rebase the source branch onto the current default branch.
+Run the full merge request pipeline after the rebase.
+If the default branch advances, repeat the rebase and verification before merging.
+Merge the tested source tip without additional changes.
+Publication rejects a different source tree after a merge-time rebase or conflict resolution.
 
 ## Project settings and cutover
 

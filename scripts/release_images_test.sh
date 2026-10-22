@@ -56,7 +56,7 @@ SH
 chmod +x "$work/bin/curl"
 export PATH="$work/bin:$PATH"
 jq -n --arg target "$CI_COMMIT_SHA" --arg head "$head" --arg base "$base" '
-  {iid:1,state:"merged",squash_commit_sha:$target,merge_commit_sha:null,
+  {iid:1,state:"merged",sha:$head,squash_commit_sha:$target,merge_commit_sha:null,
     target_project_id:3,target_branch:"main",diff_refs:{head_sha:$head,base_sha:$base}}
 ' > "$FIXTURE_DIR/mr.json"
 jq -s '.' "$FIXTURE_DIR/mr.json" > "$FIXTURE_DIR/mrs.json"
@@ -98,10 +98,12 @@ jq -n --arg tree "$tree" --arg head "$head" --arg base "$base" --arg hash "$hash
 cp -R "$FIXTURE_DIR" "$work/good-api"
 reset_api() { rm -f "$FIXTURE_DIR/fail"; cp "$work/good-api/"* "$FIXTURE_DIR/"; }
 expect_rejection() {
+  local expected_error=${2:-}
   if bash "$root/scripts/resolve_release_images.sh" "$work/rejected" > "$work/rejection.log" 2>&1; then
     printf 'Unexpected acceptance: %s\n' "$1" >&2
     exit 1
   fi
+  if [[ -n $expected_error ]]; then grep -Fq "$expected_error" "$work/rejection.log"; fi
   printf 'PASS: reject %s\n' "$1"
   reset_api
 }
@@ -109,6 +111,61 @@ CI_JOB_TOKEN= expect_rejection 'missing CI job token'
 bash "$root/scripts/resolve_release_images.sh" "$work/verified"
 cmp "$FIXTURE_DIR/image.tar" "$work/verified/amd64/image.tar"
 echo 'PASS: promote matching AMD64 squash-merge artifacts'
+
+# A regular merge retains the tested source tree without squashing commits.
+git merge -q --no-ff feature -m 'merge feature'
+CI_COMMIT_SHA=$(git rev-parse HEAD)
+git push -q origin main
+jq --arg target "$CI_COMMIT_SHA" '.[0].merge_commit_sha=$target | .[0].squash_commit_sha=null' \
+  "$work/good-api/mrs.json" > "$FIXTURE_DIR/mrs.json"
+bash "$root/scripts/resolve_release_images.sh" "$work/merge-verified"
+cmp "$FIXTURE_DIR/image.tar" "$work/merge-verified/amd64/image.tar"
+reset_api
+echo 'PASS: promote matching non-squashed merge artifacts'
+
+# Fast-forward merges use the MR source tip instead of a new merge commit.
+ff_base=$CI_COMMIT_SHA
+git switch -qc fast-forward-feature
+git commit -q --allow-empty -m 'first preserved commit'
+ff_previous=$(git rev-parse HEAD)
+git commit -q --allow-empty -m 'second preserved commit'
+ff_head=$(git rev-parse HEAD)
+git switch -q main
+git merge -q --ff-only fast-forward-feature
+CI_COMMIT_SHA=$ff_head
+git push -q origin main
+jq --arg head "$ff_head" --arg base "$ff_base" '
+  .sha=$head | .merge_commit_sha=null | .squash_commit_sha=null
+  | .diff_refs={head_sha:$head,base_sha:$base}
+' "$work/good-api/mr.json" > "$FIXTURE_DIR/mr.json"
+jq -s '.' "$FIXTURE_DIR/mr.json" > "$FIXTURE_DIR/mrs.json"
+jq --arg head "$ff_head" '.[0].sha=$head' "$work/good-api/pipelines.json" > "$FIXTURE_DIR/pipelines.json"
+jq --arg head "$ff_head" --arg base "$ff_base" '.head=$head | .commit=$head | .base=$base' \
+  "$work/good-api/source.json" > "$FIXTURE_DIR/source.json"
+cp -R "$FIXTURE_DIR" "$work/ff-api"
+bash "$root/scripts/resolve_release_images.sh" "$work/ff-verified"
+cmp "$FIXTURE_DIR/image.tar" "$work/ff-verified/amd64/image.tar"
+echo 'PASS: promote matching multi-commit fast-forward artifacts'
+
+# A shared tree does not make an intermediate source commit the merged tip.
+jq --arg head "$ff_previous" '.[0].sha=$head' "$work/ff-api/mrs.json" > "$FIXTURE_DIR/mrs.json"
+expect_rejection 'fast-forward MR with a different source tip' 'No unique merged MR'
+cp "$work/ff-api/"* "$FIXTURE_DIR/"
+jq '. += [(.[0] | .iid=2)]' "$work/ff-api/mrs.json" > "$FIXTURE_DIR/mrs.json"
+expect_rejection 'ambiguous fast-forward MR association' 'No unique merged MR'
+
+# Rebased integration changes require a new pipeline for the final source tree.
+cp "$work/ff-api/"* "$FIXTURE_DIR/"
+printf 'untested integration\n' > integration
+git add integration
+git commit -qm 'untested integration'
+CI_COMMIT_SHA=$(git rev-parse HEAD)
+git push -q origin main
+jq --arg target "$CI_COMMIT_SHA" '.sha=$target | .diff_refs.head_sha=$target' \
+  "$work/ff-api/mr.json" > "$FIXTURE_DIR/mr.json"
+jq -s '.' "$FIXTURE_DIR/mr.json" > "$FIXTURE_DIR/mrs.json"
+expect_rejection 'fast-forward tree changed after testing' 'does not match the verified MR pipeline'
+CI_COMMIT_SHA=$first_target
 
 # Unrelated test retries do not invalidate the original scanned image job.
 jq '. += [(.[] | select(.name == "e2e") | .id=115)]' "$work/good-api/jobs.json" > "$FIXTURE_DIR/jobs.json"

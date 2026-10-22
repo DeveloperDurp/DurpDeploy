@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Resolve the latest verified GitLab MR source, including squash merges.
+# Resolve verified GitLab MR sources for merge, squash, and fast-forward merges.
 set -euo pipefail
 destination=${1:?usage: resolve_release_images.sh DESTINATION}
 [[ ${CI_PROJECT_ID:?} =~ ^[0-9]+$ ]]
@@ -15,12 +15,13 @@ scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 
 api() {
+  local endpoint=$1 max_bytes=${2:-2147483648}
   # GitLab serves these same-origin artifact-file endpoints without redirects.
   curl --fail --silent --show-error --max-time 180 \
     --proto '=https' --proto-redir '=https' \
-    --max-filesize "${2:-2147483648}" \
+    --max-filesize "$max_bytes" \
     --header "JOB-TOKEN: $CI_JOB_TOKEN" \
-    "$CI_API_V4_URL/projects/$CI_PROJECT_ID/$1"
+    "$CI_API_V4_URL/projects/$CI_PROJECT_ID/$endpoint"
 }
 api_list() {
   local endpoint=$1 page=1 count separator='?'
@@ -41,7 +42,8 @@ api_list "repository/commits/$target/merge_requests?state=merged" |
   jq -e --arg target "$target" --arg branch "$CI_DEFAULT_BRANCH" --argjson project "$CI_PROJECT_ID" '
     [.[] | select(.state == "merged" and .target_branch == $branch
       and .target_project_id == $project
-      and (.merge_commit_sha == $target or .squash_commit_sha == $target))]
+      and (.merge_commit_sha == $target or .squash_commit_sha == $target
+        or (.merge_commit_sha == null and .squash_commit_sha == null and .sha == $target)))]
     | if length == 1 then .[0] else error("No unique merged MR") end
   ' > "$scratch/mr.json"
 iid=$(jq -er '.iid | select(type == "number" and . > 0)' "$scratch/mr.json")
@@ -55,10 +57,14 @@ jq -e --argjson project "$CI_PROJECT_ID" '
 pipeline=$(jq -er '.id | select(type == "number" and . > 0)' "$scratch/pipeline.json")
 tested=$(jq -er '.sha | select(test("^[0-9a-f]{40}$"))' "$scratch/pipeline.json")
 if ! git cat-file -e "$tested^{commit}" 2>/dev/null; then git fetch --no-tags origin "$tested"; fi
-[[ $(git rev-parse "$tested^{tree}") == "$tree" ]]
+if [[ $(git rev-parse "$tested^{tree}") != "$tree" ]]; then
+  echo 'Publication source tree does not match the verified MR pipeline. Rebase and rerun MR checks before merging.' >&2
+  exit 1
+fi
 api_list "pipelines/$pipeline/jobs?include_retried=true" > "$scratch/jobs.json"
 latest_job() {
-  jq -er --arg name "$1" --argjson pipeline "$pipeline" '
+  local name=$1
+  jq -er --arg name "$name" --argjson pipeline "$pipeline" '
     [.[] | select(.name == $name)] | max_by(.id)
     | select(.status == "success" and .allow_failure == false and .pipeline.id == $pipeline)
     | .id | select(type == "number" and . > 0)
