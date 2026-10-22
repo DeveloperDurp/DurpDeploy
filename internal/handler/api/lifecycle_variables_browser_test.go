@@ -183,9 +183,12 @@ func (b *packageBrowser) assertConnectedVariablePreview(
 	t *testing.T, f *artifactE2E,
 ) {
 	t.Helper()
-	f.api(t, "POST", f.base()+"/variables", map[string]string{
-		"name": "LOCAL_PREVIEW", "value": "project-local-preview",
-	}, 201)
+	for i := range 7 {
+		f.api(t, "POST", f.base()+"/variables", map[string]string{
+			"name":  fmt.Sprintf("LOCAL_PREVIEW_%d", i),
+			"value": "project-local-preview",
+		}, 201)
+	}
 	for _, width := range []int{375, 390, 768, 1280} {
 		b.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
 			"width": width, "height": 844, "deviceScaleFactor": 1,
@@ -201,6 +204,8 @@ func (b *packageBrowser) assertConnectedVariablePreview(
   inherited.closest('.card') === group && !inherited.classList.contains('card') &&
   parseFloat(getComputedStyle(inherited).borderTopWidth) > 0 &&
   group.textContent.includes('LOCAL_PREVIEW') && group.textContent.includes('project-local-preview') &&
+  group.textContent.includes('showing 6 of 7') && !group.textContent.includes('manage all') &&
+  [...group.parentElement.querySelectorAll('a')].filter(a => a.href === manage?.href).length === 1 &&
   inherited.textContent.includes('REGION') && inherited.textContent.includes('shared-default') &&
   inherited.textContent.includes('••••••••') && !inherited.querySelector('button') &&
   manage?.href.endsWith('/variables') && document.documentElement.scrollWidth <= innerWidth &&

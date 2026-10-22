@@ -438,6 +438,7 @@ Repeat with a Viewer account.
 Confirm that secret values stay masked.
 
 Select Manage to open the project Variables page.
+With more than six local variables, confirm that the preview shows a count and only one Manage link.
 Confirm that inherited variables retain their separate card and permitted actions.
 Repeat with a project that has only inherited variables.
 Repeat with a project that has only local variables.

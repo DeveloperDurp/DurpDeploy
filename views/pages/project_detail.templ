@@ -335,8 +335,7 @@ templ VariablesPreviewTable(project db.Project, label string, vars []db.Variable
 					if showMoreLink && len(vars) > variablesPreviewCap {
 						<tr>
 							<td colspan="3" class="text-center text-xs text-gray-500 italic py-1">
-								{ fmt.Sprintf("showing %d of %d —", variablesPreviewCap, len(vars)) }
-								<a href={ fmt.Sprintf("/projects/%d/variables", project.ID) } class="link link-primary">manage all</a>
+								{ fmt.Sprintf("showing %d of %d", variablesPreviewCap, len(vars)) }
 							</td>
 						</tr>
 					}
