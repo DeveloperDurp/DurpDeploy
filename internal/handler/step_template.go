@@ -28,6 +28,10 @@ func (h *StepTemplateHandler) ListTemplates(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	if r.Method == http.MethodGet && r.URL.Query().Get("type") == "projects" {
+		(&ProjectTemplateHandler{repo: h.repo}).List(w, r)
+		return
+	}
 	templates, err := h.repo.Queries.ListStepTemplates(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -190,6 +194,7 @@ func (h *StepTemplateHandler) CreateTemplate(
 	}
 
 	if retargetFormDialog(w, r, "#templates-content") {
+		w.Header().Set("HX-Push-Url", "/templates")
 		h.ListTemplates(w, r)
 		return
 	}

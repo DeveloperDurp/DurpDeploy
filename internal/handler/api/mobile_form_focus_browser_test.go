@@ -74,6 +74,10 @@ func TestMobileFormFocusBrowserE2E(t *testing.T) {
 				fmt.Sprintf("%s/touch=%t", scenario.name, touch),
 				func(t *testing.T) {
 					b.navigateBackTest(t, f.baseURL+scenario.path)
+					b.evaluate(
+						t,
+						`document.querySelector('[data-template-create-menu] > summary')?.click(); true`,
+					)
 					b.evaluate(t, fmt.Sprintf(
 						`[...document.querySelectorAll(%q)].find(e => e.getClientRects().length).click(); true`,
 						scenario.opener,

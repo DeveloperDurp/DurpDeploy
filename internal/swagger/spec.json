@@ -4641,6 +4641,50 @@
         ]
       }
     },
+    "/project-templates": {
+      "get": {
+        "tags": [
+          "project-templates"
+        ],
+        "summary": "List project templates accessible through current source-project membership.",
+        "operationId": "listProjectTemplates",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "Limit",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "Offset",
+            "name": "offset",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/ProjectTemplateListResponse"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/projects": {
       "get": {
         "produces": [
@@ -5912,6 +5956,258 @@
             }
           }
         }
+      }
+    },
+    "/projects/{id}/project-templates": {
+      "get": {
+        "tags": [
+          "project-templates"
+        ],
+        "summary": "List templates owned by an accessible source project.",
+        "operationId": "listSourceProjectTemplates",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "Limit",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "Offset",
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "Source project ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/ProjectTemplateListResponse"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "project-templates"
+        ],
+        "summary": "Save an independent project snapshot without secret values or credentials.",
+        "operationId": "saveProjectTemplate",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "Source project ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "Body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/saveProjectTemplateRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/ProjectTemplateResponse"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/projects/{id}/project-templates/{templateId}": {
+      "get": {
+        "tags": [
+          "project-templates"
+        ],
+        "summary": "Preview copied defaults, secret definitions, steps, and references.",
+        "operationId": "previewProjectTemplate",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "Source project ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "Template ID within the source project.",
+            "name": "templateId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/ProjectTemplateResponse"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/projects/{id}/project-templates/{templateId}/projects": {
+      "post": {
+        "description": "Scoped tokens cannot create projects. Lifecycle assignment requires a global administrator.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "project-templates"
+        ],
+        "summary": "Create a project atomically with explicit mappings and fresh secrets and credentials.",
+        "operationId": "applyProjectTemplate",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "Source project ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "Template ID within the source project.",
+            "name": "templateId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "description": "Use snapshot variable keys for variable_values.\nUse source environment IDs for environment_mappings.\nUse one-based step positions for agent_selectors overrides.\nSupply all secret values and package credentials independently.\nSet reviewed to true after reviewing the preview.",
+            "name": "Body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ApplyProjectTemplate"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "ProjectResponse is the JSON shape for a project.",
+            "schema": {
+              "$ref": "#/definitions/ProjectResponse"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
       }
     },
     "/projects/{id}/releases": {
@@ -9681,6 +9977,57 @@
       "x-go-name": "swaggerAgentListResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "ApplyProjectTemplate": {
+      "type": "object",
+      "properties": {
+        "agent_selectors": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "x-go-name": "AgentSelectors"
+        },
+        "description": {
+          "type": "string",
+          "x-go-name": "Description"
+        },
+        "environment_mappings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "x-go-name": "EnvironmentMappings"
+        },
+        "lifecycle_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "LifecycleID"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "package_repository": {
+          "$ref": "#/definitions/ProjectTemplatePackage"
+        },
+        "reviewed": {
+          "type": "boolean",
+          "x-go-name": "Reviewed"
+        },
+        "variable_values": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "x-go-name": "VariableValues"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
+    },
     "ArtifactGateInfo": {
       "type": "object",
       "properties": {
@@ -10802,6 +11149,42 @@
       "x-go-name": "swaggerLifecycleVariableList",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "ListAccessibleProjectTemplatesRow": {
+      "type": "object",
+      "properties": {
+        "created_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CreatedAt"
+        },
+        "created_by": {
+          "$ref": "#/definitions/NullInt64"
+        },
+        "description": {
+          "type": "string",
+          "x-go-name": "Description"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "source_project_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "SourceProjectID"
+        },
+        "source_project_name": {
+          "type": "string",
+          "x-go-name": "SourceProjectName"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/db"
+    },
     "LogEntry": {
       "type": "object",
       "title": "LogEntry is a single line of deployment log output.",
@@ -11483,6 +11866,232 @@
       "x-go-name": "swaggerProjectResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "ProjectTemplateListResponse": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ListAccessibleProjectTemplatesRow"
+          },
+          "x-go-name": "Items"
+        },
+        "limit": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Limit"
+        },
+        "offset": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Offset"
+        },
+        "total": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Total"
+        }
+      },
+      "x-go-name": "swaggerProjectTemplateListResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "ProjectTemplatePackage": {
+      "type": "object",
+      "properties": {
+        "auth_type": {
+          "type": "string",
+          "x-go-name": "AuthType"
+        },
+        "credential": {
+          "type": "string",
+          "x-go-name": "Credential"
+        },
+        "url_template": {
+          "type": "string",
+          "x-go-name": "URLTemplate"
+        },
+        "username": {
+          "type": "string",
+          "x-go-name": "Username"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
+    },
+    "ProjectTemplateResponse": {
+      "type": "object",
+      "properties": {
+        "created_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CreatedAt"
+        },
+        "description": {
+          "type": "string",
+          "x-go-name": "Description"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "snapshot": {
+          "$ref": "#/definitions/ProjectTemplateSnapshot"
+        },
+        "source_project_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "SourceProjectID"
+        }
+      },
+      "x-go-name": "projectTemplateResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "ProjectTemplateSnapshot": {
+      "type": "object",
+      "title": "ProjectTemplateSnapshot excludes credentials and execution history by construction.",
+      "properties": {
+        "description": {
+          "type": "string",
+          "x-go-name": "Description"
+        },
+        "lifecycle_name": {
+          "type": "string",
+          "x-go-name": "LifecycleName"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "package_repository": {
+          "$ref": "#/definitions/Repository"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProjectTemplateStep"
+          },
+          "x-go-name": "Steps"
+        },
+        "variables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProjectTemplateVariable"
+          },
+          "x-go-name": "Variables"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
+    },
+    "ProjectTemplateStep": {
+      "type": "object",
+      "properties": {
+        "agent_execution_mode": {
+          "type": "string",
+          "x-go-name": "AgentExecutionMode"
+        },
+        "agent_selectors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "AgentSelectors"
+        },
+        "approval_artifact_path": {
+          "type": "string",
+          "x-go-name": "ApprovalArtifactPath"
+        },
+        "approval_review_format": {
+          "type": "string",
+          "x-go-name": "ApprovalReviewFormat"
+        },
+        "approval_review_path": {
+          "type": "string",
+          "x-go-name": "ApprovalReviewPath"
+        },
+        "container_image": {
+          "type": "string",
+          "x-go-name": "ContainerImage"
+        },
+        "execution_target": {
+          "type": "string",
+          "x-go-name": "ExecutionTarget"
+        },
+        "interpreter": {
+          "type": "string",
+          "x-go-name": "Interpreter"
+        },
+        "max_retries": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "MaxRetries"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "network_mode": {
+          "type": "string",
+          "x-go-name": "NetworkMode"
+        },
+        "script_body": {
+          "type": "string",
+          "x-go-name": "ScriptBody"
+        },
+        "sort_order": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "SortOrder"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "TimeoutSeconds"
+        },
+        "variable_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "VariableNames"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
+    },
+    "ProjectTemplateVariable": {
+      "type": "object",
+      "properties": {
+        "default": {
+          "type": "string",
+          "x-go-name": "Default"
+        },
+        "environment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "EnvironmentID"
+        },
+        "environment_name": {
+          "type": "string",
+          "x-go-name": "EnvironmentName"
+        },
+        "key": {
+          "type": "string",
+          "x-go-name": "Key"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "secret": {
+          "type": "boolean",
+          "x-go-name": "Secret"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
+    },
     "Release": {
       "type": "object",
       "title": "Release is a refreshable snapshot of project steps and variables.",
@@ -11690,6 +12299,24 @@
       },
       "x-go-name": "swaggerReorderStepsRequest",
       "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "Repository": {
+      "type": "object",
+      "properties": {
+        "auth_type": {
+          "type": "string",
+          "x-go-name": "AuthType"
+        },
+        "url_template": {
+          "type": "string",
+          "x-go-name": "URLTemplate"
+        },
+        "username": {
+          "type": "string",
+          "x-go-name": "Username"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/artifact"
     },
     "RequestEntityTooLargeError": {
       "type": "object",
@@ -13307,6 +13934,20 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "TargetDeploymentID"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "saveProjectTemplateRequest": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "x-go-name": "Description"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
         }
       },
       "x-go-package": "durpdeploy/internal/handler/api"

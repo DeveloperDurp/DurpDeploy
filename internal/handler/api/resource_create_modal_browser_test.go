@@ -29,6 +29,10 @@ func TestResourceCreateModalBrowserE2E(t *testing.T) {
 				)
 				b.evaluate(
 					t,
+					`document.querySelector('[data-template-create-menu] > summary')?.click(); true`,
+				)
+				b.evaluate(
+					t,
 					fmt.Sprintf(
 						`document.querySelector('.page-header a[href=%q]').click(); true`,
 						"/"+resource+"/new",
@@ -63,7 +67,7 @@ func TestResourceCreateModalBrowserE2E(t *testing.T) {
 			)
 			b.wait(
 				t,
-				`!document.querySelector('#project-edit-dialog').open && document.activeElement?.hasAttribute('hx-get')`,
+				`!document.querySelector('#project-edit-dialog').open && (document.activeElement?.hasAttribute('hx-get') || document.activeElement?.matches('[data-template-create-menu] > summary'))`,
 			)
 			open()
 			for _, kind := range []string{"mousePressed", "mouseReleased"} {

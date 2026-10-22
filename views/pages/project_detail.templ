@@ -42,6 +42,9 @@ templ ProjectMenuDialog(project db.Project) {
 				</ul>
 				<ul class="menu w-full">
 					<li class="menu-title">Settings</li>
+					if CanWrite(ctx) {
+						<li><a href={ fmt.Sprintf("/projects/%d/project-templates/new", project.ID) }>Save as Template</a></li>
+					}
 					<li><a href={ fmt.Sprintf("/projects/%d/notifications", project.ID) }>Notifications</a></li>
 					<li><a href={ fmt.Sprintf("/projects/%d/edit#project-members", project.ID) }>Members</a></li>
 				</ul>

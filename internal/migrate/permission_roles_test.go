@@ -30,24 +30,33 @@ func TestPermissionRolesUpgrade(t *testing.T) {
 			var users []db.User
 			for _, role := range []string{"viewer", "deployer", "admin"} {
 				user, err := q.CreateUser(ctx, db.CreateUserParams{
-					Email: role + "@upgrade.test", PasswordHash: "retained hash",
-					Name: role, Role: role,
+					Email:        role + "@upgrade.test",
+					PasswordHash: "retained hash",
+					Name:         role,
+					Role:         role,
 				})
 				requireNoError(t, err, "seed legacy user")
 				users = append(users, user)
 				requireNoError(
 					t,
 					q.AddProjectMember(ctx, db.AddProjectMemberParams{
-						ProjectID: project.ID, UserID: user.ID, Role: "deployer",
+						ProjectID: project.ID,
+						UserID:    user.ID,
+						Role:      "deployer",
 					}),
 					"seed legacy membership",
 				)
 				_, err = q.CreateSession(ctx, db.CreateSessionParams{
-					ID: role, UserID: user.ID, CsrfToken: "retained csrf", ExpiresAt: 4102444800,
+					ID:        role,
+					UserID:    user.ID,
+					CsrfToken: "retained csrf",
+					ExpiresAt: 4102444800,
 				})
 				requireNoError(t, err, "seed session")
 				_, err = q.CreateOIDCIdentity(ctx, db.CreateOIDCIdentityParams{
-					Issuer: "https://upgrade.test", Subject: role, UserID: user.ID,
+					Issuer:  "https://upgrade.test",
+					Subject: role,
+					UserID:  user.ID,
 				})
 				requireNoError(t, err, "seed OIDC identity")
 				_, err = conn.ExecContext(
@@ -60,8 +69,12 @@ func TestPermissionRolesUpgrade(t *testing.T) {
 				for _, scope := range []string{"global", "scoped"} {
 					id := role + "-" + scope
 					_, err = q.CreateApiToken(ctx, db.CreateApiTokenParams{
-						ID: id, UserID: user.ID, Name: id, TokenPrefix: "ddp_pat_1234",
-						TokenHash: id, Scope: scope,
+						ID:          id,
+						UserID:      user.ID,
+						Name:        id,
+						TokenPrefix: "ddp_pat_1234",
+						TokenHash:   id,
+						Scope:       scope,
 					})
 					requireNoError(t, err, "seed token")
 					if scope == "scoped" {
@@ -82,8 +95,17 @@ func TestPermissionRolesUpgrade(t *testing.T) {
 					}
 				}
 			}
-			requireNoError(t, goose.Up(conn, "."), "upgrade roles")
-			requireNoError(t, goose.Up(conn, "."), "repeat startup")
+			targetVersion := fixture.baselineVersion + 1
+			requireNoError(
+				t,
+				goose.UpTo(conn, ".", targetVersion),
+				"upgrade roles",
+			)
+			requireNoError(
+				t,
+				goose.UpTo(conn, ".", targetVersion),
+				"repeat startup",
+			)
 			for _, before := range users {
 				want := before
 				if want.Role == "deployer" {
@@ -171,7 +193,11 @@ func TestPermissionRolesUpgrade(t *testing.T) {
 			}
 			version, err := goose.GetDBVersion(conn)
 			requireNoError(t, err, "read version")
-			if err := goose.Down(conn, "."); err == nil {
+			if err := goose.DownTo(
+				conn,
+				".",
+				fixture.baselineVersion,
+			); err == nil {
 				t.Fatal("unsafe rollback succeeded")
 			}
 			after, err := goose.GetDBVersion(conn)

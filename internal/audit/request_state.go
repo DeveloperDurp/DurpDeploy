@@ -63,6 +63,18 @@ type actionOverride struct {
 	reason     string
 }
 
+// SetProjectTemplateResult lets middleware audit the newly created identity.
+func SetProjectTemplateResult(
+	r *http.Request,
+	action, entity string,
+	id int64,
+) {
+	if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {
+		state.overridden = &actionOverride{action: action, entityType: entity,
+			entityID: sql.NullInt64{Int64: id, Valid: true}}
+	}
+}
+
 func Suppress(r *http.Request) {
 	if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {
 		state.suppress = true

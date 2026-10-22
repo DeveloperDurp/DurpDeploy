@@ -230,6 +230,8 @@ func newRouter(
 		pr.Get("/projects", ph.ListProjects)
 		pr.Get("/projects/new", ph.NewProject)
 		pr.Post("/projects", ph.CreateProject)
+		projectTemplatesH := handler.NewProjectTemplateHandler(repo)
+		pr.Get("/project-templates", projectTemplatesH.List)
 
 		tokensH := handler.NewTokensHandler(repo)
 		pr.Get("/settings/tokens", tokensH.MyTokens)
@@ -318,6 +320,8 @@ func newRouter(
 		sth := handler.NewStepTemplateHandler(repo)
 		pr.Get("/templates", sth.ListTemplates)
 		pr.Get("/templates/new", sth.NewTemplateForm)
+		pr.With(auth.RequireRole("admin", "maintainer")).
+			Get("/templates/project-source", projectTemplatesH.Sources)
 		pr.Post("/templates", sth.CreateTemplate)
 		pr.Get("/templates/{id}/edit", sth.EditTemplateForm)
 		pr.Put("/templates/{id}", sth.UpdateTemplate)
@@ -387,6 +391,20 @@ func newRouter(
 		// templates, deployments, logs) stay on pr above.
 		pr.Group(func(ppr chi.Router) {
 			ppr.Use(auth.RequireProjectAccess(repo))
+			ppr.Get("/projects/{id}/project-templates", projectTemplatesH.List)
+			ppr.Get(
+				"/projects/{id}/project-templates/new",
+				projectTemplatesH.Form,
+			)
+			ppr.Post("/projects/{id}/project-templates", projectTemplatesH.Save)
+			ppr.Get(
+				"/projects/{id}/project-templates/{templateId}",
+				projectTemplatesH.Preview,
+			)
+			ppr.Post(
+				"/projects/{id}/project-templates/{templateId}/projects",
+				projectTemplatesH.Apply,
+			)
 			artifactH := handler.NewArtifactHandler(repo)
 			ppr.Get("/projects/{id}/package-repository", artifactH.Get)
 			ppr.Get("/projects/{id}/package-repository/edit", artifactH.Form)
@@ -666,6 +684,8 @@ func newRouter(
 		apiProjH := api.NewProjectHandler(repo)
 		ar.Get("/projects", apiProjH.ListProjects)
 		ar.Post("/projects", apiProjH.CreateProject)
+		apiProjectTemplatesH := api.NewProjectTemplateHandler(repo)
+		ar.Get("/project-templates", apiProjectTemplatesH.List)
 
 		apiEnvH := api.NewEnvironmentHandler(repo)
 		ar.Get("/environments", apiEnvH.ListEnvironments)
@@ -787,6 +807,22 @@ func newRouter(
 		// Project-scoped sub-group.
 		ar.Group(func(par chi.Router) {
 			par.Use(auth.RequireProjectAccess(repo))
+			par.Get(
+				"/projects/{id}/project-templates",
+				apiProjectTemplatesH.ListForProject,
+			)
+			par.Post(
+				"/projects/{id}/project-templates",
+				apiProjectTemplatesH.Save,
+			)
+			par.Get(
+				"/projects/{id}/project-templates/{templateId}",
+				apiProjectTemplatesH.Preview,
+			)
+			par.Post(
+				"/projects/{id}/project-templates/{templateId}/projects",
+				apiProjectTemplatesH.Apply,
+			)
 
 			par.Get("/projects/{id}", apiProjH.GetProject)
 			par.Put("/projects/{id}", apiProjH.UpdateProject)

@@ -72,6 +72,15 @@ The token settings page defaults to all accessible projects and a `viewer` ceili
 
 Tokens with explicit ceilings cannot access token management APIs.
 Scoped tokens cannot create projects, change shared resources, or access instance administration.
+Project templates belong to their source project.
+Current source-project membership controls template lists and previews.
+Saving or applying a project template requires effective Maintainer permission on the source project.
+Applying a template also requires permission to create projects.
+Scoped tokens can read and save templates through selected project routes.
+Scoped tokens cannot apply templates or browse the global project-template list.
+Only global administrators can assign a lifecycle to the new project.
+Templates disappear when their source project is deleted.
+Existing projects created from those templates remain independent.
 A scoped `admin` token can manage authorized project memberships.
 Approval also requires a global administrator as the owner.
 

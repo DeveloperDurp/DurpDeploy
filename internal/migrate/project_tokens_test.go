@@ -40,18 +40,18 @@ func TestProjectTokenUpgradeAndRollbackRefusal(t *testing.T) {
 		INSERT INTO api_tokens(id,user_id,name,token_prefix,token_hash,scope)
 		VALUES('legacy-global',1,'Legacy','ddp_pat_','hash','global')`)
 	requireNoError(t, err, "seed existing global token")
-	requireNoError(t, goose.Up(conn, "."), "upgrade token schema")
+	requireNoError(t, goose.UpTo(conn, ".", 63), "upgrade token schema")
 	row, err := db.New(conn).GetApiTokenByID(t.Context(), "legacy-global")
 	requireNoError(t, err, "read migrated global token")
 	if row.Scope != "global" || row.TokenRole != "" {
 		t.Fatal("migration changed existing global permissions")
 	}
-	if err := goose.Down(conn, "."); err == nil {
+	if err := goose.DownTo(conn, ".", 62); err == nil {
 		t.Fatal("unsafe token migration rollback succeeded")
 	}
 	version, err := goose.GetDBVersion(conn)
 	requireNoError(t, err, "read version after refused rollback")
-	if version != 64 {
+	if version != 63 {
 		t.Fatal("refused rollback changed schema version")
 	}
 	_, err = db.New(conn).ListApiTokenProjectIDs(t.Context(), row.ID)

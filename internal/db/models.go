@@ -456,6 +456,16 @@ type ProjectMember struct {
 	Role      string `json:"role"`
 }
 
+type ProjectTemplate struct {
+	ID              int64         `json:"id"`
+	SourceProjectID int64         `json:"source_project_id"`
+	CreatedBy       sql.NullInt64 `json:"created_by"`
+	Name            string        `json:"name"`
+	Description     string        `json:"description"`
+	SnapshotJson    string        `json:"snapshot_json"`
+	CreatedAt       int64         `json:"created_at"`
+}
+
 type Release struct {
 	ID             int64  `json:"id"`
 	ProjectID      int64  `json:"project_id"`

@@ -35,6 +35,9 @@ func rotateStoredCredentials(
 	if err := rotateLifecycleVariables(ctx, q, rotation); err != nil {
 		return err
 	}
+	if err := rotateProjectTemplates(ctx, q, rotation); err != nil {
+		return err
+	}
 	if err := rotateArtifactGateChunks(ctx, q, rotation); err != nil {
 		return err
 	}
@@ -115,6 +118,37 @@ func rotateArtifactGateChunks(
 				ChunkIndex:   key.ChunkIndex,
 				Ciphertext:   value,
 			}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rotateProjectTemplates(
+	ctx context.Context,
+	q *db.Queries,
+	rotation secretKeyRotation,
+) error {
+	keys, err := q.ListProjectTemplateRotationKeys(ctx)
+	if err != nil {
+		return err
+	}
+	for _, id := range keys {
+		ciphertext, err := q.GetProjectTemplateRotationValue(ctx, id)
+		if err != nil {
+			return err
+		}
+		value, err := rotateServerCiphertext(ciphertext, rotation)
+		if err != nil {
+			return err
+		}
+		if err := q.UpdateProjectTemplateRotationValue(
+			ctx,
+			db.UpdateProjectTemplateRotationValueParams{
+				ID:           id,
+				SnapshotJson: value,
+			},
+		); err != nil {
 			return err
 		}
 	}

@@ -8,23 +8,61 @@ import (
 )
 
 templ TemplatesList(templates []db.StepTemplate, currentPath string) {
+	@TemplatesPage(currentPath) {
+		@TemplatesListContent(templates)
+	}
+}
+
+templ TemplatesPage(currentPath string) {
 	@layouts.Base("Templates", currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
 			{Label: "Home", Href: "/"},
 			{Label: "Templates"},
 		})
-		@TemplatesListContent(templates)
+		{ children... }
 	}
+}
+
+templ TemplateTypeNavigation(projects bool) {
+	<nav aria-label="Template types" class="inline-flex flex-wrap gap-1 rounded-box bg-base-200 p-1">
+		<a href="/templates" aria-current={ strconv.FormatBool(!projects) } class={ "btn", templ.KV("btn-primary", !projects), templ.KV("btn-ghost", projects) }>Step Templates</a>
+		<a href="/templates?type=projects" aria-current={ strconv.FormatBool(projects) } class={ "btn", templ.KV("btn-primary", projects), templ.KV("btn-ghost", !projects) }>Project Templates</a>
+	</nav>
+}
+
+templ TemplatesHeader(projects bool) {
+	<div class="page-header">
+		<h1 class="text-3xl font-bold">Templates</h1>
+		if CanWrite(ctx) {
+			<details x-ref="createMenu" class="dropdown dropdown-end" data-template-create-menu @keydown.escape.prevent.stop="$el.open = false; $refs.editButton.focus()" @click.outside="$el.open = false">
+				<summary x-ref="editButton" class="btn btn-primary">Create template <span aria-hidden="true">⌄</span></summary>
+				<ul class="dropdown-content menu bg-base-200 rounded-box z-20 w-72 max-w-[calc(100vw-2rem)] p-2 shadow">
+					<li><a href="/templates/new" hx-get="/templates/new" hx-target="#project-edit-content" hx-select="[data-create-form]" hx-swap="innerHTML" hx-push-url="false" hx-boost="false" @click="$refs.createMenu.open = false"><span><span class="block">New step template</span><span class="block text-xs opacity-70">Create a reusable deployment step.</span></span></a></li>
+					<li><a href="/templates/project-source" hx-get="/templates/project-source" hx-target="#project-edit-content" hx-select="[data-project-template-sources]" hx-swap="innerHTML" hx-push-url="false" hx-boost="false" @click="$refs.createMenu.open = false"><span><span class="block">Save from project</span><span class="block text-xs opacity-70">Choose an existing source project.</span></span></a></li>
+				</ul>
+			</details>
+		}
+	</div>
+	<div class="flex flex-wrap items-center justify-between gap-3">
+		@TemplateTypeNavigation(projects)
+		<button type="button" class="btn btn-ghost" data-template-help-trigger @click="$refs.templateHelp.showModal()">How templates work <span aria-hidden="true">ⓘ</span></button>
+	</div>
+	<dialog x-ref="templateHelp" class="modal" aria-labelledby="template-help-title" data-template-help>
+		<div class="modal-box space-y-4">
+			<h2 id="template-help-title" class="text-xl font-bold">How templates work</h2>
+			<p>Step templates reuse individual deployment steps.</p>
+			<p>Project templates capture a project configuration. Current source-project membership controls access.</p>
+			<p>To save a project template, open its Project menu and select Save as Template.</p>
+			<p>Secret values and credentials are excluded. Supply fresh values when you create a project from a template.</p>
+			<form method="dialog" class="modal-action"><button type="submit" class="btn">Close</button></form>
+		</div>
+		<form method="dialog" class="modal-backdrop"><button type="submit" aria-label="Close template help"></button></form>
+	</dialog>
 }
 
 templ TemplatesListContent(templates []db.StepTemplate) {
 	<div id="templates-content" class="space-y-4" x-data="formDialogHost" x-on:htmx:after-settle.camel="afterSettle" x-on:htmx:before-swap.camel="beforeSwap" x-on:form-saved="saved">
-		<div class="page-header">
-			<h1 class="text-3xl font-bold">Templates</h1>
-			if CanWrite(ctx) {
-				@NewResourceButton("/templates/new", "New Template")
-			}
-		</div>
+		@TemplatesHeader(false)
 		@TemplatesListFragment(templates)
 		if CanWrite(ctx) {
 			@ResourceFormDialog("New Template", "[data-create-form]")
@@ -38,7 +76,7 @@ templ TemplatesListFragment(templates []db.StepTemplate) {
 			<div class="card bg-base-200 p-8 text-center">
 				<p class="text-gray-400 mb-4">No templates yet. Create your first template to reuse deployment steps.</p>
 				if CanWrite(ctx) {
-					@NewResourceButton("/templates/new", "New Template")
+					<p>Open Create template and select New step template.</p>
 				}
 			</div>
 		} else {

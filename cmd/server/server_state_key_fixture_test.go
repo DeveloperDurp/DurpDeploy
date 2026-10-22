@@ -100,6 +100,12 @@ var serverStateStores = []serverStateStore{
 		metadata:   "SELECT token_hash,user_id,session_id,purpose,csrf_hash,attempts,expires_at,created_at FROM mfa_challenges",
 	},
 	{
+		name:     "project-template",
+		insert:   "INSERT INTO project_templates(source_project_id,created_by,name,description,snapshot_json,created_at) VALUES(1,1,'rotation','template',?,100)",
+		read:     "SELECT snapshot_json FROM project_templates",
+		metadata: "SELECT id,source_project_id,created_by,name,description,created_at FROM project_templates",
+	},
+	{
 		name:     "agent",
 		insert:   "UPDATE agents SET encrypted_identity = ?",
 		read:     "SELECT encrypted_identity FROM agents",

@@ -1,0 +1,304 @@
+package pages
+
+import (
+	"fmt"
+	"net/url"
+	"strconv"
+	"strings"
+
+	"durpdeploy/internal/auth"
+	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
+	"durpdeploy/views/layouts"
+)
+
+type ProjectTemplateFormData struct {
+	ProjectID    int64
+	Template     db.ProjectTemplate
+	Snapshot     repository.ProjectTemplateSnapshot
+	Input        repository.ApplyProjectTemplate
+	Environments []db.Environment
+	Lifecycles   []db.Lifecycle
+	Error        string
+	ReturnTo     string
+}
+
+func projectTemplatePath(projectID, templateID int64) string {
+	return fmt.Sprintf("/projects/%d/project-templates/%d", projectID, templateID)
+}
+
+func templateVariableValue(data ProjectTemplateFormData, variable repository.ProjectTemplateVariable) string {
+	if variable.Secret {
+		return ""
+	}
+	if value, ok := data.Input.VariableValues[variable.Key]; ok {
+		return value
+	}
+	if variable.Default != nil {
+		return *variable.Default
+	}
+	return ""
+}
+
+func templateVariableOverridden(data ProjectTemplateFormData, key string) bool {
+	_, ok := data.Input.VariableValues[key]
+	return ok
+}
+
+func templateDescription(data ProjectTemplateFormData) string {
+	if data.Input.Description != nil {
+		return *data.Input.Description
+	}
+	return data.Snapshot.Description
+}
+
+func templateSelectors(data ProjectTemplateFormData, index int, step repository.ProjectTemplateStep) string {
+	if labels, ok := data.Input.AgentSelectors[strconv.Itoa(index+1)]; ok {
+		return strings.Join(labels, ", ")
+	}
+	return strings.Join(step.AgentSelectors, ", ")
+}
+
+func templateEnvironmentVariables(snapshot repository.ProjectTemplateSnapshot) []repository.ProjectTemplateVariable {
+	var variables []repository.ProjectTemplateVariable
+	seen := map[int64]bool{}
+	for _, variable := range snapshot.Variables {
+		if variable.EnvironmentID != 0 && !seen[variable.EnvironmentID] {
+			variables = append(variables, variable)
+			seen[variable.EnvironmentID] = true
+		}
+	}
+	return variables
+}
+
+func templatePackageFields(data ProjectTemplateFormData) *repository.ProjectTemplatePackage {
+	if data.Input.PackageRepository != nil {
+		return data.Input.PackageRepository
+	}
+	if source := data.Snapshot.PackageRepository; source != nil {
+		return &repository.ProjectTemplatePackage{URLTemplate: source.URLTemplate, AuthType: source.AuthType, Username: source.Username}
+	}
+	return nil
+}
+
+templ ProjectTemplatesPage(rows []db.ListAccessibleProjectTemplatesRow, offset, total int64, currentPath string) {
+	@TemplatesPage(currentPath) {
+		@ProjectTemplatesListContent(rows, offset, total, currentPath)
+	}
+}
+
+templ ProjectTemplatesListContent(rows []db.ListAccessibleProjectTemplatesRow, offset, total int64, currentPath string) {
+	<div id="templates-content" class="space-y-4" x-data="formDialogHost" x-on:htmx:after-settle.camel="afterSettle" x-on:htmx:before-swap.camel="beforeSwap" x-on:form-saved="saved">
+		@TemplatesHeader(true)
+		<div class="space-y-4" data-project-templates>
+			if len(rows) == 0 {
+				<p>No accessible project templates.</p>
+			}
+			for _, row := range rows {
+				@ResourceCard(row.Name, projectTemplatePath(row.SourceProjectID, row.ID)) {
+					<p>{ row.Description }</p>
+					<p>Source project: { row.SourceProjectName }</p>
+				}
+			}
+		</div>
+		<nav class="flex gap-4 mt-4" aria-label="Template pages">
+			if offset > 0 {
+				<a class="btn btn-outline" href={ fmt.Sprintf("%s?type=projects&offset=%d", currentPath, max(int64(0), offset-50)) }>Previous</a>
+			}
+			if offset+50 < total {
+				<a class="btn btn-outline" href={ fmt.Sprintf("%s?type=projects&offset=%d", currentPath, offset+50) }>Next</a>
+			}
+		</nav>
+		if CanWrite(ctx) {
+			@ResourceFormDialog("Create template", "[data-create-form], [data-project-template-sources]")
+		}
+	</div>
+}
+
+templ ProjectTemplateSourcesPage(projects []db.Project, currentPath string) {
+	@layouts.Base("Save from project", currentPath) {
+		<div class="space-y-4" data-project-template-sources>
+			<div class="page-header">
+				<h1 class="text-3xl font-bold">Save from project</h1>
+				<a href="/templates?type=projects" class="btn btn-ghost" x-data="backNavigation" @click="back">Cancel</a>
+			</div>
+			<p>Choose a source project to open its Save as Template form.</p>
+			if len(projects) == 0 {
+				<p>No projects are available. Maintainer access to a source project is required.</p>
+			}
+			for _, project := range projects {
+				@ResourceCard(project.Name, fmt.Sprintf("/projects/%d/project-templates/new?return_to=%s", project.ID, url.QueryEscape("/templates?type=projects"))) {
+					<p>{ project.Description.String }</p>
+				}
+			}
+		</div>
+	}
+}
+
+templ ProjectTemplatePage(data ProjectTemplateFormData, currentPath string) {
+	if data.Template.ID == 0 && !CanWrite(ctx) {
+		@ViewerForbiddenMessage("Save Project Template", "save", "a project template", "/projects", currentPath)
+	} else {
+		@layouts.Base("Project Template", currentPath) {
+			<div class="page-header">
+				if data.Template.ID == 0 {
+					<h1 class="text-3xl font-bold">Save as Template</h1>
+				} else {
+					<h1 class="text-3xl font-bold break-words">{ data.Template.Name }</h1>
+				}
+				if data.Template.ID == 0 {
+					<a href={ templ.SafeURL(data.ReturnTo) } class="btn btn-ghost">Cancel</a>
+				} else {
+					<a href="/templates?type=projects" class="btn btn-ghost">Templates</a>
+				}
+			</div>
+			if data.Template.ID != 0 {
+				<p class="mb-4">{ data.Template.Description }</p>
+			}
+			if data.Error != "" {
+				<div class="alert alert-error mb-4" role="alert" data-template-error>{ data.Error }</div>
+			}
+			<div class="alert mb-4"><p>Secret values and credentials are excluded. Review scripts and copied non-secret defaults before reuse.</p></div>
+			@ProjectTemplatePreview(data.Snapshot)
+			if CanWrite(ctx) {
+				if data.Template.ID == 0 {
+					<form method="post" action={ fmt.Sprintf("/projects/%d/project-templates", data.ProjectID) } hx-boost="false" class="card bg-base-200 mt-6" data-save-project-template>
+						<input type="hidden" name="return_to" value={ data.ReturnTo }/>
+						<div class="card-body space-y-4">
+							<h2 class="card-title">Save project template</h2>
+							<label class="form-control" for="template-name"><span class="label-text">Template name</span><input id="template-name" name="name" value={ data.Input.Name } maxlength="255" required class="input input-bordered w-full"/></label>
+							<label class="form-control" for="template-description"><span class="label-text">Template description</span><textarea id="template-description" name="description" class="textarea textarea-bordered w-full">{ templateDescription(data) }</textarea></label>
+							<p>The source project owns this template. Its members can preview it. Maintainers can create independent projects from it.</p>
+							<button class="btn btn-primary" type="submit">Save Template</button>
+						</div>
+					</form>
+				} else {
+					@ApplyProjectTemplateForm(data)
+				}
+			} else {
+				<p class="mt-4">Creating projects from this template requires Maintainer access to the source project.</p>
+			}
+		}
+	}
+}
+
+templ ProjectTemplatePreview(snapshot repository.ProjectTemplateSnapshot) {
+	<section class="space-y-4" aria-label="Template configuration" data-template-preview>
+		<h2 class="text-xl font-bold">Included configuration</h2>
+		<p>Project: { snapshot.Name }. { snapshot.Description }</p>
+		if snapshot.LifecycleName != "" {
+			<p>Source lifecycle: { snapshot.LifecycleName }. Select a lifecycle separately. Shared lifecycle values and definitions are excluded.</p>
+		}
+		<h3 class="text-lg font-bold">Ordered deployment steps</h3>
+		if len(snapshot.Steps) == 0 {
+			<p>No deployment steps.</p>
+		}
+		for i, step := range snapshot.Steps {
+			<details class="collapse collapse-arrow bg-base-200">
+				<summary class="collapse-title font-medium break-words">{ strconv.Itoa(i+1) }. { step.Name }</summary>
+				<div class="collapse-content min-w-0 space-y-2">
+					<p>Interpreter: { step.Interpreter }. Target: { step.ExecutionTarget }. Agent mode: { step.AgentExecutionMode }.</p>
+					<p class="break-all">Image: { step.ContainerImage }. Network: { step.NetworkMode }.</p>
+					<p>Timeout: { strconv.FormatInt(step.TimeoutSeconds, 10) } seconds. Retries: { strconv.FormatInt(step.MaxRetries, 10) }.</p>
+					<p class="break-all">Agent selectors: { strings.Join(step.AgentSelectors, ", ") }</p>
+					<p class="break-all">Variable restrictions: { strings.Join(step.VariableNames, ", ") }</p>
+					<p class="break-all">Approval artifact: { step.ApprovalArtifactPath }. Review: { step.ApprovalReviewPath }. Format: { step.ApprovalReviewFormat }.</p>
+					<pre class="whitespace-pre-wrap break-all rounded bg-base-300 p-4">{ step.ScriptBody }</pre>
+				</div>
+			</details>
+		}
+		<h3 class="text-lg font-bold">Variable definitions and copied defaults</h3>
+		if len(snapshot.Variables) == 0 {
+			<p>No project variables.</p>
+		}
+		for _, variable := range snapshot.Variables {
+			<div class="card bg-base-200">
+				<div class="card-body min-w-0">
+					<h4 class="font-bold break-all">{ variable.Name }</h4>
+					if variable.EnvironmentID != 0 {
+						<p>Source environment: { variable.EnvironmentName }. Requires a mapping.</p>
+					} else {
+						<p>Unscoped</p>
+					}
+					if variable.Secret {
+						<p>Secret definition only. A new value is required.</p>
+					} else if variable.Default != nil {
+						<p class="whitespace-pre-wrap break-all">Default: { *variable.Default }</p>
+					} else {
+						<p>No default value</p>
+					}
+				</div>
+			</div>
+		}
+		if source := snapshot.PackageRepository; source != nil {
+			<p class="break-all">Package repository: { source.URLTemplate }. Authentication: { source.AuthType }. Username: { source.Username }. Review the source and supply fresh credentials.</p>
+		}
+		<p>Runbooks, schedules, notifications, releases, deployments, history, memberships, and API tokens are excluded. Creating a project starts no work.</p>
+	</section>
+}
+
+templ ApplyProjectTemplateForm(data ProjectTemplateFormData) {
+	<form method="post" action={ projectTemplatePath(data.ProjectID, data.Template.ID) + "/projects" } hx-boost="false" class="card bg-base-200 mt-6" data-apply-project-template>
+		<div class="card-body space-y-4">
+			<h2 class="card-title">Create project from template</h2>
+			<label class="form-control" for="project-name"><span class="label-text">New project name</span><input id="project-name" name="name" value={ data.Input.Name } required maxlength="255" class="input input-bordered w-full"/></label>
+			<label class="form-control" for="project-description"><span class="label-text">Project description</span><textarea id="project-description" name="description" class="textarea textarea-bordered w-full">{ templateDescription(data) }</textarea></label>
+			<label class="form-control" for="template-lifecycle">
+				<span class="label-text">Lifecycle</span>
+				<select id="template-lifecycle" name="lifecycle_id" class="select select-bordered w-full">
+					<option value="0">No lifecycle</option>
+					if auth.RoleFromContext(ctx) == "admin" {
+						for _, lc := range data.Lifecycles {
+							<option value={ strconv.FormatInt(lc.ID, 10) } selected?={ data.Input.LifecycleID == lc.ID }>{ lc.Name }</option>
+						}
+					}
+				</select>
+			</label>
+			<p>Only global administrators can assign a lifecycle. Environment mappings must match the selected lifecycle.</p>
+			for _, variable := range templateEnvironmentVariables(data.Snapshot) {
+				if variable.EnvironmentID != 0 {
+					<label class="form-control" for={ "environment-" + variable.Key }>
+						<span class="label-text">Map { variable.EnvironmentName }{ " for " }{ variable.Name }</span>
+						<select id={ "environment-" + variable.Key } name={ "environment_" + strconv.FormatInt(variable.EnvironmentID, 10) } class="select select-bordered w-full" required>
+							<option value="">Select environment</option>
+							for _, env := range data.Environments {
+								<option value={ strconv.FormatInt(env.ID, 10) } selected?={ data.Input.EnvironmentMappings[strconv.FormatInt(variable.EnvironmentID, 10)] == env.ID }>{ env.Name }</option>
+							}
+						</select>
+					</label>
+				}
+			}
+			for _, variable := range data.Snapshot.Variables {
+				if variable.Secret {
+					<label class="form-control" for={ "variable-" + variable.Key }>
+						<span class="label-text">{ variable.Name } — new secret required</span>
+						<input id={ "variable-" + variable.Key } name={ "variable_" + variable.Key } type="password" required autocomplete="new-password" class="input input-bordered w-full"/>
+					</label>
+				} else {
+					<fieldset class="space-y-2">
+						<legend class="font-bold break-all">{ variable.Name }</legend>
+						<label for={ "override-" + variable.Key } class="flex items-start gap-3"><input id={ "override-" + variable.Key } name={ "override_" + variable.Key } type="checkbox" value="true" checked?={ templateVariableOverridden(data, variable.Key) } class="checkbox"/><span>Use replacement value</span></label>
+						<label for={ "variable-" + variable.Key } class="form-control"><span class="label-text">Replacement value (used only when selected)</span><textarea id={ "variable-" + variable.Key } name={ "variable_" + variable.Key } class="textarea textarea-bordered w-full">{ "\n"+templateVariableValue(data, variable) }</textarea></label>
+						<p class="text-sm">Leave the checkbox clear to copy the original default exactly.</p>
+					</fieldset>
+				}
+			}
+			for i, step := range data.Snapshot.Steps {
+				if step.ExecutionTarget == "agent" {
+					<label class="form-control" for={ fmt.Sprintf("selectors-%d", i+1) }><span class="label-text">Agent selectors for { step.Name } (comma-separated)</span><input id={ fmt.Sprintf("selectors-%d", i+1) } name={ fmt.Sprintf("selectors_%d", i+1) } value={ templateSelectors(data, i, step) } class="input input-bordered w-full"/></label>
+				}
+			}
+			if source := templatePackageFields(data); source != nil {
+				<fieldset class="space-y-4">
+					<legend class="font-bold">Package repository</legend>
+					<label class="form-control" for="package-url"><span class="label-text">Package URL template</span><input id="package-url" name="package_url" value={ source.URLTemplate } required class="input input-bordered w-full"/></label>
+					<label class="form-control" for="package-auth"><span class="label-text">Authentication</span><select id="package-auth" name="package_auth" class="select select-bordered w-full"><option value="noauth" selected?={ source.AuthType == "noauth" }>No authentication</option><option value="basic" selected?={ source.AuthType == "basic" }>Basic</option><option value="bearer" selected?={ source.AuthType == "bearer" }>Bearer</option></select></label>
+					<label class="form-control" for="package-username"><span class="label-text">Username</span><input id="package-username" name="package_username" value={ source.Username } class="input input-bordered w-full"/></label>
+					<label class="form-control" for="package-credential"><span class="label-text">New credential (required for Basic or Bearer)</span><input id="package-credential" name="package_credential" type="password" autocomplete="new-password" class="input input-bordered w-full"/></label>
+				</fieldset>
+			}
+			<label class="flex items-start gap-3" for="template-reviewed"><input id="template-reviewed" type="checkbox" name="reviewed" value="true" required checked?={ data.Input.Reviewed } class="checkbox"/><span>I reviewed the scripts, copied defaults, environment mappings, package source, and agent selectors.</span></label>
+			<button class="btn btn-primary" type="submit">Create Project</button>
+		</div>
+	</form>
+}

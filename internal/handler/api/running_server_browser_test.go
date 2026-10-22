@@ -111,6 +111,10 @@ func TestRunningServerBrowserE2E(t *testing.T) {
 				`!document.querySelector('.htmx-settling, .htmx-request')`,
 			)
 			openCreate := func() {
+				b.evaluate(
+					t,
+					`document.querySelector('[data-template-create-menu] > summary')?.click(); true`,
+				)
 				b.evaluate(t, fmt.Sprintf(
 					`document.querySelector('.page-header a[href=%q]').click(); true`,
 					"/"+resource+"/new",

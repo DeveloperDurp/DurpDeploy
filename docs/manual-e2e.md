@@ -1,5 +1,67 @@
 # Manual checks after `make e2e-test`
 
+## Reusable project templates (#76)
+
+The running-server suite retains a source project, template, destination project, frozen release, and restricted token metadata.
+The suite prints links to each project, template preview, and release.
+It creates no schedules or deployments for this scenario.
+
+Both template types share the **Create template** menu.
+Select **New step template** to open the step template form.
+Select **Save from project** to choose a source project.
+Select its card to open the **Save as Template** form directly.
+After saving, confirm that this route returns to **Project Templates**.
+After saving from a project's **Project menu**, confirm that the form returns to that project.
+Select **How templates work** to open the help dialog.
+Switch between template types and confirm that the header and cards keep their vertical positions.
+
+1. Open the retained source project as a Maintainer or administrator.
+2. Open **Project menu** and select **Save as Template** under **Settings**.
+3. Review the ordered steps, scripts, execution settings, variable definitions, and copied non-secret defaults.
+4. Confirm that secret values and package credentials are absent.
+5. Enter a unique template name and description.
+6. Select **Save Template**.
+7. Open **Templates** and select **Project Templates**.
+8. Select the saved template card.
+9. Enter a new project name.
+10. Map each source environment to an existing environment.
+11. Supply a fresh value for each secret definition.
+12. If a package source exists, review its settings and supply fresh credentials.
+13. Review the agent selectors.
+14. If a selector is unavailable, replace it or clear it explicitly.
+15. If you are a global administrator, select an authorized lifecycle or **No lifecycle**.
+16. Confirm the review checkbox.
+17. Select **Create Project**.
+
+Leave **Use replacement value** clear to copy a non-secret default exactly, including line breaks.
+To replace a default, select **Use replacement value** and enter its replacement value.
+
+Expect new project, step, variable, and package identities.
+Expect copied scripts, interpreters, ordering, restrictions, timeouts, retries, images, modes, network settings, and approval settings.
+Expect only the creator membership in the new project.
+Expect no copied history, notification settings, schedules, tokens, or runbooks.
+
+Change a source step and variable after saving the template.
+Confirm that the saved template and destination project keep their previous configuration.
+Change a destination step after creating a release.
+Confirm that the release keeps its snapshot.
+
+Submit missing secrets or invalid environment mappings through the public API.
+Expect `422` and no partial project.
+Repeat a creation request with an existing name.
+Expect `409`.
+Check both creation audit events through `/api/v1/admin/audit`.
+
+Remove source-project membership from a test user.
+Confirm that template lists and previews no longer expose the source template.
+Confirm that Viewers and Deployers see no save or apply controls.
+Confirm that their API writes return `403`.
+Confirm that scoped tokens cannot create a project from a template.
+
+Templates use current source-project access and disappear when the source project is deleted.
+Created projects remain independent.
+Runbooks and shared lifecycle configuration are excluded from this initial feature.
+
 ## Preceding stages for promotion (A18)
 
 As an Admin, force a release to production before test succeeds.

@@ -209,6 +209,81 @@ logs a warning without retry. Last error is a stable
 outcome code with a deployment link for redacted logs. Compatibility confirms
 the observed supported protocol, while agent versions remain unverified.
 
+## Project templates
+
+Project templates belong to their source project.
+Current source-project membership controls access.
+Saving or applying a template requires effective Maintainer permission on that project.
+Applying a template also requires project creation permission.
+Scoped tokens can read and save templates through selected project routes.
+Scoped tokens cannot create projects or read the global project-template list.
+
+1. Save a snapshot with `POST /api/v1/projects/{id}/project-templates`.
+   Supply `{"name":"Reusable workflow","description":"Project template"}`.
+2. Browse accessible templates with `GET /api/v1/project-templates?limit=50&offset=0`.
+   Use `GET /api/v1/projects/{id}/project-templates` for one source project.
+3. Preview a snapshot with `GET /api/v1/projects/{id}/project-templates/{templateId}`.
+4. Review the ordered steps, copied defaults, and reference hints in `snapshot`.
+5. Create a project with `POST /api/v1/projects/{id}/project-templates/{templateId}/projects`.
+
+Use this creation body:
+
+```json
+{
+  "name": "New project",
+  "description": "Independent copy",
+  "reviewed": true,
+  "lifecycle_id": 0,
+  "environment_mappings": {"12": 34},
+  "variable_values": {"2": "new secret"},
+  "agent_selectors": {"1": ["production"]},
+  "package_repository": {
+    "url_template": "https://packages.example.com/{version}/app.zip",
+    "auth_type": "bearer",
+    "username": "",
+    "credential": "new credential"
+  }
+}
+```
+
+Use variable `key` values from the preview in `variable_values`.
+Supply a nonempty value for every secret definition.
+Non-secret values use their copied defaults unless overridden.
+In the web form, select **Use replacement value** to override a non-secret default.
+Leave this checkbox clear to preserve the original default exactly, including line breaks.
+If you omit `description`, creation uses the snapshot description.
+Supply an empty `description` to clear it.
+Map every nonzero source `environment_id` to an existing destination environment.
+Environment mappings must match the selected lifecycle.
+Only global administrators can assign a lifecycle.
+Use `0` for no lifecycle.
+
+Agent selectors remain unchanged unless overridden.
+Use one-based step positions as selector keys.
+Use an empty array to clear selectors explicitly.
+Selected labels must exist when creation runs.
+Review broad selectors before creation.
+
+If the snapshot includes a package source, supply `package_repository` with fresh credentials.
+Omit this object when the snapshot has no package source.
+Templates never contain secret-variable values or package credentials.
+Scripts and non-secret defaults remain verbatim.
+Review them for embedded credentials before reuse.
+
+Successful save and creation requests return `201`.
+Creation returns the new project.
+Invalid references or missing secrets return `422` without partial creation.
+Duplicate names return `409`.
+Unauthorized operations return `403`.
+A template under the wrong source project returns `404`.
+Both creation operations record audit events.
+
+The snapshot excludes runbooks, lifecycle definitions, shared lifecycle values, notifications, schedules, releases, deployments, memberships, and API tokens.
+Creation starts no deployment.
+Source edits do not change templates or created projects.
+Deleting a source project removes its templates.
+Created projects and release snapshots remain independent.
+
 ## Deploy flow (the common ask)
 
 Administrators can read delivery history with `GET /api/v1/admin/notifications`.

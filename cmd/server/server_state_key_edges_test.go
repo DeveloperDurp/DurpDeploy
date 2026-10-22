@@ -14,37 +14,45 @@ import (
 func TestServerStateRotationPreservesEmptyAndNull(t *testing.T) {
 	for _, store := range serverStateStores {
 		for _, empty := range []sql.NullString{{}, {String: "", Valid: true}} {
-			if !empty.Valid && (store.name == "totp" || store.enrollment) {
+			if !empty.Valid &&
+				(store.name == "totp" || store.enrollment || store.name == "project-template") {
 				continue
 			}
 			t.Run(
 				store.name+map[bool]string{false: "/null", true: "/empty"}[empty.Valid],
-				func(t *testing.T) {
-					f := newServerStateKeyFixture(t)
-					if store.enrollment {
-						store.seed(t, f, "")
-					} else if _, err := f.repo.DB.ExecContext(t.Context(), store.insert, empty); err != nil {
-						t.Fatal(err)
-					}
-					var before sql.NullString
-					if err := f.repo.DB.QueryRowContext(t.Context(), store.read).
-						Scan(&before); err != nil {
-						t.Fatal(err)
-					}
-					if err := f.rotate(t, false); err != nil {
-						t.Fatal(err)
-					}
-					var after sql.NullString
-					if err := f.repo.DB.QueryRowContext(t.Context(), store.read).
-						Scan(&after); err != nil {
-						t.Fatal(err)
-					}
-					if after != before {
-						t.Fatal("rotation changed empty representation")
-					}
-				},
+				func(t *testing.T) { checkEmptyServerStateRotation(t, store, empty) },
 			)
 		}
+	}
+}
+
+func checkEmptyServerStateRotation(
+	t *testing.T,
+	store serverStateStore,
+	empty sql.NullString,
+) {
+	t.Helper()
+	f := newServerStateKeyFixture(t)
+	if store.enrollment {
+		store.seed(t, f, "")
+	} else if _, err := f.repo.DB.ExecContext(t.Context(), store.insert, empty); err != nil {
+		t.Fatal(err)
+	}
+	var before sql.NullString
+	if err := f.repo.DB.QueryRowContext(t.Context(), store.read).
+		Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.rotate(t, false); err != nil {
+		t.Fatal(err)
+	}
+	var after sql.NullString
+	if err := f.repo.DB.QueryRowContext(t.Context(), store.read).
+		Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if after != before {
+		t.Fatal("rotation changed empty representation")
 	}
 }
 
