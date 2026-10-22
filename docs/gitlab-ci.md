@@ -7,6 +7,12 @@ ARM64 build and scan coverage is removed.
 
 ## Pipeline events
 
+The `dev-stacks` merge request job runs the two-worktree HTTPS regression with the scanned app image.
+It checks API and browser access, namespace isolation, teardown, and startup failure cleanup.
+It invokes the T3 settle hook and checks worktree ownership, retry, and retained fixture isolation.
+It retains connection records and browser screenshots in `artifacts/dev-stacks`.
+Local verification uses the same regression with rootless Podman.
+
 Merge requests run lint, Go tests, API tests, browser tests, database parity, and security checks.
 Main pushes, tags, manual pipelines, and scheduled pipelines run the shared build and security checks.
 Protected main pushes, protected tags, and protected manual pipelines can publish verified images and charts.

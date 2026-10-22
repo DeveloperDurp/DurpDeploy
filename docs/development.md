@@ -73,6 +73,141 @@ The container engine must support `host-gateway`; startup fails clearly if the
 host backend cannot be reached through that mapping. Docker is preferred when
 available, with a healthy Podman engine used otherwise.
 
+## Isolated development stacks
+
+For coding threads, use the [thread wrapper](#thread-owned-stacks-and-automatic-teardown).
+Use `make dev-stack` when multiple worktrees or threads share one container engine.
+Start the rootless Podman socket before the launcher.
+Keep each state directory outside every source worktree.
+
+```bash
+systemctl --user start podman.socket
+make dev-stack STATE="$HOME/.local/state/durpdeploy/thread-a"
+make dev-stack ACTION=status STATE="$HOME/.local/state/durpdeploy/thread-a"
+make dev-stack ACTION=logs STATE="$HOME/.local/state/durpdeploy/thread-a"
+bash scripts/dev_stack.sh logs "$HOME/.local/state/durpdeploy/thread-a" caddy
+```
+
+Each `up` creates an app container, a Caddy container, a network, and four volumes.
+The volumes contain the database, agent identity, and Caddy data and configuration.
+The app image, runner namespace, and artifact workspace belong to that stack.
+The app HTTP listener stays inside the stack network.
+The container engine allocates loopback HTTPS and agent ports.
+The launcher sets the public URLs before the app starts.
+The app and proxy have CPU, memory, and process limits.
+
+Read `connection.json` for the stack ID, URLs, resource IDs, and state directory.
+The connection record and `status` output contain no credentials or encryption keys.
+The private state directory contains the encryption key and TLS private keys.
+Keep that directory private.
+The launcher does not read the worktree `.env` file or inherit application settings.
+
+The launcher uses rootless Podman by default.
+Set `DEV_STACK_SOCKET` to select another local Unix socket.
+For Docker, set `DEV_STACK_RUNTIME=docker` and select its local socket.
+Set `DEV_STACK_SOURCE` to build another worktree.
+Set `DEV_STACK_IMAGE` to use an existing app image with a private ownership layer.
+The runtime socket grants the app the operator's container authority.
+Use trusted deployment scripts.
+
+Use the generated `.localhost` hostname with a separate browser profile for each stack.
+Keep browser trust scoped to that profile.
+Do not change the system trust store or `/etc/hosts`.
+For CLI requests, use a separate cookie jar and the printed CA file:
+
+```bash
+state="$HOME/.local/state/durpdeploy/thread-a"
+url=$(jq -r .url "$state/connection.json")
+host=${url#https://}
+curl --noproxy '*' --cacert "$state/tls/ca.pem" \
+  --resolve "$host:127.0.0.1" "$url/healthz"
+```
+
+Create an administrator through the existing CLI inside the app container.
+Read the container name from the connection record.
+Load `/data/secret-key` into `DURPDEPLOY_SECRET_KEY` inside that container before the command.
+Use the existing `admin create` or `tokens create` command.
+Do not put credentials in the connection record.
+
+```bash
+app=$(jq -r '.resources[] | select(.kind == "container" and (.name | endswith("-app"))) | .name' "$state/connection.json")
+read -r -s -p 'Administrator password: ' password
+podman exec --user=10001 "$app" sh -c '
+  DURPDEPLOY_SECRET_KEY=$(cat /data/secret-key)
+  export DURPDEPLOY_SECRET_KEY
+  exec /usr/local/bin/durpdeploy admin create --email "$1" --password "$2"
+' bootstrap admin@local.test "$password"
+unset password
+```
+
+For Docker, replace `podman` with the selected Docker command.
+
+Use `logs` to inspect the app or proxy.
+For a restart, restart the recorded app container with the selected engine.
+An existing state directory cannot be used for another `up` operation.
+After a failed launch, read `build.log`, `app.log`, `caddy.log`, and `cleanup.log` in that directory.
+If cleanup is unconfirmed, retry `down` after the engine responds.
+
+```bash
+make dev-stack ACTION=down STATE="$HOME/.local/state/durpdeploy/thread-a"
+```
+
+`down` deletes that stack's containers, network, image tag, and volumes, including its database.
+It verifies ownership labels and recorded resource IDs before deletion.
+It keeps the local state directory for diagnostics.
+It does not change the runtime socket or other stacks.
+If you need the database, export it before `down`.
+Certificates expire after seven days.
+Create a new stack when its certificate expires.
+
+Run `make dev-stack-test` for the two-worktree API and browser regression.
+The test retains healthy examples and prints their URLs and state directories.
+Read [manual E2E](manual-e2e.md#isolated-development-stacks) for repeat and teardown instructions.
+
+### Thread-owned stacks and automatic teardown
+
+Import the project scripts from `t3.json` into T3 Code.
+Start a thread with its own worktree.
+Run the start script or use these commands from that worktree:
+
+```bash
+make dev-stack-thread
+make dev-stack-thread ACTION=status
+make dev-stack-thread ACTION=logs
+bash scripts/dev_stack_thread.sh logs caddy
+```
+
+The wrapper registers one stack in the worktree's ignored `.local/dev-stack.json` file.
+The registration contains the canonical worktree path and the private state directory.
+The stack state stays under `${XDG_STATE_HOME:-$HOME/.local/state}/durpdeploy/worktree-stacks/`.
+Read `state_dir` from the registration to find `connection.json` and diagnostic logs.
+The wrapper always builds the current worktree.
+An existing registration prevents a second stack from replacing the first stack.
+
+The T3 cleanup script has `runOnSettle: true`.
+T3 runs it in the thread's worktree when the thread settles.
+T3 skips this hook for threads without their own worktree.
+Completing an agent turn does not invoke the hook.
+Keep the thread unsettled while you need the stack for manual review.
+Settling the thread deletes its registered containers, network, image tag, and volumes, including the database.
+
+The wrapper checks the registration and connection record against the current worktree.
+The launcher verifies resource ownership and the worktree label before deletion.
+Repeated cleanup succeeds when no stack is registered.
+If cleanup fails, the registration remains available for another attempt.
+After the engine recovers, retry the cleanup command:
+
+```bash
+make dev-stack-thread ACTION=settle
+```
+
+Use the same command to remove a registered stack before settling the thread.
+After cleanup succeeds, use `make dev-stack-thread` to start a new stack.
+Do not copy registrations between worktrees.
+Retained regression fixtures use the standalone launcher and remain outside this hook.
+The hook does not install a timer or a host service.
+For older worktrees without the wrapper, the hook succeeds only when no stack registration exists.
+
 ## Development encryption key
 
 For local development, `make dev` reuses the encryption key from `.env` or

@@ -80,6 +80,7 @@ image-verification:
     - agent-container-podman
     - test
     - e2e
+    - dev-stacks
     - coverage
   script:
     - printf 'All required merge request checks passed.\n'

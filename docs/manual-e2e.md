@@ -1,5 +1,51 @@
 # Manual checks after `make e2e-test`
 
+## Isolated development stacks
+
+Run `make dev-stack-test` with the selected local container socket active.
+For Docker, set `DEV_STACK_RUNTIME=docker` and `DEV_STACK_SOCKET`.
+The regression starts stacks from two detached worktrees.
+It builds the app once before it starts both stacks concurrently.
+Each stack receives its own labelled image layer and resources.
+Set `DEV_STACK_IMAGE` to reuse a previously built app image.
+
+The regression checks authenticated API and browser access through verified HTTPS.
+It checks hostname validation, separate cookies, separate keys, and separate agent identities.
+It checks deployment containers and staging volumes while another stack restarts.
+It removes stack A while stack B runs a deployment.
+It checks successful deployment in B after removal.
+It checks partial startup failure, interrupted startup, and rejected foreign ownership.
+It also checks inspection errors after cleanup starts and while an app is stopped.
+Expect cleanup to remain unconfirmed when an existing resource cannot be inspected.
+Expect a later cleanup retry to succeed without affecting B.
+The regression also invokes the configured T3 settle command from a worktree.
+It checks copied registrations, missing records, repeated settlement, and cleanup retry.
+It checks that edited JSON records cannot bypass the resource worktree label.
+Expect the registered stack and its database volumes to disappear.
+Expect the standalone B fixture and its authenticated API to remain available.
+
+Read the printed state directory for retained examples.
+Stack B retains its project, environment, release, and deployment history.
+The recreated stack A retains a fresh administrator for manual testing.
+Read each private `login.json` file for its test login.
+Use separate browser profiles and the CA file from each connection record.
+Keep certificate trust inside those profiles.
+Use separate cookie jars for CLI checks.
+Do not enable schedules for this test.
+
+Repeat the health check with the resolver and CA arguments in [development](development.md#isolated-development-stacks).
+Open B's retained project and release through its API or browser.
+Deploy the retained release to the retained environment.
+Expect `succeeded` and `stack-deployment-ok` in its logs.
+
+Use `bash scripts/dev_stack.sh status STATE_DIRECTORY` to inspect a retained stack.
+Use `bash scripts/dev_stack.sh logs STATE_DIRECTORY caddy` to inspect its proxy.
+Use `bash scripts/dev_stack.sh down STATE_DIRECTORY` to delete one stack's resources and database.
+Repeat `down` for the other retained stack when manual testing is complete.
+Keep the state directories when you need diagnostic logs.
+These retained fixtures are not registered with the thread wrapper.
+Settling the coding thread does not remove them.
+
 ## Release provenance and CI retries (#18)
 
 1. Open a disposable project's **Releases** page as a Maintainer or administrator.

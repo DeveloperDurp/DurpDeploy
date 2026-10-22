@@ -1380,9 +1380,10 @@ WEB_DELETE=$(curl -s -b "$COOKIES" -X POST -d "version=delete-web&csrf_token=$CS
 [[ "$WEB_DELETE" == 303 ]] || { echo "FAIL: web release create got $WEB_DELETE"; exit 1; }
 WEB_RELEASE_ID=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP 'href="/projects/'$PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
 WEB_URL="$BASE/projects/$PROJECT_ID/releases/$WEB_RELEASE_ID"
-curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -q "hx-delete=\"/projects/$PROJECT_ID/releases/$WEB_RELEASE_ID\"" \
+# Drain each response so pipefail does not mistake curl's closed pipe for a missing control.
+curl_body "$BASE/projects/$PROJECT_ID/releases" | grep "hx-delete=\"/projects/$PROJECT_ID/releases/$WEB_RELEASE_ID\"" >/dev/null \
     || { echo "FAIL: release list has no delete control"; exit 1; }
-curl_body "$WEB_URL" | grep -q "hx-delete=\"/projects/$PROJECT_ID/releases/$WEB_RELEASE_ID\"" \
+curl_body "$WEB_URL" | grep "hx-delete=\"/projects/$PROJECT_ID/releases/$WEB_RELEASE_ID\"" >/dev/null \
     || { echo "FAIL: release detail has no delete control"; exit 1; }
 [[ "$(curl_silent -X DELETE "$WEB_URL")" == 403 ]] || { echo "FAIL: release delete bypassed CSRF"; exit 1; }
 CODE=$(curl -s -b "$COOKIES" -H "X-CSRF-Token: $CSRF" -H 'HX-Request: true' \

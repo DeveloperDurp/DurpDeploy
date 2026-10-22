@@ -1,0 +1,18 @@
+{
+  "$schema": "https://t3.codes/schema/t3.json",
+  "scripts": [
+    {
+      "name": "Start isolated development stack",
+      "command": "bash scripts/dev_stack_thread.sh up",
+      "icon": "play",
+      "runOnWorktreeCreate": false
+    },
+    {
+      "name": "Tear down thread stack",
+      "command": "if test -f scripts/dev_stack_thread.sh; then bash scripts/dev_stack_thread.sh settle; else test ! -e .local/dev-stack.json; fi",
+      "icon": "configure",
+      "runOnWorktreeCreate": false,
+      "runOnSettle": true
+    }
+  ]
+}

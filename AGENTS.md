@@ -39,6 +39,17 @@ CI generates templ output before checks that import the application. Mirror that
 
 ## Running / testing
 
+For a coding thread, read [isolated development stacks](docs/development.md#thread-owned-stacks-and-automatic-teardown).
+Run `make dev-stack-thread` from the thread's worktree.
+Use its connection record for API and browser tests.
+Use the worktree's `.local/dev-stack.json` registration to find that record.
+Import the scripts from `t3.json` into the T3 project.
+The `runOnSettle` script deletes the registered stack and database when the thread settles.
+Keep the thread unsettled during manual review.
+Use separate browser profiles and scoped certificate trust.
+Do not register retained regression fixtures with the thread wrapper.
+If cleanup fails, keep the registration and retry `make dev-stack-thread ACTION=settle`.
+
 For populated demos, follow [the demo lifecycle](docs/manual-e2e.md#populated-demo).
 Run `make demo`, with the selected engine's local Unix socket active first.
 On Citadel, use `systemctl --user start podman.socket`. Verify `agent/3`, the

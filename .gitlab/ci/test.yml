@@ -25,6 +25,18 @@ pre-commit:
   - env --default-signal=INT,TERM,HUP make go-test-cleanup-test
   - make backup-restore-script-test
   - bash scripts/check-dev-database-contract.sh
+dev-stacks:
+  extends: .mr-built-app
+  timeout: 30 minutes
+  script:
+  - bash -n scripts/dev_stack.sh scripts/dev_stack_thread.sh
+  - shellcheck -S error scripts/dev_stack.sh scripts/dev_stack_thread.sh
+  - node --check scripts/dev_stack_test.mjs
+  - |-
+    export DEV_STACK_RUNTIME=docker DEV_STACK_SOCKET=/var/run/docker.sock
+    export DEV_STACK_IMAGE="$DURPDEPLOY_E2E_IMAGE"
+    export DEV_STACK_EVIDENCE_DIR="$CI_PROJECT_DIR/artifacts/dev-stacks"
+    make dev-stack-test
 backup-restore:
   extends: .mr-test
   timeout: 90 minutes

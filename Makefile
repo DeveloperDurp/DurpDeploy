@@ -66,6 +66,18 @@ dev-server:
 dev-secret-key-test:
 	bash scripts/dev_secret_key_test.sh
 
+.PHONY: dev-stack dev-stack-thread dev-stack-test
+# Keep STATE outside the source worktree. Each up creates a new private stack.
+dev-stack:
+	@test -n "$(STATE)" || { echo 'Set STATE to a new absolute state directory.' >&2; exit 1; }
+	bash scripts/dev_stack.sh $(or $(ACTION),up) '$(STATE)'
+
+dev-stack-thread:
+	bash scripts/dev_stack_thread.sh $(or $(ACTION),up)
+
+dev-stack-test:
+	timeout --signal=TERM --kill-after=60s 20m node scripts/dev_stack_test.mjs
+
 .PHONY: dev-agent dev-agent-down dev-agent-reset dev-agent-test
 .PHONY: demo demo-stop demo-refresh demo-refresh-full demo-test
 

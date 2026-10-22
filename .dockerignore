@@ -34,6 +34,11 @@ screenshots/
 # Local database
 *.db
 *.db-*
+.env
+.local/
+.opencode/
+tmp/
+secrets/
 
 # Node
 node_modules/
