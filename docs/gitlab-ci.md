@@ -51,6 +51,11 @@ The published application image uses `USER 10001:10001`.
 The browser image installs templ from `go.mod` and `go.sum` with `-mod=readonly`.
 It disables npm lifecycle scripts with `npm ci --ignore-scripts`.
 
+The application builder and CI tools use Node.js 24.22.1 from digest-pinned official images.
+The browser image removes its older Node package before copying the patched distribution.
+The copied distribution retains Node and npm dependency license notices.
+The independent cache cleanup job uses the same pinned Node version.
+
 Repository image pulls use these Harbor proxy projects:
 
 | Upstream registry | Harbor project |
