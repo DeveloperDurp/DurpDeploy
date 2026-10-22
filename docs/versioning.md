@@ -44,7 +44,7 @@ harbor.durp.info/github/developerdurp/durpdeploy:v0.0.0-dev.742_g0123456789ab
 ```
 
 CI builds and scans Linux AMD64 before publication.
-Publication also requires a successful GitLab merge request pipeline with the same source tree.
+Publication uses the current pipeline's scanned image and does not require matching merge request artifacts.
 The publisher verifies the current build metadata and publishes the scanned image bytes.
 It refuses to replace an existing version tag with different image bytes.
 

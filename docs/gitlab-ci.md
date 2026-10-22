@@ -36,11 +36,11 @@ Protected and other pipelines do not import merge request caches.
 Builds check upstream base references before using cached layers.
 Build timing evidence records browser and helper build durations.
 
-Product images and charts are published to both the GitLab registry and GHCR.
+Product images are published to both the GitLab registry and GHCR.
 Application images use `$CI_REGISTRY_IMAGE` and `ghcr.io/developerdurp/durpdeploy`.
-Helm charts use `$CI_REGISTRY_IMAGE/charts/durpdeploy` and `ghcr.io/developerdurp/charts/durpdeploy`.
+Helm charts are published only to `$CI_REGISTRY_IMAGE/charts/durpdeploy`.
 The image publisher verifies the same scanned image digests in both registries.
-The chart publisher uploads one package and compares its downloaded bytes from each registry.
+The chart publisher uploads one package and compares its downloaded bytes from the GitLab registry.
 
 The disposable CI images use root to prepare checkout ownership and test fixtures.
 The helper also starts its private Docker daemon and switches to the rootless Podman user.
@@ -207,11 +207,12 @@ Keep credential values out of repository files and command output.
 | `GHCR_USER` | `production` | Protect the variable. Use the GHCR publishing account. |
 | `GHCR_TOKEN` | `production` | Mask and protect the token. Allow package publication only. |
 
-Publication uses GitLab's short-lived `CI_JOB_TOKEN` to read merge request metadata, job results, and image artifacts.
-Do not configure a separate GitLab read token.
+GitLab downloads the current pipeline's required image artifacts before publication starts.
+Publication does not need a separate GitLab API token.
 GitLab registry publication uses the automatic `CI_REGISTRY_USER` and `CI_REGISTRY_PASSWORD` credentials.
-GHCR publication requires the two production variables above.
-The E2E job checks these API permissions and downloads version metadata with its real job token.
+GHCR image publication requires the two production variables above.
+The image publisher pushes the current pipeline's scanned archive without rebuilding it.
+Chart publication does not use GHCR credentials.
 
 Production variables must remain unavailable to unprotected merge request pipelines.
 The `production` scope is used only by the two publication jobs.
@@ -234,22 +235,18 @@ The retention job keeps successful archives and source metadata for thirty days.
 Source and configuration security reports remain available for seven days.
 Browser and agent evidence remains available for seven days.
 
-Publication requires the latest successful matching merge request pipeline.
-It checks the latest image and retention jobs, source tree, source references, archive hash, and AMD64 platform metadata.
-Squash merge commit identifiers can differ when their source trees match.
-Fast-forward merges use the verified merge request source tip without squashing commits.
-Missing, expired, failed, or mismatched artifacts stop publication.
+Publication uses the current pipeline's scanned image archive.
+It does not require merge request artifacts or compare the merged source tree with an earlier merge request pipeline.
+The publisher verifies the archive checksum, commit, source tree, pipeline, producing image job, version, build number, and AMD64 platform metadata.
+Missing or mismatched artifacts stop publication.
 
-The publisher separately verifies the current pipeline archive and embedded build identity.
+The publisher verifies the embedded build identity.
 It publishes the scanned image bytes without rebuilding them.
 Image publication must succeed in both registries before chart publication starts.
-Chart publication must succeed in both registries before its job passes.
+Chart publication must succeed in the GitLab registry before its job passes.
 
-Before final verification, rebase the source branch onto the current default branch.
-Run the full merge request pipeline after the rebase.
-If the default branch advances, repeat the rebase and verification before merging.
-Merge the tested source tip without additional changes.
-Publication rejects a different source tree after a merge-time rebase or conflict resolution.
+After merge, the default branch pipeline builds and scans the merged source before publication.
+Publication requires successful lint, source security, configuration security, and image retention jobs from that pipeline.
 
 ## Project settings and cutover
 

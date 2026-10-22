@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run only after resolve_release_images.sh, inside the serialized publisher.
+# Run only after prepare_versioned_images.sh, inside the serialized publisher.
 set -euo pipefail
 
 directory=${1:?usage: publish_release_images.sh DIRECTORY VERSION [IMAGE]}

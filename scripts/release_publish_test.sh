@@ -79,6 +79,10 @@ SH
 cat > "$transport/bin/docker" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ $1 == login ]]; then
+	[[ $(cat) == fixture-token ]]
+	exit 0
+fi
 arguments=()
 for argument in "$@"; do
 	argument=${argument//ghcr.io\/fixture\/project/$TEST_REGISTRY}
@@ -93,10 +97,18 @@ SH
 chmod +x "$transport/bin/"*
 export PATH="$transport/bin:$PATH"
 export REGISTRY_OWNER=fixture IMAGE_NAME=project IS_RELEASE=true
+export CI_REGISTRY_IMAGE=registry.gitlab.example/fixture/project
 
 # Given verified image archives, publish and verify the AMD64 platform digest.
 export CI_COMMIT_SHA="$older"
-bash "$root/scripts/publish_release_images.sh" "$work/verified" v1.0.0
+publish_current_pipeline() {
+  CI_COMMIT_REF_PROTECTED=true CI_PIPELINE_SOURCE=push \
+    software_version="$BUILD_VERSION" build_number="$BUILD_NUMBER" is_release=true version=v1.0.0 \
+    GHCR_TOKEN=fixture-token GHCR_USER=fixture CI_REGISTRY_PASSWORD=fixture-token \
+    CI_REGISTRY=registry.gitlab.example CI_REGISTRY_USER=fixture \
+    bash "$root/scripts/ci_publish.sh" images
+}
+CI_COMMIT_BRANCH=main publish_current_pipeline
 skopeo inspect --raw docker://ghcr.io/fixture/project:v1.0.0 > "$transport/index.json"
 for arch in amd64; do
 	expected="sha256:$(sha256sum "$work/verified/$arch/manifest.json" | cut -d ' ' -f 1)"
@@ -105,6 +117,7 @@ for arch in amd64; do
 		"$transport/index.json" > /dev/null
 done
 echo 'PASS: real registry retains the scanned AMD64 platform digest'
+echo 'PASS: main publication uses the current pipeline image without MR artifacts or remote branch refs'
 
 # Given a normalized SemVer build tag, publish the same scanned manifests.
 bash "$root/scripts/publish_release_images.sh" "$work/verified" v1.0.0_build.4
@@ -137,7 +150,6 @@ skopeo inspect --raw docker://ghcr.io/fixture/project:v2.0.0 |
 echo 'PASS: existing version tags reject different images'
 
 # The second registry receives the same verified platform and index bytes.
-export CI_REGISTRY_IMAGE=registry.gitlab.example/fixture/project
 bash "$root/scripts/publish_release_images.sh" "$work/verified" v1.0.0 "$CI_REGISTRY_IMAGE"
 skopeo inspect --raw "docker://$CI_REGISTRY_IMAGE:v1.0.0" > "$transport/gitlab.json"
 cmp "$transport/index.json" "$transport/gitlab.json"
@@ -150,12 +162,16 @@ echo 'PASS: both registries retain identical verified image indexes'
 
 export TEST_HELM
 TEST_HELM=$(command -v helm3)
+unset REGISTRY_OWNER IMAGE_NAME GHCR_TOKEN GHCR_USER
 cat > "$transport/bin/helm" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 arguments=()
 for argument in "$@"; do
-  argument=${argument//ghcr.io\/fixture\/charts/$TEST_REGISTRY\/charts}
+  if [[ $argument == *ghcr.io* ]]; then
+    echo 'Chart publication tried to access GHCR.' >&2
+    exit 1
+  fi
   arguments+=("${argument//registry.gitlab.example\/fixture\/project/$TEST_GITLAB_REGISTRY}")
 done
 case $1 in push|pull) arguments+=(--plain-http) ;; esac
@@ -170,4 +186,4 @@ bash "$root/scripts/publish_release_chart.sh" "$work/durpdeploy-1.2.3.tgz" 1.2.3
 printf 'apiVersion: v2\nname: durpdeploy\nversion: 1.2.3+build.4\n' > "$work/chart/Chart.yaml"
 helm package "$work/chart" --destination "$work"
 bash "$root/scripts/publish_release_chart.sh" "$work/durpdeploy-1.2.3+build.4.tgz" 1.2.3+build.4
-echo 'PASS: both registries retain identical Helm package bytes'
+echo 'PASS: GitLab retains identical Helm package bytes without GHCR credentials'

@@ -10,7 +10,6 @@ private=$(mktemp -d)
 trap 'rm -rf "$private"' EXIT
 case ${1:?usage: ci_publish.sh images|chart} in
   images)
-    bash scripts/resolve_release_images.sh "$private/verified-mr-images"
     bash scripts/prepare_versioned_images.sh artifacts "$private/verified-images"
     printf '%s' "${GHCR_TOKEN:?}" |
       docker login ghcr.io -u "${GHCR_USER:?}" --password-stdin
@@ -24,8 +23,6 @@ case ${1:?usage: ci_publish.sh images|chart} in
     mkdir "$private/bin"
     ln -s /usr/local/bin/helm3 "$private/bin/helm"
     export PATH="$private/bin:$PATH"
-    printf '%s' "${GHCR_TOKEN:?}" |
-      helm registry login ghcr.io -u "${GHCR_USER:?}" --password-stdin
     printf '%s' "${CI_REGISTRY_PASSWORD:?}" |
       helm registry login "${CI_REGISTRY:?}" -u "${CI_REGISTRY_USER:?}" --password-stdin
     helm lint charts/durpdeploy

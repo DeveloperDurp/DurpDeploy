@@ -18,22 +18,18 @@ GitLab retains sanitized reports and CycloneDX SBOMs for seven days, including r
 Reports identify the checkout commit, OCI manifest digests, scanner version, and vulnerability database version and timestamps.
 The `image-verification` job requires the AMD64 image scan, Go tests, E2E tests, and source security checks.
 
-After merge, publication verifies artifacts from the latest matching successful merge request pipeline.
-It checks the latest job identifiers, archive digests, source tree, source references, and platform metadata.
-Squash merges can have different commit identifiers but must have the same source tree.
-Publication then verifies the current run's scanned archives, including version, build number, commit, platform, and image labels.
+After merge, the default branch pipeline builds and scans the merged source.
+Publication verifies the current run's scanned archives, including pipeline, producing image job, checksum, source tree, version, build number, commit, and platform.
+It also verifies the embedded image labels.
+Publication does not require merge request artifacts or a matching merge request source tree.
 The publisher uses these scanned platform manifests without rebuilding or rescanning.
 Helm publication requires successful image publication.
-
-Partial retries reuse verified artifacts for unchanged image jobs.
-Publication rejects artifacts that name an older image job after that job is retried.
+The image publisher sends the scanned image to GitLab and GHCR.
+The chart publisher uses only the GitLab registry.
 
 GitLab retains successful image artifacts for 30 days.
 Missing, expired, failed, or mismatched artifacts stop publication.
-If artifacts expire, the original commit cannot use this promotion path.
-Create a new merge request for a new verified release revision.
-Commits without matching merge request artifacts cannot use this publication path.
-This includes releases built before this workflow was introduced.
+If artifacts expire, rerun the image build and retention jobs before publication.
 
 Image publishing jobs share one queue.
 Each pipeline retains its own source-scan jobs and artifacts.
