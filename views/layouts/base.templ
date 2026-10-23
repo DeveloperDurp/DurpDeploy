@@ -62,7 +62,24 @@ templ Base(title string, currentPath string) {
 			<div id="app-navbar" class="navbar bg-base-200 border-b border-base-300" x-data="navbar" @keydown.escape.window="closeFocusedMenu($event)" @click.window="closeOutsideMenu($event)">
 				<div class="w-full px-4 sm:px-6 lg:px-8 flex flex-nowrap items-center gap-2">
 					<div class="min-w-0 shrink-0">
-						<a href="/" class="btn btn-ghost text-xl whitespace-nowrap">DurpDeploy</a>
+						<a href="/" class="btn btn-ghost text-xl whitespace-nowrap">
+							<svg xmlns="http://www.w3.org/2000/svg" width="40" height="28" viewBox="0 0 816 544" class="shrink-0" aria-hidden="true" focusable="false">
+								<defs>
+									<linearGradient id="navbar-logo-blue" x1="0" y1="0" x2="480" y2="544" gradientUnits="userSpaceOnUse">
+										<stop stop-color="#8bb4ff"></stop>
+										<stop offset="1" stop-color="#6b97ed"></stop>
+									</linearGradient>
+									<linearGradient id="navbar-logo-purple" x1="383" y1="0" x2="816" y2="544" gradientUnits="userSpaceOnUse">
+										<stop stop-color="#c8a0f4"></stop>
+										<stop offset="1" stop-color="#ac7ce0"></stop>
+									</linearGradient>
+								</defs>
+								<path fill="url(#navbar-logo-purple)" fill-rule="evenodd" d="M391 0h193c132 0 232 122 232 272S716 544 584 544H391q-8 0-8-8V8q0-8 8-8Zm106 124v297h87c68 0 112-67 112-149s-44-148-112-148Z"></path>
+								<path fill="url(#navbar-logo-blue)" fill-rule="evenodd" d="M8 0h238c140 0 234 122 234 272S386 544 246 544H8q-8 0-8-8V8q0-8 8-8Zm105 124v297h133c71 0 112-67 112-149s-41-148-112-148Z"></path>
+								<path fill="url(#navbar-logo-blue)" d="M169 185h49q4 0 7 3l78 77q7 7 0 14l-78 77q-3 3-7 3h-49q-12 0-6-12l72-75-72-75q-8-12 6-12Z"></path>
+							</svg>
+							DurpDeploy
+						</a>
 					</div>
 					<div class="flex min-w-0 flex-1 items-center gap-2">
 						<details data-mobile-nav="true" data-focus-menu class="dropdown dropdown-end ml-auto shrink-0 xl:hidden">
