@@ -85,6 +85,14 @@ func TestAgentDeleteBrowserE2E(t *testing.T) {
 	// When: the native confirmation is cancelled, then accepted on each page.
 	fleetDeleteConfirm(t, browser, "pending-delete", false)
 	browser.wait(t, `location.pathname === '/admin/agents/pending-delete'`)
+	fleetRevokeConfirm(t, browser, "pending-delete", false)
+	if agent, err := h.repo.Queries.GetAgent(t.Context(), "pending-delete"); err != nil ||
+		agent.Status != "pending" {
+		t.Fatalf("cancelled revocation agent=%+v error=%v", agent, err)
+	}
+	fleetRevokeConfirm(t, browser, "pending-delete", true)
+	assertFleetRevokedPage(t, browser, "pending-delete")
+	fleetBrowserNavigate(t, browser, srv.URL+"/admin/agents/pending-delete")
 	fleetDeleteConfirm(t, browser, "pending-delete", true)
 	fleetBrowserLoaded(t, browser)
 	browser.wait(t, `location.pathname === '/admin/agents' &&
@@ -116,15 +124,32 @@ func TestAgentDeleteBrowserE2E(t *testing.T) {
 		}, &struct{}{})
 		browser.screenshot(t, fmt.Sprintf("delete-blocked-list-%d", width))
 	}
-	fleetRevokeConfirm(t, browser, "busy-delete")
-	browser.wait(t, `document.body.innerText.includes('revoked')`)
+	fleetRevokeConfirm(t, browser, "busy-delete", true)
+	assertFleetRevokedPage(t, browser, "busy-delete")
 	agent, err = h.repo.Queries.GetAgent(t.Context(), "busy-delete")
 	if err != nil || agent.Status != "revoked" {
 		t.Fatalf("emergency revocation agent=%+v error=%v", agent, err)
 	}
 }
 
-func fleetRevokeConfirm(t *testing.T, browser *packageBrowser, id string) {
+func assertFleetRevokedPage(t *testing.T, browser *packageBrowser, id string) {
+	t.Helper()
+	browser.wait(t, fmt.Sprintf(`location.pathname === '/admin/agents' &&
+		document.readyState === 'complete' &&
+		!document.querySelector('[hx-post="/admin/agents/%s/revoke"]') &&
+		document.querySelector('a[href="/admin/agents/%s"]')
+		?.closest('tr').innerText.includes('revoked')`, id, id))
+	if string(browser.evaluate(t, `document.querySelectorAll('#app-navbar')
+		.length === 1 && document.querySelectorAll('main').length === 1 &&
+		!document.querySelector('button #app-navbar, button main')`)) != "true" {
+		t.Fatal("revocation inserted a full page into its action button")
+	}
+	browser.screenshot(t, "revoked-"+id)
+}
+
+func fleetRevokeConfirm(
+	t *testing.T, browser *packageBrowser, id string, accept bool,
+) {
 	t.Helper()
 	browser.wire.events = nil
 	browser.evaluate(t, fmt.Sprintf(`setTimeout(() => document.querySelector(
@@ -135,7 +160,7 @@ func fleetRevokeConfirm(t *testing.T, browser *packageBrowser, id string) {
 	browser.call(
 		t,
 		"Page.handleJavaScriptDialog",
-		map[string]bool{"accept": true},
+		map[string]bool{"accept": accept},
 		&struct{}{},
 	)
 }

@@ -1,5 +1,29 @@
 # Manual checks after `make e2e-test`
 
+## Agent revocation navigation
+
+Use disposable agents without production work.
+Retain each revoked agent for inspection.
+These checks create no schedules.
+
+1. Open **Admin > Agents** as an administrator.
+2. Select **Revoke** for a disposable agent.
+3. Cancel the confirmation and confirm that the agent status stays unchanged.
+4. Select **Revoke** again and accept the confirmation.
+5. Confirm that the Agents list shows **revoked** and hides that agent's **Revoke** button.
+6. Confirm that the page has one navigation bar and no page content inside an action button.
+7. Repeat from another disposable agent's detail page with **Revoke agent**.
+8. Confirm that revocation returns to `/admin/agents`.
+9. Call `POST /api/v1/admin/agents/{id}/revoke` with an administrator bearer token.
+10. Confirm a `204` response and a **revoked** status from `GET /api/v1/admin/agents/{id}`.
+
+Run the API and browser regressions:
+
+```sh
+bash scripts/go_test.sh -count=1 -run '^TestAgentRevokeEndToEnd$' ./internal/server
+bash scripts/go_test.sh -tags=e2e,agentbrowser -count=1 -run '^TestAgentDeleteBrowserE2E$' ./internal/handler/api
+```
+
 ## Isolated development stacks
 
 Run `make dev-stack-test` with the selected local container socket active.

@@ -141,6 +141,11 @@ func (h *AgentsHandler) Revoke(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", "/admin/agents")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	http.Redirect(w, r, "/admin/agents", http.StatusSeeOther)
 }
 
