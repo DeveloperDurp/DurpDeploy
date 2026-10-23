@@ -2,6 +2,101 @@ function olderLogsURL() {
 	return `${location.pathname}?before=${this.olderBefore}`;
 }
 
+function isVisibleLogRow(row) {
+	return row.isConnected && !row.closest('details:not([open])') &&
+		row.getBoundingClientRect().height > 0;
+}
+
+// Both log views scroll the page and leave manually collapsed panels closed.
+function logFollowing() {
+	return {
+		followingLogs: false,
+		logUpdate: null,
+		logFrame: null,
+		logScrollY: null,
+		visibleLogRows() {
+			return [...this.$root.querySelectorAll('[data-log-id]')]
+				.filter(isVisibleLogRow);
+		},
+		logEndElement() {
+			return this.visibleLogRows().reduce((latest, row) =>
+				!latest || BigInt(row.dataset.logId) > BigInt(latest.dataset.logId) ? row : latest,
+				null) || this.$refs.logEnd;
+		},
+		atLogEnd() {
+			const last = this.logEndElement();
+			if (!last) return false;
+			const rect = last.getBoundingClientRect();
+			return rect.bottom > 0 && rect.bottom <= innerHeight + 48;
+		},
+		trackLogScroll(event) {
+			if (event?.type === 'scroll' && this.logScrollY !== null && Math.abs(scrollY - this.logScrollY) < 1) {
+				this.logScrollY = null;
+				return;
+			}
+			this.logScrollY = null;
+			this.followingLogs = !document.hidden && this.atLogEnd();
+			if (this.logUpdate && !this.followingLogs) this.logUpdate.anchors = [];
+		},
+		logVisibilityChanged() {
+			this.followingLogs = !document.hidden && this.atLogEnd();
+		},
+		pauseLogFollow(event) {
+			if (event.type === 'touchstart' || event.deltaY < 0 ||
+				['ArrowUp', 'PageUp', 'Home'].includes(event.key)) {
+				this.followingLogs = false;
+				if (this.logUpdate) this.logUpdate.anchors = [];
+			}
+		},
+		resumeLogFollow() {
+			this.followingLogs = true;
+			this.scrollToLogs();
+		},
+		scrollToLogs() {
+			if (document.hidden) return;
+			const last = this.logEndElement();
+			if (!last) return;
+			const { bottom } = last.getBoundingClientRect();
+			if (bottom > innerHeight || bottom <= 0) {
+				last.scrollIntoView({ block: 'end', behavior: 'instant' });
+				this.logScrollY = scrollY;
+			}
+		},
+		beforeLogUpdate() {
+			if (this.logUpdate) return;
+			const rows = this.visibleLogRows();
+			// Keep a surviving visible row fixed when retention removes earlier output.
+			const anchors = rows.filter(row => {
+				const rect = row.getBoundingClientRect();
+				return rect.bottom > 0 && rect.top < innerHeight;
+			}).map(row => ({ row, top: row.getBoundingClientRect().top }));
+			this.logUpdate = { anchors };
+			this.$nextTick(() => {
+				this.logFrame = requestAnimationFrame(() => {
+					if (!this.logUpdate) return;
+					if (!document.hidden) {
+						if (this.followingLogs) this.scrollToLogs();
+						else if (this.logUpdate.trimmed) {
+							const anchor = this.logUpdate.anchors.find(item => isVisibleLogRow(item.row));
+							if (anchor) {
+								window.scrollBy({
+									top: anchor.row.getBoundingClientRect().top - anchor.top, behavior: 'instant',
+								});
+								this.logScrollY = scrollY;
+							}
+						}
+					}
+					this.logUpdate = null;
+				});
+			});
+		},
+		stopLogFollowing() {
+			cancelAnimationFrame(this.logFrame);
+			this.logUpdate = null;
+		},
+	};
+}
+
 function renderLogLine(element, line = element.textContent) {
 	const fragment = document.createDocumentFragment();
 	let color = /^\s*[-+]\/[-+]/.test(line) ? 'text-warning'
@@ -33,6 +128,15 @@ function renderLogLine(element, line = element.textContent) {
 }
 
 export function registerLogComponents(Alpine) {
+	Alpine.bind('logFollowing', () => ({
+		'@scroll.window': 'trackLogScroll',
+		'@resize.window': 'trackLogScroll',
+		'@toggle.capture': 'trackLogScroll',
+		'@visibilitychange.document': 'logVisibilityChanged',
+		'@wheel.window.passive': 'pauseLogFollow',
+		'@touchstart.window.passive': 'pauseLogFollow',
+		'@keydown.window': 'pauseLogFollow',
+	}));
 	const encoder = new TextEncoder();
 	const initialRows = element => [...element.querySelectorAll('[data-log-id]')]
 		.map(node => ({ id: node.dataset.logId, node,
@@ -41,6 +145,7 @@ export function registerLogComponents(Alpine) {
 	const trim = component => {
 		while (component.retained.length > component.limit ||
 			component.retainedBytes > component.byteLimit) {
+			if (component.logUpdate) component.logUpdate.trimmed = true;
 			const removed = component.retained.shift();
 			component.retainedBytes -= removed.bytes;
 			if (removed.node) removed.node.remove();
@@ -50,6 +155,8 @@ export function registerLogComponents(Alpine) {
 		}
 	};
 	const initialize = component => {
+		// We preserve retained rows explicitly, including in browsers without scroll anchoring.
+		component.$el.style.overflowAnchor = 'none';
 		component.retained = initialRows(component.$el);
 		component.retainedBytes = component.retained.reduce((sum, row) => sum + row.bytes, 0);
 		trim(component);
@@ -61,6 +168,7 @@ export function registerLogComponents(Alpine) {
 		trim(component);
 	};
 	Alpine.data('deploymentStream', ({ url, after, limit, byteLimit, olderBefore }) => ({
+		...logFollowing(),
 		url,
 		lastID: after,
 		limit,
@@ -76,6 +184,7 @@ export function registerLogComponents(Alpine) {
 			if (this.started) return;
 			this.started = true;
 			initialize(this);
+			this.$nextTick(() => this.trackLogScroll());
 			const address = new URL(this.url, location.href);
 			address.searchParams.set('after', this.lastID);
 			this.source = new EventSource(address);
@@ -91,6 +200,7 @@ export function registerLogComponents(Alpine) {
 			// SSE IDs are exact decimal strings, including beyond Number's range.
 			entry.id = event.lastEventId;
 			if (BigInt(entry.id) <= BigInt(this.lastID)) return;
+			this.beforeLogUpdate();
 			this.lastID = entry.id;
 			const node = document.createElement('div');
 			node.dataset.logId = entry.id;
@@ -99,6 +209,7 @@ export function registerLogComponents(Alpine) {
 			retain(this, { id: entry.id, node }, entry);
 		},
 		destroy() {
+			this.stopLogFollowing();
 			this.destroyed = true;
 			if (this.source) this.source.close();
 			this.source = null;
@@ -107,6 +218,7 @@ export function registerLogComponents(Alpine) {
 
 
 	Alpine.data('deploymentStepLogs', ({ url, status, view }) => ({
+		...logFollowing(),
 		renderLogLine,
 		renderEntry(element, entry) {
 			renderLogLine(element, entry.line);
@@ -135,6 +247,7 @@ export function registerLogComponents(Alpine) {
 		init() {
 			initialize(this);
 			if (view.historical) return;
+			this.$nextTick(() => this.trackLogScroll());
 			// Cancellation can set terminal status before the runner writes final logs.
 			const address = new URL(this.url, location.href);
 			address.searchParams.set('after', this.lastID);
@@ -153,6 +266,7 @@ export function registerLogComponents(Alpine) {
 			const entry = JSON.parse(event.data);
 			entry.id = event.lastEventId;
 			if (BigInt(entry.id) <= BigInt(this.lastID)) return;
+			this.beforeLogUpdate();
 			this.lastID = entry.id;
 			let panel = this.panels.find(item => item.index === entry.step_index);
 			if (!panel && entry.step) {
@@ -206,6 +320,7 @@ export function registerLogComponents(Alpine) {
 			}
 		},
 		destroy() {
+			this.stopLogFollowing();
 			this.source?.close();
 			this.source = null;
 		},

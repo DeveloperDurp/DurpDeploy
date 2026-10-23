@@ -789,6 +789,48 @@ Retain the deployments and releases for repeat checks.
 Run `TestDeploymentStepPanelsBrowserE2E` for automated browser coverage.
 Run `TestDeploymentStepLogsAPIWebE2E` and `TestDeploymentStepLogOutcomesAPIWebE2E` for the existing API contracts.
 
+## Follow live logs
+
+Start a deployment with two steps that print log lines for at least 30 seconds.
+Open the deployment page.
+Expand the step panels that you want to watch.
+Scroll to the latest visible log line.
+Expect **Follow logs** to show **On**.
+Confirm that new output stays visible through step changes and completion.
+Confirm that each step panel keeps your open or closed selection.
+
+Close the next step panel while its logs arrive.
+Select **Follow logs**.
+Confirm that the page follows output in the panel you left open.
+Confirm that the closed panel stays closed.
+
+Scroll up to read earlier output.
+Expect **Follow logs** to show **Paused**.
+Confirm that retained lines keep their screen position when older lines leave the preview window.
+If the preview removes the line you read, use **Older logs** to read it again.
+Select **Follow logs** with the mouse or keyboard.
+Confirm that the page returns to the latest visible output.
+Scroll up again, then return to the live end to resume following.
+
+Print a single wrapped log line that is taller than the viewport.
+Scroll to the middle of that line.
+Select **Follow logs**.
+Confirm that the end of the line becomes visible.
+
+Switch to another browser tab while logs arrive.
+Return to the log page.
+Confirm that background updates did not force the page to the latest output.
+Select **Older logs**.
+Confirm that historical pages have no **Follow logs** control and receive no live updates.
+
+Repeat these checks for a runbook execution and a phone viewport.
+Run `TestLogFollowingBrowserE2E` for API deployment, log API, and browser coverage.
+The browser test checks the visibility handler with real SSE output and an injected visibility event.
+Use two browser tabs for the manual background check.
+The running-server suite retains both log examples and prints their links.
+Retain the project, release, environment, runbook, and execution history for repeat checks.
+Keep schedules disabled.
+
 ## Step execution locations
 
 Create a release with a server container step, an agent host step, and an agent container step.

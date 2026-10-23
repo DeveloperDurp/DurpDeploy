@@ -3,6 +3,15 @@ package pages
 import "durpdeploy/internal/repository"
 import "strconv"
 
+templ LogFollowControl() {
+	if logHistoryPage(ctx).Before == 0 {
+		<button type="button" class="btn btn-ghost sm:btn-sm" x-cloak data-follow-logs @click="resumeLogFollow" x-bind:aria-pressed="followingLogs">
+			Follow logs
+			<span class="badge badge-outline" x-text="followingLogs ? 'On' : 'Paused'"></span>
+		</button>
+	}
+}
+
 templ LogHistoryNavigation(base, exportURL string) {
 	{{ page := logHistoryPage(ctx) }}
 	<div class="flex flex-wrap items-center gap-2" aria-label="Log history">

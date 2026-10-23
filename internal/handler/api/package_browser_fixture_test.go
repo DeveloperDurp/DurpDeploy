@@ -220,7 +220,16 @@ func (b *packageBrowser) evaluate(
 
 func (b *packageBrowser) wait(t *testing.T, predicate string) {
 	t.Helper()
-	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); {
+	b.waitFor(t, predicate, 15*time.Second)
+}
+
+func (b *packageBrowser) waitFor(
+	t *testing.T,
+	predicate string,
+	timeout time.Duration,
+) {
+	t.Helper()
+	for deadline := time.Now().Add(timeout); time.Now().Before(deadline); {
 		var result struct {
 			Result struct {
 				Value json.RawMessage `json:"value"`

@@ -64,6 +64,7 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=10m -run '^Test((Deployment|Runbook)LogHistoryPages|OpenLogStreamRevocation|StalledSMTPDelivery|SMTPPlaintextWarning|BackupHealthRecovery)APIWebE2E$' ./internal/handler/api
     ;;
   browser-execution)
+    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestLogFollowingBrowserE2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=3m -v -run '^TestQueuedCancellation(APIWeb|Browser)E2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^Test(DeploymentStepLogs|DeploymentStepPanels|DeploymentStepLogsHistoricalQuiet|DeploymentLogHistory|RunbookLogHistory|RunbookLogRevocation|DeploymentStagingFailure|LegacyRunbookStreamDrainsAfterTerminalBadge)BrowserE2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^TestVerification(Rollback|Polling|CleanupRetry)BrowserE2E$' ./internal/handler/api

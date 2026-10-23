@@ -386,7 +386,7 @@ templ DeploymentDetailPage(project db.Project, release db.Release, environment d
 
 templ DeploymentDetail(project db.Project, release db.Release, environment db.Environment, deployment db.Deployment, logs []db.DeploymentLog, waitingForAgents bool) {
 	{{ logView := deploymentPageLogView(ctx, release, deployment, logs) }}
-	<div class="space-y-6" x-data={ fmt.Sprintf("deploymentStepLogs({ url: '/deployments/%d/logs/stream?format=structured&preview=true', status: %q, view: %s })", deployment.ID, deployment.Status, deploymentLogConfig(logView)) } x-on:htmx:after-swap.camel.window="statusChanged($event)">
+	<div class="space-y-6" x-data={ fmt.Sprintf("deploymentStepLogs({ url: '/deployments/%d/logs/stream?format=structured&preview=true', status: %q, view: %s })", deployment.ID, deployment.Status, deploymentLogConfig(logView)) } x-bind="logFollowing" x-on:htmx:after-swap.camel.window="statusChanged($event)">
 		if warning := artifactDecisionWarning(ctx); warning != "" {
 			<div class="alert alert-warning" role="alert" data-artifact-decision-warning>{ warning }</div>
 		}
@@ -424,6 +424,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 		@ReleaseProvenance(release)
 		<section class="space-y-4" aria-label="Step logs">
 			<h2 class="text-xl font-bold">Step logs</h2>
+			@LogFollowControl()
 			@LogHistoryNavigation(fmt.Sprintf("/deployments/%d", deployment.ID), fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID))
 			for position, panel := range logView.Panels {
 				<details
@@ -467,6 +468,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 					</div>
 				</details>
 			}
+			<div x-ref="logEnd"></div>
 		</section>
 		<div hx-get={ fmt.Sprintf("/deployments/%d/verification", deployment.ID) } hx-trigger="load" hx-swap="outerHTML" aria-live="polite"></div>
 	</div>
