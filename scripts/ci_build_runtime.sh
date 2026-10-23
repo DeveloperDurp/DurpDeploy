@@ -30,7 +30,7 @@ build_image() {
   local -a cache=()
   if [[ -n $cache_scope ]]; then
     cache=(--cache-from "type=registry,ref=$cache_scope:$name"
-      --cache-to "type=registry,ref=$cache_scope:$name,mode=max")
+      --cache-to "type=registry,ref=$cache_scope:$name,mode=min")
   fi
   docker buildx build --pull --platform linux/amd64 --push \
     --provenance=false --sbom=false "${cache[@]}" \

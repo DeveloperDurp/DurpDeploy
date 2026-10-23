@@ -57,12 +57,23 @@ default:
   cache: []
   artifacts:
     when: always
-    expire_in: 7 days
+    expire_in: 1 day
     paths: [artifacts/]
+    # Keep job evidence without uploading archives downloaded from producers.
+    exclude:
+      - artifacts/built-image-amd64/**/*
+      - artifacts/agent-build/**/*
+      - artifacts/runtime.env
+      - artifacts/runtime-timing.json
+      - artifacts/build.env
+      - artifacts/image.env
 
 .mr-test:
   stage: test
-  needs: [ci-runtime, lint]
+  needs:
+    - ci-runtime
+    - job: lint
+      artifacts: false
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
@@ -97,7 +108,7 @@ ci-runtime:
   script:
     - bash scripts/ci_build_runtime.sh
   artifacts:
-    expire_in: 30 days
+    expire_in: 4 hours
     paths: [artifacts/runtime.env, artifacts/runtime-timing.json]
     reports:
       dotenv: artifacts/runtime.env

@@ -11,11 +11,11 @@ coverage:
       package_list=$(bash scripts/ci_coverage_packages.sh "$COVERAGE_SHARD")
       test -n "$package_list"
       mapfile -t packages <<< "$package_list"
-      bash scripts/go_test.sh -tags=e2e -count=1 -timeout=20m \
+      bash scripts/go_test.sh -tags=e2e -count=1 -timeout=30m \
         -covermode=atomic -coverpkg=./... \
         -coverprofile="artifacts/coverage/$COVERAGE_SHARD.out" "${packages[@]}"
   artifacts:
-    expire_in: 7 days
+    expire_in: 4 hours
     paths: [artifacts/coverage/]
 
 sonarcloud:
@@ -24,6 +24,8 @@ sonarcloud:
     name: harbor.durp.info/dockerhub/sonarsource/sonar-scanner-cli@sha256:a3f4215076706c95a17a68c19322ee916e40a3acd081a8c1a1e839e0194afa57
     entrypoint: [""]
   needs: [coverage]
+  artifacts:
+    paths: []
   before_script:
     - unset GHCR_TOKEN GHCR_USER
   cache: []

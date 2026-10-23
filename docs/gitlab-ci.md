@@ -37,6 +37,8 @@ It retains the Go tool build cache in `/opt/go-build`.
 Each job writes cache updates to its own container layer.
 The pipeline does not upload unusable local GitLab cache archives.
 Same-project merge requests reuse separate browser and helper build caches under `ci-cache/mr-<number>`.
+Registry caches export final-image layers with `mode=min`.
+Intermediate build stages are rebuilt when their output is absent from the cache.
 Merge request jobs never write shared protected caches.
 Protected and other pipelines do not import merge request caches.
 Builds check upstream base references before using cached layers.
@@ -99,6 +101,8 @@ The Go test runner also removes containers owned by each test session.
 
 The Podman job runs as `pwuser` with subordinate user and group mappings.
 It uses VFS storage and starts `podman system service` without systemd.
+The staging capacity test allows ten minutes for transfer and cleanup through VFS.
+Its Go suite allows twenty minutes within the forty-five-minute job limit.
 It verifies rootless execution before it runs the agent tests.
 The job temporarily allows exit code `77` when `user.max_user_namespaces=0`.
 Other Podman failures fail the pipeline.
@@ -129,7 +133,7 @@ The report records deletion requests, not completed storage reclamation.
 The job uses `CI_JOB_TOKEN` for registry and merge request API requests.
 It does not require a separate cleanup token.
 Merge request pipelines run its tests and a read-only dry run.
-Reports are available in `artifacts/cache-cleanup/report.json` for seven days.
+Reports are available in `artifacts/cache-cleanup/report.json` for one day.
 
 After merging, create a daily pipeline schedule targeting protected `main`.
 Set the schedule variable `CI_CACHE_CLEANUP` to `true`.
@@ -173,6 +177,8 @@ Go tests that run application handlers in-process retain their existing builds a
 The browser job runs four shards: navigation, resources, execution, and agents.
 Each shard retains the existing test commands and assertions.
 Browser evidence uses a separate directory for each shard.
+The resources shard runs permission checks and form checks in separate test processes.
+Each process has its own ten-minute timeout.
 The rollout job runs four shards: contracts, two artifact groups, and verification.
 Artifact groups split the compiled test inventory and require every selected test to pass.
 New artifact gate tests enter one group automatically.
@@ -195,6 +201,7 @@ Coverage runs five shards: API, handlers, repository, migrations, and core.
 Every Go package belongs to one shard.
 New packages enter the core shard unless a specific group includes them.
 Each shard uses `-coverpkg=./...` and retains a separate coverage report.
+Coverage test processes have a thirty-minute timeout within the forty-five-minute job limit.
 SonarCloud waits for all five shards and requires all five reports.
 The scanner reads the reports together and waits for the same quality gate.
 
@@ -236,10 +243,29 @@ Read findings with `make sonar-issues MR=<merge-request-number>` and a local `SO
 ## Publication and retained evidence
 
 The image job builds and scans Linux AMD64 OCI archives.
-It retains sanitized image evidence for seven days, including failed scan evidence.
-The retention job keeps successful archives and source metadata for thirty days.
+The image job retains archives and scan evidence for four hours for downstream jobs.
+The retention job keeps successful archives and source metadata for four hours for publication in the same pipeline.
+If the artifacts expire, run a new pipeline before publication.
 Source and configuration security reports remain available for seven days.
-Browser and agent evidence remains available for seven days.
+Browser and agent evidence remains available for one day.
+Agent archives, runtime metadata, version metadata, and coverage reports expire after four hours.
+If handoff artifacts expire, run a new pipeline instead of retrying downstream jobs.
+
+Consumers exclude downloaded image archives and build metadata from their artifact uploads.
+Verification gates wait for required jobs without downloading their artifacts.
+Publication downloads archives only in the image publisher.
+SonarCloud downloads coverage reports without uploading another copy.
+Docker build contexts exclude `artifacts/` to avoid sending downloaded archives to the builder.
+
+Disable **Keep artifacts from most recent successful jobs** in **Settings > CI/CD > Artifacts**.
+GitLab otherwise preserves the latest successful artifacts for each ref despite `expire_in`.
+This setting and YAML retention changes do not shorten the expiration of existing artifacts.
+Review existing artifacts separately before deletion.
+Keep archives that pending publication jobs require.
+
+Registry tag deletion does not guarantee immediate disk reclamation.
+If registry storage remains high after cleanup, inspect the registry garbage collection configuration.
+Use the registry administrator procedure for the installed GitLab version.
 
 Publication uses the current pipeline's scanned image archive.
 It does not require merge request artifacts or compare the merged source tree with an earlier merge request pipeline.

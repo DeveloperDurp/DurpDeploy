@@ -125,6 +125,10 @@ func checkRuntimeCacheCalls(t *testing.T, directory, iid string, cached bool) {
 			t.Fatalf("cache escaped MR scope: %s", calls)
 		}
 	}
+	if cached && (!strings.Contains(calls, "mode=min") ||
+		strings.Contains(calls, "mode=max")) {
+		t.Fatalf("cache exports unused intermediate stages: %s", calls)
+	}
 	want := "BROWSER_IMAGE=registry.example/project/ci-browser@sha256:" +
 		strings.Repeat("b", 64)
 	if !strings.Contains(calls, want) {

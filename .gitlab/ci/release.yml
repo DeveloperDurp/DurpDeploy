@@ -7,7 +7,7 @@ version:
     - mkdir -p artifacts
     - BUILD_MODIFIED=false bash scripts/build_metadata.sh > artifacts/build.env
   artifacts:
-    expire_in: 7 days
+    expire_in: 4 hours
     paths: [artifacts/build.env]
     reports:
       dotenv: artifacts/build.env
@@ -32,12 +32,12 @@ images:
     - bash scripts/ci_image.sh
   artifacts:
     when: always
-    expire_in: 7 days
+    expire_in: 4 hours
     paths: [artifacts/image-evidence/, artifacts/built-image-amd64/, artifacts/image.env]
     reports:
       dotenv: artifacts/image.env
 
-# Keep sanitized failure evidence for seven days and successful images for thirty.
+# Keep the handoff short and retain successful images for prompt publication.
 retain-image:
   stage: verify
   needs: [ci-runtime, images]
@@ -48,7 +48,7 @@ retain-image:
     - test -s artifacts/built-image-amd64/source.json
   artifacts:
     when: on_success
-    expire_in: 30 days
+    expire_in: 4 hours
     paths: [artifacts/built-image-amd64/, artifacts/image.env]
     reports:
       dotenv: artifacts/image.env
@@ -63,38 +63,76 @@ image-verification:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   needs:
     - ci-runtime
-    - retain-image
-    - security-scan
-    - container-security
-    - pre-commit
-    - backup-restore
-    - database-tls
-    - auth-mfa-parity
-    - agent-rollout
-    - package-browser
-    - artifact-stress
-    - mobile-browser
-    - auth-mfa-sqlite
-    - agent-smoke
-    - agent-container-docker
-    - agent-container-podman
-    - test
-    - e2e
-    - dev-stacks
-    - coverage
+    - job: retain-image
+      artifacts: false
+    - job: security-scan
+      artifacts: false
+    - job: container-security
+      artifacts: false
+    - job: pre-commit
+      artifacts: false
+    - job: backup-restore
+      artifacts: false
+    - job: database-tls
+      artifacts: false
+    - job: auth-mfa-parity
+      artifacts: false
+    - job: agent-rollout
+      artifacts: false
+    - job: package-browser
+      artifacts: false
+    - job: artifact-stress
+      artifacts: false
+    - job: mobile-browser
+      artifacts: false
+    - job: auth-mfa-sqlite
+      artifacts: false
+    - job: agent-smoke
+      artifacts: false
+    - job: agent-container-docker
+      artifacts: false
+    - job: agent-container-podman
+      artifacts: false
+    - job: test
+      artifacts: false
+    - job: e2e
+      artifacts: false
+    - job: dev-stacks
+      artifacts: false
+    - job: coverage
+      artifacts: false
   script:
     - printf 'All required merge request checks passed.\n'
 
 publish-images:
   extends: .publish
-  needs: [ci-runtime, version, lint, security-scan, container-security, retain-image]
+  needs:
+    - ci-runtime
+    - version
+    - job: lint
+      artifacts: false
+    - job: security-scan
+      artifacts: false
+    - job: container-security
+      artifacts: false
+    - retain-image
   timeout: 30 minutes
   script:
     - bash scripts/ci_publish.sh images
 
 publish-chart:
   extends: .publish
-  needs: [ci-runtime, version, lint, security-scan, container-security, publish-images]
+  needs:
+    - ci-runtime
+    - version
+    - job: lint
+      artifacts: false
+    - job: security-scan
+      artifacts: false
+    - job: container-security
+      artifacts: false
+    - job: publish-images
+      artifacts: false
   timeout: 30 minutes
   script:
     - bash scripts/ci_publish.sh chart

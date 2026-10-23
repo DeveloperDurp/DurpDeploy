@@ -237,7 +237,7 @@ CANCEL_DEP=$(echo "$CANCEL_URL" | grep -oP '/deployments/\K[0-9]+')
 echo "Cancel Deployment ID: $CANCEL_DEP"
 
 for i in {1..50}; do
-  if curl_body "$BASE/deployments/$CANCEL_DEP/status" | grep -q 'running'; then break; fi
+  if curl_body "$BASE/deployments/$CANCEL_DEP/status" | grep 'running' > /dev/null; then break; fi
   sleep 0.1
 done
 CANCEL_STATUS=$(curl_body "$BASE/deployments/$CANCEL_DEP/status")
@@ -286,7 +286,7 @@ ELAPSED=$((END - START))
 
 echo "$STATUS_BODY" | grep -q 'failed' || { echo "FAIL: timeout deploy did not fail, got status: $STATUS_BODY"; exit 1; }
 [[ $ELAPSED -lt 25 ]] || { echo "FAIL: timeout deploy took ${ELAPSED}s, expected <25s"; exit 1; }
-curl_body "$BASE/deployments/$TIMEOUT_DEP/logs.txt" | grep -q 'timed out' || { echo "FAIL: timeout log missing"; exit 1; }
+curl_body "$BASE/deployments/$TIMEOUT_DEP/logs.txt" | grep 'timed out' > /dev/null || { echo "FAIL: timeout log missing"; exit 1; }
 echo "  Per-step timeout killed long sleep: OK (failed in ${ELAPSED}s)"
 
 echo "=== F3.2c: Re-run ==="
@@ -549,10 +549,10 @@ DEV_DEP=$(echo "$DEV_URL" | grep -oP '/deployments/\K[0-9]+')
 [[ -n "$DEV_DEP" ]] || { echo "FAIL: dev deployment did not redirect"; exit 1; }
 echo "Dev Deployment ID: $DEV_DEP"
 for i in {1..200}; do
-  if curl_body "$BASE/deployments/$DEV_DEP/status" | grep -q 'succeeded'; then break; fi
+  if curl_body "$BASE/deployments/$DEV_DEP/status" | grep 'succeeded' > /dev/null; then break; fi
   sleep 0.1
 done
-curl_body "$BASE/deployments/$DEV_DEP/status" | grep -q succeeded || { echo "FAIL: app dev deployment did not succeed"; exit 1; }
+curl_body "$BASE/deployments/$DEV_DEP/status" | grep succeeded > /dev/null || { echo "FAIL: app dev deployment did not succeed"; exit 1; }
 echo "  Dev deploy succeeded: OK"
 
 # Deploy to staging -> should succeed
@@ -561,10 +561,10 @@ STAGING_DEP=$(echo "$STAGING_URL" | grep -oP '/deployments/\K[0-9]+')
 [[ -n "$STAGING_DEP" ]] || { echo "FAIL: staging deployment did not redirect"; exit 1; }
 echo "Staging Deployment ID: $STAGING_DEP"
 for i in {1..200}; do
-  if curl_body "$BASE/deployments/$STAGING_DEP/status" | grep -q 'succeeded'; then break; fi
+  if curl_body "$BASE/deployments/$STAGING_DEP/status" | grep 'succeeded' > /dev/null; then break; fi
   sleep 0.1
 done
-curl_body "$BASE/deployments/$STAGING_DEP/status" | grep -q succeeded || { echo "FAIL: app staging deployment did not succeed"; exit 1; }
+curl_body "$BASE/deployments/$STAGING_DEP/status" | grep succeeded > /dev/null || { echo "FAIL: app staging deployment did not succeed"; exit 1; }
 echo "  Staging deploy succeeded: OK"
 
 # Deploy to prod -> should be pending_approval

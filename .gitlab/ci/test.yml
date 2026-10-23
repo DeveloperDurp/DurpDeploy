@@ -1,6 +1,11 @@
 .mr-built-app:
   extends: .mr-test
-  needs: [ci-runtime, lint, version, images]
+  needs:
+    - ci-runtime
+    - job: lint
+      artifacts: false
+    - version
+    - images
   variables:
     DURPDEPLOY_E2E_IMAGE: localhost/durpdeploy-e2e:$CI_JOB_ID
     DURPDEPLOY_E2E_BINARY: $CI_PROJECT_DIR/.cache/e2e-app/durpdeploy
@@ -154,14 +159,18 @@ agent-image:
   script:
     - bash scripts/ci_agent_image.sh build
   artifacts:
-    expire_in: 7 days
+    expire_in: 4 hours
     paths: [artifacts/agent-build/]
     reports:
       dotenv: artifacts/agent-build/build.env
 
 agent-container-docker:
   extends: .mr-test
-  needs: [ci-runtime, lint, agent-image]
+  needs:
+    - ci-runtime
+    - job: lint
+      artifacts: false
+    - agent-image
   timeout: 30 minutes
   variables:
     CI_RUNTIME: docker
@@ -181,8 +190,12 @@ agent-container-docker:
     bash scripts/go_test.sh -tags=e2e,agentcontainer -race -count=1 -timeout=8m -v -run '^TestAgentContainerAPIE2E$' ./internal/agentserver
 agent-container-podman:
   extends: .mr-test
-  needs: [ci-runtime, lint, agent-image]
-  timeout: 30 minutes
+  needs:
+    - ci-runtime
+    - job: lint
+      artifacts: false
+    - agent-image
+  timeout: 45 minutes
   # Temporary exception for the runner's disabled user namespaces.
   allow_failure:
     exit_codes: 77
@@ -204,7 +217,7 @@ agent-container-podman:
     make -C "$AGENT_SOURCE" container-executor-contract
     bash scripts/go_test.sh -tags=e2e,agentcontainer -race -count=1 -timeout=8m -v -run '^TestAgentContainerAPIE2E$' ./internal/agentserver
     DURPDEPLOY_AGENT_E2E_BINARY="$CI_PROJECT_DIR/artifacts/agent-build/agent" \
-      bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 -timeout=10m -v \
+      bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 -timeout=20m -v \
       -run '^(TestDeploymentStaging(Transfer|ImportFailure|TransferPausesStepTimeout|Audit|ArtifactGate|Package|PackageAgentOnly|PackageLegacyAgent)APIE2E|TestExecutionLocationAPIWebE2E|TestLegacyExecutionLocationAPIWebE2E)$' ./internal/agentserver
     ROOTLESS
 test:

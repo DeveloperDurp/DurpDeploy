@@ -15,10 +15,23 @@ type rule struct {
 	If string `yaml:"if"`
 }
 
+type need struct {
+	Job       string `yaml:"job"`
+	Artifacts *bool  `yaml:"artifacts"`
+}
+
+func (n *need) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.ScalarNode {
+		return node.Decode(&n.Job)
+	}
+	type fields need
+	return node.Decode((*fields)(n))
+}
+
 type job struct {
 	Extends       string    `yaml:"extends"`
 	Stage         string    `yaml:"stage"`
-	Needs         []string  `yaml:"needs"`
+	Needs         []need    `yaml:"needs"`
 	Rules         []rule    `yaml:"rules"`
 	Script        []string  `yaml:"script"`
 	AllowFailure  yaml.Node `yaml:"allow_failure"`
@@ -35,7 +48,14 @@ type job struct {
 		When     string   `yaml:"when"`
 		ExpireIn string   `yaml:"expire_in"`
 		Paths    []string `yaml:"paths"`
+		Exclude  []string `yaml:"exclude"`
 	} `yaml:"artifacts"`
+}
+
+func (j job) needs(name string) bool {
+	return slices.ContainsFunc(j.Needs, func(n need) bool {
+		return n.Job == name
+	})
 }
 
 func (j job) allowsFailure() bool {
@@ -128,7 +148,7 @@ func TestPublishersRequireSameCommitSecurityAndScannedImages(t *testing.T) {
 		for _, required := range []string{
 			"version", "lint", "security-scan", "container-security",
 		} {
-			if !slices.Contains(current.Needs, required) {
+			if !current.needs(required) {
 				t.Errorf("%s can bypass %s", name, required)
 			}
 		}
@@ -146,14 +166,14 @@ func TestPublishersRequireSameCommitSecurityAndScannedImages(t *testing.T) {
 			t.Errorf("%s can publish from an untrusted event", name)
 		}
 	}
-	if !slices.Contains(jobs["publish-images"].Needs, "retain-image") ||
-		!slices.Contains(jobs["publish-chart"].Needs, "publish-images") {
+	if !jobs["publish-images"].needs("retain-image") ||
+		!jobs["publish-chart"].needs("publish-images") {
 		t.Fatal("publishers bypass scanned-image or image-publication gates")
 	}
 }
 
-func TestMergeRequestGateRequiresEveryTestJob(t *testing.T) {
-	jobs := pipeline(t)
+func assertMergeRequestTestGates(t *testing.T, jobs map[string]job) {
+	t.Helper()
 	gate := jobs["image-verification"]
 	for name, current := range jobs {
 		if strings.HasPrefix(name, ".") {
@@ -170,13 +190,19 @@ func TestMergeRequestGateRequiresEveryTestJob(t *testing.T) {
 			len(current.Rules) != 1 ||
 			current.Rules[0].If !=
 				`$CI_PIPELINE_SOURCE == "merge_request_event"` ||
-			!slices.Contains(current.Needs, "lint") {
+			!current.needs("lint") {
 			t.Errorf("%s must be a blocking MR test after lint", name)
 		}
-		if !slices.Contains(gate.Needs, name) {
+		if !gate.needs(name) {
 			t.Errorf("image verification omits %s", name)
 		}
 	}
+}
+
+func TestMergeRequestGateRequiresEveryTestJob(t *testing.T) {
+	jobs := pipeline(t)
+	assertMergeRequestTestGates(t, jobs)
+	gate := jobs["image-verification"]
 	var podmanPolicy struct {
 		ExitCodes int `yaml:"exit_codes"`
 	}
@@ -188,14 +214,14 @@ func TestMergeRequestGateRequiresEveryTestJob(t *testing.T) {
 	for _, name := range []string{
 		"retain-image", "security-scan", "container-security",
 	} {
-		if !slices.Contains(gate.Needs, name) {
+		if !gate.needs(name) {
 			t.Errorf("image verification omits %s", name)
 		}
 	}
 	for name, current := range jobs {
 		for _, dependency := range current.Needs {
-			if _, ok := jobs[dependency]; !ok {
-				t.Errorf("%s needs missing job %s", name, dependency)
+			if _, ok := jobs[dependency.Job]; !ok {
+				t.Errorf("%s needs missing job %s", name, dependency.Job)
 			}
 		}
 	}
@@ -203,17 +229,18 @@ func TestMergeRequestGateRequiresEveryTestJob(t *testing.T) {
 
 func TestEvidenceRetentionAndAMD64Coverage(t *testing.T) {
 	jobs := pipeline(t)
-	for _, name := range []string{
-		"images", "security-scan", "container-security",
+	for name, expiry := range map[string]string{
+		"images": "4 hours", "security-scan": "7 days",
+		"container-security": "7 days",
 	} {
 		current := jobs[name]
 		if current.allowsFailure() || current.Artifacts.When != "always" ||
-			current.Artifacts.ExpireIn != "7 days" || len(current.Rules) != 0 {
+			current.Artifacts.ExpireIn != expiry || len(current.Rules) != 0 {
 			t.Errorf("%s must block and retain evidence on every event", name)
 		}
 	}
 	retained := jobs["retain-image"].Artifacts
-	if retained.When != "on_success" || retained.ExpireIn != "30 days" ||
+	if retained.When != "on_success" || retained.ExpireIn != "4 hours" ||
 		!slices.Contains(retained.Paths, "artifacts/built-image-amd64/") {
 		t.Fatal("only successful scans can produce promotion artifacts")
 	}
@@ -227,6 +254,59 @@ func TestEvidenceRetentionAndAMD64Coverage(t *testing.T) {
 		strings.Index(script, "container_scan.sh image") >
 			strings.Index(script, `mv "$private/image.tar"`) {
 		t.Fatal("promotion must follow the AMD64 scan")
+	}
+}
+
+func TestArtifactDownloadsOnlyReachConsumers(t *testing.T) {
+	jobs := pipeline(t)
+	consumers := map[string][]string{
+		".mr-built-app":          {"version", "images"},
+		"e2e":                    {"version", "images"},
+		"auth-mfa-sqlite":        {"version", "images"},
+		"dev-stacks":             {"version", "images"},
+		"agent-container-docker": {"agent-image"},
+		"agent-container-podman": {"agent-image"},
+		"images":                 {"version"},
+		"retain-image":           {"images"},
+		"publish-images":         {"version", "retain-image"},
+		"publish-chart":          {"version"},
+		"sonarcloud":             {"coverage"},
+	}
+	for name, current := range jobs {
+		for _, dependency := range current.Needs {
+			want := dependency.Job == "ci-runtime" ||
+				slices.Contains(consumers[name], dependency.Job)
+			actual := dependency.Artifacts == nil || *dependency.Artifacts
+			if actual != want {
+				t.Errorf("%s downloads %s: got %t, want %t",
+					name, dependency.Job, actual, want)
+			}
+		}
+	}
+}
+
+func TestConsumersDoNotUploadDownloadedArchives(t *testing.T) {
+	data, err := os.ReadFile("../../.gitlab-ci.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root struct {
+		Default job `yaml:"default"`
+	}
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{
+		"artifacts/built-image-amd64/**/*", "artifacts/agent-build/**/*",
+		"artifacts/runtime.env", "artifacts/runtime-timing.json",
+		"artifacts/build.env", "artifacts/image.env",
+	} {
+		if !slices.Contains(root.Default.Artifacts.Exclude, path) {
+			t.Errorf("consumers re-upload %s", path)
+		}
+	}
+	if root.Default.Artifacts.ExpireIn != "1 day" {
+		t.Fatal("diagnostics must expire after one day")
 	}
 }
 

@@ -211,7 +211,7 @@ func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 			}
 			if scenario == "capacity" {
 				// VFS must copy 512 MiB and 20,000 files before cleanup.
-				s.waitFor(t, deployment.ID, want, 5*time.Minute)
+				s.waitFor(t, deployment.ID, want, 10*time.Minute)
 			} else {
 				s.wait(t, deployment.ID, want)
 			}
