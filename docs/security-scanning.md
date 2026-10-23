@@ -213,6 +213,16 @@ need a fix or a documented maintainer risk decision; scanner errors need
 repair, never suppression. Real credentials require revocation/rotation
 and incident review before any narrowly justified history exception.
 
+Issue #145 re-reviewed the two G115 conversions in `internal/logscrub/scrubber.go`.
+Only the standard-library regular expression compiler creates their instruction indexes and empty-width flags.
+The prefix-buffering fix leaves those conversions unchanged.
+The updated source hashes retain the existing reasons, owner, and expiration.
+
+The split-prefix tests use fixed, inert AWS-format and Slack-format canaries.
+Their exceptions require the exact rule, test path, and literal or complete source line.
+The Slack rule extracts only part of the canary, so its exceptions match complete source lines.
+The scanner fixtures reject changed canaries, unrelated credentials, and the same literals outside the reviewed paths.
+
 ## Evidence
 
 Safe reports are written to `artifacts/security/` and retained for seven days

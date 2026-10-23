@@ -22,11 +22,29 @@ paths = ['''^internal/runner/scrubber_test\.go$''']
 regexes = ['''^abc\.123-XYZ_456=$''']
 
 [[allowlists]]
-description = "Reviewed alphabetic AWS-format canary in historical scrubber test"
+description = "Reviewed alphabetic AWS-format canary in scrubber regressions"
 condition = "AND"
 targetRules = ["aws-access-token"]
-paths = ['''^internal/runner/scrubber_test\.go$''']
+paths = ['''^internal/(runner/scrubber_test|logscrub/default_prefix_test|repository/remote_log_prefix_test|agentserver/log_prefix_redaction_test|handler/api/step_logs_browser_test)\.go$''']
 regexes = ['''^AKIAABCDEFGHIJKLMNOP$''']
+
+# The Slack scanner extracts only xoxa-synthetic. Match the complete source
+# line so another credential with that prefix cannot use this exception.
+[[allowlists]]
+description = "Reviewed fixed Slack-format canary in split-prefix regressions"
+condition = "AND"
+targetRules = ["slack-legacy-workspace-token"]
+paths = ['''^internal/(logscrub/default_prefix_test|repository/remote_log_prefix_test|agentserver/log_prefix_redaction_test)\.go$''']
+regexTarget = "line"
+regexes = ['''^\s*"xoxa-synthetic-proof",(?: "xoxp-synthetic-proof",)?$''']
+
+[[allowlists]]
+description = "Reviewed fixed Slack-format output in the step-log browser test"
+condition = "AND"
+targetRules = ["slack-legacy-workspace-token"]
+paths = ['''^internal/handler/api/step_logs_browser_test\.go$''']
+regexTarget = "line"
+regexes = ['''^\s*"0xoxa-synthetic-proof\\n0xoxp-synthetic-proof\\n"$''']
 
 [[allowlists]]
 description = "Reviewed inert GitLab-format canary in provenance rejection tests"

@@ -104,6 +104,35 @@ mv "$fixture/app/canary.txt" "$fixture/app/internal/runner/scrubber_test.go"
 # When / Then: path alone does not grant an exception.
 expect_exit 1 bash "$runner" gitleaks "$fixture/app"
 
+# Given the four split-prefix regression sources with fixed inert canaries.
+allowlist_fixture="$fixture/allowlist"
+aws_canary=AKIA'ABCDEFGHIJKLMNOP'
+aws_other=AKIA'BCDEFGHIJKLMNOPQ'
+slack_canary=xoxa'-synthetic-proof'
+slack_other=xoxa'-synthetic-other'
+for source in internal/logscrub/default_prefix_test.go \
+  internal/repository/remote_log_prefix_test.go \
+  internal/agentserver/log_prefix_redaction_test.go \
+  internal/handler/api/step_logs_browser_test.go; do
+  mkdir -p "$allowlist_fixture/$(dirname "$source")"
+  cp "$root/$source" "$allowlist_fixture/$source"
+  # When / Then: only the exact source canaries pass in the reviewed path.
+  expect_exit 0 bash "$runner" gitleaks "$allowlist_fixture"
+  sed "s/$aws_canary/$aws_other/g" \
+    "$root/$source" >"$allowlist_fixture/$source"
+  expect_exit 1 bash "$runner" gitleaks "$allowlist_fixture"
+  sed "s/$slack_canary/$slack_other/g" \
+    "$root/$source" >"$allowlist_fixture/$source"
+  expect_exit 1 bash "$runner" gitleaks "$allowlist_fixture"
+  cp "$root/$source" "$allowlist_fixture/$source"
+  printf 'api_key = "%s"\n' "$canary" >>"$allowlist_fixture/$source"
+  expect_exit 1 bash "$runner" gitleaks "$allowlist_fixture"
+  cp "$root/$source" "$allowlist_fixture/$source"
+done
+# The exact same literals outside the reviewed paths must still fail.
+cp "$root/internal/logscrub/default_prefix_test.go" "$allowlist_fixture/other.go"
+expect_exit 1 bash "$runner" gitleaks "$allowlist_fixture"
+
 # Given a credential removed from the current tree but retained in PR history.
 git clone -q --no-checkout "$root" "$fixture/history"
 git -C "$fixture/history" read-tree --empty

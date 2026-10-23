@@ -225,7 +225,7 @@ func (s *Scrubber) PendingBytes(text string) int {
 	} {
 		limit := min(len(text), len(prefix))
 		for size := limit; size > pending; size-- {
-			if hasWordSuffix(text, prefix[:size]) {
+			if strings.HasSuffix(text, prefix[:size]) {
 				pending = size
 				break
 			}
@@ -370,20 +370,6 @@ func hasWordSuffixFold(text string, suffix string) bool {
 	if start < 0 || !strings.EqualFold(text[start:], suffix) {
 		return false
 	}
-	if start == 0 {
-		return true
-	}
-	previous := text[start-1]
-	return (previous < 'a' || previous > 'z') &&
-		(previous < 'A' || previous > 'Z') &&
-		(previous < '0' || previous > '9') && previous != '_'
-}
-
-func hasWordSuffix(text string, suffix string) bool {
-	if !strings.HasSuffix(text, suffix) {
-		return false
-	}
-	start := len(text) - len(suffix)
 	if start == 0 {
 		return true
 	}

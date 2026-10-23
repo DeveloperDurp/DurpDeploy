@@ -3,7 +3,7 @@
     "rule": "G115",
     "file": "internal/logscrub/scrubber.go",
     "line": "352",
-    "source_sha256": "196e7064b08e655b9f7cb2051f47e5e68a0fba51dbffcee6f5860f37b90a49aa",
+    "source_sha256": "dafef3d932c2f9515aa92f9db02c2502f78a0ca2ace5fe258070b922698b7e13",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Arg is narrowed only for compiler-created InstEmptyWidth, whose standard-library EmptyOp bitmask fits uint8. Evidence: regexp/syntax compiler; scrubber_test.go boundary/streaming coverage."
@@ -12,7 +12,7 @@
     "rule": "G115",
     "file": "internal/logscrub/scrubber.go",
     "line": "289",
-    "source_sha256": "196e7064b08e655b9f7cb2051f47e5e68a0fba51dbffcee6f5860f37b90a49aa",
+    "source_sha256": "dafef3d932c2f9515aa92f9db02c2502f78a0ca2ace5fe258070b922698b7e13",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Instruction index is produced exclusively by successful regexp/syntax.Compile and fits its uint32 program addresses. Evidence: scrubber.go compile path; scrubber_test.go streaming-pattern coverage."

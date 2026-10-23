@@ -15,8 +15,17 @@ import (
 
 func TestDeploymentStepLogsBrowserE2E(t *testing.T) {
 	f := newArtifactE2E(t)
+	// Default credentials are not configured literals. Exercise the local
+	// writer's newline framing, then inspect live and reloaded step panels.
+	credentialOutput := "0Bearer synthetic-proof\n0ghp_" + strings.Repeat(
+		"S",
+		36,
+	) +
+		"\n0AKIAABCDEFGHIJKLMNOP\n0xoxb-synthetic-proof\n" +
+		"0xoxa-synthetic-proof\n0xoxp-synthetic-proof\n"
 	for _, script := range []string{
-		"printf '<img src=x onerror=alert(1)>\\nfirst-only\\n'; sleep 8",
+		"printf '<img src=x onerror=alert(1)>\\nfirst-only\\n0Bea'; sleep 1; " +
+			"printf '%s' '" + credentialOutput[4:] + "'; sleep 7",
 		"printf 'second-only\\n'; sleep 8",
 	} {
 		f.api(t, "POST", f.base()+"/steps", map[string]any{
@@ -51,6 +60,20 @@ func TestDeploymentStepLogsBrowserE2E(t *testing.T) {
 		t,
 		`document.querySelector('[data-step-index="0"]').textContent.includes('mode=container') && document.querySelector('[data-step-index="0"]').textContent.includes('host=')`,
 	)
+	browser.wait(
+		t,
+		`document.querySelector('[data-step-index="0"]').textContent.split('0[REDACTED]').length === 7`,
+	)
+	assertNoBrowserCredential := func() {
+		t.Helper()
+		if string(browser.evaluate(
+			t,
+			`!document.body.innerText.includes('synthetic-proof') && !document.body.innerText.includes('SSSSSSSS') && !document.body.innerText.includes('AKIAABCDEFGHIJKLMNOP')`,
+		)) != "true" {
+			t.Fatal("default credential escaped into a rendered step panel")
+		}
+	}
+	assertNoBrowserCredential()
 	// Reload and explicitly reconnect while the first step is active.
 	browser.wire.events = nil
 	browser.call(t, "Page.reload", struct{}{}, &struct{}{})
@@ -61,6 +84,11 @@ func TestDeploymentStepLogsBrowserE2E(t *testing.T) {
 		t,
 		`document.readyState === 'complete' && document.querySelector('[data-step-index="0"] .badge').textContent === 'Running'`,
 	)
+	browser.wait(
+		t,
+		`document.querySelector('[data-step-index="0"]').textContent.split('0[REDACTED]').length === 7`,
+	)
+	assertNoBrowserCredential()
 	browser.evaluate(
 		t,
 		`(() => { const stream = Alpine.$data(document.querySelector('[x-data^="deploymentStepLogs"]')); stream.source.close(); stream.init(); return true; })()`,
@@ -144,6 +172,7 @@ func TestDeploymentStepLogsBrowserE2E(t *testing.T) {
 		`document.querySelector('[data-step-index="1"]').textContent.includes('mode=container') && document.querySelector('[data-step-index="1"]').textContent.includes('container=')`,
 	)
 	browser.captureStepLogs(t, "viewer-completed")
+	assertNoBrowserCredential()
 }
 
 func TestDeploymentStepLogsHistoricalQuietBrowserE2E(t *testing.T) {

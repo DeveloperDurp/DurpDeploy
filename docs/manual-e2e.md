@@ -1842,3 +1842,52 @@ DOCKER_HOST=unix:///run/user/1000/podman/podman.sock \
 
 These isolated checks remove their disposable databases and certificates.
 They do not modify retained demo projects or enable schedules.
+
+## Split default credential redaction
+
+Use synthetic credentials for these checks.
+Do not configure the synthetic values as secret variables.
+Default patterns must detect the credentials independently.
+
+Run the authenticated remote-ingress regression:
+
+```bash
+bash scripts/go_test.sh -race -count=1 \
+  -run '^TestSplitCredentialRedactionAPIWebE2E$' ./internal/agentserver
+```
+
+The test sends `0Bea` and `rer synthetic-proof\n` in separate authenticated requests.
+It also checks GitHub, AWS, and all three Slack prefixes.
+The first request must not persist or broadcast the unfinished credential.
+The continuation must produce `0[REDACTED]`, with the authenticated agent attribution.
+Current and legacy claims retain ordering, replay handling, and encrypted pending buffers.
+Public API logs, pagination, exports, live streams, replay streams, and web routes must contain no credential value.
+
+Run the browser regression:
+
+```bash
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 \
+  -timeout=4m -run '^TestDeploymentStepLogsBrowserE2E$' ./internal/handler/api
+```
+
+For a retained example, create a Bash step in the thread-owned development stack.
+Print each synthetic credential with a leading digit.
+Split the Bearer prefix across two writes, then end each credential with a newline.
+Open the deployment page while the step runs.
+Expand its log panel.
+Expect six `0[REDACTED]` markers and no synthetic credential values.
+Reload the page and repeat the check at desktop and phone widths.
+Read the same deployment through the authenticated API and its SSE endpoint.
+Keep the project, release, environment, and deployment for manual review.
+
+The bounded `FuzzDefaultPatternStreaming` target covers this default-pattern regression.
+
+```bash
+bash scripts/go_test.sh -run '^$' -fuzz '^FuzzDefaultPatternStreaming$' \
+  -fuzztime=30s -parallel=1 ./internal/logscrub
+```
+
+Issue #48 retains its independent `FuzzScrubberStreaming` target and discovery corpus `4bfe6d6a4ac85117`.
+After this fix merges, run that corpus against the merged revision.
+An earlier stacked integration requires separate approval.
+The invalid-byte alias oracle associated with `3e1a1c989b26e560` is outside this regression.

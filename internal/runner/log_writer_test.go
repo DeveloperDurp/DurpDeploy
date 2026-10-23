@@ -3,6 +3,7 @@ package runner
 import (
 	"database/sql"
 	"durpdeploy/internal/testutil"
+	"strings"
 	"testing"
 
 	"durpdeploy/internal/db"
@@ -11,11 +12,40 @@ import (
 )
 
 func TestBroadcastWriterHoldsMultilineSecretPrefixAcrossWrites(t *testing.T) {
-	for _, chunks := range [][]string{
-		{"prefix first\n", "second suffix\n"},
-		{"prefix first\nsecond suffix", "\n"},
-		{"prefix first\nsecond suffix", ""},
-	} {
+	tests := []struct {
+		chunks  []string
+		secrets []string
+		want    string
+	}{
+		{
+			[]string{"prefix first\n", "second suffix\n"},
+			[]string{"first\nsecond"},
+			"prefix [REDACTED] suffix",
+		},
+		{
+			[]string{"prefix first\nsecond suffix", "\n"},
+			[]string{"first\nsecond"},
+			"prefix [REDACTED] suffix",
+		},
+		{
+			[]string{"prefix first\nsecond suffix", ""},
+			[]string{"first\nsecond"},
+			"prefix [REDACTED] suffix",
+		},
+		{[]string{"0Bea", "rer synthetic-proof\n"}, nil, "0[REDACTED]"},
+		{[]string{"0Bearer\n", "synthetic-proof\n"}, nil, "0[REDACTED]"},
+		{
+			[]string{"0gh", "p_" + strings.Repeat("S", 36) + "\n"},
+			nil,
+			"0[REDACTED]",
+		},
+		{[]string{"0AK", "IAABCDEFGHIJKLMNOP\n"}, nil, "0[REDACTED]"},
+		{[]string{"0xo", "xb-synthetic-proof\n"}, nil, "0[REDACTED]"},
+		{[]string{"0xo", "xa-synthetic-proof\n"}, nil, "0[REDACTED]"},
+		{[]string{"0xo", "xp-synthetic-proof"}, nil, "0[REDACTED]"},
+	}
+	for _, test := range tests {
+		chunks := test.chunks
 		t.Run(chunks[0], func(t *testing.T) {
 			connection, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
 			if err != nil {
@@ -63,7 +93,7 @@ func TestBroadcastWriterHoldsMultilineSecretPrefixAcrossWrites(t *testing.T) {
 			writer := &broadcastWriter{
 				broker: broker, repo: repo, deploymentID: deployment.ID,
 				stepName: "secret", ctx: t.Context(),
-				scrubber: NewScrubber([]string{"first\nsecond"}),
+				scrubber: NewScrubber(test.secrets),
 			}
 
 			if _, err := writer.Write([]byte(chunks[0])); err != nil {
@@ -78,7 +108,7 @@ func TestBroadcastWriterHoldsMultilineSecretPrefixAcrossWrites(t *testing.T) {
 				t.Fatal(err)
 			}
 			writer.Flush()
-			if line := <-stream; line != "prefix [REDACTED] suffix" {
+			if line := <-stream; line != test.want {
 				t.Fatalf("broadcast line=%q", line)
 			}
 			logs, err := repo.Queries.ListDeploymentLogsByDeployment(
@@ -87,7 +117,7 @@ func TestBroadcastWriterHoldsMultilineSecretPrefixAcrossWrites(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(logs) != 1 || logs[0].Line != "prefix [REDACTED] suffix" ||
+			if len(logs) != 1 || logs[0].Line != test.want ||
 				logs[0].StepName != (sql.NullString{String: "secret", Valid: true}) {
 				t.Fatalf("stored logs=%+v", logs)
 			}
