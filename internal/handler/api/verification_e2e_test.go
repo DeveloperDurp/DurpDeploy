@@ -115,12 +115,10 @@ func TestVerificationAPIWebContainerE2E(t *testing.T) {
 	// Given: a real server, encrypted release variables, and local containers.
 	f := newVerificationE2E(t)
 	release := verificationRelease(t, f, "verified-v1")
-	configureVerification(
+	configureBashVerification(
 		t,
 		f,
-		"bash",
 		`printf '%s\n' "$SECRET"; test "$SECRET" = verification-secret-value`,
-		5,
 	)
 
 	// When: the API starts a deployment with Bash verification.

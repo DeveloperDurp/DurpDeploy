@@ -1,6 +1,8 @@
 package cicontract
 
 import (
+	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,9 +33,43 @@ func TestCoveragePartitionsEveryPackageOnce(t *testing.T) {
 		[]string{"api", "handlers", "repository", "migrations", "core"})
 }
 
-func TestUnitPartitionsEveryPackageOnce(t *testing.T) {
-	checkPackagePartition(t, "ci_test_packages.sh",
-		[]string{"repository", "database", "handlers", "core"})
+func TestCoverageIncludesEveryDefaultTestFile(t *testing.T) {
+	files := func(tags string) map[string]bool {
+		t.Helper()
+		cmd := exec.Command("go", "list", "-json", "-tags="+tags, "./...")
+		cmd.Dir = "../.."
+		output, err := cmd.Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoder := json.NewDecoder(strings.NewReader(string(output)))
+		result := map[string]bool{}
+		for {
+			var pkg struct {
+				ImportPath                string
+				TestGoFiles, XTestGoFiles []string
+			}
+			if err := decoder.Decode(&pkg); err == io.EOF {
+				break
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			for _, file := range append(pkg.TestGoFiles, pkg.XTestGoFiles...) {
+				result[pkg.ImportPath+"/"+file] = true
+			}
+		}
+		return result
+	}
+	coverage := files("e2e")
+	defaults := files("")
+	if len(defaults) == 0 {
+		t.Fatal("default test inventory is empty")
+	}
+	for file := range defaults {
+		if !coverage[file] {
+			t.Errorf("coverage suite omits default test file %s", file)
+		}
+	}
 }
 
 func checkPackagePartition(t *testing.T, script string, shards []string) {
@@ -99,7 +135,7 @@ func TestTestShardsPropagateFailure(t *testing.T) {
 	path = fixtureCommand(t, "make", "exit 9\n") + ":" + path
 	for _, shard := range []string{
 		"rollout-contracts", "rollout-artifacts-1", "rollout-artifacts-2", "rollout-verification",
-		"browser-navigation", "browser-resources", "browser-execution",
+		"browser-navigation", "browser-resources", "browser-permissions", "browser-execution",
 		"browser-agents", "unknown",
 	} {
 		cmd := exec.Command("bash", "../../scripts/ci_test_shard.sh", shard)
@@ -117,7 +153,14 @@ func TestTestShardsPropagateFailure(t *testing.T) {
 }
 
 func TestSonarRequiresEveryCoverageReport(t *testing.T) {
-	shards := []string{"api", "handlers", "repository", "migrations", "core"}
+	shards := []string{
+		"api-1",
+		"api-2",
+		"handlers",
+		"repository",
+		"migrations",
+		"core",
+	}
 	script := strings.Join(pipeline(t)["sonarcloud"].Script, "\n")
 	path := fixtureCommand(t, "sonar-scanner",
 		"printf '%s\\n' \"$@\" > \"$SCANNER_ARGS\"\n")

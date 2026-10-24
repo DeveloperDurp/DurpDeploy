@@ -250,6 +250,11 @@ func (f *artifactE2E) completion(t *testing.T, id int64, want events.Type) {
 		case event := <-f.done:
 			if event.DeploymentID == id {
 				if event.Type != want {
+					logs, err := f.h.repo.Queries.ListDeploymentLogsByDeployment(
+						t.Context(),
+						id,
+					)
+					t.Logf("deployment logs (read error: %v): %+v", err, logs)
 					t.Fatalf("completion=%s: %s", event.Type, event.Message)
 				}
 				return

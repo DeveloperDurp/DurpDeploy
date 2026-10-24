@@ -2,6 +2,8 @@ container-security:
   stage: scan
   needs: [ci-runtime]
   timeout: 30 minutes
+  variables:
+    CI_RUNTIME: none
   script:
     - make trivy-tools
     - |
@@ -21,6 +23,7 @@ security-scan:
   needs: [ci-runtime]
   timeout: 30 minutes
   variables:
+    CI_RUNTIME: none
     KUBERNETES_MEMORY_LIMIT: "6Gi"
     # Leave memory for compiler subprocesses within the job's memory limit.
     GOMEMLIMIT: 2GiB

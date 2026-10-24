@@ -78,7 +78,7 @@ All applicable Go and end-to-end tests must pass before work is complete. Run
 the full relevant suites only at final verification; use focused tests while
 working. Do not treat focused tests as a substitute for final verification.
 
-Database fixtures must register `testutil.CleanupContainer(t, container)`
+Test-owned database fixtures must register `testutil.CleanupContainer(t, container)`
 immediately after creation, before checking its error: Testcontainers can
 return a live container together with a startup error. Cleanup uses its own
 bounded context and fails the test if removal fails. Use `make test` or
@@ -88,6 +88,11 @@ owned sessions on success, failure, timeout, or HUP/INT/TERM. Cleanup also runs
 when Ryuk is disabled on rootless Podman. Plain
 `go test` relies on Ryuk for process-level cleanup; SIGKILL or machine failure
 cannot run shell traps. Running-server E2E examples and demos remain retained.
+
+For package-owned fixtures, register each container with the package owner before checking its startup error.
+Remove package-owned containers in `TestMain` with `testutil.TerminateContainer`.
+Fail the package if removal fails.
+Give each test a fresh database and close its connections before database removal.
 
 Every scenario in `make e2e-test` must remain available for manual checks
 after the command exits. Retain its projects, environments, release snapshots,

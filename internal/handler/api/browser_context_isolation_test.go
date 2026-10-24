@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -20,12 +21,12 @@ func TestBrowserContextIsolationE2E(t *testing.T) {
 		)
 	}))
 	t.Cleanup(server.Close)
-	first := startPackageBrowser(t)
+	first := startLivePackageBrowser(t, server.URL)
 	first.evaluate(t, "location.href="+strconv.Quote(server.URL))
 	first.wait(t, "location.origin === "+strconv.Quote(server.URL))
 	first.evaluate(t, `localStorage.setItem('fixture', 'private');
 		document.cookie = 'fixture=private'; true`)
-	second := startPackageBrowser(t)
+	second := startLivePackageBrowser(t, server.URL)
 	second.evaluate(t, "location.href="+strconv.Quote(server.URL))
 	second.wait(t, "location.origin === "+strconv.Quote(server.URL))
 	// Then: cookies and local storage do not cross context boundaries.
@@ -34,5 +35,20 @@ func TestBrowserContextIsolationE2E(t *testing.T) {
 		`document.cookie === '' && localStorage.getItem('fixture') === null`,
 	)) != "true" {
 		t.Fatal("shared Chromium leaked browser state between test contexts")
+	}
+	// A self-signed HTTPS override must not affect the shared HTTP browser.
+	secure := httptest.NewTLSServer(server.Config.Handler)
+	t.Cleanup(secure.Close)
+	private := startLivePackageBrowser(t, secure.URL)
+	private.evaluate(t, "location.href="+strconv.Quote(secure.URL))
+	private.wait(t, "location.origin === "+strconv.Quote(secure.URL))
+	var navigation struct {
+		ErrorText string `json:"errorText"`
+	}
+	first.call(t, "Page.navigate", map[string]string{"url": secure.URL},
+		&navigation)
+	if !strings.HasPrefix(navigation.ErrorText, "net::ERR_CERT_") {
+		t.Fatalf("shared browser accepted a private certificate override: %+v",
+			navigation)
 	}
 }

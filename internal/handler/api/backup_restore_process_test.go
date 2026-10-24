@@ -38,18 +38,28 @@ func (f *restoreFixture) start(t *testing.T) *restoreProcess {
 	if err := command.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { p.stop(t) })
+	t.Cleanup(func() {
+		if t.Failed() && !p.stopped && f.backend == restorePostgresBackend {
+			f.native.logPostgresActivity(t)
+		}
+		p.stop(t)
+	})
 	ready := make(chan string, 1)
 	go func() {
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
 			var event struct {
+				Level   string `json:"level"`
 				Message string `json:"msg"`
 				Address string `json:"addr"`
 			}
-			if json.Unmarshal(scanner.Bytes(), &event) == nil &&
-				event.Message == "server starting" {
-				ready <- "http://" + event.Address
+			if json.Unmarshal(scanner.Bytes(), &event) == nil {
+				switch {
+				case event.Message == "server starting":
+					ready <- "http://" + event.Address
+				case event.Level == "ERROR":
+					t.Logf("recovery server error: %s", scanner.Text())
+				}
 			}
 		}
 		waitErr := command.Wait()

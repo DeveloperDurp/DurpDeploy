@@ -2,6 +2,16 @@
 set -Eeuo pipefail
 trap 'printf "E2E failed at line %s\n" "$LINENO" >&2' ERR
 
+scenario=${1-all}
+if (($# > 1)); then
+	printf 'Select one E2E scenario\n' >&2
+	exit 2
+fi
+case "$scenario" in
+	all | existing-server | host | container) ;;
+	*) printf 'Unknown E2E scenario: %s\n' "$scenario" >&2; exit 2 ;;
+esac
+
 [[ "${GITLAB_CI:-}" == true ]] || {
 	printf 'Run only in an isolated GitLab job pod\n' >&2
 	exit 2
@@ -54,148 +64,174 @@ export DURPDEPLOY_CONTAINER_URL=unix:///var/run/docker.sock
 docker info >/dev/null
 
 cd "$root"
-bash scripts/e2e_build_server.sh "$tmp/durpdeploy"
+bash scripts/npm_install.sh
+verification_image=$(sed -n 's/^[[:space:]]*BashImage = "\([^"]*\)"/\1/p' \
+	internal/verification/settings.go)
+# Resolve the pinned verification image before its execution deadline starts.
+bash scripts/ensure_fixture_image.sh "$verification_image" docker
+# Client-only scenarios must not depend on a previous host scenario's pulls.
+for fixture_image in \
+	harbor.durp.info/dockerhub/library/bash:5.2 \
+	harbor.durp.info/dockerhub/library/python:3.12-alpine \
+	harbor.durp.info/microsoft/powershell:latest; do
+	bash scripts/ensure_fixture_image.sh "$fixture_image" docker
+done
 export DURPDEPLOY_SECRET_KEY
 DURPDEPLOY_SECRET_KEY=$(openssl rand -base64 32)
 
-# A disabled embedded agent must fail closed instead of running on the host.
-DURPDEPLOY_DB="$tmp/bad-runtime.db" "$tmp/durpdeploy" admin create \
-	--email e2e-admin@test.local \
-	--password e2e-admin-password-1234 >/dev/null
-e2e_reserve_port "$tmp"
-base="http://localhost:$E2E_RESERVED_PORT"
-e2e_release_port
-DURPDEPLOY_DB="$tmp/bad-runtime.db" \
-	DURPDEPLOY_EMBEDDED_AGENT_ENABLED=false \
-	DURPDEPLOY_EXECUTION_BOUNDARY=service DURPDEPLOY_ADDR="127.0.0.1:${base##*:}" \
-	DURPDEPLOY_AGENT_LISTEN_ADDR=127.0.0.1:0 \
-	DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost \
-	DURPDEPLOY_AGENT_IDENTITY_DIR="$tmp/bad-agent" \
-	DURPDEPLOY_URL="$base" \
-	"$tmp/durpdeploy" >"$tmp/bad-runtime.log" 2>&1 &
-server_pid=$!
-base=$(e2e_wait_for_server "$server_pid" "$tmp/bad-runtime.log")
-curl -fsS -c "$tmp/cookies" -o /dev/null -X POST \
-	-d 'email=e2e-admin@test.local&password=e2e-admin-password-1234' \
-	"$base/login"
-csrf=$(curl -fsS -b "$tmp/cookies" "$base/" |
-	grep -oP '<meta name="csrf-token" content="\K[^"]+' | head -1)
-token=$(curl -fsS -b "$tmp/cookies" -D "$tmp/headers" -o /dev/null \
-	-X POST -d "name=runtime-probe&csrf_token=$csrf" \
-	"$base/settings/tokens";
-	curl -fsS -b "$tmp/cookies" \
-	"$base$(grep -i '^location:' "$tmp/headers" | tr -d '\r' |
-		cut -d ' ' -f 2)" | grep -oE 'ddp_pat_[0-9a-f]{64}' | head -1)
-api() {
-	curl -fsS -H "Authorization: Bearer $token" \
-		-H 'Content-Type: application/json' -d "$1" "$base/api/v1/$2"
-}
-project=$(api '{"name":"runtime-probe"}' projects |
-	python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
-environment=$(api '{"name":"runtime-probe"}' environments |
-	python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
-api '{"name":"probe","script_body":"echo must-not-run","container_image":"harbor.durp.info/dockerhub/library/bash:5.2"}' \
-	"projects/$project/steps" >/dev/null
-release=$(api '{"version":"v1"}' "projects/$project/releases" |
-	python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
-deployment=$(api \
-	"{\"release_id\":$release,\"environment_id\":$environment}" \
-	"projects/$project/deployments" |
-	python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
-for _ in {1..200}; do
-	status=$(curl -fsS -H "Authorization: Bearer $token" \
-		"$base/api/v1/deployments/$deployment/status" |
-		python3 -c 'import sys,json; print(json.load(sys.stdin)["status"])')
-	[[ "$status" =~ ^(failed|succeeded|cancelled)$ ]] && break
-	sleep 0.1
-done
-[[ "$status" == failed ]]
-if curl -fsS -H "Authorization: Bearer $token" \
-	"$base/api/v1/deployments/$deployment/logs" | grep -q must-not-run; then
-	printf 'Missing runtime executed the step\n' >&2
-	exit 1
-fi
-kill "$server_pid"
-wait "$server_pid" || true
-server_pid=
+if [[ $scenario == all || $scenario == existing-server ]]; then
+	scenario_started=$SECONDS
+	bash scripts/e2e_build_server.sh "$tmp/durpdeploy"
+	# A disabled embedded agent must fail closed instead of running on the host.
+	DURPDEPLOY_DB="$tmp/bad-runtime.db" "$tmp/durpdeploy" admin create \
+		--email e2e-admin@test.local \
+		--password e2e-admin-password-1234 >/dev/null
+	e2e_reserve_port "$tmp"
+	base="http://localhost:$E2E_RESERVED_PORT"
+	e2e_release_port
+	DURPDEPLOY_DB="$tmp/bad-runtime.db" \
+		DURPDEPLOY_EMBEDDED_AGENT_ENABLED=false \
+		DURPDEPLOY_EXECUTION_BOUNDARY=service DURPDEPLOY_ADDR="127.0.0.1:${base##*:}" \
+		DURPDEPLOY_AGENT_LISTEN_ADDR=127.0.0.1:0 \
+		DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost \
+		DURPDEPLOY_AGENT_IDENTITY_DIR="$tmp/bad-agent" \
+		DURPDEPLOY_URL="$base" \
+		"$tmp/durpdeploy" >"$tmp/bad-runtime.log" 2>&1 &
+	server_pid=$!
+	base=$(e2e_wait_for_server "$server_pid" "$tmp/bad-runtime.log")
+	curl -fsS -c "$tmp/cookies" -o /dev/null -X POST \
+		-d 'email=e2e-admin@test.local&password=e2e-admin-password-1234' \
+		"$base/login"
+	csrf=$(curl -fsS -b "$tmp/cookies" "$base/" |
+		grep -oP '<meta name="csrf-token" content="\K[^"]+' | head -1)
+	token=$(curl -fsS -b "$tmp/cookies" -D "$tmp/headers" -o /dev/null \
+		-X POST -d "name=runtime-probe&csrf_token=$csrf" \
+		"$base/settings/tokens";
+		curl -fsS -b "$tmp/cookies" \
+		"$base$(grep -i '^location:' "$tmp/headers" | tr -d '\r' |
+			cut -d ' ' -f 2)" | grep -oE 'ddp_pat_[0-9a-f]{64}' | head -1)
+	api() {
+		curl -fsS -H "Authorization: Bearer $token" \
+			-H 'Content-Type: application/json' -d "$1" "$base/api/v1/$2"
+	}
+	project=$(api '{"name":"runtime-probe"}' projects |
+		python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+	environment=$(api '{"name":"runtime-probe"}' environments |
+		python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+	api '{"name":"probe","script_body":"echo must-not-run","container_image":"harbor.durp.info/dockerhub/library/bash:5.2"}' \
+		"projects/$project/steps" >/dev/null
+	release=$(api '{"version":"v1"}' "projects/$project/releases" |
+		python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+	deployment=$(api \
+		"{\"release_id\":$release,\"environment_id\":$environment}" \
+		"projects/$project/deployments" |
+		python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+	for _ in {1..200}; do
+		status=$(curl -fsS -H "Authorization: Bearer $token" \
+			"$base/api/v1/deployments/$deployment/status" |
+			python3 -c 'import sys,json; print(json.load(sys.stdin)["status"])')
+		[[ "$status" =~ ^(failed|succeeded|cancelled)$ ]] && break
+		sleep 0.1
+	done
+	[[ "$status" == failed ]]
+	if curl -fsS -H "Authorization: Bearer $token" \
+		"$base/api/v1/deployments/$deployment/logs" | grep -q must-not-run; then
+		printf 'Missing runtime executed the step\n' >&2
+		exit 1
+	fi
+	kill "$server_pid"
+	wait "$server_pid" || true
+	server_pid=
+	printf 'E2E disabled-runtime probe: %s seconds\n' "$((SECONDS - scenario_started))"
 
-printf 'Running existing-server SQLite E2E\n'
-DURPDEPLOY_DB="$tmp/running-server.db" "$tmp/durpdeploy" admin create \
-	--email e2e-admin@test.local \
-	--password e2e-admin-password-1234 >/dev/null
-e2e_reserve_port "$tmp"
-base="http://localhost:$E2E_RESERVED_PORT"
-e2e_release_port
-DURPDEPLOY_DB="$tmp/running-server.db" \
-	DURPDEPLOY_EXECUTION_BOUNDARY=service DURPDEPLOY_ADDR="127.0.0.1:${base##*:}" \
-	DURPDEPLOY_AGENT_LISTEN_ADDR=127.0.0.1:0 \
-	DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost \
-	DURPDEPLOY_AGENT_IDENTITY_DIR="$tmp/running-agent" \
-	DURPDEPLOY_URL="$base" \
-	"$tmp/durpdeploy" >"$tmp/running-server.log" 2>&1 &
-server_pid=$!
-base=$(e2e_wait_for_server "$server_pid" "$tmp/running-server.log")
-suite_started=$(date -u +%FT%TZ)
-DURPDEPLOY_BASE_URL="$base" \
+	printf 'Running existing-server SQLite E2E\n'
+	scenario_started=$SECONDS
+	DURPDEPLOY_DB="$tmp/running-server.db" "$tmp/durpdeploy" admin create \
+		--email e2e-admin@test.local \
+		--password e2e-admin-password-1234 >/dev/null
+	e2e_reserve_port "$tmp"
+	base="http://localhost:$E2E_RESERVED_PORT"
+	e2e_release_port
 	DURPDEPLOY_DB="$tmp/running-server.db" \
-	DURPDEPLOY_E2E_CLI="$tmp/durpdeploy" make e2e-test
-kill "$server_pid"
-wait "$server_pid"
-server_pid=
-bash scripts/check_e2e_containers.sh "$namespace" "$suite_started"
-
-printf 'Running host control-plane E2E\n'
-suite_started=$(date -u +%FT%TZ)
-DURPDEPLOY_E2E_PORT=0 ./scripts/e2e_test.sh
-bash scripts/check_e2e_containers.sh "$namespace" "$suite_started"
-
-if [[ -n ${DURPDEPLOY_E2E_IMAGE:-} ]]; then
-	printf 'Reusing scanned containerized control plane\n'
-	image=$DURPDEPLOY_E2E_IMAGE
-	docker image inspect "$image" >/dev/null
-else
-	printf 'Building containerized control plane\n'
-	docker build -t "$image" .
-fi
-docker volume create "$volume" >/dev/null
-docker volume create "$identity_volume" >/dev/null
-docker run --rm --volume "$volume:/data" -e DURPDEPLOY_SECRET_KEY \
-	"$image" admin create --email e2e-admin@test.local \
-	--password e2e-admin-password-1234 >/dev/null
-e2e_reserve_port "$tmp"
-base="http://localhost:$E2E_RESERVED_PORT"
-e2e_release_port
-docker run -d --name "$app_name" --user 0 --read-only \
-	--cap-drop ALL --cap-add SETUID --cap-add SETGID \
-	--security-opt no-new-privileges --tmpfs /tmp:size=64m,mode=1777 \
-	--volume "$volume:/data" \
-	--volume "$identity_volume:/var/lib/durpdeploy/agent-identity" \
-	--volume /var/run/docker.sock:/var/run/durpdeploy-runtime.sock \
-	-p "127.0.0.1:${base##*:}:8080" \
-	-e DURPDEPLOY_SECRET_KEY -e DURPDEPLOY_CONTAINER_RUNTIME \
-	-e DURPDEPLOY_CONTAINER_NAMESPACE \
-	-e DURPDEPLOY_CONTAINER_URL=unix:///var/run/durpdeploy-runtime.sock \
-	-e DURPDEPLOY_DB=/data/durpdeploy.db \
-	-e DURPDEPLOY_ADDR=0.0.0.0:8080 \
-	-e DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:23187 \
-	-e DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost \
-	-e DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity \
-	-e DURPDEPLOY_URL="$base" \
-	"$image" >/dev/null
-binding=$(docker port "$app_name" 8080/tcp)
-[[ ${binding##*:} == "${base##*:}" ]]
-for _ in {1..100}; do
-	curl -fsS "$base/healthz" >/dev/null 2>&1 && break
-	sleep 0.1
-done
-DURPDEPLOY_BASE_URL="$base" node scripts/e2e_origin_test.mjs
-docker exec "$app_name" /bin/sh -ceu \
-	'test "$(awk '\''/^Uid:/{print $2}'\'' /proc/1/status)" = 10001; command -v docker; command -v podman'
-printf 'Running containerized control-plane E2E\n'
-suite_started=$(date -u +%FT%TZ)
-DURPDEPLOY_E2E_CLIENT_ONLY=1 DURPDEPLOY_E2E_CONTROL_PLANE_PORT="${binding##*:}" \
+		DURPDEPLOY_EXECUTION_BOUNDARY=service DURPDEPLOY_ADDR="127.0.0.1:${base##*:}" \
+		DURPDEPLOY_AGENT_LISTEN_ADDR=127.0.0.1:0 \
+		DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost \
+		DURPDEPLOY_AGENT_IDENTITY_DIR="$tmp/running-agent" \
+		DURPDEPLOY_URL="$base" \
+		"$tmp/durpdeploy" >"$tmp/running-server.log" 2>&1 &
+	server_pid=$!
+	base=$(e2e_wait_for_server "$server_pid" "$tmp/running-server.log")
+	suite_started=$(date -u +%FT%TZ)
 	DURPDEPLOY_BASE_URL="$base" \
-	./scripts/e2e_test.sh
-docker stop "$app_name" >/dev/null
-bash scripts/check_e2e_containers.sh "$namespace" "$suite_started"
-printf 'Host and in-container API/web E2E and container cleanup: PASS\n'
+		DURPDEPLOY_DB="$tmp/running-server.db" \
+		DURPDEPLOY_E2E_CLI="$tmp/durpdeploy" make e2e-test
+	kill "$server_pid"
+	wait "$server_pid"
+	server_pid=
+	bash scripts/check_e2e_containers.sh "$namespace" "$suite_started"
+	printf 'E2E existing-server SQLite: %s seconds\n' "$((SECONDS - scenario_started))"
+fi
+
+if [[ $scenario == all || $scenario == host ]]; then
+	printf 'Running host control-plane E2E\n'
+	scenario_started=$SECONDS
+	suite_started=$(date -u +%FT%TZ)
+	DURPDEPLOY_E2E_PORT=0 ./scripts/e2e_test.sh
+	bash scripts/check_e2e_containers.sh "$namespace" "$suite_started"
+	printf 'E2E host control-plane: %s seconds\n' "$((SECONDS - scenario_started))"
+fi
+
+if [[ $scenario == all || $scenario == container ]]; then
+	scenario_started=$SECONDS
+	if [[ -n ${DURPDEPLOY_E2E_IMAGE:-} ]]; then
+		printf 'Reusing scanned containerized control plane\n'
+		image=$DURPDEPLOY_E2E_IMAGE
+		docker image inspect "$image" >/dev/null
+	else
+		printf 'Building containerized control plane\n'
+		docker build -t "$image" .
+	fi
+	docker volume create "$volume" >/dev/null
+	docker volume create "$identity_volume" >/dev/null
+	docker run --rm --volume "$volume:/data" -e DURPDEPLOY_SECRET_KEY \
+		"$image" admin create --email e2e-admin@test.local \
+		--password e2e-admin-password-1234 >/dev/null
+	e2e_reserve_port "$tmp"
+	base="http://localhost:$E2E_RESERVED_PORT"
+	e2e_release_port
+	docker run -d --name "$app_name" --user 0 --read-only \
+		--cap-drop ALL --cap-add SETUID --cap-add SETGID \
+		--security-opt no-new-privileges --tmpfs /tmp:size=64m,mode=1777 \
+		--volume "$volume:/data" \
+		--volume "$identity_volume:/var/lib/durpdeploy/agent-identity" \
+		--volume /var/run/docker.sock:/var/run/durpdeploy-runtime.sock \
+		-p "127.0.0.1:${base##*:}:8080" \
+		-e DURPDEPLOY_SECRET_KEY -e DURPDEPLOY_CONTAINER_RUNTIME \
+		-e DURPDEPLOY_CONTAINER_NAMESPACE \
+		-e DURPDEPLOY_CONTAINER_URL=unix:///var/run/durpdeploy-runtime.sock \
+		-e DURPDEPLOY_DB=/data/durpdeploy.db \
+		-e DURPDEPLOY_ADDR=0.0.0.0:8080 \
+		-e DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:23187 \
+		-e DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost \
+		-e DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity \
+		-e DURPDEPLOY_URL="$base" \
+		"$image" >/dev/null
+	binding=$(docker port "$app_name" 8080/tcp)
+	[[ ${binding##*:} == "${base##*:}" ]]
+	for _ in {1..100}; do
+		curl -fsS "$base/healthz" >/dev/null 2>&1 && break
+		sleep 0.1
+	done
+	DURPDEPLOY_BASE_URL="$base" node scripts/e2e_origin_test.mjs
+	docker exec "$app_name" /bin/sh -ceu \
+		'test "$(awk '\''/^Uid:/{print $2}'\'' /proc/1/status)" = 10001; command -v docker; command -v podman'
+	printf 'Running containerized control-plane E2E\n'
+	suite_started=$(date -u +%FT%TZ)
+	DURPDEPLOY_E2E_CLIENT_ONLY=1 DURPDEPLOY_E2E_CONTROL_PLANE_PORT="${binding##*:}" \
+		DURPDEPLOY_BASE_URL="$base" \
+		./scripts/e2e_test.sh
+	docker stop "$app_name" >/dev/null
+	bash scripts/check_e2e_containers.sh "$namespace" "$suite_started"
+	printf 'E2E containerized control-plane: %s seconds\n' "$((SECONDS - scenario_started))"
+fi
+printf 'E2E scenario %s and container cleanup: PASS\n' "$scenario"

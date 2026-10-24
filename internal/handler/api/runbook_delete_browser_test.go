@@ -73,13 +73,7 @@ func TestRunbookDeletionBrowserE2E(t *testing.T) {
 			"runbook browser deletion requires its server, session, and history",
 		)
 	}
-	b := startPackageBrowser(t, true)
-	b.call(
-		t,
-		"Security.setIgnoreCertificateErrors",
-		map[string]bool{"ignore": true},
-		&struct{}{},
-	)
+	b := startLivePackageBrowser(t, base)
 	if fixture != nil {
 		viewer := seedAPIUser(
 			t,

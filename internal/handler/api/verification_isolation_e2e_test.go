@@ -44,7 +44,7 @@ func TestVerificationProjectImageIsolationE2E(t *testing.T) {
 	const target = `private_value=inline-private-proof
 test "${BASH_ENV-unset}" = unset && test "${LD_PRELOAD-unset}" = unset || exit 1
 echo verification-isolated`
-	configureVerification(t, f, "bash", target, 10)
+	configureBashVerification(t, f, target)
 	_, f.token = seedAPIToken(t, f.h.repo, deployer.ID)
 	f.api(t, "POST", f.base()+"/steps", map[string]any{
 		"name":            "Untrusted final step",

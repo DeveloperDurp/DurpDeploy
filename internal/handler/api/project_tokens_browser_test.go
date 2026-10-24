@@ -36,7 +36,7 @@ func TestProjectTokensBrowserE2E(t *testing.T) {
 			"token browser suite requires two retained projects and a session",
 		)
 	}
-	b := startPackageBrowser(t, true)
+	b := startLivePackageBrowser(t, base)
 	t.Cleanup(func() {
 		if !t.Failed() {
 			return
@@ -61,12 +61,6 @@ func TestProjectTokensBrowserE2E(t *testing.T) {
 			),
 		)
 	})
-	b.call(
-		t,
-		"Security.setIgnoreCertificateErrors",
-		map[string]bool{"ignore": true},
-		&struct{}{},
-	)
 	b.setBackTestSession(t, base, session)
 	b.navigateBackTest(t, base+"/settings/tokens")
 	b.wait(

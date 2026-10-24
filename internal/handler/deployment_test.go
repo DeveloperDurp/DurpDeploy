@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,10 +18,10 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
-	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"durpdeploy/internal/server"
+	"durpdeploy/internal/testutil/sqlitefixture"
 
 	"github.com/robfig/cron/v3"
 )
@@ -45,20 +44,10 @@ type testHarness struct {
 func newHarness(t *testing.T) *testHarness {
 	t.Helper()
 	binary := setupTestPodman(t)
-	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "test.db")
-	dsn := fmt.Sprintf(
-		"file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
-		dbPath,
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	conn := sqlitefixture.Open(t, dbPath,
+		"_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
 	)
-	conn, err := migrate.Run(dsn)
-	if err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = conn.Close()
-		_ = os.RemoveAll(dir)
-	})
 
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()

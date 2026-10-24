@@ -19,10 +19,10 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
-	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"durpdeploy/internal/server"
+	"durpdeploy/internal/testutil/sqlitefixture"
 
 	"github.com/robfig/cron/v3"
 )
@@ -40,16 +40,9 @@ type projectHarness struct {
 func newProjectHarness(t *testing.T) *projectHarness {
 	t.Helper()
 	binary := setupTestPodman(t)
-	dir := t.TempDir()
-	dsn := fmt.Sprintf(
-		"file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
-		filepath.Join(dir, "test.db"),
+	conn := sqlitefixture.Open(t, filepath.Join(t.TempDir(), "test.db"),
+		"_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
 	)
-	conn, err := migrate.Run(dsn)
-	if err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
 
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()

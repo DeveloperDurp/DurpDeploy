@@ -22,6 +22,20 @@ COPY --from=helm /usr/bin/helm /usr/local/bin/helm
 COPY --from=helm3 /usr/bin/helm /usr/local/bin/helm3
 COPY .gitlab/licenses/ /usr/local/share/licenses/durpdeploy-ci/
 
+# Keep tools in a final-image layer so the existing mode=min cache retains them.
+COPY scripts/install_security_tools.sh scripts/install_golangci_lint.sh scripts/install_trivy.sh /opt/tool-build/scripts/
+COPY .security/trivy-NOTICE /opt/tool-build/.security/trivy-NOTICE
+RUN GOMODCACHE=/tmp/security-mod GOCACHE=/tmp/security-build GOMAXPROCS=2 GOFLAGS=-p=2 \
+    SECURITY_TOOL_DIR=/opt/ci-tools/security \
+    bash /opt/tool-build/scripts/install_security_tools.sh && \
+    GOLANGCI_LINT_TOOL_DIR=/opt/ci-tools/lint bash /opt/tool-build/scripts/install_golangci_lint.sh && \
+    TRIVY_TOOL_DIR=/opt/ci-tools/security bash /opt/tool-build/scripts/install_trivy.sh && \
+    mkdir -p /opt/ci-tools/licenses && \
+    find /tmp/security-mod -type f \
+        \( -iname '*license*' -o -iname '*notice*' -o -iname '*copying*' \) \
+        -exec cp --parents -t /opt/ci-tools/licenses {} + && \
+    rm -rf /tmp/security-mod /tmp/security-build
+
 ENV CGO_ENABLED=1
 
 # The Podman lane runs as this unprivileged user, without systemd or host sockets.

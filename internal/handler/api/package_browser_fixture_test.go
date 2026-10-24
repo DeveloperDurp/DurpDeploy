@@ -120,6 +120,18 @@ func packageBrowserEndpoint(t *testing.T) string {
 }
 
 // Tests that change browser-wide settings request their own process.
+// HTTPS certificate overrides affect the process, so keep those browsers private.
+func startLivePackageBrowser(t *testing.T, base string) *packageBrowser {
+	t.Helper()
+	private := strings.HasPrefix(strings.ToLower(base), "https://")
+	b := startPackageBrowser(t, private)
+	if private {
+		b.call(t, "Security.setIgnoreCertificateErrors",
+			map[string]bool{"ignore": true}, &struct{}{})
+	}
+	return b
+}
+
 func startPackageBrowser(t *testing.T, privateProcess ...bool) *packageBrowser {
 	t.Helper()
 	endpoint := os.Getenv("DURPDEPLOY_TEST_BROWSER_ENDPOINT")
@@ -270,17 +282,46 @@ func (b *packageBrowser) waitFor(
 
 func (b *packageBrowser) screenshot(t *testing.T, name string) {
 	t.Helper()
-	b.evaluate(
-		t,
-		`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))`,
-	)
 	b.evaluate(t, `(async () => {
-		await document.fonts.ready;
-		for (let y = 0; y < document.documentElement.scrollHeight; y += innerHeight) {
-			window.scrollTo(0, y); await new Promise(resolve => setTimeout(resolve, 50));
+		const frame = () => new Promise(requestAnimationFrame);
+		const settle = async () => { await frame(); await frame(); };
+		let timeout;
+		try {
+			return await Promise.race([
+				(async () => {
+					await document.fonts.ready;
+					for (let y = 0; y < document.documentElement.scrollHeight; y += innerHeight) {
+						window.scrollTo({top: y, left: 0, behavior: 'instant'});
+						await settle();
+					}
+					window.scrollTo({top: 0, left: 0, behavior: 'instant'});
+					let previous = '';
+					for (;;) {
+						await settle();
+						const size = JSON.stringify([
+							document.documentElement.scrollWidth,
+							document.documentElement.scrollHeight,
+							innerWidth, innerHeight, scrollX, scrollY
+						]);
+						const images = [...document.images].every(image =>
+							!image.getClientRects().length || image.complete);
+						const animations = document.getAnimations().every(animation =>
+							animation.effect?.getTiming().iterations === Infinity ||
+							(!animation.pending && animation.playState !== 'running'));
+						if (images && animations && document.fonts.status === 'loaded' &&
+							!document.querySelector('.htmx-settling') &&
+							size === previous && scrollY === 0) return true;
+						previous = size;
+					}
+				})(),
+				new Promise((_, reject) => {
+					timeout = setTimeout(() => reject(new Error(
+						'Screenshot rendering did not settle')), 15000);
+				})
+			]);
+		} finally {
+			clearTimeout(timeout);
 		}
-		window.scrollTo(0, 0); await new Promise(resolve => setTimeout(resolve, 300));
-		return true;
 	})()`)
 	directory := os.Getenv("DURPDEPLOY_PACKAGE_UI_EVIDENCE")
 	if directory == "" {

@@ -51,8 +51,12 @@ func TestBackupRestoreInterruptFixture(t *testing.T) {
 			break
 		}
 		if time.Now().After(deadline) {
+			status := f.api.api(t, "GET", fmt.Sprintf(
+				"/api/v1/deployments/%d/status", deployment.ID,
+			), nil, 200)
 			t.Fatalf(
-				"interruption fixture did not start its container work: %s",
+				"interruption fixture did not start its container work: status=%s logs=%s",
+				status,
 				logs,
 			)
 		}

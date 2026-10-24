@@ -37,7 +37,7 @@ func newQueueE2E(t *testing.T) (*artifactE2E, db.Release, db.Release) {
 func TestEnvironmentQueueAPIWebE2E(t *testing.T) {
 	// Given: an executing local deployment and two later API requests.
 	f, slow, fast := newQueueE2E(t)
-	configureVerification(t, f, "bash", "true", 5)
+	configureBashVerification(t, f, "true")
 	head := verificationDeploy(t, f, slow)
 	waitVerificationLog(t, f,
 		fmt.Sprintf("/api/v1/deployments/%d", head.ID), "queue-head")

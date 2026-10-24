@@ -20,9 +20,9 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
-	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
+	"durpdeploy/internal/testutil/sqlitefixture"
 )
 
 // scheduledHarness holds a test server with scheduled-deployment routes mounted.
@@ -36,16 +36,9 @@ func newScheduledHarness(t *testing.T) *scheduledHarness {
 	t.Helper()
 	// ponytail: file-backed SQLite, not :memory:, because the runner spawns
 	// goroutines that need their own DB connection.
-	dir := t.TempDir()
-	dsn := fmt.Sprintf(
-		"file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
-		filepath.Join(dir, "test.db"),
+	conn := sqlitefixture.Open(t, filepath.Join(t.TempDir(), "test.db"),
+		"_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
 	)
-	conn, err := migrate.Run(dsn)
-	if err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
 
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()

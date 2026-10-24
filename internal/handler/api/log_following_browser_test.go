@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -25,12 +26,10 @@ func TestLogFollowingBrowserE2E(t *testing.T) {
 	if session == "" || token == "" {
 		t.Fatal("log following requires its test session and API token")
 	}
-	b := startPackageBrowser(t)
-	b.call(t, "Security.setIgnoreCertificateErrors",
-		map[string]bool{"ignore": true}, &struct{}{})
+	b := startLivePackageBrowser(t, base)
 	b.setStepLogSession(t, base, session)
 	b.navigateBackTest(t, base+"/")
-	api := func(method, path string, body any, want int, target any) {
+	api := func(t *testing.T, method, path string, body any, want int, target any) {
 		t.Helper()
 		input, err := json.Marshal(body)
 		if err != nil {
@@ -55,14 +54,14 @@ func TestLogFollowingBrowserE2E(t *testing.T) {
 		}
 	}
 	var project struct{ ID int64 }
-	api("POST", "/api/v1/projects", map[string]string{
+	api(t, "POST", "/api/v1/projects", map[string]string{
 		"name": "Log following " + uuid.NewString(),
 	}, 201, &project)
 	var environment struct{ ID int64 }
 	if id := os.Getenv("DURPDEPLOY_LIVE_ENV_ID"); id != "" {
-		api("GET", "/api/v1/environments/"+id, nil, 200, &environment)
+		api(t, "GET", "/api/v1/environments/"+id, nil, 200, &environment)
 	} else {
-		api("POST", "/api/v1/environments", map[string]string{
+		api(t, "POST", "/api/v1/environments", map[string]string{
 			"name": "Log following " + uuid.NewString(),
 		}, 201, &environment)
 	}
@@ -87,14 +86,14 @@ echo final-follow-marker`,
 		},
 	}
 	for _, step := range steps {
-		api("POST", projectPath+"/steps", step, 201, nil)
+		api(t, "POST", projectPath+"/steps", step, 201, nil)
 	}
 	var release db.Release
-	api("POST", projectPath+"/releases", map[string]string{
+	api(t, "POST", projectPath+"/releases", map[string]string{
 		"version": "log-following",
 	}, 201, &release)
 	var saved deletionRunbook
-	api("POST", projectPath+"/runbooks", map[string]any{
+	api(t, "POST", projectPath+"/runbooks", map[string]any{
 		"name": "Log following", "steps": steps,
 	}, 201, &saved)
 
@@ -104,27 +103,46 @@ echo final-follow-marker`,
 		releaseID: release.ID, runbookID: saved.Runbook.ID,
 	}
 	for _, kind := range []string{"deployment", "runbook"} {
-		t.Run(kind, func(t *testing.T) { f.check(t, kind) })
+		// A failed case can still own the shared environment queue.
+		if !t.Run(kind, func(t *testing.T) { f.check(t, kind) }) {
+			return
+		}
 	}
 }
 
 type logFollowingBrowserFixture struct {
 	b             *packageBrowser
 	base          string
-	api           func(string, string, any, int, any)
+	api           func(*testing.T, string, string, any, int, any)
 	projectID     int64
 	environmentID int64
 	releaseID     int64
 	runbookID     int64
 }
 
-func (f logFollowingBrowserFixture) check(t *testing.T, kind string) {
+func (f logFollowingBrowserFixture) logFailure(t *testing.T, logPath string) {
 	t.Helper()
-	b, base, api := f.b, f.base, f.api
-	projectPath := fmt.Sprintf("/api/v1/projects/%d", f.projectID)
-	t.Cleanup(func() {
-		if t.Failed() {
-			t.Logf("Follow diagnostics: %s", b.evaluate(t, `({
+	if !t.Failed() {
+		return
+	}
+	if logPath != "" {
+		var execution struct{ Status string }
+		f.api(t, "GET", strings.TrimSuffix(logPath, "/logs"),
+			nil, 200, &execution)
+		var logs []db.DeploymentLog
+		f.api(t, "GET", logPath, nil, 200, &logs)
+		t.Logf("API execution status=%s log count=%d",
+			execution.Status, len(logs))
+		// Deployment and runbook APIs return different log orders.
+		sort.Slice(logs, func(i, j int) bool {
+			return logs[i].ID > logs[j].ID
+		})
+		for _, log := range logs[:min(5, len(logs))] {
+			t.Logf("API log id=%d line=%q", log.ID,
+				log.Line[:min(len(log.Line), 160)])
+		}
+	}
+	t.Logf("Follow diagnostics: %s", f.b.evaluate(t, `({
 following:window.followState?.followingLogs, hidden:document.hidden,
 pending:!!window.followState?.logUpdate, y:scrollY,
 rows:document.querySelectorAll('[data-log-id]').length,
@@ -132,19 +150,24 @@ text:document.body.textContent.slice(-1000),
 last:window.lastLog?.()?.textContent,
 bottom:window.lastLog?.()?.getBoundingClientRect().bottom,
 button:document.querySelector('[data-follow-logs]')?.outerHTML})`))
-		}
-	})
-	body := map[string]int64{"environment_id": f.environmentID}
+}
+
+func (f logFollowingBrowserFixture) check(t *testing.T, kind string) {
+	t.Helper()
+	b, base, api := f.b, f.base, f.api
+	projectPath := fmt.Sprintf("/api/v1/projects/%d", f.projectID)
 	var webPath, logPath string
+	t.Cleanup(func() { f.logFailure(t, logPath) })
+	body := map[string]int64{"environment_id": f.environmentID}
 	if kind == "deployment" {
 		body["release_id"] = f.releaseID
 		var deployment db.Deployment
-		api("POST", projectPath+"/deployments", body, 201, &deployment)
+		api(t, "POST", projectPath+"/deployments", body, 201, &deployment)
 		webPath = fmt.Sprintf("/deployments/%d", deployment.ID)
 		logPath = "/api/v1" + webPath + "/logs"
 	} else {
 		var execution db.RunbookExecution
-		api("POST", fmt.Sprintf("%s/runbooks/%d/executions",
+		api(t, "POST", fmt.Sprintf("%s/runbooks/%d/executions",
 			projectPath, f.runbookID), body, 201, &execution)
 		webPath = fmt.Sprintf("/projects/%d/runbooks/executions/%d",
 			f.projectID, execution.ID)
@@ -252,7 +275,8 @@ lastLog().scrollIntoView({block:'end',behavior:'instant'}); true`,
 	b.wait(t, `followState.followingLogs`)
 
 	// Both panels stay open as the next step receives output.
-	b.wait(t, `lastLog()?.textContent.includes('second-live-')`)
+	// The first producer sleeps 100 times for 150 ms before the next step starts.
+	b.waitFor(t, `lastLog()?.textContent.includes('second-live-')`, time.Minute)
 	b.wait(
 		t,
 		`lastLog().getBoundingClientRect().bottom <= innerHeight + 2`,
@@ -286,7 +310,13 @@ document.querySelector('[data-follow-logs]').click(); true`,
 		)
 	}
 	// A wrapped latest row can span both viewport edges.
-	b.wait(t, `followRoot.textContent.includes('wrapped-tail-end')`)
+	// The producer first sleeps 80 times for 150 ms. Allow execution overhead
+	// within the same bounded budget used to wait for its initial output.
+	b.waitFor(
+		t,
+		`followRoot.textContent.includes('wrapped-tail-end')`,
+		time.Minute,
+	)
 	b.evaluate(
 		t,
 		`window.tallRow = [...followRoot.querySelectorAll('[data-log-id]')].find(row => row.textContent.includes('wrapped-tail-end'));
@@ -319,7 +349,7 @@ tallRow.scrollIntoView({block:'start',behavior:'instant'}); window.scrollBy(0,20
 		)
 	}
 	var logs []db.DeploymentLog
-	api("GET", logPath, nil, 200, &logs)
+	api(t, "GET", logPath, nil, 200, &logs)
 	found := false
 	for _, log := range logs {
 		found = found || log.Line == "final-follow-marker"

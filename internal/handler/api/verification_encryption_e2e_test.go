@@ -27,7 +27,11 @@ func TestVerificationEncryptedTargetsE2E(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			f := newVerificationE2E(t)
 			target := encryptedVerificationTarget(t, kind)
-			configureVerification(t, f, kind, target, 5)
+			if kind == "bash" {
+				configureBashVerification(t, f, target)
+			} else {
+				configureVerification(t, f, kind, target, 5)
+			}
 			deployment := verificationDeploy(t, f,
 				verificationRelease(t, f, "encrypted-"+kind))
 			f.completion(t, deployment.ID, events.DeploymentSucceeded)

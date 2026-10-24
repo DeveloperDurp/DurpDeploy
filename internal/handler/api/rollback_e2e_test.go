@@ -99,7 +99,7 @@ func TestRollbackAPIWebContainerE2E(t *testing.T) {
 			"rollback confirmation omitted the exact source, target, or environment",
 		)
 	}
-	configureVerification(t, f, "bash", "printf 'rollback-verified\\n'", 5)
+	configureBashVerification(t, f, "printf 'rollback-verified\\n'")
 
 	// When: the operator confirms rollback through the web form.
 	f.web(t, "POST", path, url.Values{

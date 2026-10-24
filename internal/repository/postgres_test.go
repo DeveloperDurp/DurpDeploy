@@ -5,38 +5,15 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/testutil"
 )
 
-// TestPostgres_RepositoryWithTx verifies the repository (including
-// transactions) works against a real PostgreSQL instance, spun up on demand
-// via testcontainers-go. It is skipped automatically (via testcontainers-go's
-// own Docker/Podman detection) when no container runtime is available, e.g.
-// in CI.
+// TestPostgres_RepositoryWithTx checks transactions in a fresh PostgreSQL database.
 func TestPostgres_RepositoryWithTx(t *testing.T) {
 	ctx := context.Background()
-	ctr, err := postgres.Run(
-		ctx,
-		"harbor.durp.info/dockerhub/library/postgres:16-alpine",
-		postgres.WithDatabase("durpdeploy"),
-		postgres.WithUsername("durpdeploy"),
-		postgres.WithPassword("postgres"),
-		postgres.BasicWaitStrategies(),
-	)
-	testutil.CleanupContainer(t, ctr)
-	if err != nil {
-		t.Skipf("could not start postgres container: %v", err)
-	}
-
-	dsn, err := ctr.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		t.Fatalf("connection string: %v", err)
-	}
-
+	dsn := RepositoryDatabaseDSN(t, "PostgreSQL")
 	conn, err := migrate.Run(dsn)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)

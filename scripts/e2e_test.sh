@@ -45,10 +45,11 @@ fi
 curl_silent() { curl -s -b "$COOKIES" -o /dev/null -w "%{http_code}" "$@"; }
 curl_body() { curl -s -b "$COOKIES" "$@"; }
 do_delete() { curl -s -b "$COOKIES" -H "X-CSRF-Token: $CSRF" -o /dev/null -w "%{http_code}" -X DELETE "$1"; }
+# Consume streamed responses completely to avoid curl write errors under pipefail.
 csrf_from_cookies() {
     curl -s -b "$1" "$BASE/" \
         | grep -oP '<meta name="csrf-token" content="\K[^"]+' \
-        | head -1
+        | sed -n '1p'
 }
 
 # mint_web_token creates an API token via the web form and prints the
@@ -65,7 +66,7 @@ mint_web_token() {
         *) return 1 ;;
     esac
     curl -s -b "$jar" "$BASE$redirect" \
-        | grep -oE 'ddp_pat_[0-9a-f]{64}' | head -1
+        | grep -oE 'ddp_pat_[0-9a-f]{64}' | sed -n '1p'
 }
 
 # Log in. Captures the session cookie into $COOKIES and gets the CSRF
@@ -144,12 +145,12 @@ echo "  CSRF gate: OK"
 echo "=== F3.1: Happy Path ==="
 CODE=$(curl_silent -X POST -d "name=TestProject&csrf_token=$CSRF" "$BASE/projects")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create project got $CODE"; exit 1; }
-PROJECT_ID=$(curl_body "$BASE/projects" | grep -oP 'href="/projects/\K[0-9]+' | head -1)
+PROJECT_ID=$(curl_body "$BASE/projects" | grep -oP 'href="/projects/\K[0-9]+' | sed -n '1p')
 echo "Project ID: $PROJECT_ID"
 
 CODE=$(curl_silent -X POST -d "name=TestEnv&csrf_token=$CSRF" "$BASE/environments")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create env got $CODE"; exit 1; }
-ENV_ID=$(curl_body "$BASE/environments" | grep -oP 'href="/environments/\K[0-9]+' | head -1)
+ENV_ID=$(curl_body "$BASE/environments" | grep -oP 'href="/environments/\K[0-9]+' | sed -n '1p')
 echo "Env ID: $ENV_ID"
 
 CODE=$(curl_silent -X POST \
@@ -237,11 +238,11 @@ CANCEL_DEP=$(echo "$CANCEL_URL" | grep -oP '/deployments/\K[0-9]+')
 echo "Cancel Deployment ID: $CANCEL_DEP"
 
 for i in {1..50}; do
-  if curl_body "$BASE/deployments/$CANCEL_DEP/status" | grep 'running' > /dev/null; then break; fi
+  if curl_body "$BASE/deployments/$CANCEL_DEP/status" | grep 'running' >/dev/null; then break; fi
   sleep 0.1
 done
 CANCEL_STATUS=$(curl_body "$BASE/deployments/$CANCEL_DEP/status")
-CANCEL_STATE=$(echo "$CANCEL_STATUS" | grep -oP 'badge [^"]+">\K[a-z_]+' | head -1)
+CANCEL_STATE=$(echo "$CANCEL_STATUS" | grep -oP 'badge [^"]+">\K[a-z_]+' | sed -n '1p')
 echo "$CANCEL_STATUS" | grep -q 'running' || {
 	curl_body "$BASE/deployments/$CANCEL_DEP/logs.txt" >&2
   echo "FAIL: cancel deployment did not reach running (state=${CANCEL_STATE:-unknown})"; exit 1;
@@ -286,7 +287,7 @@ ELAPSED=$((END - START))
 
 echo "$STATUS_BODY" | grep -q 'failed' || { echo "FAIL: timeout deploy did not fail, got status: $STATUS_BODY"; exit 1; }
 [[ $ELAPSED -lt 25 ]] || { echo "FAIL: timeout deploy took ${ELAPSED}s, expected <25s"; exit 1; }
-curl_body "$BASE/deployments/$TIMEOUT_DEP/logs.txt" | grep 'timed out' > /dev/null || { echo "FAIL: timeout log missing"; exit 1; }
+curl_body "$BASE/deployments/$TIMEOUT_DEP/logs.txt" | grep 'timed out' >/dev/null || { echo "FAIL: timeout log missing"; exit 1; }
 echo "  Per-step timeout killed long sleep: OK (failed in ${ELAPSED}s)"
 
 echo "=== F3.2c: Re-run ==="
@@ -359,7 +360,7 @@ curl -s -b "$COOKIES" -o /dev/null -X POST -d "release_id=$NEW_REL&environment_i
 
 echo "=== F3.5: Lifecycle Gate ==="
 # Separate project + envs + lifecycle so the F3.1 project stays free-floating.
-LC_PROJECT_ID=$(curl_body "$BASE/projects" | grep -oP 'href="/projects/\K[0-9]+' | head -1)
+LC_PROJECT_ID=$(curl_body "$BASE/projects" | grep -oP 'href="/projects/\K[0-9]+' | sed -n '1p')
 # We can't easily mint unique names via grep, so use a deterministic counter trick.
 # Use the project list and grab the highest id.
 LC_PROJECT_ID=$(curl_body "$BASE/projects" | grep -oP 'href="/projects/\K[0-9]+' | sort -n | tail -1)
@@ -549,10 +550,10 @@ DEV_DEP=$(echo "$DEV_URL" | grep -oP '/deployments/\K[0-9]+')
 [[ -n "$DEV_DEP" ]] || { echo "FAIL: dev deployment did not redirect"; exit 1; }
 echo "Dev Deployment ID: $DEV_DEP"
 for i in {1..200}; do
-  if curl_body "$BASE/deployments/$DEV_DEP/status" | grep 'succeeded' > /dev/null; then break; fi
+  if curl_body "$BASE/deployments/$DEV_DEP/status" | grep 'succeeded' >/dev/null; then break; fi
   sleep 0.1
 done
-curl_body "$BASE/deployments/$DEV_DEP/status" | grep succeeded > /dev/null || { echo "FAIL: app dev deployment did not succeed"; exit 1; }
+curl_body "$BASE/deployments/$DEV_DEP/status" | grep succeeded >/dev/null || { echo "FAIL: app dev deployment did not succeed"; exit 1; }
 echo "  Dev deploy succeeded: OK"
 
 # Deploy to staging -> should succeed
@@ -561,10 +562,10 @@ STAGING_DEP=$(echo "$STAGING_URL" | grep -oP '/deployments/\K[0-9]+')
 [[ -n "$STAGING_DEP" ]] || { echo "FAIL: staging deployment did not redirect"; exit 1; }
 echo "Staging Deployment ID: $STAGING_DEP"
 for i in {1..200}; do
-  if curl_body "$BASE/deployments/$STAGING_DEP/status" | grep 'succeeded' > /dev/null; then break; fi
+  if curl_body "$BASE/deployments/$STAGING_DEP/status" | grep 'succeeded' >/dev/null; then break; fi
   sleep 0.1
 done
-curl_body "$BASE/deployments/$STAGING_DEP/status" | grep succeeded > /dev/null || { echo "FAIL: app staging deployment did not succeed"; exit 1; }
+curl_body "$BASE/deployments/$STAGING_DEP/status" | grep succeeded >/dev/null || { echo "FAIL: app staging deployment did not succeed"; exit 1; }
 echo "  Staging deploy succeeded: OK"
 
 # Deploy to prod -> should be pending_approval
@@ -803,7 +804,7 @@ echo "  Health check: OK"
 # A2.1: Agent skills discovery is public, no auth needed.
 CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/.well-known/skills/index.json")
 [[ "$CODE" == "200" ]] || { echo "FAIL: skills index got $CODE, want 200"; exit 1; }
-curl -s "$BASE/.well-known/skills/index.json" | grep -q '"durpdeploy"' || { echo "FAIL: skills index missing durpdeploy"; exit 1; }
+curl -s "$BASE/.well-known/skills/index.json" | grep '"durpdeploy"' >/dev/null || { echo "FAIL: skills index missing durpdeploy"; exit 1; }
 CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/.well-known/skills/durpdeploy/SKILL.md")
 [[ "$CODE" == "200" ]] || { echo "FAIL: SKILL.md got $CODE, want 200"; exit 1; }
 SKILL_DOCUMENT=$(curl -s "$BASE/.well-known/skills/durpdeploy/SKILL.md")
@@ -1662,7 +1663,7 @@ done
 # get a line almost immediately; cap the connection at 5s to avoid hanging.
 LOGS=$(curl -s -m 5 -H "Authorization: Bearer $API_TOKEN" \
     "$BASE/api/v1/deployments/$API_LOG_DEP_ID/logs/stream?format=ndjson") || true
-LOG_LINE=$(echo "$LOGS" | head -1)
+LOG_LINE=$(echo "$LOGS" | sed -n '1p')
 echo "$LOG_LINE" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'line' in d; print('ndjson line OK')"
 echo "  Log streaming (ndjson): OK"
 
@@ -1749,8 +1750,8 @@ CODE=$(curl -s -b "$COOKIES" -o "$TOTP_PAGE" -w "%{http_code}" \
     -X POST -d "csrf_token=$CSRF" "$BASE/settings/security/totp/begin")
 [[ "$CODE" == "200" ]] || { echo "FAIL: TOTP enrollment begin got $CODE"; exit 1; }
 TOTP_SEED=$(grep -oP 'id="totp-manual-key"[^>]*>\K[^<]+' "$TOTP_PAGE")
-TOTP_CHALLENGE=$(grep -oP 'name="challenge_token" value="\K[^"]+' "$TOTP_PAGE" | head -1)
-TOTP_CHALLENGE_CSRF=$(grep -oP 'name="challenge_csrf" value="\K[^"]+' "$TOTP_PAGE" | head -1)
+TOTP_CHALLENGE=$(grep -oP 'name="challenge_token" value="\K[^"]+' "$TOTP_PAGE" | sed -n '1p')
+TOTP_CHALLENGE_CSRF=$(grep -oP 'name="challenge_csrf" value="\K[^"]+' "$TOTP_PAGE" | sed -n '1p')
 [[ -n "$TOTP_SEED" && -n "$TOTP_CHALLENGE" && -n "$TOTP_CHALLENGE_CSRF" ]] || {
     echo "FAIL: TOTP enrollment response omitted required state"; exit 1;
 }
@@ -1779,7 +1780,7 @@ CODE=$(curl -s -b "$COOKIES" -c "$COOKIES" -o "$RECOVERY_PAGE" -w "%{http_code}"
 [[ "$CODE" == "200" ]] || { echo "FAIL: TOTP enrollment confirm got $CODE"; exit 1; }
 RECOVERY_CODE_COUNT=$(grep -o 'class="recovery-code' "$RECOVERY_PAGE" | wc -l)
 [[ "$RECOVERY_CODE_COUNT" == "10" ]] || { echo "FAIL: recovery code count got $RECOVERY_CODE_COUNT, want 10"; exit 1; }
-RECOVERY_CODE=$(grep -oP 'class="recovery-code[^>]*>\K[^<]+' "$RECOVERY_PAGE" | head -1)
+RECOVERY_CODE=$(grep -oP 'class="recovery-code[^>]*>\K[^<]+' "$RECOVERY_PAGE" | sed -n '1p')
 [[ -n "$RECOVERY_CODE" ]] || { echo "FAIL: recovery verification omitted codes"; exit 1; }
 CODE=$(curl -s -b "$COOKIES" -c "$COOKIES" -o /dev/null -w "%{http_code}" \
     -X POST "$BASE/settings/security/recovery/continue")
@@ -1795,7 +1796,7 @@ CODE=$(curl -s -b "$MFA_COOKIES" -o /dev/null -w "%{http_code}" "$BASE/")
 [[ "$CODE" == "303" ]] || { echo "FAIL: enrolled password created a browser session"; exit 1; }
 MFA_PAGE="$TMP/mfa-login.html"
 curl -s -b "$MFA_COOKIES" -o "$MFA_PAGE" "$BASE/login/mfa"
-MFA_CSRF=$(grep -oP 'name="csrf_token" value="\K[^"]+' "$MFA_PAGE" | head -1)
+MFA_CSRF=$(grep -oP 'name="csrf_token" value="\K[^"]+' "$MFA_PAGE" | sed -n '1p')
 [[ -n "$MFA_CSRF" ]] || { echo "FAIL: MFA page omitted CSRF state"; exit 1; }
 sleep $((31 - $(date +%s) % 30))
 TOTP_CODE=$(totp_code "$TOTP_SEED")
@@ -1811,7 +1812,7 @@ CODE=$(curl -s -c "$MFA_COOKIES" -o /dev/null -w "%{http_code}" \
     -X POST -d "email=$ADMIN_EMAIL&password=$ADMIN_PASS" "$BASE/login")
 [[ "$CODE" == "303" ]] || { echo "FAIL: recovery password login got $CODE"; exit 1; }
 curl -s -b "$MFA_COOKIES" -o "$MFA_LOGIN_PAGE" "$BASE/login/mfa"
-MFA_CSRF=$(grep -oP 'name="csrf_token" value="\K[^"]+' "$MFA_LOGIN_PAGE" | head -1)
+MFA_CSRF=$(grep -oP 'name="csrf_token" value="\K[^"]+' "$MFA_LOGIN_PAGE" | sed -n '1p')
 CODE=$(curl -s -b "$MFA_COOKIES" -c "$MFA_COOKIES" -o /dev/null -w "%{http_code}" \
     -X POST -d "csrf_token=$MFA_CSRF&code=$RECOVERY_CODE" "$BASE/login/mfa/recovery")
 [[ "$CODE" == "303" ]] || { echo "FAIL: recovery login completion got $CODE"; exit 1; }
@@ -1821,7 +1822,7 @@ curl -s -b "$MFA_COOKIES" -c "$MFA_COOKIES" -o /dev/null -X POST \
 curl -s -c "$MFA_COOKIES" -o /dev/null -X POST \
     -d "email=$ADMIN_EMAIL&password=$ADMIN_PASS" "$BASE/login"
 curl -s -b "$MFA_COOKIES" -o "$MFA_LOGIN_PAGE" "$BASE/login/mfa"
-MFA_CSRF=$(grep -oP 'name="csrf_token" value="\K[^"]+' "$MFA_LOGIN_PAGE" | head -1)
+MFA_CSRF=$(grep -oP 'name="csrf_token" value="\K[^"]+' "$MFA_LOGIN_PAGE" | sed -n '1p')
 CODE=$(curl -s -b "$MFA_COOKIES" -o /dev/null -w "%{http_code}" \
     -X POST -d "csrf_token=$MFA_CSRF&code=$RECOVERY_CODE" "$BASE/login/mfa/recovery")
 [[ "$CODE" == "422" ]] || { echo "FAIL: reused recovery code got $CODE"; exit 1; }

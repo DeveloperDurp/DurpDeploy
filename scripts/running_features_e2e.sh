@@ -97,7 +97,14 @@ wait_running_deployment() {
         [[ "$status" =~ ^(succeeded|failed|cancelled|cleanup_unconfirmed)$ ]] && break
         sleep 0.1
     done
-    [[ "$status" == "$wanted" ]] || { echo "FAIL: deployment $id=$status, want $wanted"; exit 1; }
+    [[ "$status" == "$wanted" ]] || {
+        echo "=== Deployment #$id: redacted log export ===" >&2
+        api_get --fail --show-error --max-time 10 \
+            "$BASE/api/v1/deployments/$id/logs.txt" >&2 || \
+            echo "WARN: deployment log export unavailable" >&2
+        echo "FAIL: deployment $id=$status, want $wanted"
+        exit 1
+    }
 }
 VERIFY_RELEASE=$(api_post '{"version":"verified-v1"}' "$BASE/api/v1/projects/$VERIFY_PROJECT_ID/releases")
 VERIFY_RELEASE_ID=$(echo "$VERIFY_RELEASE" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
@@ -187,6 +194,11 @@ source "$SCRIPT_DIR/project_tokens_e2e.sh"
 source "$SCRIPT_DIR/project_templates_e2e.sh"
 source "$SCRIPT_DIR/template_library_e2e.sh"
 source "$SCRIPT_DIR/permission_roles_e2e.sh"
+browser_command=(go test -tags=e2e,packagebrowser -count=1 -timeout=5m
+    -v -run '^Test(RunningServer|RunbookDeletion|ProjectTokens|LogFollowing)BrowserE2E$' ./internal/handler/api)
+if [[ ${GITLAB_CI:-} == true ]]; then
+    browser_command=(bash "$SCRIPT_DIR/ci_browser_shard.sh" -- "${browser_command[@]}")
+fi
 DURPDEPLOY_LIVE_BASE="$BASE" \
 DURPDEPLOY_LIVE_TOKEN_PROJECTS="$PROJECT_TOKEN_BROWSER_IDS" \
 DURPDEPLOY_LIVE_LIFECYCLE="/lifecycles/$SHARED_LC_ID" \
@@ -198,8 +210,7 @@ DURPDEPLOY_LIVE_RUNBOOK_EDITOR="/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/e
 DURPDEPLOY_LIVE_RUNBOOK_DELETE="$RUNBOOK_DELETE_BROWSER_PATH" \
 DURPDEPLOY_LIVE_RUNBOOK_DELETE_HISTORY="$RUNBOOK_DELETE_BROWSER_HISTORY" \
 SSL_CERT_FILE="${DURPDEPLOY_E2E_CA_FILE:-${SSL_CERT_FILE:-}}" \
-    go test -tags=e2e,packagebrowser -count=1 -timeout=5m \
-    -v -run '^Test(RunningServer|RunbookDeletion|ProjectTokens|LogFollowing)BrowserE2E$' ./internal/handler/api
+    "${browser_command[@]}"
 
 CODE=$(api_get_code "$BASE/api/v1$RUNBOOK_DELETE_BROWSER_PATH")
 [[ "$CODE" == 404 ]] || { echo "FAIL: browser runbook deletion=$CODE"; exit 1; }

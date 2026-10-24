@@ -56,6 +56,7 @@ unrelated=$(engine run --detach --network=none \
 
 for mode in timeout TERM; do
     log_file="$work_dir/$mode.log"
+    : >"$log_file"
     setup_deadline=$((SECONDS + setup_seconds))
     DURPDEPLOY_RESTORE_INTERRUPT_FIXTURE=1 \
         DURPDEPLOY_GO_TEST_DIRECTORY="$work_dir" \

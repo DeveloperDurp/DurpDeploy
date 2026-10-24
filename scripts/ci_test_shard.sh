@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Run one isolated test shard without changing its original checks.
 set -euo pipefail
+tests=()
 case ${1:?usage: ci_test_shard.sh SUITE} in
   rollout-contracts)
     make agent-rollout-gate
@@ -11,10 +12,6 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
     bash scripts/go_test.sh -race -count=1 ./internal/artifact
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=3m -run '^Test(PermissionGuidance(Deployment)?|ProjectPanelScope|UsersPhone|UsersDefaultRole|UsersFormAccessibility)APIWebE2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestLifecycleStageOrderAPIWebE2E$' ./internal/handler
-    (
-    export DURPDEPLOY_CONTAINER_RUNTIME=docker
-    bash scripts/go_test.sh -tags=e2e -count=1 -run '^(TestReleaseDeferredPackageAPIWebE2E|TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E|TestDeploymentStagingCleanupE2E|TestDeploymentStepResourcesE2E|TestDeploymentStagingFailureAPIWebE2E|TestDeploymentStepLogsAPIWebE2E|TestDeploymentStepLogOutcomesAPIWebE2E|TestPageNavigationHTTPAPIWebE2E|TestLifecycleVariablesAPIWebE2E|TestLifecycleVariableScopeChangesApplyToExistingReleaseE2E)$' ./internal/handler/api
-    )
     (
     export DURPDEPLOY_CONTAINER_RUNTIME=docker
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestEnvironmentQueue.*E2E$' ./internal/handler/api
@@ -36,53 +33,58 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
     )
     ;;
   browser-navigation)
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestSelfPasswordChange' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestStaleFormBackBrowserE2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestSwaggerTokensBrowserE2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestLoginDestination(APIWeb|HTMXAPIWeb|Browser)E2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestDeploymentNotes(APIWeb|Browser)E2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=3m -v -run '^TestDeploymentFilterEmptyAPIWebE2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -run '^TestBrowserContextIsolationE2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^Test(SwaggerInstance|ReleaseDeferredPackage|ReleaseRefreshConflictStaysOnPage|ThemeStyles|PackageRepository|PackageRepositoryBack|BackNavigation|BackHistory|PageNavigation|PageNavigationExpiredSession|OIDCNavigation)BrowserE2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^Test(DeploymentMobile|DeploymentListMobile|ResourceListMobile|HomeMobile|HomeRunningPoll|HomeChartTimer|SchedulePages|MainPagePattern)BrowserE2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^Test(LifecycleVariables|LifecycleLiveScope|LifecyclePageNavigation|LifecycleStageOrder|VariableScopesBeforeDeployment|NotificationCredentialForms|NotificationValidationPreservesForm|SMTPPlaintextWarning)BrowserE2E$' ./internal/handler/api
+    tests=(
+      '^TestSelfPasswordChange'
+      '^TestStaleFormBackBrowserE2E$'
+      '^TestSwaggerTokensBrowserE2E$'
+      '^TestLoginDestination(APIWeb|HTMXAPIWeb|Browser)E2E$'
+      '^TestDeploymentNotes(APIWeb|Browser)E2E$'
+      '^TestDeploymentFilterEmptyAPIWebE2E$'
+      '^TestBrowserContextIsolationE2E$'
+      '^TestScreenshotRenderingReadinessBrowserE2E$'
+      '^Test(SwaggerInstance|ReleaseDeferredPackage|ReleaseRefreshConflictStaysOnPage|ThemeStyles|PackageRepository|PackageRepositoryBack|BackNavigation|BackHistory|PageNavigation|PageNavigationExpiredSession|OIDCNavigation)BrowserE2E$'
+      '^Test(DeploymentMobile|DeploymentListMobile|ResourceListMobile|HomeMobile|HomeRunningPoll|HomeChartTimer|SchedulePages|MainPagePattern)BrowserE2E$'
+      '^Test(LifecycleVariables|LifecycleLiveScope|LifecyclePageNavigation|LifecycleStageOrder|VariableScopesBeforeDeployment|NotificationCredentialForms|NotificationValidationPreservesForm|SMTPPlaintextWarning)BrowserE2E$'
+    )
     ;;
   browser-resources)
-	  bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=15m -v -run '^TestTemplateLibrary.*E2E$' ./internal/handler/api
-	  bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestStepVariables(APIWeb|Browser)E2E$' ./internal/handler/api
-	  bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=6m -v -run '^TestReleaseProvenance.*E2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestProjectGroups.*E2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestProjectTemplates.*(APIWeb|Browser)E2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestPromotionGuidance(APIWeb|Browser)E2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestRunbookRetryVersion(APIWeb|Browser)E2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestRunbookHistoryPhone(APIWeb|Browser)E2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=3m -v -run '^TestReleaseContent(APIWeb|Browser)E2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=3m -v -run '^TestVariableNames(APIWeb|Browser)E2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=3m -v -run '^TestReleaseDuplicateRecovery(APIWeb|Browser)E2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=3m -v -run '^TestReleaseVariableGuidance(APIWeb|Browser)E2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=3m -v -run '^TestRerunInputs(APIWeb|Browser)E2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=3m -v -run '^TestStepFormActionsBrowserE2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=3m -v -run '^TestAuditIdentities(APIWeb|Browser)E2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^Test(PermissionGuidance(Deployment)?|UsersFormAccessibility|UsersDefaultRole|UsersPhone|ProjectStaleSave|ProjectMemberRoles|UserModalPermissionFeedback|MemberModalErrorFeedback|ProjectPanelScope|ProjectTokens|RolePermissions)BrowserE2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^Test(ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|MobileFormFocus|RunbookEditor|RunbookDeletion|AlpineEditForms|AlpineDialogs|RunningServer)BrowserE2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=10m -v -run '^TestRunbookDeletion.*APIWebE2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=10m -v -run '^Test(ProjectTokens.*|PermissionRolesExecution.*)(API|APIWeb)E2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=10m -run '^Test((Deployment|Runbook)LogHistoryPages|OpenLogStreamRevocation|StalledSMTPDelivery|SMTPPlaintextWarning|BackupHealthRecovery)APIWebE2E$' ./internal/handler/api
+    tests=(
+      '^TestTemplateLibrary.*E2E$'
+      '^TestStepVariables(APIWeb|Browser)E2E$'
+      '^TestReleaseProvenance.*E2E$'
+      '^TestProjectGroups.*E2E$'
+      '^TestProjectTemplates.*(APIWeb|Browser)E2E$'
+      '^TestPromotionGuidance(APIWeb|Browser)E2E$'
+      '^TestRunbookRetryVersion(APIWeb|Browser)E2E$'
+      '^TestRunbookHistoryPhone(APIWeb|Browser)E2E$'
+      '^TestReleaseContent(APIWeb|Browser)E2E$'
+      '^TestVariableNames(APIWeb|Browser)E2E$'
+      '^TestReleaseDuplicateRecovery(APIWeb|Browser)E2E$'
+      '^TestReleaseVariableGuidance(APIWeb|Browser)E2E$'
+      '^TestRerunInputs(APIWeb|Browser)E2E$'
+      '^TestStepFormActionsBrowserE2E$'
+      '^TestAuditIdentities(APIWeb|Browser)E2E$'
+    )
+    ;;
+  browser-permissions)
+    tests=(
+      '^Test(PermissionGuidance(Deployment)?|UsersFormAccessibility|UsersDefaultRole|UsersPhone|ProjectStaleSave|ProjectMemberRoles|UserModalPermissionFeedback|MemberModalErrorFeedback|ProjectPanelScope|ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|MobileFormFocus|RunbookEditor|RunbookDeletion|AlpineEditForms|AlpineDialogs|RunningServer|ProjectTokens|RolePermissions)BrowserE2E$'
+      '^TestRunbookDeletion.*APIWebE2E$'
+      '^Test(ProjectTokens.*|PermissionRolesExecution.*)(API|APIWeb)E2E$'
+      '^Test((Deployment|Runbook)LogHistoryPages|OpenLogStreamRevocation|StalledSMTPDelivery|SMTPPlaintextWarning|BackupHealthRecovery)APIWebE2E$'
+    )
     ;;
   browser-execution)
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestLogFollowingBrowserE2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=3m -v -run '^TestQueuedCancellation(APIWeb|Browser)E2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^Test(DeploymentStepLogs|DeploymentStepPanels|DeploymentStepLogsHistoricalQuiet|DeploymentLogHistory|RunbookLogHistory|RunbookLogRevocation|DeploymentStagingFailure|LegacyRunbookStreamDrainsAfterTerminalBadge)BrowserE2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^TestVerification(Rollback|Polling|CleanupRetry)BrowserE2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^TestEnvironmentQueueBrowserE2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^Test(ArtifactGate.*|TerraformPlanColors)BrowserE2E$' ./internal/handler/api
+    tests=(
+      '^TestLogFollowingBrowserE2E$'
+      '^TestQueuedCancellation(APIWeb|Browser)E2E$'
+      '^Test(DeploymentStepLogs|DeploymentStepPanels|DeploymentStepLogsHistoricalQuiet|DeploymentLogHistory|RunbookLogHistory|RunbookLogRevocation|DeploymentStagingFailure|LegacyRunbookStreamDrainsAfterTerminalBadge)BrowserE2E$'
+      '^TestVerification(Rollback|Polling|CleanupRetry)BrowserE2E$'
+      '^TestEnvironmentQueueBrowserE2E$'
+      '^Test(ArtifactGate.*|TerraformPlanColors)BrowserE2E$'
+    )
     ;;
   browser-agents)
-    (
-    export DURPDEPLOY_E2E_RUNNING_SUITE=1
-    export DURPDEPLOY_E2E_PORT=18087
-    bash scripts/e2e_test.sh
-    )
     bash scripts/go_test.sh -tags=e2e,agentbrowser -race -count=1 -timeout=10m -v -run '^(TestBuildInfoBrowserE2E|TestAgentFleetBrowserE2E|TestAgentDeleteBrowserE2E|TestDeploymentWaitingForAgentsBrowserE2E)$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e,agentbrowser -race -count=1 -timeout=10m -v -run '^TestAgentContainerBrowserE2E$' ./internal/handler/api
     for version in v1.2.3+build.4 v0.0.0-dev.742+g0123456789ab; do
@@ -93,3 +95,9 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
     ;;
   *) echo "Unknown CI test shard: $1" >&2; exit 2 ;;
 esac
+
+if ((${#tests[@]})); then
+  selected=$(IFS='|'; printf '%s' "${tests[*]}")
+  bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 \
+    -timeout=20m -v -run "$selected" ./internal/handler/api
+fi

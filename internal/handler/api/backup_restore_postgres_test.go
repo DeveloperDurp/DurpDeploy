@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"io"
 	"net/netip"
 	"net/url"
 	"path/filepath"
@@ -22,6 +23,42 @@ import (
 
 const restorePostgresImage = "harbor.durp.info/dockerhub/library/postgres:16-alpine@" +
 	"sha256:1a66d744c1b459e13b05a8fca341da84cb63383e99ce262210efee5a319d4551"
+
+func (db *restoreNativeDB) logPostgresActivity(t *testing.T) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	// Use a reserved administrator connection before stopping the failed app.
+	// Report counts and waits only. SQL text can contain credentials or secrets.
+	const query = `SET statement_timeout = '3s';
+SELECT json_build_object('max_connections', current_setting('max_connections'),
+    'reserved_connections', current_setting('superuser_reserved_connections'),
+    'sessions', (SELECT json_agg(activity) FROM (
+        SELECT CASE usename WHEN 'restore_app' THEN 'application'
+                WHEN 'postgres' THEN 'administrator' ELSE 'other' END AS owner,
+            backend_type, state, wait_event_type, wait_event,
+            CASE WHEN query LIKE '-- name: TouchApiTokenLastUsed%'
+                THEN 'token_usage' ELSE 'other' END AS operation,
+            count(*) AS connections,
+            count(*) FILTER (WHERE cardinality(pg_blocking_pids(pid)) > 0)
+                AS blocked,
+            max(extract(epoch FROM clock_timestamp() - query_start))
+                AS oldest_query_seconds
+        FROM pg_stat_activity WHERE pid <> pg_backend_pid()
+        GROUP BY 1, 2, 3, 4, 5, 6 ORDER BY connections DESC LIMIT 20
+    ) AS activity));`
+	code, output, err := db.container.Exec(ctx, []string{
+		"psql", "--no-psqlrc", "--tuples-only", "--no-align",
+		"-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1",
+		"-c", query,
+	}, tcexec.Multiplexed())
+	if err != nil {
+		t.Logf("PostgreSQL activity diagnostics unavailable: %v", err)
+		return
+	}
+	data, err := io.ReadAll(io.LimitReader(output, 16<<10))
+	t.Logf("PostgreSQL activity: exit=%d read_error=%v\n%s", code, err, data)
+}
 
 func restorePostgres(t *testing.T) *restoreNativeDB {
 	t.Helper()

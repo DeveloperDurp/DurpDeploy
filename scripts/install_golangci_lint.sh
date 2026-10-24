@@ -1,10 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-version=${1:?usage: install_golangci_lint.sh version}
+version=${1:-2.11.3}
 root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-target="$root/bin/lint/golangci-lint"
+target="${GOLANGCI_LINT_TOOL_DIR:-$root/bin/lint}/golangci-lint"
 if [[ -x "$target" ]] && "$target" --version | grep -Fq "version $version "; then
+  exit 0
+fi
+
+prebuilt=/opt/ci-tools/lint
+if [[ "$target" != "$prebuilt/golangci-lint" && -x "$prebuilt/golangci-lint" ]] &&
+  "$prebuilt/golangci-lint" --version | grep -Fq "version $version "; then
+  mkdir -p "$(dirname -- "$target")"
+  cp "$prebuilt/LICENSE" "$(dirname -- "$target")/LICENSE"
+  install -m 755 "$prebuilt/golangci-lint" "$target"
   exit 0
 fi
 

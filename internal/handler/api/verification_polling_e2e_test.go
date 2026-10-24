@@ -13,7 +13,7 @@ import (
 func TestVerificationPollingFollowsCheckStatusE2E(t *testing.T) {
 	// Given: a completed deployment and a verification read from completion.
 	f := newVerificationE2E(t)
-	configureVerification(t, f, "bash", "echo healthy", 5)
+	configureBashVerification(t, f, "echo healthy")
 	deployment := verificationDeploy(t, f,
 		verificationRelease(t, f, "poll-status"))
 	f.completion(t, deployment.ID, events.DeploymentSucceeded)

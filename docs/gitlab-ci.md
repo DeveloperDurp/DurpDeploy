@@ -34,14 +34,32 @@ Other jobs pull that exact digest to prevent helper tag replacement.
 This helper image supplies existing Go, Playwright, Docker, Podman, Helm, and scanner prerequisites.
 The helper image preloads dependencies from `go.mod` and `go.sum` into `/opt/go-mod`.
 It retains the Go tool build cache in `/opt/go-build`.
-Each job writes cache updates to its own container layer.
-The pipeline does not upload unusable local GitLab cache archives.
+The `go-test-cache` job compiles shared browser, race, and coverage API test variants without executing tests.
+It exports new Go build objects in an archive limited to 512 MiB.
+It excludes dependency objects already present in the helper image.
+Test jobs download these objects through the shared GitLab cache.
+Each test job restores these objects into its private `/opt/go-build` directory.
+All test commands still execute their selected tests with `-count=1`.
+The producer restores and uploads a GitLab cache scoped to the project and merge request.
+Consumers use the same cache key with `policy: pull` after the producer finishes.
+Consumers do not upload the cache or download a separate build-cache artifact.
+Protected pipelines do not import merge request caches.
+Persistent GitLab caches require the separate runner S3 configuration and a one-day bucket lifecycle policy.
+If the cache is unavailable, each job builds from the helper image cache.
+The lint job keeps a separate `golangci-lint` analysis cache and does not wait for the Go cache producer.
+Its key includes the project, source project, merge request, branch, protection status, Go toolchain, linter installer, and linter configuration.
+Only successful lint jobs upload this cache.
+The same one-day bucket lifecycle applies.
 Same-project merge requests reuse separate browser and helper build caches under `ci-cache/mr-<number>`.
 Registry caches export final-image layers with `mode=min`.
 Intermediate build stages are rebuilt when their output is absent from the cache.
 Merge request jobs never write shared protected caches.
 Protected and other pipelines do not import merge request caches.
 Builds check upstream base references before using cached layers.
+The helper image also builds the pinned security scanners and downloads checksum-verified lint and Trivy binaries.
+The existing registry cache retains that tool layer and its license notices.
+Job installers check the tool versions before reuse and retain their local installation fallback.
+Scanner jobs still analyze the current commit and fetch current vulnerability data.
 Build timing evidence records browser and helper build durations.
 
 Product images are published to both the GitLab registry and GHCR.
@@ -79,7 +97,8 @@ Repository image pulls use these Harbor proxy projects:
 Docker Hub official images retain the `library/` namespace after the Harbor project.
 Existing image tags and digest pins remain unchanged.
 Isolated E2E setup pulls interpreter images before deployment execution deadlines start.
-Browser jobs pull Playwright before browser startup deadlines start.
+Package browser shards use Chromium already installed in the helper image.
+Standalone container browser checks pull Playwright before browser startup deadlines start.
 Testcontainers uses the Docker Hub proxy for its auxiliary images.
 Trivy downloads its databases and check bundle through the GHCR proxy.
 Compose builds the application image locally.
@@ -132,7 +151,9 @@ The report records deletion requests, not completed storage reclamation.
 
 The job uses `CI_JOB_TOKEN` for registry and merge request API requests.
 It does not require a separate cleanup token.
-Merge request pipelines run its tests and a read-only dry run.
+Merge request pipelines run cleanup unit tests once in `pre-commit`.
+Cleanup schedules run these tests before registry inventory or deletion.
+Merge requests run a read-only inventory only when the cleanup script, tests, or job configuration changes.
 Reports are available in `artifacts/cache-cleanup/report.json` for one day.
 
 After merging, create a daily pipeline schedule targeting protected `main`.
@@ -155,7 +176,7 @@ Each runtime retains its execution contract and API tests.
 
 The CI image precompiles locked dependencies with normal and race instrumentation.
 Coverage jobs reuse normal dependency objects, and race jobs reuse race dependency objects.
-Go still validates and compiles source-specific application code in each isolated job.
+Go validates reused application objects against its content-addressed build inputs.
 Dependency locks, Go version, probe source, and image definitions control cache invalidation.
 
 Each package browser shard shares one Chromium process.
@@ -163,6 +184,28 @@ Each test creates a separate browser context and disposes it after its assertion
 Browser contexts isolate cookies and local storage.
 Tests that change browser-wide certificate settings retain private Chromium processes.
 Standalone browser checks retain their owned-container fallback.
+Navigation and permissions preload the image required by private-process browser fixtures before their startup deadlines begin.
+The shared browser wrapper removes its owned process group and temporary profile after the shard exits.
+The running-server HTTP checks also reuse this wrapper in CI.
+Each check keeps its own browser context.
+HTTPS checks keep private Chromium processes because certificate overrides affect the entire process.
+Screenshot helpers wait for fonts, lazy images, layout, and finite animations within a bounded deadline.
+They retain the existing screenshots, viewport sizes, and assertions.
+
+The common API and handler harnesses copy a blank migrated SQLite template into separate on-disk databases.
+Each copy uses the real startup connection path and retains independent data and foreign-key enforcement.
+Fixture cleanup drains active database connections before it removes database files.
+Dedicated migration, persistence, backend, and recovery checks retain their original database setup.
+Fixed fixture passwords use one full-strength hash per password and package process.
+Each fixture keeps independent users, sessions, CSRF tokens, and API tokens.
+Password creation, verification, change, and salt-randomness tests still execute their original operations.
+
+Repository tests share one PostgreSQL server and one SQL Server per package process.
+Each case creates an empty database and runs its original migrations.
+Case cleanup closes connections before it removes the database.
+Package cleanup removes both servers and fails if removal fails.
+The shell test runner retains its owned-session cleanup after timeouts and interruption.
+Recovery and TLS fixtures keep their dedicated servers.
 
 Fixture preload checks pull an image only when it is absent from the private runtime.
 Application image pulls and pull-failure assertions retain their existing behavior.
@@ -174,15 +217,32 @@ Local checks build from the checkout unless `DURPDEPLOY_E2E_BINARY` selects an e
 Container E2E builds its image unless `DURPDEPLOY_E2E_IMAGE` selects an existing image.
 Go tests that run application handlers in-process retain their existing builds and race settings.
 
-The browser job runs four shards: navigation, resources, execution, and agents.
-Each shard retains the existing test commands and assertions.
+The `dev-stacks` job uses the scanned application image and skips the Go cache download and restore.
+The `pre-commit` job runs independent release, E2E harness, and cleanup regression checks.
+These checks do not wait for the application image build.
+Three existing jobs distribute the independent server scenarios without adding jobs or changing runner capacity.
+The `e2e` job runs parallel isolation, the disabled-runtime probe, and the existing-server SQLite suite.
+The `auth-mfa-sqlite` job also runs the host control-plane scenario.
+The `dev-stacks` job also runs the containerized control-plane scenario.
+Each scenario keeps its assertions, cleanup checks, and elapsed-time output.
+The host and container scenarios both run the runbook browser checks.
+Each invocation uses a separate namespace and database.
+Interpreter images load before deployment deadlines start.
+Run `bash scripts/e2e_server_containers.sh` without arguments to select all server scenarios in an isolated CI job.
+
+The browser job runs five shards: navigation, resources, permissions, execution, and agents.
+Each shard retains its test selections and assertions.
+Navigation, resources, permissions, and execution each use one Go test process.
+These processes retain race detection and isolated browser contexts.
+The agents shard retains its separate build-version checks.
+The running-server SQLite suite runs in `e2e` instead of repeating in the agents browser shard.
 Browser evidence uses a separate directory for each shard.
-The resources shard runs permission checks and form checks in separate test processes.
-Each process has its own ten-minute timeout.
 The rollout job runs four shards: contracts, two artifact groups, and verification.
+The full coverage suite owns the twelve ordinary API tests previously repeated without race detection in rollout contracts.
+Targeted rollout race checks still run separately.
 Artifact groups split the compiled test inventory and require every selected test to pass.
 New artifact gate tests enter one group automatically.
-The image verification job waits for all browser and rollout shards.
+GitLab requires all blocking jobs before the pipeline can pass.
 
 Restore cleanup checks retain genuine Go timeouts and separate TERM interruption checks.
 The timeout is two minutes for SQLite and four minutes for PostgreSQL and SQL Server.
@@ -195,17 +255,44 @@ Cleanup still uses an independent bounded context and fails if container removal
 Explicit shutdown, recovery, timeout, and interruption checks keep their existing behavior.
 This change does not affect retained running-server examples or application shutdown.
 
-Unit tests run four shards: repository, database, handlers, and core.
-New unit-test packages enter the core shard automatically.
-Coverage runs five shards: API, handlers, repository, migrations, and core.
-Every Go package belongs to one shard.
+The full Go suite runs once and collects coverage in the same invocation.
+It uses six jobs across five package groups: API, handlers, repository, migrations, and core.
+Two API jobs split the compiled test inventory without running a test twice.
+The split includes examples and fuzz seed tests.
+Each coverage job retains the thirty-minute test timeout from main.
+The `e2e` tag includes ordinary tests and API E2E tests.
+A contract test verifies that this tag includes every ordinary test file.
+Targeted race, browser, backend, and stress checks remain separate.
+Every Go package belongs to one package group.
 New packages enter the core shard unless a specific group includes them.
 Each shard uses `-coverpkg=./...` and retains a separate coverage report.
-Coverage test processes have a thirty-minute timeout within the forty-five-minute job limit.
-SonarCloud waits for all five shards and requires all five reports.
+SonarCloud waits for all six jobs and requires all six reports.
 The scanner reads the reports together and waits for the same quality gate.
 
-The runner keeps its existing ten-job concurrency limit.
+The rootless Podman capacity fixture retains its full 512 MiB payload and 20,000 files.
+Its completion wait is ten minutes for VFS copying and staging transfer.
+The staging suite timeout is twenty minutes.
+Bash execution fixtures use the standard thirty-second verification deadline unless they test timeouts.
+These fixtures allow one minute for deployment completion.
+Dedicated timeout and cancellation tests retain their existing deadlines.
+
+Security scan jobs do not start a container daemon.
+Trivy scans the image archive, configuration, and npm dependencies without running containers.
+The image build job retains its private Docker daemon.
+
+### Timing baseline
+
+Pipeline [1386](https://gitlab.durp.info/durfy/apps/durpdeploy/-/pipelines/1386) provides the historical baseline before these changes.
+It completed successfully without job retries on October 22, 2026.
+Elapsed time from pipeline creation to completion was 36 minutes and 26 seconds.
+The four duplicate unit-test jobs consumed 32 minutes and 6 seconds of runner time.
+The resources browser shard consumed 27 minutes and 48 seconds.
+
+Compare elapsed time, summed job durations, and queue times separately.
+Shared runner load and cold image caches can affect elapsed time.
+Record the MR pipeline URL and commit with each measurement.
+
+These changes preserve the runner's current concurrency and job resources.
 Shards run as runner slots become available.
 Runner storage and persistent distributed cache configuration require separate GitOps work.
 
@@ -249,7 +336,9 @@ Go catalog, validation, and copy code remain in the coverage gate.
 
 The image job builds and scans Linux AMD64 OCI archives.
 The image job retains archives and scan evidence for four hours for downstream jobs.
-The retention job keeps successful archives and source metadata for four hours for publication in the same pipeline.
+The retention job runs only in protected publication pipelines.
+It keeps successful archives and source metadata for four hours in the same pipeline.
+Merge request checks consume the original image artifacts directly.
 If the artifacts expire, run a new pipeline before publication.
 Source and configuration security reports remain available for seven days.
 Browser and agent evidence remains available for one day.

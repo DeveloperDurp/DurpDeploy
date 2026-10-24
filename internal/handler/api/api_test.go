@@ -9,8 +9,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,7 +23,6 @@ import (
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/handler/api"
 	"durpdeploy/internal/httpstream"
-	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"durpdeploy/internal/server"
@@ -36,20 +35,7 @@ type harness struct {
 }
 
 func newAPIHarness(t *testing.T, binary ...string) *harness {
-	dir, err := os.MkdirTemp("", "api-test-")
-	if err != nil {
-		t.Fatalf("mkdtemp: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	dsn := fmt.Sprintf(
-		"file:%s/test.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
-		dir,
-	)
-	conn, err := migrate.Run(dsn)
-	if err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
+	conn := newAPITestDatabase(t)
 
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
@@ -62,12 +48,21 @@ func newAPIHarness(t *testing.T, binary ...string) *harness {
 	return &harness{repo: repo, runner: rnr, broker: broker}
 }
 
+// Fixture users keep independent identities and full-strength password checks.
+var fixturePasswordHash = sync.OnceValues(func() (string, error) {
+	return auth.HashPassword("testpass")
+})
+
+var fixtureLoginPasswordHash = sync.OnceValues(func() (string, error) {
+	return auth.HashPassword("testpass123")
+})
+
 func seedAPIUser(
 	t *testing.T,
 	repo *repository.Repository,
 	email, role string,
 ) *db.User {
-	pwHash, err := auth.HashPassword("testpass")
+	pwHash, err := fixturePasswordHash()
 	if err != nil {
 		t.Fatalf("hash password: %v", err)
 	}

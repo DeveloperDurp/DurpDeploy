@@ -16,7 +16,6 @@ import (
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler/api"
-	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 )
 
@@ -26,11 +25,8 @@ type tokenHarness struct {
 }
 
 func newTokenHarness(t *testing.T) *tokenHarness {
-	conn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
-	if err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
+	t.Helper()
+	conn := newAPITestDatabase(t)
 
 	repo := repository.New(conn)
 	h := api.NewAPITokenHandler(repo)
@@ -42,7 +38,7 @@ func seedUser(
 	repo *repository.Repository,
 	email, role string,
 ) *db.User {
-	pwHash, err := auth.HashPassword("testpass")
+	pwHash, err := fixturePasswordHash()
 	if err != nil {
 		t.Fatalf("hash password: %v", err)
 	}

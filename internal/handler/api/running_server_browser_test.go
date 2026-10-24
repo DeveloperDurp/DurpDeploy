@@ -29,9 +29,7 @@ func TestRunningServerBrowserE2E(t *testing.T) {
 	if session == "" || token == "" {
 		t.Fatal("running browser suite requires its test session and API token")
 	}
-	b := startPackageBrowser(t, true)
-	b.call(t, "Security.setIgnoreCertificateErrors",
-		map[string]bool{"ignore": true}, &struct{}{})
+	b := startLivePackageBrowser(t, base)
 	b.setBackTestSession(t, base, session)
 	b.navigateBackTest(t, base+"/")
 	if lifecycle := os.Getenv("DURPDEPLOY_LIVE_LIFECYCLE"); lifecycle != "" {

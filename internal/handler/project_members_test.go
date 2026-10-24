@@ -30,7 +30,7 @@ func seedSessionAs(
 	t.Helper()
 	ctx := context.Background()
 
-	hash, err := auth.HashPassword("testpass")
+	hash, err := fixturePasswordHash()
 	if err != nil {
 		t.Fatalf("hash password: %v", err)
 	}

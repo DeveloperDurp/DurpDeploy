@@ -3,17 +3,26 @@ coverage:
   timeout: 45 minutes
   parallel:
     matrix:
-      - COVERAGE_SHARD: [api, handlers, repository, migrations, core]
+      - COVERAGE_SHARD: [api-1, api-2, handlers, repository, migrations, core]
   script:
     - make templ-generate swagger-ui-copy
     - |-
       mkdir -p artifacts/coverage
-      package_list=$(bash scripts/ci_coverage_packages.sh "$COVERAGE_SHARD")
+      package_shard=$COVERAGE_SHARD
+      selection=()
+      if [[ $COVERAGE_SHARD == api-* ]]; then
+        package_shard=api
+        tests=$(bash scripts/ci_coverage_tests.sh "${COVERAGE_SHARD##*-}")
+        expression=${tests//$'\n'/|}
+        selection=(-run "^($expression)$")
+      fi
+      package_list=$(bash scripts/ci_coverage_packages.sh "$package_shard")
       test -n "$package_list"
       mapfile -t packages <<< "$package_list"
       bash scripts/go_test.sh -tags=e2e -count=1 -timeout=30m \
         -covermode=atomic -coverpkg=./... \
-        -coverprofile="artifacts/coverage/$COVERAGE_SHARD.out" "${packages[@]}"
+        -coverprofile="artifacts/coverage/$COVERAGE_SHARD.out" "${selection[@]}" "${packages[@]}"
+    - if [[ $COVERAGE_SHARD == core ]]; then bash scripts/build_version_test.sh; fi
   artifacts:
     expire_in: 4 hours
     paths: [artifacts/coverage/]
@@ -38,11 +47,11 @@ sonarcloud:
   script:
     - test -n "$SONAR_TOKEN"
     - |-
-      for shard in api handlers repository migrations core; do
+      for shard in api-1 api-2 handlers repository migrations core; do
         test -s "artifacts/coverage/$shard.out"
       done
       sonar-scanner -Dsonar.qualitygate.wait=true \
-        -Dsonar.go.coverage.reportPaths=artifacts/coverage/api.out,artifacts/coverage/handlers.out,artifacts/coverage/repository.out,artifacts/coverage/migrations.out,artifacts/coverage/core.out \
+        -Dsonar.go.coverage.reportPaths=artifacts/coverage/api-1.out,artifacts/coverage/api-2.out,artifacts/coverage/handlers.out,artifacts/coverage/repository.out,artifacts/coverage/migrations.out,artifacts/coverage/core.out \
         -Dsonar.pullrequest.key="gitlab-$CI_MERGE_REQUEST_IID" \
         -Dsonar.pullrequest.branch="$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" \
         -Dsonar.pullrequest.base="$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"

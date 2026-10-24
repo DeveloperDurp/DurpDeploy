@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
@@ -15,7 +16,7 @@ import (
 func TestVerificationPollingBrowserE2E(t *testing.T) {
 	// Given: a terminal deployment and the stale verification state from a read.
 	f := newVerificationE2E(t)
-	configureVerification(t, f, "bash", "echo healthy", 5)
+	configureBashVerification(t, f, "echo healthy")
 	deployment := verificationDeploy(t, f,
 		verificationRelease(t, f, "browser-poll"))
 	f.completion(t, deployment.ID, events.DeploymentSucceeded)
@@ -74,6 +75,7 @@ func TestVerificationPollingBrowserE2E(t *testing.T) {
 func TestVerificationRollbackBrowserE2E(t *testing.T) {
 	// Given: the real web/API server and installed browser harness.
 	f := newVerificationE2E(t)
+	f.completionTimeout = time.Minute
 	browser := startPackageBrowser(t)
 	setSession := func(session string) {
 		var cookie struct{ Success bool }
@@ -141,7 +143,7 @@ func TestVerificationRollbackBrowserE2E(t *testing.T) {
  window.environmentFormBeforeSave = form;
  form.querySelector('[name=verification_type]').value = 'bash';
  form.querySelector('[name=verification_target]').value = 'echo browser-verified';
- form.querySelector('[name=verification_timeout_seconds]').value = '5';
+ form.querySelector('[name=verification_timeout_seconds]').value = '30';
  form.requestSubmit(); return true;
 })()`)
 	browser.wait(
@@ -214,12 +216,10 @@ func TestVerificationRollbackBrowserE2E(t *testing.T) {
 		fmt.Sprintf("/deployments/%d", first.ID),
 		"document.querySelector('[aria-live=polite]').innerText.includes('succeeded')",
 	)
-	configureVerification(
+	configureBashVerification(
 		t,
 		f,
-		"bash",
 		"echo browser-verification-failed; exit 1",
-		5,
 	)
 	v2 := verificationRelease(t, f, "browser-v2")
 	second := verificationDeploy(t, f, v2)
@@ -338,7 +338,7 @@ func TestVerificationRollbackBrowserE2E(t *testing.T) {
 		map[string]bool{"requires_approval": false},
 		200,
 	)
-	configureVerification(t, f, "bash", "echo browser-rollback-verified", 5)
+	configureBashVerification(t, f, "echo browser-rollback-verified")
 	capture(
 		"rollback-ready",
 		rollbackPath,

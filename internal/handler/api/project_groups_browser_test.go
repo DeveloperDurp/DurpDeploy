@@ -265,9 +265,11 @@ func assertProjectFilterVisibility(
 	t *testing.T, b *packageBrowser, width int, active bool,
 ) {
 	const toggleFilters = `document.querySelector('[data-project-filter-toggle]').click(); true`
+	// Pagination restores CSS classes when the HTMX swap settles.
 	b.wait(
 		t,
-		`document.querySelector('[data-project-filter-toggle]')?.parentElement?._x_dataStack`,
+		`!document.querySelector('.htmx-request, .htmx-settling') &&
+ document.querySelector('[data-project-filter-toggle]')?.parentElement?._x_dataStack`,
 	)
 	if string(b.evaluate(t, fmt.Sprintf(`(() => {
  const toggle = document.querySelector('[data-project-filter-toggle]');

@@ -8,6 +8,14 @@ case "$(uname -s)/$(uname -m)" in
   *) printf 'Trivy installer supports Linux AMD64 and ARM64 only\n' >&2; exit 2 ;;
 esac
 destination=${TRIVY_TOOL_DIR:-$root/bin/security}
+prebuilt=/opt/ci-tools/security
+if [[ "$destination" != "$prebuilt" && -x "$prebuilt/trivy" ]] &&
+  [[ $("$prebuilt/trivy" --version | sed -n '1p') == "Version: $version" ]]; then
+  mkdir -p "$destination"
+  install -m 755 "$prebuilt/trivy" "$destination/trivy"
+  cp "$prebuilt/trivy-LICENSE" "$prebuilt/trivy-NOTICE" "$destination/"
+  exit 0
+fi
 private=$(mktemp -d)
 trap 'rm -rf "$private"' EXIT
 curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \

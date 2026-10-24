@@ -83,7 +83,8 @@ The image policy blocks fixable HIGH and CRITICAL vulnerabilities and scanner er
 The scanner ignores configuration and ignore files from the checkout.
 GitLab retains sanitized reports and CycloneDX SBOMs for seven days, including reports from blocked image scans.
 Reports identify the checkout commit, OCI manifest digests, scanner version, and vulnerability database version and timestamps.
-The `image-verification` job requires the AMD64 image scan, Go tests, E2E tests, and source security checks.
+The merge request pipeline requires the AMD64 image scan, Go tests, E2E tests, and source security checks.
+Each blocking job must pass before the pipeline can succeed.
 
 After merge, the default branch pipeline builds and scans the merged source.
 Publication verifies the current run's scanned archives, including pipeline, producing image job, checksum, source tree, version, build number, commit, and platform.

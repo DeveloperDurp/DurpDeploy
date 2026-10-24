@@ -2,6 +2,8 @@
   extends: .mr-test
   needs:
     - ci-runtime
+    - job: go-test-cache
+      artifacts: false
     - job: lint
       artifacts: false
     - version
@@ -51,12 +53,34 @@ pre-commit:
   - make dev-agent-test
   - make dev-secret-key-test
   - make demo-test
+  - node --test scripts/ci_cache_cleanup.test.mjs
   - env --default-signal=INT,TERM,HUP make go-test-cleanup-test
   - make backup-restore-script-test
   - bash scripts/check-dev-database-contract.sh
+  - shellcheck -S error scripts/release_images_test.sh scripts/ci_publish.sh scripts/publish_release_images.sh scripts/publish_release_chart.sh scripts/release_publish_test.sh
+  - bash scripts/release_images_test.sh
+  - bash scripts/e2e_build_server_test.sh
+  - |-
+    for script in scripts/e2e_test.sh scripts/e2e_lifecycle.sh scripts/e2e_wait.sh scripts/e2e_parallel_test.sh scripts/e2e_db_test.sh scripts/e2e_fixture_reset.sh scripts/e2e_fixture_reset_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh; do
+      bash -n "$script"
+    done
+    shellcheck -S error scripts/e2e_test.sh scripts/e2e_lifecycle.sh scripts/e2e_wait.sh scripts/e2e_parallel_test.sh scripts/e2e_db_test.sh scripts/e2e_fixture_reset.sh scripts/e2e_fixture_reset_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh
+    bash scripts/e2e_fixture_reset_test.sh
+    bash scripts/check_e2e_containers_test.sh
+    bash -n scripts/mobile-browser-image-cleanup-test.sh
+    shellcheck -S error scripts/mobile-browser-image-cleanup-test.sh
+    bash scripts/mobile-browser-image-cleanup-test.sh
+  - |-
+    for script in scripts/build_metadata.sh scripts/build_server.sh scripts/build_version_test.sh scripts/prepare_versioned_images.sh scripts/ci_e2e_app.sh scripts/e2e_build_server.sh scripts/e2e_build_server_test.sh scripts/ci_agent_image.sh scripts/ci_browser_shard.sh scripts/ensure_fixture_image.sh; do
+      bash -n "$script"
+    done
+    shellcheck -S error scripts/build_metadata.sh scripts/build_server.sh scripts/build_version_test.sh scripts/prepare_versioned_images.sh scripts/ci_e2e_app.sh scripts/e2e_build_server.sh scripts/e2e_build_server_test.sh scripts/ci_agent_image.sh scripts/ci_browser_shard.sh scripts/ensure_fixture_image.sh
 dev-stacks:
   extends: .mr-built-app
   timeout: 30 minutes
+  cache: []
+  variables:
+    CI_GO_CACHE_ENABLED: "false"
   script:
   - bash -n scripts/dev_stack.sh scripts/dev_stack_thread.sh
   - shellcheck -S error scripts/dev_stack.sh scripts/dev_stack_thread.sh
@@ -66,9 +90,13 @@ dev-stacks:
     export DEV_STACK_IMAGE="$DURPDEPLOY_E2E_IMAGE"
     export DEV_STACK_EVIDENCE_DIR="$CI_PROJECT_DIR/artifacts/dev-stacks"
     make dev-stack-test
+  - DURPDEPLOY_RUNBOOK_BROWSER_E2E=1 bash scripts/e2e_server_containers.sh container
 backup-restore:
   extends: .mr-test
   timeout: 90 minutes
+  # Recovery diagnostics use the job log. This job creates no artifact files.
+  artifacts:
+    paths: []
   variables:
     CI_JOB_TEMP: /tmp/durpdeploy-ci
     DURPDEPLOY_CONTAINER_RUNTIME: docker
@@ -126,13 +154,12 @@ package-browser:
   timeout: 45 minutes
   parallel:
     matrix:
-      - BROWSER_SHARD: [navigation, resources, execution, agents]
+      - BROWSER_SHARD: [navigation, resources, permissions, execution, agents]
   variables:
     CI_JOB_TEMP: /tmp/durpdeploy-ci
     DURPDEPLOY_CONTAINER_RUNTIME: docker
     DURPDEPLOY_PACKAGE_UI_EVIDENCE: $CI_PROJECT_DIR/artifacts/package-ui/$BROWSER_SHARD
   script:
-    - docker pull harbor.durp.info/microsoft/playwright:v1.61.1-noble
     - go tool templ generate
     - make swagger-ui-copy
     - bash scripts/ci_browser_shard.sh "browser-$BROWSER_SHARD"
@@ -167,6 +194,7 @@ auth-mfa-sqlite:
   - go tool templ generate
   - make swagger-ui-copy
   - make auth-mfa-e2e-sqlite
+  - DURPDEPLOY_RUNBOOK_BROWSER_E2E=1 bash scripts/e2e_server_containers.sh host
 agent-smoke:
   extends: .mr-test
   timeout: 30 minutes
@@ -192,6 +220,8 @@ agent-container-docker:
   extends: .mr-test
   needs:
     - ci-runtime
+    - job: go-test-cache
+      artifacts: false
     - job: lint
       artifacts: false
     - agent-image
@@ -216,6 +246,8 @@ agent-container-podman:
   extends: .mr-test
   needs:
     - ci-runtime
+    - job: go-test-cache
+      artifacts: false
     - job: lint
       artifacts: false
     - agent-image
@@ -244,21 +276,6 @@ agent-container-podman:
       bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 -timeout=20m -v \
       -run '^(TestDeploymentStaging(Transfer|ImportFailure|TransferPausesStepTimeout|Audit|ArtifactGate|Package|PackageAgentOnly|PackageLegacyAgent)APIE2E|TestExecutionLocationAPIWebE2E|TestLegacyExecutionLocationAPIWebE2E)$' ./internal/agentserver
     ROOTLESS
-test:
-  extends: .mr-test
-  timeout: 45 minutes
-  parallel:
-    matrix:
-      - TEST_SHARD: [repository, database, handlers, core]
-  script:
-  - go tool templ generate
-  - make swagger-ui-copy
-  - |-
-    package_list=$(bash scripts/ci_test_packages.sh "$TEST_SHARD")
-    test -n "$package_list"
-    mapfile -t packages <<< "$package_list"
-    bash scripts/go_test.sh -v -count=1 -timeout=20m "${packages[@]}"
-  - if [[ $TEST_SHARD == core ]]; then bash scripts/build_version_test.sh; fi
 e2e:
   extends: .mr-built-app
   timeout: 45 minutes
@@ -266,31 +283,17 @@ e2e:
   - docker pull harbor.durp.info/microsoft/playwright:v1.61.1-noble
   - go tool templ generate
   - make swagger-ui-copy
-  - shellcheck -S error scripts/release_images_test.sh scripts/ci_publish.sh scripts/publish_release_images.sh scripts/publish_release_chart.sh scripts/release_publish_test.sh
-  - bash scripts/release_images_test.sh
-  - bash scripts/e2e_build_server_test.sh
-  - |-
-    for script in scripts/e2e_test.sh scripts/e2e_lifecycle.sh scripts/e2e_wait.sh scripts/e2e_parallel_test.sh scripts/e2e_db_test.sh scripts/e2e_fixture_reset.sh scripts/e2e_fixture_reset_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh; do
-      bash -n "$script"
-    done
-    shellcheck -S error scripts/e2e_test.sh scripts/e2e_lifecycle.sh scripts/e2e_wait.sh scripts/e2e_parallel_test.sh scripts/e2e_db_test.sh scripts/e2e_fixture_reset.sh scripts/e2e_fixture_reset_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh
-    bash scripts/e2e_fixture_reset_test.sh
-    bash scripts/check_e2e_containers_test.sh
-    bash -n scripts/mobile-browser-image-cleanup-test.sh
-    shellcheck -S error scripts/mobile-browser-image-cleanup-test.sh
-    bash scripts/mobile-browser-image-cleanup-test.sh
-  - |-
-    for script in scripts/build_metadata.sh scripts/build_server.sh scripts/build_version_test.sh scripts/prepare_versioned_images.sh scripts/ci_e2e_app.sh scripts/e2e_build_server.sh scripts/e2e_build_server_test.sh scripts/ci_agent_image.sh scripts/ci_browser_shard.sh scripts/ensure_fixture_image.sh; do
-      bash -n "$script"
-    done
-    shellcheck -S error scripts/build_metadata.sh scripts/build_server.sh scripts/build_version_test.sh scripts/prepare_versioned_images.sh scripts/ci_e2e_app.sh scripts/e2e_build_server.sh scripts/e2e_build_server_test.sh scripts/ci_agent_image.sh scripts/ci_browser_shard.sh scripts/ensure_fixture_image.sh
   - |-
     (
+    SECONDS=0
     export DURPDEPLOY_CONTAINER_RUNTIME=docker
     bash scripts/e2e_parallel_test.sh
+    printf 'E2E parallel isolation: %s seconds\n' "$SECONDS"
     )
   - |-
     (
+    SECONDS=0
     export DURPDEPLOY_RUNBOOK_BROWSER_E2E=1
-    bash ./scripts/e2e_server_containers.sh
+    bash scripts/e2e_server_containers.sh existing-server
+    printf 'E2E server scenarios: %s seconds\n' "$SECONDS"
     )

@@ -2,7 +2,6 @@
 
 BINARY_NAME=durpdeploy
 MAIN_PATH=./cmd/server
-GOLANGCI_LINT_VERSION=2.11.3
 DEV_POSTGRES_CONTAINER ?= durpdeploy-dev-postgres
 DEV_POSTGRES_IMAGE ?= harbor.durp.info/dockerhub/library/postgres:16-alpine
 DEV_MSSQL_CONTAINER ?= durpdeploy-dev-mssql
@@ -281,7 +280,7 @@ swagger-ui-copy: npm-install
 	sh scripts/copy_swagger_ui.sh node_modules/swagger-ui-dist static/swagger-ui
 
 npm-install:
-	npm ci --ignore-scripts
+	bash scripts/npm_install.sh
 
 tailwind-build: npm-install
 	npx @tailwindcss/cli -i static/css/input.css -o static/css/tailwind.min.css --minify
@@ -306,7 +305,7 @@ golines:
 
 .PHONY: lint-tools lint
 lint-tools:
-	bash scripts/install_golangci_lint.sh $(GOLANGCI_LINT_VERSION)
+	bash scripts/install_golangci_lint.sh
 
 lint: lint-tools templ-generate swagger-ui-copy
 	./bin/lint/golangci-lint run ./...
@@ -384,10 +383,7 @@ container-scan-test:
 	bash scripts/container_scan_test.sh
 
 security-tools:
-	mkdir -p bin/security
-	GOTOOLCHAIN=go1.26.10 GOBIN="$(CURDIR)/bin/security" go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
-	GOTOOLCHAIN=go1.26.10 GOBIN="$(CURDIR)/bin/security" go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
-	GOTOOLCHAIN=go1.26.10 GOBIN="$(CURDIR)/bin/security" go install github.com/zricethezav/gitleaks/v8@v8.30.1
+	bash scripts/install_security_tools.sh
 
 security-scan: templ-generate swagger-ui-copy
 	@result=0; for scanner in govulncheck gosec gitleaks; do \

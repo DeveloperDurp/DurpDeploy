@@ -60,18 +60,27 @@ func checkReleaseVariableName(
 	t *testing.T, b *packageBrowser, count int, name string,
 ) {
 	t.Helper()
-	if string(b.evaluate(t, fmt.Sprintf(`(() => {
+	raw := b.evaluate(t, fmt.Sprintf(`(() => {
  const cells = document.querySelectorAll('[data-release-variable-name]');
  const name = %q;
  const cell = [...cells].find(element => element.textContent === name);
- return cells.length === %d && !!cell && cell.tagName === 'TD' &&
+ const valid = cells.length === %d && !!cell && cell.tagName === 'TD' &&
   cell.getClientRects().length > 0 &&
   cell.scrollWidth <= cell.clientWidth && cell.scrollHeight <= cell.clientHeight &&
   getComputedStyle(cell).whiteSpace !== 'nowrap' &&
   !cell.querySelector('details, summary, button, a') &&
   [...document.querySelectorAll('td')].filter(e => e.textContent === name).length === 1;
-})()`, name, count))) != "true" {
-		t.Fatalf("saved variable %q is repeated, clipped, or hidden", name)
+ return {valid, name, width:innerWidth, count:cells.length,
+  text:cell?.textContent, scrollWidth:cell?.scrollWidth, clientWidth:cell?.clientWidth,
+  scrollHeight:cell?.scrollHeight, clientHeight:cell?.clientHeight,
+  rect:cell?.getBoundingClientRect().toJSON(), whiteSpace:cell && getComputedStyle(cell).whiteSpace};
+})()`, name, count))
+	var result struct{ Valid bool }
+	if err := json.Unmarshal(raw, &result); err != nil {
+		t.Fatal(err)
+	}
+	if !result.Valid {
+		t.Fatalf("saved variable name is repeated, clipped, or hidden: %s", raw)
 	}
 }
 

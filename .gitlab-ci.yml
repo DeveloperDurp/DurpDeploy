@@ -54,6 +54,7 @@ default:
     - unset SONAR_TOKEN
     - if [[ ${CI_ENVIRONMENT_NAME:-} != production ]]; then unset GHCR_TOKEN GHCR_USER; fi
     - bash scripts/ci_prepare.sh
+    - if [[ ${CI_GO_CACHE_ENABLED:-} == true ]]; then python3 scripts/ci_go_cache.py restore; fi
   cache: []
   artifacts:
     when: always
@@ -70,8 +71,16 @@ default:
 
 .mr-test:
   stage: test
+  variables:
+    CI_GO_CACHE_ENABLED: "true"
+  cache:
+    key: go-v1-linux-amd64-$CI_PROJECT_ID-source-$CI_MERGE_REQUEST_SOURCE_PROJECT_ID-mr-$CI_MERGE_REQUEST_IID
+    paths: [.cache/ci-go/]
+    policy: pull
   needs:
     - ci-runtime
+    - job: go-test-cache
+      artifacts: false
     - job: lint
       artifacts: false
   rules:

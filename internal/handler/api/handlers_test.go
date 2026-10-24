@@ -5,11 +5,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
@@ -21,7 +19,6 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/handler/api"
-	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 )
@@ -32,20 +29,7 @@ type testHarness struct {
 }
 
 func newHarness(t *testing.T) *testHarness {
-	dir, err := os.MkdirTemp("", "api-test-")
-	if err != nil {
-		t.Fatalf("mkdtemp: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	dsn := fmt.Sprintf(
-		"file:%s/test.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
-		dir,
-	)
-	conn, err := migrate.Run(dsn)
-	if err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
+	conn := newAPITestDatabase(t)
 
 	repo := repository.New(conn)
 	_ = runner.NewLogBroker()
@@ -281,7 +265,7 @@ func TestAgents_AdminManagementFlow(t *testing.T) {
 }
 
 func (h *testHarness) seedUser(t *testing.T, email, role string) *db.User {
-	pwHash, err := auth.HashPassword("testpass123")
+	pwHash, err := fixtureLoginPasswordHash()
 	if err != nil {
 		t.Fatalf("hash password: %v", err)
 	}

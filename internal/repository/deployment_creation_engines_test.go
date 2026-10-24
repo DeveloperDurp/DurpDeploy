@@ -9,13 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/mssqldriver"
 	"durpdeploy/internal/pgdriver"
-	"durpdeploy/internal/testutil"
 )
 
 type deploymentCreationEngine struct {
@@ -51,26 +48,9 @@ func newDeploymentCreationEngine(
 			driver: "sqlite",
 		}
 	case "PostgreSQL":
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-		container, err := postgres.Run(
-			ctx,
-			"harbor.durp.info/dockerhub/library/postgres:16-alpine",
-			postgres.WithDatabase("creation"),
-			postgres.WithUsername("creation"),
-			postgres.WithPassword("fixture-only"),
-			postgres.BasicWaitStrategies(),
-		)
-		testutil.CleanupContainer(t, container)
-		if err != nil {
-			t.Fatalf("start required PostgreSQL backend: %v", err)
-		}
-		dsn, err := container.ConnectionString(ctx, "sslmode=disable")
-		if err != nil {
-			t.Fatal(err)
-		}
 		return deploymentCreationEngine{
-			name: name, dsn: dsn, driver: pgdriver.DriverName,
+			name: name, dsn: RepositoryDatabaseDSN(t, name),
+			driver: pgdriver.DriverName,
 		}
 	case "SQLServer":
 		return newSQLServerDeploymentCreationEngine(t)
@@ -85,7 +65,7 @@ func newSQLServerDeploymentCreationEngine(
 ) deploymentCreationEngine {
 	t.Helper()
 	return deploymentCreationEngine{
-		name: "SQLServer", dsn: testutil.SQLServerDSN(t),
+		name: "SQLServer", dsn: RepositoryDatabaseDSN(t, "SQLServer"),
 		driver: mssqldriver.DriverName,
 	}
 }
@@ -99,21 +79,23 @@ func openDeploymentCreationEngine(
 	if err != nil {
 		t.Fatalf("migrate %s: %v", engine.name, err)
 	}
+	t.Cleanup(func() {
+		if err := primary.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	secondary, err := sql.Open(engine.driver, engine.dsn)
 	if err != nil {
 		t.Fatalf("open second %s connection: %v", engine.name, err)
-	}
-	if err := secondary.Ping(); err != nil {
-		t.Fatalf("ping second %s connection: %v", engine.name, err)
 	}
 	t.Cleanup(func() {
 		if err := secondary.Close(); err != nil {
 			t.Error(err)
 		}
-		if err := primary.Close(); err != nil {
-			t.Error(err)
-		}
 	})
+	if err := secondary.Ping(); err != nil {
+		t.Fatalf("ping second %s connection: %v", engine.name, err)
+	}
 	first, second := New(primary), New(secondary)
 	seedDeploymentCreationRace(t, first)
 	return first, second

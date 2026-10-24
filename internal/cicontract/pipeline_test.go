@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -34,6 +35,7 @@ type job struct {
 	Needs         []need    `yaml:"needs"`
 	Rules         []rule    `yaml:"rules"`
 	Script        []string  `yaml:"script"`
+	Cache         yaml.Node `yaml:"cache"`
 	AllowFailure  yaml.Node `yaml:"allow_failure"`
 	When          string    `yaml:"when"`
 	Interruptible *bool     `yaml:"interruptible"`
@@ -123,6 +125,9 @@ func pipeline(t *testing.T) map[string]job {
 		if current.Needs == nil {
 			current.Needs = parent.Needs
 		}
+		if current.Cache.Kind == 0 {
+			current.Cache = parent.Cache
+		}
 		if current.Interruptible == nil {
 			current.Interruptible = parent.Interruptible
 		}
@@ -172,9 +177,18 @@ func TestPublishersRequireSameCommitSecurityAndScannedImages(t *testing.T) {
 	}
 }
 
-func assertMergeRequestTestGates(t *testing.T, jobs map[string]job) {
-	t.Helper()
-	gate := jobs["image-verification"]
+func TestImageRetentionUsesPublicationRules(t *testing.T) {
+	jobs := pipeline(t)
+	retention := jobs["retain-image"].Rules
+	publication := jobs["publish-images"].Rules
+	if len(retention) != 1 || len(publication) != 1 ||
+		retention[0].If != publication[0].If {
+		t.Fatal("image retention must run exactly when images can be published")
+	}
+}
+
+func TestMergeRequestJobsBlockPipeline(t *testing.T) {
+	jobs := pipeline(t)
 	for name, current := range jobs {
 		if strings.HasPrefix(name, ".") {
 			continue
@@ -193,16 +207,11 @@ func assertMergeRequestTestGates(t *testing.T, jobs map[string]job) {
 			!current.needs("lint") {
 			t.Errorf("%s must be a blocking MR test after lint", name)
 		}
-		if !gate.needs(name) {
-			t.Errorf("image verification omits %s", name)
-		}
 	}
 }
 
-func TestMergeRequestGateRequiresEveryTestJob(t *testing.T) {
+func TestPipelineFailurePolicies(t *testing.T) {
 	jobs := pipeline(t)
-	assertMergeRequestTestGates(t, jobs)
-	gate := jobs["image-verification"]
 	var podmanPolicy struct {
 		ExitCodes int `yaml:"exit_codes"`
 	}
@@ -214,15 +223,84 @@ func TestMergeRequestGateRequiresEveryTestJob(t *testing.T) {
 	for _, name := range []string{
 		"retain-image", "security-scan", "container-security",
 	} {
-		if !gate.needs(name) {
-			t.Errorf("image verification omits %s", name)
+		if jobs[name].allowsFailure() || jobs[name].When == "always" {
+			t.Errorf("%s must block pipeline success", name)
 		}
 	}
+}
+
+func TestPipelineDependenciesExist(t *testing.T) {
+	jobs := pipeline(t)
 	for name, current := range jobs {
 		for _, dependency := range current.Needs {
 			if _, ok := jobs[dependency.Job]; !ok {
 				t.Errorf("%s needs missing job %s", name, dependency.Job)
 			}
+		}
+	}
+}
+
+func TestServerE2EScenariosRunOnceAcrossJobs(t *testing.T) {
+	command := regexp.MustCompile(`(?m)^\s*` +
+		`(?:DURPDEPLOY_RUNBOOK_BROWSER_E2E=1\s+)?` +
+		`bash (?:\./)?scripts/e2e_server_containers\.sh` +
+		`(?:[ \t]+([a-z-]+))?[ \t]*$`)
+	owners := map[string]string{}
+	for name, current := range pipeline(t) {
+		scenarios := command.FindAllStringSubmatch(
+			strings.Join(current.Script, "\n"), -1,
+		)
+		if len(scenarios) > 1 {
+			t.Errorf("%s serializes independent server scenarios", name)
+		}
+		for _, match := range scenarios {
+			scenario := match[1]
+			checkServerE2EScenario(t, name, current, scenario, match[0])
+			if previous, ok := owners[scenario]; ok {
+				t.Errorf("%s repeats %s from %s", name, scenario, previous)
+			}
+			owners[scenario] = name
+		}
+	}
+	for _, scenario := range []string{"existing-server", "host", "container"} {
+		if _, ok := owners[scenario]; !ok {
+			t.Errorf("missing server E2E scenario %s", scenario)
+		}
+	}
+}
+
+func checkServerE2EScenario(
+	t *testing.T, name string, current job, scenario, command string,
+) {
+	t.Helper()
+	if !slices.Contains([]string{
+		"existing-server", "host", "container",
+	}, scenario) {
+		t.Fatalf("%s runs an unknown or combined scenario %q", name, scenario)
+	}
+	if !current.needs("images") || current.allowsFailure() {
+		t.Errorf("%s must use the scanned image and block failures", name)
+	}
+	if scenario != "existing-server" && !strings.Contains(
+		command, "DURPDEPLOY_RUNBOOK_BROWSER_E2E=1",
+	) {
+		t.Errorf("%s omits the runbook browser checks", name)
+	}
+}
+
+func TestServerE2ERejectsInvalidSelection(t *testing.T) {
+	for _, args := range [][]string{{"unknown"}, {""}, {"host", "container"}} {
+		cmd := exec.Command("bash", append([]string{
+			"../../scripts/e2e_server_containers.sh",
+		}, args...)...)
+		cmd.Env = append(os.Environ(), "GITLAB_CI=true")
+		output, err := cmd.CombinedOutput()
+		if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 2 {
+			t.Fatalf("args=%q: want selection error, got %v: %s",
+				args, err, output)
+		}
+		if !strings.Contains(string(output), "E2E scenario") {
+			t.Fatalf("args=%q: selection was not validated: %s", args, output)
 		}
 	}
 }
@@ -282,6 +360,98 @@ func TestArtifactDownloadsOnlyReachConsumers(t *testing.T) {
 					name, dependency.Job, actual, want)
 			}
 		}
+	}
+}
+
+type goBuildCache struct {
+	Key    string   `yaml:"key"`
+	Policy string   `yaml:"policy"`
+	Paths  []string `yaml:"paths"`
+}
+
+func TestGoCacheHasOneWriterAndPullOnlyConsumers(t *testing.T) {
+	jobs := pipeline(t)
+	producer := jobs["go-test-cache"]
+	var cache goBuildCache
+	if err := producer.Cache.Decode(&cache); err != nil {
+		t.Fatal(err)
+	}
+	for _, variable := range []string{
+		"$CI_PROJECT_ID", "$CI_MERGE_REQUEST_SOURCE_PROJECT_ID",
+		"$CI_MERGE_REQUEST_IID",
+	} {
+		if !strings.Contains(cache.Key, variable) {
+			t.Errorf("cache key does not isolate %s", variable)
+		}
+	}
+	if cache.Policy != "pull-push" || producer.allowsFailure() ||
+		len(producer.Artifacts.Paths) != 0 ||
+		!slices.Equal(cache.Paths, []string{".cache/ci-go/"}) {
+		t.Fatal("Go cache producer must use cache storage without artifacts")
+	}
+	for name, current := range jobs {
+		if name != "go-test-cache" && name != "lint" &&
+			current.Cache.Kind == yaml.MappingNode {
+			checkGoCacheConsumer(t, name, current, cache)
+		}
+		if current.needs("lint") && len(current.Rules) == 1 &&
+			current.Rules[0].If == `$CI_PIPELINE_SOURCE == "merge_request_event"` &&
+			!current.needs("go-test-cache") {
+			t.Errorf("%s can start without the compiled test handoff", name)
+		}
+	}
+}
+
+func TestLintCacheIsIsolatedFromTestAndProtectedCaches(t *testing.T) {
+	lint := pipeline(t)["lint"]
+	var cache struct {
+		Key struct {
+			Prefix string
+			Files  []string
+		}
+		Paths  []string
+		Policy string
+		When   string
+	}
+	if err := lint.Cache.Decode(&cache); err != nil {
+		t.Fatal(err)
+	}
+	for _, variable := range []string{
+		"$CI_PROJECT_ID", "$CI_MERGE_REQUEST_SOURCE_PROJECT_ID",
+		"$CI_MERGE_REQUEST_IID", "$CI_COMMIT_REF_PROTECTED",
+		"$CI_COMMIT_REF_SLUG", "$GOTOOLCHAIN",
+	} {
+		if !strings.Contains(cache.Key.Prefix, variable) {
+			t.Errorf("lint cache key does not isolate %s", variable)
+		}
+	}
+	if !slices.Equal(cache.Paths, []string{".cache/golangci-lint/"}) ||
+		cache.Policy != "pull-push" || cache.When != "on_success" ||
+		lint.needs("go-test-cache") {
+		t.Fatal(
+			"lint must own a separate cache without waiting for test builds",
+		)
+	}
+	if !slices.Equal(cache.Key.Files, []string{
+		"scripts/install_golangci_lint.sh", ".golangci.yml",
+	}) {
+		t.Fatal("lint cache must invalidate on tool and configuration changes")
+	}
+}
+
+func checkGoCacheConsumer(
+	t *testing.T, name string, current job, expected goBuildCache,
+) {
+	t.Helper()
+	var consumer goBuildCache
+	if err := current.Cache.Decode(&consumer); err != nil {
+		t.Fatal(err)
+	}
+	if consumer.Policy != "pull" || consumer.Key != expected.Key ||
+		!slices.Equal(consumer.Paths, expected.Paths) ||
+		!current.needs("go-test-cache") || len(current.Rules) != 1 ||
+		current.Rules[0].If != `$CI_PIPELINE_SOURCE == "merge_request_event"` {
+		t.Errorf("%s must only pull its MR cache after the producer", name)
 	}
 }
 

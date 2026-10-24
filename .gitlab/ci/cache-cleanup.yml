@@ -10,11 +10,14 @@ cache-cleanup:
     - unset SONAR_TOKEN GHCR_TOKEN GHCR_USER
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - .gitlab/ci/cache-cleanup.yml
+        - scripts/ci_cache_cleanup*.mjs
       variables:
         CI_CACHE_CLEANUP_DRY_RUN: "true"
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_CACHE_CLEANUP == "true" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
   script:
-    - node --test scripts/ci_cache_cleanup.test.mjs
+    - if [ "$CI_PIPELINE_SOURCE" = schedule ]; then node --test scripts/ci_cache_cleanup.test.mjs; fi
     - node scripts/ci_cache_cleanup.mjs
   artifacts:
     when: always

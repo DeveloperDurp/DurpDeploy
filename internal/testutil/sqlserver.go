@@ -5,6 +5,8 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"errors"
+	"fmt"
 	"net"
 	"net/netip"
 	"net/url"
@@ -40,6 +42,20 @@ func SQLServerContainer(
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
 	defer cancel()
+	c, dsn, err := StartSQLServer(ctx, image,
+		func(c testcontainers.Container) { CleanupContainer(t, c) })
+	if err != nil {
+		t.Fatalf("start required SQL Server backend: %v", err)
+	}
+	return c, dsn
+}
+
+// StartSQLServer registers ownership before checking the startup result.
+// The caller must bound ctx and remove the registered container on every exit.
+func StartSQLServer(
+	ctx context.Context, image string,
+	onCreated func(testcontainers.Container),
+) (_ testcontainers.Container, _ string, result error) {
 	password := "Fixture!" + rand.Text()
 	c, err := testcontainers.GenericContainer(ctx,
 		testcontainers.GenericContainerRequest{
@@ -62,17 +78,17 @@ func SQLServerContainer(
 			},
 			Started: true,
 		})
-	CleanupContainer(t, c)
+	onCreated(c)
 	if err != nil {
-		t.Fatalf("start required SQL Server backend: %v", err)
+		return c, "", err
 	}
 	host, err := c.Host(ctx)
 	if err != nil {
-		t.Fatal(err)
+		return c, "", err
 	}
 	port, err := c.MappedPort(ctx, sqlServerPort)
 	if err != nil {
-		t.Fatal(err)
+		return c, "", err
 	}
 	dsn := (&url.URL{
 		Scheme: "sqlserver", User: url.UserPassword("sa", password),
@@ -80,20 +96,18 @@ func SQLServerContainer(
 	}).String() + "?database=master&encrypt=false&trustservercertificate=true"
 	probe, err := sql.Open("sqlserver", dsn)
 	if err != nil {
-		t.Fatal(err)
+		return c, "", err
 	}
 	defer func() {
-		if err := probe.Close(); err != nil {
-			t.Error(err)
-		}
+		result = errors.Join(result, probe.Close())
 	}()
 	for {
 		if err := probe.PingContext(ctx); err == nil {
-			return c, dsn
+			return c, dsn, nil
 		}
 		select {
 		case <-ctx.Done():
-			t.Fatalf("wait for SQL Server login: %v", ctx.Err())
+			return c, "", fmt.Errorf("wait for SQL Server login: %w", ctx.Err())
 		case <-time.After(250 * time.Millisecond):
 		}
 	}

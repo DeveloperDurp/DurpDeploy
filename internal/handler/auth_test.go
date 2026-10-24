@@ -3,15 +3,14 @@ package handler_test
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,11 +18,11 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/mfa"
-	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"durpdeploy/internal/secret"
 	"durpdeploy/internal/server"
+	"durpdeploy/internal/testutil/sqlitefixture"
 
 	"github.com/robfig/cron/v3"
 )
@@ -37,21 +36,10 @@ type authHarness struct {
 
 func newAuthHarness(t *testing.T) *authHarness {
 	t.Helper()
-	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "test.db")
-	dsn := fmt.Sprintf(
-		"file:%s?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&"+
+	conn := sqlitefixture.Open(t, filepath.Join(t.TempDir(), "test.db"),
+		"_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&"+
 			"_pragma=busy_timeout(5000)",
-		dbPath,
 	)
-	conn, err := migrate.Run(dsn)
-	if err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = conn.Close()
-		_ = os.RemoveAll(dir)
-	})
 
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
@@ -132,7 +120,7 @@ func seedSession(
 	t.Helper()
 	ctx := context.Background()
 
-	hash, err := auth.HashPassword("testpass")
+	hash, err := fixturePasswordHash()
 	if err != nil {
 		t.Fatalf("hash password: %v", err)
 	}
@@ -184,6 +172,11 @@ func seedSession(
 		client:       client,
 	}
 }
+
+// Fixture users share only this immutable hash, with production parameters.
+var fixturePasswordHash = sync.OnceValues(func() (string, error) {
+	return auth.HashPassword("testpass")
+})
 
 func TestLogin_Get(t *testing.T) {
 	h := newAuthHarness(t)

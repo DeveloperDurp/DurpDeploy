@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/verification"
 )
 
 func newVerificationE2E(t *testing.T) *artifactE2E {
@@ -56,6 +57,13 @@ func verificationDeploy(
 		t.Fatal(err)
 	}
 	return deployment
+}
+
+// Use the normal Bash deadline when the test does not exercise timeouts.
+func configureBashVerification(t *testing.T, f *artifactE2E, target string) {
+	t.Helper()
+	f.completionTimeout = max(f.completionTimeout, time.Minute)
+	configureVerification(t, f, "bash", target, verification.DefaultTimeout)
 }
 
 func configureVerification(

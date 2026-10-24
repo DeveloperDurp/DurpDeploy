@@ -91,6 +91,38 @@ func TestCleanupContainerAcceptsNilHandles(t *testing.T) {
 	// Then: cleanup completes without dereferencing either nil handle.
 }
 
+func TestSQLServerStartupFailureRegistersOwnership(t *testing.T) {
+	testcontainers.SkipIfProviderIsNotHealthy(t)
+	var owned testcontainers.Container
+	registered := false
+	t.Run("failed startup", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+		defer cancel()
+		// Bash exits without SQL Server readiness, after a container exists.
+		container, _, err := StartSQLServer(ctx,
+			"harbor.durp.info/dockerhub/library/bash:5.2",
+			func(c testcontainers.Container) {
+				CleanupContainer(t, c)
+				owned, registered = c, true
+			},
+		)
+		require.Error(t, err)
+		require.True(t, registered)
+		require.NotNil(t, owned)
+		require.Equal(t, owned, container)
+	})
+	// Failed readiness still leaves cleanup responsible for the real handle.
+	require.True(t, registered)
+	require.NotNil(t, owned)
+	api, err := testcontainers.NewDockerClientWithOpts(t.Context())
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, api.Close()) })
+	_, err = api.ContainerInspect(t.Context(), owned.GetContainerID(),
+		client.ContainerInspectOptions{})
+	require.True(t, errdefs.IsNotFound(err),
+		"container survived failed setup: %v", err)
+}
+
 func TestCleanupContainerDiscardsFixtureWithoutShutdownGrace(t *testing.T) {
 	testcontainers.SkipIfProviderIsNotHealthy(t)
 	// Given: an owned fixture that ignores graceful termination.
