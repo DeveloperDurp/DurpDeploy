@@ -7,6 +7,73 @@ Image and chart publication require successful source and configuration scans fr
 The scanner fixture suite and API-token regression test run only for merge requests.
 See [GitLab CI](gitlab-ci.md) for schedule, credential, and runner setup.
 
+## Bounded fuzzing and race checks
+
+Merge request Go suites replay native fuzz seeds and committed regression inputs.
+Every merge request pipeline also runs bounded exploration across five offline targets.
+Findings and timeouts fail the required `fuzz` job.
+Scheduled pipelines run the same exploration.
+Manual pipelines enable exploration when `CI_FUZZ=true`.
+Cache-cleanup schedules exclude these jobs.
+
+`FuzzReadJSON` checks closed-schema JSON, chunked input, stable errors, and bounded body reads.
+Existing public API regressions check rejected requests before database mutations.
+`FuzzValidateZIPPaths` checks entry paths, special entries, duplicates, and tree collisions.
+It builds at most two stored entries with fixed payloads and never extracts fuzzed paths.
+`FuzzScrubberStreaming` checks chunk boundaries, pending-byte bounds, and synthetic credential redaction.
+`FuzzDefaultPatternStreaming` reuses the default-credential regression target added by the redaction fix.
+`FuzzReviewJSONSyntax` retains its existing comparison with Go JSON validation.
+
+Fuzz inputs never become scripts, URLs, runtime commands, or network requests.
+Targets use synthetic credentials and local fixtures.
+The runner removes inherited application settings and credentials before testing.
+It preserves only the Go toolchain, cache paths, and process environment needed for compilation.
+It uses the pipeline's pinned Go toolchain and runtime image without new dependencies.
+
+Run exploration from a prepared checkout:
+
+```bash
+make templ-generate swagger-ui-copy
+bash scripts/ci_fuzz.sh
+```
+
+Each target has a 30-second exploration budget and a five-second minimization budget.
+Two workers share the job's two-CPU and 4-GiB limits.
+Each test binary has a two-minute timeout.
+Each command has a six-minute deadline and a ten-second termination grace period.
+This deadline includes compilation and test-runner cleanup.
+The complete job has a 20-minute timeout.
+Failures and timeouts fail the job.
+
+Reports in `artifacts/fuzz/` contain reproduction commands, progress, target names, and exit codes.
+Raw native output can echo inputs, so the runner discards it after selecting safe diagnostic lines.
+Failed synthetic inputs remain unchanged in `artifacts/fuzz/corpus/<target>/` for seven days.
+Review those inputs before adding them to `<package>/testdata/fuzz/<target>/`.
+Never add real credentials or private payloads to the corpus.
+
+Replay a retained input with the reported package and target:
+
+```bash
+bash scripts/go_test.sh -count=1 \
+  -run '^FuzzScrubberStreaming/3e1a1c989b26e560$' ./internal/logscrub
+```
+
+The retained malformed-byte regression distinguishes exact credentials from different invalid-byte lookalikes.
+Go regex treats malformed bytes as replacement runes.
+Whole-message matching can therefore redact lookalikes that streaming literal matching preserves.
+The test checks exact malformed credentials and their displayed UTF-8 form separately.
+It does not require different byte values to be identical credentials.
+
+The existing rollout race gate also selects cancellation and concurrent broker lifecycle tests.
+The API/web SSE regression overlaps disconnects with live broker notifications.
+These checks reuse the existing race jobs without adding artifact, network, or browser duplicates.
+Existing artifact, stream-revocation, and browser checks remain required.
+
+Triage failures against the affected boundary before changing application behavior.
+Behavioral fixes require public API regressions and web regressions where applicable.
+Update the shipped agent skill when documented API behavior changes.
+Do not suppress a real finding without a reviewed justification and maintainer risk decision.
+
 ## Image verification and publication
 
 Merge requests, main pushes, release tags, manual runs, and scheduled runs build Linux AMD64 images.

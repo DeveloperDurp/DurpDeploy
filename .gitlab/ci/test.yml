@@ -13,6 +13,30 @@
     - !reference [default, before_script]
     - bash scripts/ci_e2e_app.sh
 
+fuzz:
+  stage: test
+  needs: [ci-runtime]
+  timeout: 20 minutes
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_FUZZ == "true"'
+  variables:
+    CI_RUNTIME: none
+    KUBERNETES_CPU_REQUEST: "1"
+    KUBERNETES_CPU_LIMIT: "2"
+    KUBERNETES_MEMORY_REQUEST: 2Gi
+    KUBERNETES_MEMORY_LIMIT: 4Gi
+    GOMEMLIMIT: 1GiB
+  script:
+    - go tool templ generate
+    - make swagger-ui-copy
+    - bash scripts/ci_fuzz.sh
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths: [artifacts/fuzz/]
+
 pre-commit:
   extends: .mr-test
   timeout: 30 minutes

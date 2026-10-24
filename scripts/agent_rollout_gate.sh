@@ -12,6 +12,12 @@ fi
 grep -Fq 'FROM remote_step_runs' "$ROOT/scripts/agent_lifecycle_faults.mjs"
 
 tests=(
+	TestAcceptedCancelCannotRaceTerminalSuccess
+	TestCancelDoesNotFinalizeDeploymentBeforeRunnerStops
+	TestControllerCancelWaitsForRemoteAcknowledgement
+	TestCancellationWaitsForStagingCreation
+	TestCancellationDuringStagingExportPreservesCancelledStatus
+	TestLogBrokerConcurrentLifecycle
 	TestAgentV3CleanupBlocksQueueUntilReadyPoll
 	TestAgentV3EncryptedPayloadKeepsStepRestriction
 	TestAgentV3MixedFleetAndClaimRecheck

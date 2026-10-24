@@ -4,6 +4,10 @@ set -euo pipefail
 case ${1:?usage: ci_test_shard.sh SUITE} in
   rollout-contracts)
     make agent-rollout-gate
+    bash scripts/run_named_go_tests.sh --race --tags e2e --timeout 3m \
+      --packages ./internal/handler/api \
+      --tests TestConcurrentLogDisconnectAPIWebE2E \
+      --require TestConcurrentLogDisconnectAPIWebE2E
     bash scripts/go_test.sh -race -count=1 ./internal/artifact
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=3m -run '^Test(PermissionGuidance(Deployment)?|ProjectPanelScope|UsersPhone|UsersDefaultRole|UsersFormAccessibility)APIWebE2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestLifecycleStageOrderAPIWebE2E$' ./internal/handler
