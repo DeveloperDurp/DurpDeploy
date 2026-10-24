@@ -663,7 +663,7 @@ func TestStepsPage_RendersFullPage(t *testing.T) {
 		t,
 		body,
 		fmt.Sprintf(
-			`(?s)<div class="page-header">\s*<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Steps for .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
+			`(?s)<div class="page-header">\s*<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Steps for .*?</h1>\s*<div class="flex gap-2">\s*<button[^>]*data-show-step-variables[^>]*>View Variables</button>\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>\s*</div>`,
 			proj.ID,
 		),
 	)

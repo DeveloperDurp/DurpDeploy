@@ -130,6 +130,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 					}
 				</h2>
 				<div class="flex gap-2">
+					@StepVariablesButton()
 					<button type="submit" class="btn btn-primary md:btn-sm">Save</button>
 					<button type="button" class="btn btn-ghost md:btn-sm" x-on:click="$dispatch('step-form-cancel')">Cancel</button>
 				</div>
@@ -233,6 +234,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 					<div class="flex shrink-0 items-center justify-between gap-4">
 						<h3 :id="$id('script-editor-title')" class="text-lg font-semibold">Script Body</h3>
 						<button type="button" class="btn btn-sm" x-on:click="$refs.modal.close()">Close</button>
+						@StepVariablesButton()
 					</div>
 					<div class="flex min-h-0 flex-1 font-mono text-sm border border-base-300 rounded bg-base-100 overflow-hidden">
 						<pre x-ref="modalGutter" x-text="lineNumbers" class="select-none text-right px-3 py-3 text-base-content bg-base-200 overflow-hidden" style="line-height:1.5rem"></pre>
@@ -390,6 +392,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 					<dialog data-fullscreen-dialog x-cloak :class="{ hidden: !modalOpen }" x-ref="modal" x-id="['script-editor-title']" :aria-labelledby="$id('script-editor-title')" x-on:close="modalOpen = false" class="fixed inset-0 z-50 bg-base-100 text-base-content p-4 flex flex-col gap-4 w-screen h-screen max-w-none max-h-none">
 						<div class="flex shrink-0 items-center justify-between gap-4">
 							<h3 :id="$id('script-editor-title')" class="text-lg font-semibold">Script Body</h3>
+							@StepVariablesButton()
 							<button type="button" class="btn btn-sm" x-on:click="$refs.modal.close()">Close</button>
 						</div>
 						<div class="flex min-h-0 flex-1 font-mono text-sm border border-base-300 rounded bg-base-100 overflow-hidden">
@@ -437,6 +440,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 			<input type="hidden" name="sort_order" value={ strconv.FormatInt(step.SortOrder, 10) }/>
 				@StepArtifactFields(step, false)
 				<div class="flex gap-2 pt-9">
+					@StepVariablesButton()
 					<button type="submit" class="btn btn-primary btn-sm">Update</button>
 					<button type="button" class="btn btn-ghost btn-sm" x-on:click="$dispatch('step-form-cancel')" hx-get={ fmt.Sprintf("/projects/%d/steps", projectID) } hx-target="#step-list" hx-swap="innerHTML">Cancel</button>
 				</div>

@@ -1547,6 +1547,55 @@ Project administrators with global Maintainer permission can retain or remove an
 As a Maintainer, create or update a project with a new lifecycle ID.
 Confirm a 403 response without a project change.
 
+## Step variable viewer (#142)
+
+Run `make e2e-test` against the selected development instance.
+The suite retains a project named `variable-viewer-<run>` and prints its Steps URL.
+Use its project, lifecycle, environment, and saved step for these checks.
+
+1. Open the retained project's **Steps** page.
+2. Select **View Variables**.
+3. Confirm separate configured and predefined groups.
+4. Select the retained environment.
+5. Confirm `REGION` resolves to the environment-specific lifecycle value.
+6. Confirm its unscoped project value is overridden.
+7. Search for `SECRET`.
+8. Confirm the secret flag appears without a value.
+9. Copy the name and reference into a scratch editor.
+10. Confirm the clipboard contains a name or reference without the secret value.
+
+Repeat these editor checks in **Add Step**, **Edit**, and fullscreen script mode:
+
+1. Change the name, script, interpreter, timeout, retries, and variable selection without saving.
+2. Select part of the script and scroll the editor.
+3. Open **View Variables**.
+4. Confirm references match Bash, PowerShell, or Python, according to the draft interpreter.
+5. Confirm selected variables are available and other configured variables are excluded.
+6. Close the viewer with **Close**, then repeat with Escape.
+7. Confirm every draft field, script selection, scroll position, and parent dialog remains intact.
+8. Confirm focus returns to the **View Variables** button.
+9. Cancel the step form and confirm the saved step is unchanged.
+
+Check a phone with its software keyboard open:
+
+1. Focus **Search variable names**.
+2. Scroll through results while the keyboard remains open.
+3. Confirm the search, environment control, copy buttons, and Close button remain reachable.
+4. Confirm there is no horizontal overflow.
+5. Use Tab and Shift+Tab to verify focus stays in the viewer.
+6. Use a screen reader to verify dialog labels, result counts, and copy announcements.
+
+Confirm package and staging variables remain conditional without execution context.
+Select the agent target and confirm approved-artifact injection is unsupported.
+Inspect `GET /api/v1/projects/{id}/variables/available` with and without `environment_id`.
+Repeat with a viewer token scoped to this project.
+Confirm another project's endpoint is rejected.
+Confirm an unrelated project's step ID returns `404`.
+
+Automated API and browser checks use `TestStepVariablesAPIWebE2E` and `TestStepVariablesBrowserE2E`.
+The browser regression includes desktop, phone, reduced-height, fullscreen, copy, draft-preservation, and retry cases.
+Reduced-height emulation does not replace the physical keyboard and screen-reader checks above.
+
 ## Deployment notes in history
 
 1. Create a deployment with an incident note, such as `incident-failure`.

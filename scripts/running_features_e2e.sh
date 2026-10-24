@@ -6,6 +6,7 @@ source "$SCRIPT_DIR/project_members_e2e.sh"
 source "$SCRIPT_DIR/project_groups_e2e.sh"
 source "$SCRIPT_DIR/deployment_list_e2e.sh"
 source "$SCRIPT_DIR/provenance_e2e.sh"
+source "$SCRIPT_DIR/step_variables_e2e.sh"
 
 echo "=== Software build identity ==="
 BUILD_INFO=$(api_get "$BASE/api/v1/version")

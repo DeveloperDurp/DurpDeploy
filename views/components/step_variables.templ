@@ -1,0 +1,102 @@
+package components
+
+import "fmt"
+
+templ StepVariablesButton() {
+	<button type="button" class="btn btn-ghost btn-sm" data-show-step-variables x-on:click="$dispatch('show-step-variables')">View Variables</button>
+}
+
+templ StepVariableViewer(projectID int64) {
+	<div x-data="stepVariables" data-step-variable-viewer data-url={ fmt.Sprintf("/projects/%d/variables/available", projectID) } x-on:show-step-variables.window="openViewer">
+		<dialog x-ref="dialog" class="modal" aria-label="Available step variables" x-on:close="closed" x-on:cancel="cancelViewer" x-on:keydown.escape.stop.prevent="closeViewer" data-variable-dialog>
+			<div class="modal-box flex min-h-0 w-full max-w-3xl flex-col gap-4 overflow-hidden">
+				<div class="flex shrink-0 items-center justify-between gap-2">
+					<h2 class="text-xl font-bold">Available variables</h2>
+					<button type="button" class="btn btn-sm" x-on:click="closeViewer" aria-label="Close variable viewer">Close</button>
+				</div>
+				<div class="min-h-0 space-y-4 overflow-y-auto overscroll-contain" :aria-busy="loading">
+					<p class="text-sm">Read-only authoring reference. Configured values follow scope and step restrictions. Runtime paths require execution context.</p>
+					<div class="grid gap-3 sm:grid-cols-2" x-id="['variable-search', 'variable-environment']">
+						<div>
+							<label :for="$id('variable-search')" class="label">Search variable names</label>
+							<input :id="$id('variable-search')" x-ref="search" x-model="query" type="search" class="input input-bordered w-full" autocomplete="off" data-variable-search/>
+						</div>
+						<div>
+							<label :for="$id('variable-environment')" class="label">Environment</label>
+							<select :id="$id('variable-environment')" x-model="environmentID" x-on:change="load" class="select select-bordered w-full" data-variable-environment>
+								<option value="">No environment selected</option>
+								<template x-for="environment in catalog?.environments || []" :key="environment.id">
+									<option :value="environment.id" x-text="environment.name"></option>
+								</template>
+							</select>
+						</div>
+					</div>
+					<div x-show="!form" class="grid gap-3 sm:grid-cols-3" x-id="['reference-language', 'variable-target', 'variable-mode']">
+						<div>
+							<label :for="$id('reference-language')" class="label">Interpreter</label>
+							<select :id="$id('reference-language')" x-model="interpreter" x-on:change="load" class="select select-bordered w-full">
+								<option value="bash">Bash</option><option value="pwsh">PowerShell</option><option value="python3">Python</option>
+							</select>
+						</div>
+						<div>
+							<label :for="$id('variable-target')" class="label">Execution target</label>
+							<select :id="$id('variable-target')" x-model="target" x-on:change="load" class="select select-bordered w-full">
+								<option value="local">Server container</option><option value="agent">Agent</option>
+							</select>
+						</div>
+						<div x-show="target === 'agent'">
+							<label :for="$id('variable-mode')" class="label">Agent mode</label>
+							<select :id="$id('variable-mode')" x-model="mode" x-on:change="load" class="select select-bordered w-full">
+								<option value="host">Host</option><option value="container">Container</option>
+							</select>
+						</div>
+					</div>
+					<p x-show="form" class="text-sm">Uses the current unsaved interpreter, execution target, and variable selection from your step.</p>
+					<p x-show="loading" role="status">Loading variables…</p>
+					<div x-show="error" role="alert" class="text-error">
+						<p x-text="error"></p>
+						<button type="button" class="btn btn-sm" x-on:click="load">Retry</button>
+					</div>
+					<div x-show="catalog && !loading && !error" class="space-y-4">
+						<div class="text-sm space-y-1">
+							<template x-for="warning in catalog?.warnings || []" :key="warning"><p x-text="warning"></p></template>
+						</div>
+						<p role="status" aria-live="polite" aria-atomic="true" x-text="resultCount + ' matching variables'"></p>
+						<section aria-label="Configured variables" class="space-y-3">
+							<h3 class="font-semibold">Configured variables</h3>
+							<p x-show="configured.length === 0">No configured variables match.</p>
+							<template x-for="variable in configured" :key="variable.key">@StepVariableCard()</template>
+						</section>
+						<section aria-label="Predefined runtime variables" class="space-y-3">
+							<h3 class="font-semibold">Predefined runtime variables</h3>
+							<p x-show="predefined.length === 0">No predefined variables match.</p>
+							<template x-for="variable in predefined" :key="variable.key">@StepVariableCard()</template>
+						</section>
+						<p class="text-sm">Server configuration and host process environments are not included. Python references require <code>import os</code>.</p>
+					</div>
+				</div>
+				<p class="shrink-0 break-words text-sm" role="status" aria-live="polite" aria-atomic="true" x-text="announcement"></p>
+			</div>
+		</dialog>
+	</div>
+}
+
+templ StepVariableCard() {
+	<article class="rounded border border-base-300 bg-base-200 p-3 space-y-2 min-w-0" :data-variable-key="variable.key">
+		<div class="flex flex-wrap items-center gap-2">
+			<code class="break-all font-bold" x-text="variable.name"></code>
+			<span x-show="variable.secret" class="badge badge-warning">Secret · masked</span>
+			<span x-show="variable.effective" class="badge badge-outline">Effective definition</span>
+		</div>
+		<p class="break-words text-sm"><span x-text="variable.source"></span> · <span x-text="variable.source_name"></span> · <span x-text="variable.scope"></span></p>
+		<p x-show="variable.description" class="text-sm" x-text="variable.description"></p>
+		<p class="text-sm"><span class="font-semibold" x-text="variable.status"></span>: <span x-text="variable.reason"></span></p>
+		<p x-show="variable.overridden_by" class="text-sm">Overridden by <code x-text="variable.overridden_by"></code></p>
+		<p x-show="variable.value !== null" class="break-all text-sm">Value: <code x-text="variable.value"></code></p>
+		<input x-show="variable.reference" :value="variable.reference" :aria-label="variable.name + ' reference'" readonly class="input input-bordered input-sm w-full font-mono"/>
+		<div class="flex flex-wrap gap-2">
+			<button type="button" class="btn btn-xs" :data-key="variable.key" data-copy="name" x-on:click="copy" :aria-label="'Copy name ' + variable.name">Copy name</button>
+			<button type="button" class="btn btn-xs" :data-key="variable.key" data-copy="reference" x-on:click="copy" :disabled="!variable.reference" :aria-label="'Copy reference ' + variable.name">Copy reference</button>
+		</div>
+	</article>
+}

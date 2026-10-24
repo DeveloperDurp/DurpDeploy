@@ -9181,6 +9181,134 @@
         ]
       }
     },
+    "/projects/{id}/variables/available": {
+      "get": {
+        "description": "Secret values are null. Requires project access. Does not inspect snapshots or host environments.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "variables"
+        ],
+        "summary": "Inspect current configured and conditional runtime variables for step authoring.",
+        "operationId": "availableVariables",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "EnvironmentID",
+            "description": "Omit for scope alternatives rather than an effective environment.",
+            "name": "environment_id",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "StepID",
+            "description": "Saved step must belong to this project. Draft fields override its metadata.",
+            "name": "step_id",
+            "in": "query"
+          },
+          {
+            "enum": [
+              "bash",
+              "pwsh",
+              "powershell",
+              "python3"
+            ],
+            "type": "string",
+            "x-go-name": "Interpreter",
+            "name": "interpreter",
+            "in": "query"
+          },
+          {
+            "enum": [
+              "local",
+              "agent"
+            ],
+            "type": "string",
+            "x-go-name": "ExecutionTarget",
+            "name": "execution_target",
+            "in": "query"
+          },
+          {
+            "enum": [
+              "host",
+              "container"
+            ],
+            "type": "string",
+            "x-go-name": "AgentExecutionMode",
+            "description": "Local requires host; agent accepts host or container.",
+            "name": "agent_execution_mode",
+            "in": "query"
+          },
+          {
+            "type": "string",
+            "x-go-name": "VariableNames",
+            "description": "Comma-separated names. Explicit empty selects all configured variables.",
+            "name": "variable_names",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "AvailableVariables describes current authoring definitions, not snapshots.",
+            "schema": {
+              "$ref": "#/definitions/AvailableVariables"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/projects/{id}/variables/inherited": {
       "get": {
         "produces": [
@@ -10664,6 +10792,44 @@
       },
       "x-go-name": "swaggerAuditLogParams",
       "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "AvailableVariables": {
+      "type": "object",
+      "title": "AvailableVariables describes current authoring definitions, not snapshots.",
+      "properties": {
+        "configured": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/VariableDefinition"
+          },
+          "x-go-name": "Configured"
+        },
+        "context": {
+          "$ref": "#/definitions/VariableContext"
+        },
+        "environments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/VariableEnvironment"
+          },
+          "x-go-name": "Environments"
+        },
+        "predefined": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/VariableDefinition"
+          },
+          "x-go-name": "Predefined"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "Warnings"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
     },
     "BadRequestError": {
       "type": "object",
@@ -14516,6 +14682,121 @@
       },
       "x-go-name": "swaggerVariable",
       "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "VariableContext": {
+      "type": "object",
+      "title": "VariableContext contains only draft metadata, never script text or values.",
+      "properties": {
+        "agent_execution_mode": {
+          "type": "string",
+          "x-go-name": "AgentMode"
+        },
+        "environment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "EnvironmentID"
+        },
+        "execution_target": {
+          "type": "string",
+          "x-go-name": "Target"
+        },
+        "interpreter": {
+          "type": "string",
+          "x-go-name": "Interpreter"
+        },
+        "variable_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "VariableNames"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
+    },
+    "VariableDefinition": {
+      "type": "object",
+      "title": "VariableDefinition is display data. Secret values are never decrypted.",
+      "properties": {
+        "description": {
+          "type": "string",
+          "x-go-name": "Description"
+        },
+        "effective": {
+          "type": "boolean",
+          "x-go-name": "Effective"
+        },
+        "environment_id": {
+          "description": "Null for unscoped defaults and runtime variables.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "EnvironmentID",
+          "x-nullable": true
+        },
+        "key": {
+          "type": "string",
+          "x-go-name": "Key"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "overridden_by": {
+          "type": "string",
+          "x-go-name": "OverriddenBy"
+        },
+        "reason": {
+          "type": "string",
+          "x-go-name": "Reason"
+        },
+        "reference": {
+          "type": "string",
+          "x-go-name": "Reference"
+        },
+        "scope": {
+          "type": "string",
+          "x-go-name": "Scope"
+        },
+        "secret": {
+          "type": "boolean",
+          "x-go-name": "Secret"
+        },
+        "source": {
+          "type": "string",
+          "x-go-name": "Source"
+        },
+        "source_name": {
+          "type": "string",
+          "x-go-name": "SourceName"
+        },
+        "status": {
+          "type": "string",
+          "x-go-name": "Status"
+        },
+        "value": {
+          "description": "Null for secrets and runtime values assigned at execution.",
+          "type": "string",
+          "x-go-name": "Value",
+          "x-nullable": true
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
+    },
+    "VariableEnvironment": {
+      "type": "object",
+      "title": "VariableEnvironment deliberately contains no environment configuration.",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
     },
     "VariableListResponse": {
       "type": "array",

@@ -893,6 +893,46 @@ Deleting an environment with any active or unconfirmed remote deployment
 also returns `409`.
 Once deployments are terminal, environment deletion removes their history.
 
+## Inspect variables while authoring steps
+
+Call `GET /api/v1/projects/{id}/variables/available` to inspect current variable definitions.
+The endpoint requires project access and honors scoped-token grants.
+It returns `configured`, `predefined`, `environments`, `context`, and `warnings`.
+Environment choices contain only IDs and names.
+Secret values are `null` and are never decrypted for this view.
+Non-secret values follow existing project inspection permissions.
+
+Set `environment_id` to select an eligible environment.
+Without it, the response shows scope alternatives without an effective environment.
+Set `step_id` to load a saved project step's metadata.
+The optional draft fields override that metadata:
+
+- `interpreter`: `bash`, `pwsh`, `powershell`, or `python3`.
+- `execution_target`: `local` or `agent`.
+- `agent_execution_mode`: `host` or `container`. Local steps require `host` in this field.
+- `variable_names`: comma-separated names. An explicit empty value removes the saved restriction for this preview.
+
+Each definition includes its source, scope, secret flag, effective flag, status, reason, and copyable reference.
+`overridden_by` identifies the winning definition by its `key`.
+Configured statuses include `available`, `excluded`, `overridden`, `out_of_scope`, `requires_environment`, `conditional`, and `unsupported`.
+Python references require `import os`.
+References contain variable names, never values.
+
+Predefined paths remain conditional because authoring has no deployment package or approval context.
+`ARTIFACT_PATH` requires a package.
+`DURPDEPLOY_STAGE_DIR` requires managed deployment staging.
+`DURPDEPLOY_APPROVED_DIR` requires an approved artifact volume and is unsupported on the current remote agent.
+Managed paths bypass configured-variable restrictions when injected.
+Their values are assigned at execution.
+Host process environments and server configuration are excluded.
+This endpoint does not change snapshots, precedence, injection, or permissions.
+
+Invalid context returns `400`.
+A missing or foreign step returns `404`.
+For lifecycle projects, an environment outside the lifecycle returns `422`.
+For projects without a lifecycle, a missing environment returns `404`.
+Responses use `Cache-Control: no-store`.
+
 ## Endpoint cheat sheet
 
 Lifecycle variables are shared by every project assigned to that lifecycle.
@@ -930,6 +970,7 @@ contain merged values are not migrated; recreate them when upgrading.
 | Steps | `/api/v1/projects/{id}/steps[/{stepId}]` (`POST/GET/PUT/DELETE`, `PATCH /steps/reorder`) |
 | Variables | `/api/v1/projects/{id}/variables[/{varId}]` |
 | Inherited variables | `GET /api/v1/projects/{id}/variables/inherited` |
+| Available authoring variables | `GET /api/v1/projects/{id}/variables/available` |
 | Shared lifecycle variables | `/api/v1/lifecycles/{id}/variables[/{varId}]` (global admin) |
 | Releases | `/api/v1/projects/{id}/releases[/{relId}]` (`GET/POST/DELETE`), `POST .../refresh` |
 | Deployments | `POST /api/v1/projects/{id}/deployments`, `GET /api/v1/deployments` (member projects; global admins see all; optional positive `project_id` filter) |

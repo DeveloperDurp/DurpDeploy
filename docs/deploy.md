@@ -410,6 +410,38 @@ an actionable `last_error`. Agent steps retain host execution on their agent.
 
 ---
 
+## Inspect step variables
+
+Open a project's **Steps** page.
+Select **View Variables** to open the read-only viewer.
+The same button is available in new, edit, and fullscreen script editors.
+The viewer preserves unsaved fields, script selection, scroll position, and the editor dialog.
+
+Search by variable name.
+Select an environment to see effective definitions and overrides.
+Without an environment, the viewer shows scope alternatives.
+Project variables override lifecycle variables only within the same name and scope.
+Environment-specific values take precedence over unscoped defaults.
+The viewer uses current definitions and does not change existing snapshots.
+
+Inspect each definition's source, scope, secret flag, and availability reason.
+The viewer reads the active step's unsaved interpreter, target, and variable selection.
+Excluded variables remain visible with an explanation.
+Secret values stay masked.
+Select **Copy name** or **Copy reference** to copy names without values.
+Python references require `import os`.
+
+Runtime paths are conditional and receive their values at execution.
+`ARTIFACT_PATH` requires a package.
+`DURPDEPLOY_STAGE_DIR` requires managed staging.
+`DURPDEPLOY_APPROVED_DIR` requires an approved artifact volume.
+The current remote agent does not inject `DURPDEPLOY_APPROVED_DIR`.
+Managed paths bypass the configured-variable selection when their execution context exists.
+Server configuration and host process environments are excluded.
+
+Use `GET /api/v1/projects/{id}/variables/available` for the same metadata through the public API.
+Read the shipped agent skill for query fields and response details.
+
 ## Reverse proxy trust
 
 DurpDeploy applies login rate limits itself. It trusts forwarding headers from

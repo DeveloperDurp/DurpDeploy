@@ -151,6 +151,10 @@ func newHarness(t *testing.T) *testHarness {
 
 			apiVarH := api.NewVariableHandler(repo)
 			par.Get("/api/v1/projects/{id}/variables", apiVarH.ListVariables)
+			par.Get(
+				"/api/v1/projects/{id}/variables/available",
+				apiVarH.Available,
+			)
 			par.Post("/api/v1/projects/{id}/variables", apiVarH.CreateVariable)
 			par.Get(
 				"/api/v1/projects/{id}/variables/{varId}",

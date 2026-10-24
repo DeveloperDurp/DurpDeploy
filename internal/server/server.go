@@ -453,6 +453,7 @@ func newRouter(
 			)
 
 			ppr.Get("/projects/{id}/variables", vh.ListVariables)
+			ppr.Get("/projects/{id}/variables/available", vh.Available)
 			ppr.Post("/projects/{id}/variables", vh.CreateVariable)
 			ppr.Get("/projects/{id}/variables/{varId}/edit", vh.EditVariable)
 			ppr.Put("/projects/{id}/variables/{varId}", vh.UpdateVariable)
@@ -877,6 +878,7 @@ func newRouter(
 				artifactH.ReleasePin,
 			)
 			par.Get("/projects/{id}/variables", apiVarH.ListVariables)
+			par.Get("/projects/{id}/variables/available", apiVarH.Available)
 			par.Get(
 				"/projects/{id}/variables/inherited",
 				apiLcVariablesH.Inherited,

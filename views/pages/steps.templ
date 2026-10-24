@@ -37,6 +37,7 @@ templ StepsContent(project db.Project, steps []db.Step) {
 		<div class="page-header">
 			<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Steps for { project.Name }</h1>
 			<div class="flex gap-2">
+				@components.StepVariablesButton()
 				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
 		</div>
@@ -88,5 +89,6 @@ templ StepsContent(project db.Project, steps []db.Step) {
 				<form method="dialog" class="modal-backdrop"><button type="submit" aria-label="Cancel step form"></button></form>
 			</dialog>
 		}
+		@components.StepVariableViewer(project.ID)
 	</div>
 }

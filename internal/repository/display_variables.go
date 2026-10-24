@@ -100,15 +100,25 @@ func (r *Repository) InheritedVariablesForDisplay(
 	ctx context.Context,
 	project db.Project,
 ) (VariableInheritance, error) {
-	local, err := r.Queries.ListVariablesByProject(ctx, project.ID)
+	local, err := r.ListProjectVariablesForDisplay(ctx, project.ID)
 	if err != nil {
 		return VariableInheritance{}, err
+	}
+	return r.inheritedVariables(ctx, project, local, true)
+}
+
+func (r *Repository) ListProjectVariablesForDisplay(
+	ctx context.Context, projectID int64,
+) ([]db.Variable, error) {
+	local, err := r.Queries.ListVariablesByProject(ctx, projectID)
+	if err != nil {
+		return nil, err
 	}
 	for i := range local {
 		local[i].Value, err = r.displayValue(local[i].Value, local[i].Secret)
 		if err != nil {
-			return VariableInheritance{}, err
+			return nil, err
 		}
 	}
-	return r.inheritedVariables(ctx, project, local, true)
+	return local, nil
 }

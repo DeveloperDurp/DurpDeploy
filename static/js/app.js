@@ -1,6 +1,7 @@
 import Alpine from 'alpinejs'
 import htmx from 'htmx.org'
 import { createVariablesPage } from './variables.js'
+import { createStepVariables } from './step-variables.js'
 import { handleBoostedError } from './navigation.js'
 import { registerLogComponents } from './deployment-logs.js'
 
@@ -903,6 +904,7 @@ Alpine.data('stepEditor', () => ({
 }));
 
 Alpine.data('variablesPage', () => createVariablesPage(focusFormField));
+Alpine.data('stepVariables', () => createStepVariables(focusFormField));
 
 registerLogComponents(Alpine);
 
