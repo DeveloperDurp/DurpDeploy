@@ -492,6 +492,28 @@ These checks require no schedules.
 bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^Test(VariableNames(APIWeb|Browser)E2E|ProjectVariableNamesRejectInvalidWrites)$' ./internal/repository ./internal/handler/api
 ```
 
+## Cancel variable edits
+
+Open a project's Variables page at phone and desktop widths.
+Edit an existing variable.
+Change Name, Value, Environment, and Secret.
+Select Cancel.
+Select Edit again.
+Confirm that all fields show their saved settings.
+Repeat with a secret variable.
+Confirm that Value stays empty and uses a password field.
+Repeat Cancel and Edit twice.
+Read the variable through the public API.
+Confirm that Cancel stores no changes.
+Change Name and select Save.
+Confirm that the public API returns the new name and the original scope and Secret setting.
+Keep the variables for repeat checks.
+These checks require no schedules.
+
+```bash
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestVariableCancelBrowserE2E$' ./internal/handler/api
+```
+
 ## Duplicate release recovery (A12)
 
 Create a disposable project and a release named `edge-v1`.

@@ -73,7 +73,7 @@ func TestAlpineEditFormsBrowserE2E(t *testing.T) {
 		))
 		b.captureNavigation(t, page.name+"-editing", checkScheduleLayout)
 		b.evaluate(t, fmt.Sprintf(
-			`[...document.querySelectorAll(%q)].forEach(e => e.querySelector('button[type=button]').click()); true`,
+			`[...document.querySelectorAll(%q)].forEach(e => [...e.querySelectorAll('button')].find(button => button.textContent === 'Cancel').click()); true`,
 			page.selector,
 		))
 		b.wait(t, fmt.Sprintf(

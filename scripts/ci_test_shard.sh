@@ -58,7 +58,7 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
       '^TestRunbookRetryVersion(APIWeb|Browser)E2E$'
       '^TestRunbookHistoryPhone(APIWeb|Browser)E2E$'
       '^TestReleaseContent(APIWeb|Browser)E2E$'
-      '^TestVariableNames(APIWeb|Browser)E2E$'
+      '^TestVariable(Names(APIWeb|Browser)|CancelBrowser)E2E$'
       '^TestReleaseDuplicateRecovery(APIWeb|Browser)E2E$'
       '^TestReleaseVariableGuidance(APIWeb|Browser)E2E$'
       '^TestRerunInputs(APIWeb|Browser)E2E$'

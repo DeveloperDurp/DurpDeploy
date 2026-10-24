@@ -281,11 +281,11 @@ templ VariableQuickEditForm(projectID int64, variable db.Variable, environments 
 			</select>
 		</div>
 		<label class="cursor-pointer flex items-center gap-2">
-			<input type="checkbox" name="secret" class="checkbox checkbox-sm" x-model="secret"/>
+			<input type="checkbox" name="secret" checked?={ variable.Secret != 0 } class="checkbox checkbox-sm" x-model="secret"/>
 			<span class="text-sm">Secret</span>
 		</label>
 		<div class="flex flex-wrap gap-2">
-			<button type="button" class="btn btn-ghost btn-sm" x-on:click="editing = false">Cancel</button>
+			<button type="reset" class="btn btn-ghost btn-sm" x-on:click="editing = false">Cancel</button>
 			<button type="submit" class="btn btn-primary btn-sm">Save</button>
 		</div>
 	</form>
