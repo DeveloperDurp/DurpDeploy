@@ -118,6 +118,11 @@ func Middleware(repo *repository.Repository) func(http.Handler) http.Handler {
 			if action == "" {
 				return
 			}
+			if action == "apply_library_template" &&
+				state.libraryTemplate == nil {
+				// Project permission toasts return 200 without applying a template.
+				return
+			}
 			// HTMX permission denials return 200 without a mutation.
 			if entityType == "project_group" &&
 				state.projectGroupChange == nil {
@@ -296,6 +301,9 @@ func addRequestStateDetails(
 	}
 	if state.projectGroupChange != nil {
 		details["project_group_change"] = state.projectGroupChange
+	}
+	if state.libraryTemplate != nil {
+		details["library_template"] = state.libraryTemplate
 	}
 	if state.releaseSource != nil {
 		details["release_id"] = state.releaseID

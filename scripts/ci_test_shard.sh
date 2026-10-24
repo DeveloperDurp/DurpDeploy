@@ -48,6 +48,7 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
     bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^Test(LifecycleVariables|LifecycleLiveScope|LifecyclePageNavigation|LifecycleStageOrder|VariableScopesBeforeDeployment|NotificationCredentialForms|NotificationValidationPreservesForm|SMTPPlaintextWarning)BrowserE2E$' ./internal/handler/api
     ;;
   browser-resources)
+	  bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=15m -v -run '^TestTemplateLibrary.*E2E$' ./internal/handler/api
 	  bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestStepVariables(APIWeb|Browser)E2E$' ./internal/handler/api
 	  bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=6m -v -run '^TestReleaseProvenance.*E2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^TestProjectGroups.*E2E$' ./internal/handler/api

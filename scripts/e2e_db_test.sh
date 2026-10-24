@@ -117,7 +117,7 @@ fi
 db_query() {
     local query=$1
     case "$DB_CLIENT" in
-        sqlite) sqlite3 "$DB_DSN" "$query" ;;
+        sqlite) sqlite3 -cmd '.timeout 5000' "$DB_DSN" "$query" ;;
         postgres)
             if [[ -n "$DB_CONTAINER" ]]; then
                 docker exec "$DB_CONTAINER" psql -U durpdeploy -d durpdeploy -At -c "$query"

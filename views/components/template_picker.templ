@@ -6,6 +6,7 @@ import (
 )
 
 templ TemplatePicker(templates []db.StepTemplate, projectID int64) {
+	<p class="mb-3"><a class="link" href={ fmt.Sprintf("/projects/%d/template-library", projectID) } hx-boost="false">Browse curated steps and complete workflows</a></p>
 	if len(templates) == 0 {
 		<p class="text-gray-400">No templates available. Create one first.</p>
 	} else {

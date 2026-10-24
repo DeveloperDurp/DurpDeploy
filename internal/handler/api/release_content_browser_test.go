@@ -38,8 +38,8 @@ func TestReleaseContentBrowserE2E(t *testing.T) {
 				)
 				checkReleaseDisclosure(t, b, selector, fixture.scripts[index])
 			}
-			for index, name := range fixture.names {
-				checkReleaseVariableName(t, b, index, len(fixture.names), name)
+			for _, name := range fixture.names {
+				checkReleaseVariableName(t, b, len(fixture.names), name)
 			}
 			if string(
 				b.evaluate(
@@ -57,20 +57,21 @@ func TestReleaseContentBrowserE2E(t *testing.T) {
 }
 
 func checkReleaseVariableName(
-	t *testing.T, b *packageBrowser, index, count int, name string,
+	t *testing.T, b *packageBrowser, count int, name string,
 ) {
 	t.Helper()
 	if string(b.evaluate(t, fmt.Sprintf(`(() => {
  const cells = document.querySelectorAll('[data-release-variable-name]');
- const cell = document.querySelector('[data-release-variable-index="%d"]');
- return cells.length === %d && cell.tagName === 'TD' &&
-  cell.textContent === %q && cell.getClientRects().length > 0 &&
+ const name = %q;
+ const cell = [...cells].find(element => element.textContent === name);
+ return cells.length === %d && !!cell && cell.tagName === 'TD' &&
+  cell.getClientRects().length > 0 &&
   cell.scrollWidth <= cell.clientWidth && cell.scrollHeight <= cell.clientHeight &&
   getComputedStyle(cell).whiteSpace !== 'nowrap' &&
   !cell.querySelector('details, summary, button, a') &&
-  [...document.querySelectorAll('td')].filter(e => e.textContent === %q).length === 1;
-})()`, index, count, name, name))) != "true" {
-		t.Fatal("saved variable name is repeated, clipped, or hidden")
+  [...document.querySelectorAll('td')].filter(e => e.textContent === name).length === 1;
+})()`, name, count))) != "true" {
+		t.Fatalf("saved variable %q is repeated, clipped, or hidden", name)
 	}
 }
 

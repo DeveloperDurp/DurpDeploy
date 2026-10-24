@@ -1,5 +1,66 @@
 # Manual checks after `make e2e-test`
 
+## Curated template library
+
+The running suite retains 19 projects named `e2e-library-<slug>-<run-id>`.
+It prints each project and configuration-preview URL.
+The offline agent label exists only for configuration checks.
+It has no paired identity and cannot execute work.
+Replace it with paired Linux host labels before testing a real deployment.
+These checks create no schedules or deployments.
+
+1. Open **Templates → Template Library**.
+2. Confirm that 12 individual steps and seven complete workflows appear.
+3. Open **Deploy a Linux service**.
+4. Inspect all four ordered scripts, required variables, execution target, dependencies, and permissions.
+5. Choose a writable disposable project.
+6. Submit the form without a required value.
+7. Confirm that the form reports the missing value without changing project steps or variables.
+8. Supply the required values and registered agent labels.
+9. Supply a fresh optional artifact token through its secret input.
+10. Confirm review and apply the template.
+11. Confirm that four editable steps append in order and no deployment starts.
+12. Apply the same template again.
+13. Confirm a conflict message and unchanged project configuration.
+14. Confirm that the token input stays empty after the rejected request.
+15. Sign in as a Viewer or Deployer.
+16. Confirm that previews remain readable and no application form appears.
+
+Repeat the preview and application checks for **Deploy a Compose application** and an individual step.
+Repeat the checks for the PowerShell 7 and Python 3 variants.
+Confirm that each card and preview shows its actual interpreter.
+At phone width, confirm readable scripts, scrolling forms, visible feedback, and no page overflow.
+Use the existing step and variable editors to customize a retained copy.
+Confirm that the library preview and an earlier release snapshot remain unchanged.
+
+Use `GET /api/v1/projects/{id}/template-library/{slug}` to compare public configuration with the preview.
+Use `POST /api/v1/projects/{id}/template-library/{slug}/apply` with the preview's version and variable keys.
+Expect `201` for successful creation, `422` for invalid configuration, and `409` for stale versions or variable conflicts.
+Expect `403` for Viewer, Deployer, cross-project, or insufficient token permissions.
+Inspect **Admin → Audit** for `apply_library_template` with the destination and library version.
+Confirm that audit and variable API responses omit secret values.
+
+For `terraform-plan-apply`, inspect both scripts and the plan approval paths.
+Supply a reviewed toolchain image and its configuration directory.
+Confirm that the form has no agent-label input.
+Supply fresh optional HTTP backend credentials through the secret input.
+Apply the template and confirm that both copied steps use the selected image.
+Confirm that copying starts no deployment.
+For execution checks, use a disposable backend and configuration with built-in `terraform_data` only.
+Create a release and deploy it separately.
+Confirm that the deployment pauses after the saved plan and before any state write.
+Approve the exact artifact and confirm one state update with locking.
+Repeat with rejection and confirm no state update.
+Repeat with changed remote state and confirm that apply fails without changing state.
+In a disposable deployment, create `terraform-context` in staging before the plan step.
+Confirm failure before backend access or artifact approval.
+For Bash download, create an `artifact` directory in staging before the download step.
+Confirm failure and unchanged directory contents.
+Retain the projects, releases, decisions, and deployment history.
+Do not use production infrastructure for these checks.
+
+See [template library](template-library.md) for host prerequisites and supported deployment boundaries.
+
 ## Agent revocation navigation
 
 Use disposable agents without production work.

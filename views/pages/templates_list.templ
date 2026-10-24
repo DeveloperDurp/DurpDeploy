@@ -24,9 +24,18 @@ templ TemplatesPage(currentPath string) {
 }
 
 templ TemplateTypeNavigation(projects bool) {
+	if projects {
+		@TemplateNavigation("projects")
+	} else {
+		@TemplateNavigation("steps")
+	}
+}
+
+templ TemplateNavigation(active string) {
 	<nav aria-label="Template types" class="inline-flex flex-wrap gap-1 rounded-box bg-base-200 p-1">
-		<a href="/templates" aria-current={ strconv.FormatBool(!projects) } class={ "btn", templ.KV("btn-primary", !projects), templ.KV("btn-ghost", projects) }>Step Templates</a>
-		<a href="/templates?type=projects" aria-current={ strconv.FormatBool(projects) } class={ "btn", templ.KV("btn-primary", projects), templ.KV("btn-ghost", !projects) }>Project Templates</a>
+		<a href="/templates" aria-current={ strconv.FormatBool(active == "steps") } class={ "btn", templ.KV("btn-primary", active == "steps"), templ.KV("btn-ghost", active != "steps") }>Step Templates</a>
+		<a href="/templates?type=projects" aria-current={ strconv.FormatBool(active == "projects") } class={ "btn", templ.KV("btn-primary", active == "projects"), templ.KV("btn-ghost", active != "projects") }>Project Templates</a>
+		<a href="/templates?type=library" aria-current={ strconv.FormatBool(active == "library") } class={ "btn", templ.KV("btn-primary", active == "library"), templ.KV("btn-ghost", active != "library") }>Template Library</a>
 	</nav>
 }
 

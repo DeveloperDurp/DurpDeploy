@@ -7,6 +7,68 @@ metadata:
 
 # Operating DurpDeploy over HTTP
 
+## Curated step and workflow templates
+
+Browse `GET /api/v1/template-library` with a global token.
+Preview `GET /api/v1/template-library/{slug}` before applying an entry.
+The library contains 19 entries across Bash, PowerShell 7, Python 3, and a Terraform workflow.
+Append `-powershell` or `-python` to an existing Bash slug for its Linux-host variant.
+Read the preview's scripts, configuration, execution target, dependencies, and permissions.
+
+For scoped tokens, use these selected-project routes:
+
+```text
+GET  /api/v1/projects/{id}/template-library
+GET  /api/v1/projects/{id}/template-library/{slug}
+POST /api/v1/projects/{id}/template-library/{slug}/apply
+```
+
+Supply the preview version, `reviewed: true`, `agent_selectors`, and `variable_values` keyed by the preview's variable keys.
+Supply required values and fresh optional secrets through `variable_values`.
+Do not include credentials in URLs.
+Use a unique agent label for a single target host.
+Each matching agent runs the selected interpreter's Linux and Compose steps in host mode.
+Prepare the documented tools, paths, services, and permissions before deployment.
+
+```json
+{
+  "version": "1",
+  "reviewed": true,
+  "agent_selectors": ["app-host-01"],
+  "variable_values": {"HEALTH_URL": "https://app.example.test/health"}
+}
+```
+
+This request applies `http-health-check`.
+Successful application returns `201` with the project, slug, version, and created-record counts.
+It appends independent editable steps and encrypted variable definitions in one transaction.
+It starts no deployment and changes no existing release snapshot.
+
+Existing project or inherited lifecycle variable names return `409` without changes.
+A stale template version also returns `409`.
+Refresh the preview before retrying a stale version.
+Missing required values, invalid configuration, and unknown agent labels return `422`.
+Missing entries return `404`.
+Effective Maintainer permission is required to apply templates.
+Viewer and Deployer permission ceilings return `403`.
+Successful application records `apply_library_template` without secret values.
+Create a release and deploy separately after reviewing the editable copies.
+
+For `terraform-plan-apply`, omit `agent_selectors` or supply an empty array.
+Supply `TF_CONTAINER_IMAGE` and `TF_CONFIG_DIR` through `variable_values`.
+Use a reviewed image containing Bash, Python 3, Terraform, providers, configuration, and `.terraform.lock.hcl`.
+Configure a remote backend with state locking.
+Supply fresh optional `TF_HTTP_USERNAME` and secret `TF_HTTP_PASSWORD` values for an HTTP backend.
+Configure other backend credentials through editable secret variables and step restrictions before deployment.
+The copied Terraform steps run in server containers with bridge networking.
+They have no host mounts, agent execution, or host fallback.
+The plan step pauses for artifact approval before the apply step.
+Keep `terraform-context` absent from managed staging before the plan step.
+An existing context fails the step before Terraform runs.
+Inspect the exact saved plan before approval.
+The apply step uses only that approved plan and fails if remote state has changed.
+Copying the workflow does not run Terraform or create infrastructure.
+
 DurpDeploy is a single-binary deployment tool that runs ordered script steps
 against environments. It exposes three surfaces an agent may use:
 

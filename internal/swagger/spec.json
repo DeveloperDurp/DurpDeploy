@@ -8970,6 +8970,235 @@
         ]
       }
     },
+    "/projects/{id}/template-library": {
+      "get": {
+        "tags": [
+          "template-library"
+        ],
+        "summary": "Browse curated templates within an authorized project. Supports scoped tokens.",
+        "operationId": "listProjectLibraryTemplates",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "Limit",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "Offset",
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "Destination project ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/LibraryTemplateListResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/projects/{id}/template-library/{slug}": {
+      "get": {
+        "tags": [
+          "template-library"
+        ],
+        "summary": "Preview a curated template within an authorized project. Supports scoped tokens.",
+        "operationId": "previewProjectLibraryTemplate",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "Destination project ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "x-go-name": "Slug",
+            "description": "Curated template slug from the library list.",
+            "name": "slug",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "LibraryTemplate is bundled with the binary. Applying it creates independent\nproject records, rather than references to a mutable library definition.",
+            "schema": {
+              "$ref": "#/definitions/LibraryTemplate"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/projects/{id}/template-library/{slug}/apply": {
+      "post": {
+        "description": "Requires effective Maintainer permission. Conflicts do not overwrite configuration.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "template-library"
+        ],
+        "summary": "Append editable steps and encrypted variables atomically. Never starts work.",
+        "operationId": "applyLibraryTemplate",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "Destination project ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "x-go-name": "Slug",
+            "description": "Curated template slug from the library list.",
+            "name": "slug",
+            "in": "path",
+            "required": true
+          },
+          {
+            "description": "Supply the preview version, reviewed=true, and variable keys.\nHost templates require agent labels. Server-container templates omit labels.\nEvery matching agent runs the steps. Use a unique label for a single host.\nTerraform requires TF_CONTAINER_IMAGE and TF_CONFIG_DIR and pauses before apply.",
+            "name": "Body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ApplyLibraryTemplate"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/LibraryApplyResult"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/projects/{id}/templates-picker": {
       "get": {
         "produces": [
@@ -9610,6 +9839,112 @@
             "description": "Server error response.",
             "schema": {
               "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/template-library": {
+      "get": {
+        "tags": [
+          "template-library"
+        ],
+        "summary": "List curated step and workflow templates. Global tokens only.",
+        "operationId": "listLibraryTemplates",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "Limit",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "Offset",
+            "name": "offset",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/LibraryTemplateListResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/template-library/{slug}": {
+      "get": {
+        "tags": [
+          "template-library"
+        ],
+        "summary": "Preview every script, variable, dependency, and permission. Global tokens only.",
+        "operationId": "previewLibraryTemplate",
+        "parameters": [
+          {
+            "type": "string",
+            "x-go-name": "Slug",
+            "description": "Curated template slug from the library list.",
+            "name": "slug",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "LibraryTemplate is bundled with the binary. Applying it creates independent\nproject records, rather than references to a mutable library definition.",
+            "schema": {
+              "$ref": "#/definitions/LibraryTemplate"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
             }
           }
         },
@@ -10571,6 +10906,34 @@
       },
       "x-go-name": "swaggerAgentListResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "ApplyLibraryTemplate": {
+      "type": "object",
+      "properties": {
+        "agent_selectors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "AgentSelectors"
+        },
+        "reviewed": {
+          "type": "boolean",
+          "x-go-name": "Reviewed"
+        },
+        "variable_values": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "x-go-name": "VariableValues"
+        },
+        "version": {
+          "type": "string",
+          "x-go-name": "Version"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
     },
     "ApplyProjectTemplate": {
       "type": "object",
@@ -11602,6 +11965,124 @@
       },
       "x-go-name": "swaggerInheritedVariableList",
       "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "LibraryApplyResult": {
+      "type": "object",
+      "properties": {
+        "project_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ProjectID"
+        },
+        "slug": {
+          "type": "string",
+          "x-go-name": "Slug"
+        },
+        "steps_created": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "StepsCreated"
+        },
+        "variables_created": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "VariablesCreated"
+        },
+        "version": {
+          "type": "string",
+          "x-go-name": "Version"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
+    },
+    "LibraryTemplate": {
+      "description": "LibraryTemplate is bundled with the binary. Applying it creates independent\nproject records, rather than references to a mutable library definition.",
+      "type": "object",
+      "properties": {
+        "configuration": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/LibraryVariableConfig"
+          },
+          "x-go-name": "Configuration"
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "Dependencies"
+        },
+        "kind": {
+          "type": "string",
+          "x-go-name": "Kind"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "Permissions"
+        },
+        "slug": {
+          "type": "string",
+          "x-go-name": "Slug"
+        },
+        "snapshot": {
+          "$ref": "#/definitions/ProjectTemplateSnapshot"
+        },
+        "version": {
+          "type": "string",
+          "x-go-name": "Version"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
+    },
+    "LibraryTemplateListResponse": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LibraryTemplate"
+          },
+          "x-go-name": "Items"
+        },
+        "limit": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Limit"
+        },
+        "offset": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Offset"
+        },
+        "total": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Total"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "LibraryVariableConfig": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "x-go-name": "Description"
+        },
+        "format": {
+          "type": "string",
+          "x-go-name": "Format"
+        },
+        "required": {
+          "type": "boolean",
+          "x-go-name": "Required"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
     },
     "Lifecycle": {
       "type": "object",

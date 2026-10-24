@@ -240,6 +240,11 @@ Analysis keys use `gitlab-<merge-request-number>` to separate them from historic
 Self-managed GitLab supports SonarCloud analysis without native merge request decoration.
 Read findings with `make sonar-issues MR=<merge-request-number>` and a local `SONAR_TOKEN`.
 
+Bundled PowerShell and Python templates run through deployment API tests in separate processes.
+These processes do not emit coverage for the Go reports.
+SonarCloud excludes these script files from coverage and keeps their static analysis.
+Go catalog, validation, and copy code remain in the coverage gate.
+
 ## Publication and retained evidence
 
 The image job builds and scans Linux AMD64 OCI archives.

@@ -185,6 +185,7 @@ echo "=== Running-server browser checks ==="
 source "$SCRIPT_DIR/lifecycle_variables_e2e.sh"
 source "$SCRIPT_DIR/project_tokens_e2e.sh"
 source "$SCRIPT_DIR/project_templates_e2e.sh"
+source "$SCRIPT_DIR/template_library_e2e.sh"
 source "$SCRIPT_DIR/permission_roles_e2e.sh"
 DURPDEPLOY_LIVE_BASE="$BASE" \
 DURPDEPLOY_LIVE_TOKEN_PROJECTS="$PROJECT_TOKEN_BROWSER_IDS" \

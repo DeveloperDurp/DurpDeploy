@@ -238,6 +238,9 @@ func newRouter(
 			Post("/project-groups/{id}/delete", ph.DeleteProjectGroup)
 		projectTemplatesH := handler.NewProjectTemplateHandler(repo)
 		pr.Get("/project-templates", projectTemplatesH.List)
+		libraryH := handler.NewTemplateLibraryHandler(repo)
+		pr.Get("/template-library", libraryH.List)
+		pr.Get("/template-library/{slug}", libraryH.Preview)
 
 		tokensH := handler.NewTokensHandler(repo)
 		pr.Get("/settings/tokens", tokensH.MyTokens)
@@ -398,6 +401,12 @@ func newRouter(
 		// templates, deployments, logs) stay on pr above.
 		pr.Group(func(ppr chi.Router) {
 			ppr.Use(auth.RequireProjectAccess(repo))
+			ppr.Get("/projects/{id}/template-library", libraryH.List)
+			ppr.Get("/projects/{id}/template-library/{slug}", libraryH.Preview)
+			ppr.Post(
+				"/projects/{id}/template-library/{slug}/apply",
+				libraryH.Apply,
+			)
 			ppr.Get("/projects/{id}/project-templates", projectTemplatesH.List)
 			ppr.Get(
 				"/projects/{id}/project-templates/new",
@@ -702,6 +711,9 @@ func newRouter(
 			Delete("/project-groups/{id}", api.EmptyBody(apiProjH.DeleteProjectGroup))
 		apiProjectTemplatesH := api.NewProjectTemplateHandler(repo)
 		ar.Get("/project-templates", apiProjectTemplatesH.List)
+		apiLibraryH := api.NewTemplateLibraryHandler(repo)
+		ar.Get("/template-library", apiLibraryH.List)
+		ar.Get("/template-library/{slug}", apiLibraryH.Preview)
 
 		apiEnvH := api.NewEnvironmentHandler(repo)
 		ar.Get("/environments", apiEnvH.ListEnvironments)
@@ -823,6 +835,18 @@ func newRouter(
 		// Project-scoped sub-group.
 		ar.Group(func(par chi.Router) {
 			par.Use(auth.RequireProjectAccess(repo))
+			par.Get(
+				"/projects/{id}/template-library",
+				apiLibraryH.ListForProject,
+			)
+			par.Get(
+				"/projects/{id}/template-library/{slug}",
+				apiLibraryH.PreviewForProject,
+			)
+			par.Post(
+				"/projects/{id}/template-library/{slug}/apply",
+				apiLibraryH.Apply,
+			)
 			par.Get(
 				"/projects/{id}/project-templates",
 				apiProjectTemplatesH.ListForProject,

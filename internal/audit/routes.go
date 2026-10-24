@@ -4,6 +4,8 @@ package audit
 // registered in server.go. New routes need one map entry; the fallback
 // heuristic catches anything missed with a lossy name.
 var actionMap = map[string]string{
+	"POST /projects/{id}/template-library/{slug}/apply":                  "apply_library_template",
+	"POST /api/v1/projects/{id}/template-library/{slug}/apply":           "apply_library_template",
 	"POST /projects/{id}/project-templates":                              "create_project_template",
 	"POST /api/v1/projects/{id}/project-templates":                       "create_project_template",
 	"POST /projects/{id}/project-templates/{templateId}/projects":        "create_project_from_template",

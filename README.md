@@ -25,6 +25,8 @@ Organize projects and environments, capture releases, and deploy with live logs.
 
 ## Local quick start
 
+Use the [curated template library](docs/template-library.md) for Bash, PowerShell, Python, and approval-gated Terraform deployment starters.
+
 Install Go 1.26+, Node.js, the [templ CLI](https://templ.guide/quick-start/installation),
 and Docker or Podman. Build and start the development HTTPS proxy:
 

@@ -28,6 +28,10 @@ func (h *StepTemplateHandler) ListTemplates(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	if r.Method == http.MethodGet && r.URL.Query().Get("type") == "library" {
+		(&TemplateLibraryHandler{repo: h.repo}).List(w, r)
+		return
+	}
 	if r.Method == http.MethodGet && r.URL.Query().Get("type") == "projects" {
 		(&ProjectTemplateHandler{repo: h.repo}).List(w, r)
 		return

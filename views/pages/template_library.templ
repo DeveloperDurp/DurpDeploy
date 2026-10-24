@@ -1,0 +1,236 @@
+package pages
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+
+	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
+	"durpdeploy/views/layouts"
+)
+
+type LibraryTemplateFormData struct {
+	Entry     repository.LibraryTemplate
+	ProjectID int64
+	Project   db.Project
+	Projects  []db.Project
+	Labels    []string
+	Input     repository.ApplyLibraryTemplate
+	Error     string
+}
+
+func libraryTemplatePath(projectID int64, slug string) string {
+	if projectID == 0 {
+		return "/template-library/" + slug
+	}
+	return fmt.Sprintf("/projects/%d/template-library/%s", projectID, slug)
+}
+
+func libraryVariableValue(data LibraryTemplateFormData, variable repository.ProjectTemplateVariable) string {
+	if variable.Secret {
+		return ""
+	}
+	return data.Input.VariableValues[variable.Key]
+}
+
+templ TemplateLibraryPage(entries []repository.LibraryTemplate, projectID int64, currentPath string) {
+	@TemplatesPage(currentPath) {
+		@TemplateLibraryContent(entries, projectID)
+	}
+}
+
+templ TemplateLibraryContent(entries []repository.LibraryTemplate, projectID int64) {
+	<div id="templates-content" class="space-y-4" data-template-library>
+		<h1 class="text-3xl font-bold">Template Library</h1>
+		@TemplateNavigation("library")
+		<p>Preview and configure curated templates. Applying a template adds editable copies and starts no deployment.</p>
+		if projectID != 0 {
+			<p><a class="link" href={ fmt.Sprintf("/projects/%d", projectID) }>Back to project</a></p>
+		}
+		for _, kind := range []string{"step", "workflow"} {
+			<section class="space-y-3" aria-label={ "Curated " + kind + " templates" }>
+				if kind == "step" {
+					<h2 class="text-xl font-bold">Individual steps</h2>
+				} else {
+					<h2 class="text-xl font-bold">Complete workflows</h2>
+				}
+				for _, entry := range entries {
+					if entry.Kind == kind {
+						@ResourceCard(entry.Snapshot.Name, libraryTemplatePath(projectID, entry.Slug)) {
+							<p>{ entry.Snapshot.Description }</p>
+							<p>Version { entry.Version } · { strconv.Itoa(len(entry.Snapshot.Steps)) } step(s) · { repository.LibraryInterpreters(entry) }</p>
+							if repository.LibraryUsesAgents(entry) {
+								<p>Linux host agent</p>
+							} else {
+								<p>Server containers · Human approval</p>
+							}
+						}
+					}
+				}
+			</section>
+		}
+	</div>
+}
+
+templ LibraryTemplatePage(data LibraryTemplateFormData, currentPath string) {
+	@layouts.Base(data.Entry.Snapshot.Name, currentPath) {
+		<div class="space-y-6" data-library-preview>
+			<div class="page-header">
+				<h1 class="text-3xl font-bold break-words">{ data.Entry.Snapshot.Name }</h1>
+				<a class="btn btn-ghost" href="/templates?type=library">Template Library</a>
+			</div>
+			<p>{ data.Entry.Snapshot.Description }</p>
+			<p>Version { data.Entry.Version }. Type: { data.Entry.Kind }. Applying this template starts no deployment.</p>
+			if data.Error != "" {
+				<div class="alert alert-error" role="alert" data-library-error>{ data.Error }</div>
+			}
+			<section class="space-y-2" aria-label="Dependencies and permissions">
+				<h2 class="text-xl font-bold">Dependencies</h2>
+				<ul class="list-disc list-inside">
+					for _, dependency := range data.Entry.Dependencies {
+						<li>{ dependency }</li>
+					}
+				</ul>
+				<h2 class="text-xl font-bold">Execution permissions</h2>
+				<ul class="list-disc list-inside">
+					for _, permission := range data.Entry.Permissions {
+						<li>{ permission }</li>
+					}
+				</ul>
+				if repository.LibraryUsesAgents(data.Entry) {
+					<p>These scripts run in host mode with the agent account's authority. Use labels for the intended Linux hosts.</p>
+					<p>All selected hosts must have the listed tools and permissions. No tools, services, runtime sockets, or privileges are provisioned.</p>
+				} else {
+					<p>These steps run in server containers with bridge networking. Supply a reviewed toolchain image. No host fallback or host mounts are available.</p>
+				}
+			</section>
+			<section class="space-y-3" aria-label="Ordered scripts">
+				<h2 class="text-xl font-bold">Ordered steps and scripts</h2>
+				for i, step := range data.Entry.Snapshot.Steps {
+					<details class="rounded-box bg-base-200 p-4" open>
+						<summary class="font-bold">{ strconv.Itoa(i+1) }. { step.Name }</summary>
+						<p>Interpreter: { step.Interpreter }. Target: { step.ExecutionTarget }.</p>
+						if step.ExecutionTarget == "agent" {
+							<p>Agent mode: { step.AgentExecutionMode }.</p>
+						} else {
+							<p>Container image: supply TF_CONTAINER_IMAGE. Network: { step.NetworkMode }.</p>
+						}
+						<p>Timeout: { strconv.FormatInt(step.TimeoutSeconds, 10) } seconds. Retries: { strconv.FormatInt(step.MaxRetries, 10) }.</p>
+						if step.ApprovalArtifactPath != "" {
+							<p>Human approval required after this step. Artifact: { step.ApprovalArtifactPath }. Review: { step.ApprovalReviewPath }. Format: { step.ApprovalReviewFormat }.</p>
+						}
+						<p class="break-all">Variables: { strings.Join(step.VariableNames, ", ") }</p>
+						<pre class="whitespace-pre-wrap break-all mt-3">{ step.ScriptBody }</pre>
+					</details>
+				}
+			</section>
+			<section class="space-y-3" aria-label="Required configuration">
+				<h2 class="text-xl font-bold">Configuration</h2>
+				for _, variable := range data.Entry.Snapshot.Variables {
+					<p class="break-words">
+						<strong>{ variable.Name }</strong>: { data.Entry.Configuration[variable.Key].Description }
+						if data.Entry.Configuration[variable.Key].Required {
+							<span>{ " Required." }</span>
+						} else {
+							<span>{ " Optional." }</span>
+						}
+						if variable.Secret {
+							<span>{ " Secret. Supply a fresh value." }</span>
+						}
+					</p>
+				}
+			</section>
+			if !CanWrite(ctx) {
+				<p data-library-readonly>Applying templates requires Maintainer permission on the destination project.</p>
+				@PermissionHelp("maintainer")
+			} else if data.ProjectID == 0 {
+				<section class="space-y-3" aria-label="Choose destination project">
+					<h2 class="text-xl font-bold">Choose a destination project</h2>
+					for _, project := range data.Projects {
+						@ResourceCard(project.Name, libraryTemplatePath(project.ID, data.Entry.Slug)) {
+							<p>Configure this template for { project.Name }.</p>
+						}
+					}
+					if len(data.Projects) == 0 {
+						<p>No writable projects. <a class="link" href="/projects">Open Projects</a> to create one or review your access.</p>
+					}
+				</section>
+			} else {
+				@ApplyLibraryTemplateForm(data)
+			}
+		</div>
+	}
+}
+
+templ ApplyLibraryTemplateForm(data LibraryTemplateFormData) {
+	<form
+		method="post"
+		action={ libraryTemplatePath(data.ProjectID, data.Entry.Slug) + "/apply" }
+		hx-boost="false"
+		class="card bg-base-200"
+		data-apply-library-template
+	>
+		<div class="card-body space-y-4 min-w-0">
+			<h2 class="card-title">Configure for { data.Project.Name }</h2>
+			<p>New steps append after existing steps. Existing project and lifecycle variable names cause a conflict. Nothing is overwritten.</p>
+			<p>Copies remain editable. Future library updates do not change copies or existing release snapshots.</p>
+			<input type="hidden" name="version" value={ data.Entry.Version }/>
+			for _, variable := range data.Entry.Snapshot.Variables {
+				<label class="form-control" for={ "variable-" + variable.Key }>
+					<span class="label-text break-all">
+						{ variable.Name }
+						if data.Entry.Configuration[variable.Key].Required {
+							<span>{ " (required)" }</span>
+						}
+					</span>
+					<input
+						id={ "variable-" + variable.Key }
+						name={ "variable_" + variable.Key }
+						type={ libraryInputType(variable.Secret) }
+						value={ libraryVariableValue(data, variable) }
+						required?={ data.Entry.Configuration[variable.Key].Required }
+						autocomplete="off"
+						class="input input-bordered w-full"
+						aria-describedby={ "help-" + variable.Key }
+					/>
+					<span id={ "help-" + variable.Key } class="text-sm">{ data.Entry.Configuration[variable.Key].Description }</span>
+				</label>
+			}
+			if repository.LibraryUsesAgents(data.Entry) {
+				<label class="form-control" for="library-agent-selectors">
+					<span class="label-text">Agent labels (comma-separated, required)</span>
+					<input
+						id="library-agent-selectors"
+						name="agent_selectors"
+						required
+						value={ strings.Join(data.Input.AgentSelectors, ", ") }
+						class="input input-bordered w-full"
+						aria-describedby="library-label-help"
+					/>
+				</label>
+				<p id="library-label-help" class="text-sm break-words">Available labels: { strings.Join(data.Labels, ", ") }. All workflow steps use these labels. Each matching agent runs the steps. For one host, use a label unique to that host.</p>
+			}
+			<label for="library-reviewed" class="flex items-start gap-3">
+				<input
+					id="library-reviewed"
+					name="reviewed"
+					type="checkbox"
+					value="true"
+					required
+					class="checkbox"
+				/>
+				<span>I reviewed every script, variable, execution target, dependency, and required permission.</span>
+			</label>
+			<button type="submit" class="btn btn-primary">Apply Template</button>
+			<a class="btn btn-ghost" href={ fmt.Sprintf("/projects/%d", data.ProjectID) }>Cancel</a>
+		</div>
+	</form>
+}
+
+func libraryInputType(secret bool) string {
+	if secret {
+		return "password"
+	}
+	return "text"
+}

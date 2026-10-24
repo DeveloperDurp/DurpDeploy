@@ -14,6 +14,7 @@ import (
 type requestStateKey struct{}
 
 type requestState struct {
+	libraryTemplate    *repository.LibraryApplyResult
 	releaseID          int64
 	releaseSource      *provenance.Source
 	projectGroupChange map[string]any
