@@ -83,10 +83,14 @@ func (p *Provider) AuthorizationURL(
 		oauth2.S256ChallengeOption(transaction.PKCEVerifier),
 	}
 	if transaction.Mode == TransactionModeReauth {
+		// Authentik 2026.2.7 ignores max_age=0 and can retain an earlier
+		// prompt=login marker. A positive age activates its freshness check.
+		// ParseReauthenticationClaims still rejects authentication before
+		// this transaction, even within the provider's one-second allowance.
 		options = append(
 			options,
 			oauth2.SetAuthURLParam("prompt", "login"),
-			oauth2.SetAuthURLParam("max_age", "0"),
+			oauth2.SetAuthURLParam("max_age", "1"),
 		)
 	}
 	return p.oauthConfig(discovered.provider).AuthCodeURL(

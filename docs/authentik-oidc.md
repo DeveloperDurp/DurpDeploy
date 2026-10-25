@@ -190,6 +190,20 @@ raw claims as verification evidence.
 
 ## Troubleshooting
 
+### Secret export confirmation fails with an existing Authentik session
+
+SSO-only accounts have no local password.
+Use **Use single sign-on** to confirm a secret export.
+DurpDeploy requests `prompt=login` and `max_age=1` for reauthentication.
+The positive age activates Authentik 2026.2.7's authentication age check.
+That version ignores `max_age=0` and can reuse an earlier login marker.
+DurpDeploy still rejects an `auth_time` that precedes the confirmation flow.
+
+After you sign out of Authentik, its `prompt=login` handling can request two sign-ins.
+This behavior matches [Authentik issue #18507](https://github.com/goauthentik/authentik/issues/18507).
+Keep the Authentik session active when you start another export.
+If confirmation fails immediately after a sign-in, wait two seconds and start a new confirmation.
+
 ### Redirect URI mismatch
 
 Compare the configured URI character for character with

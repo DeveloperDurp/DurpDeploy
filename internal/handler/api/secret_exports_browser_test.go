@@ -26,6 +26,9 @@ func TestSecretExportBrowserE2E(t *testing.T) {
 func testSecretExportBrowser(t *testing.T, scope, method string) {
 	t.Helper()
 	f := newExportFixture(t, method == "oidc")
+	if method == "oidc" {
+		f.issuer.EmulateAuthentikReauth()
+	}
 	browser := startPackageBrowser(t, method == "oidc")
 	if method == "oidc" {
 		browser.call(
@@ -100,9 +103,10 @@ func testSecretExportBrowser(t *testing.T, scope, method string) {
 		`location.pathname.startsWith('/admin/secret-exports/') && document.querySelector('form[action$="/download"]')`,
 	)
 	if method == "oidc" &&
-		(f.issuer.Capture().Authorization.Prompt != "login" || f.issuer.Capture().Authorization.MaxAge != "0") {
+		(f.issuer.Capture().Authorization.Prompt != "login" || f.issuer.Capture().Authorization.MaxAge != "1" || f.issuer.Counters().Reauthenticate != 1) {
 		t.Fatal("browser OIDC reused existing login")
 	}
+	browser.screenshot(t, "secret-export-"+scope+"-"+method+"-approved")
 	browser.evaluate(
 		t,
 		`document.querySelector('form[action$="/download"] button').click(); true`,

@@ -5,7 +5,18 @@ import (
 	"crypto/rsa"
 	"fmt"
 	"sync/atomic"
+	"time"
 )
+
+// EmulateAuthentikReauth models an existing Authentik 2026.2.7 session after
+// an earlier prompt=login. Its retained login marker skips prompt=login, and
+// its truthiness check ignores max_age=0. A positive age still forces login.
+func (f *Fixture) EmulateAuthentikReauth() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.authentikReauth = true
+	f.claims.AuthTime = f.now.Add(-time.Hour)
+}
 
 // NewCode issues an unused authorization code bound to the default nonce.
 func (f *Fixture) NewCode() string {
@@ -61,10 +72,11 @@ func (f *Fixture) RotateSigningKey() error {
 // Counters returns a consistent snapshot of endpoint request counts.
 func (f *Fixture) Counters() Counters {
 	return Counters{
-		Discovery: f.discoveryRequests.Load(),
-		Authorize: f.authorizeRequests.Load(),
-		Token:     f.tokenRequests.Load(),
-		JWKS:      f.jwksRequests.Load(),
+		Discovery:      f.discoveryRequests.Load(),
+		Authorize:      f.authorizeRequests.Load(),
+		Token:          f.tokenRequests.Load(),
+		JWKS:           f.jwksRequests.Load(),
+		Reauthenticate: f.reauthentications.Load(),
 	}
 }
 

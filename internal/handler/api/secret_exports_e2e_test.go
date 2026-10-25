@@ -103,6 +103,11 @@ func newExportFixture(t *testing.T, withOIDC bool) *exportFixture {
 	authHandler := handler.NewAuthHandler(f.h.repo)
 	authHandler.SetMFAService(mfa.NewService(mfa.Config{}, box))
 	if withOIDC {
+		if err := f.h.repo.Queries.UpdateUserPassword(
+			t.Context(), db.UpdateUserPasswordParams{ID: f.user.ID},
+		); err != nil {
+			t.Fatal(err)
+		}
 		f.issuer, err = oidctest.New(
 			oidctest.Options{
 				Now:         time.Now(),
@@ -345,7 +350,7 @@ func (f *exportFixture) oidc(t *testing.T, row exportRequest) int {
 	}
 	defer callback.Body.Close()
 	if f.issuer.Capture().Authorization.Prompt != "login" ||
-		f.issuer.Capture().Authorization.MaxAge != "0" {
+		f.issuer.Capture().Authorization.MaxAge != "1" {
 		t.Fatal("OIDC did not require fresh authentication")
 	}
 	if callback.Header.Get("Location") != "/admin/secret-exports/"+row.ID {
@@ -372,6 +377,9 @@ func TestSecretExportAPIWebE2E(t *testing.T) {
 func testSecretExportAPIWeb(t *testing.T, api bool, scope, method string) {
 	t.Helper()
 	f := newExportFixture(t, method == "oidc")
+	if method == "oidc" {
+		f.issuer.EmulateAuthentikReauth()
+	}
 	row := f.start(t, scope, api)
 	if status, _, _ := f.download(t, row, api); status != 404 {
 		t.Fatalf("unapproved download = %d", status)
@@ -385,12 +393,18 @@ func testSecretExportAPIWeb(t *testing.T, api bool, scope, method string) {
 	}
 	status := 0
 	if method == "oidc" {
+		if f.password(t, row, "testpass") != 422 {
+			t.Fatal("SSO-only account accepted a local password")
+		}
 		status = f.oidc(t, row)
 	} else {
 		status = f.password(t, row, "testpass")
 	}
 	if status != 303 {
 		t.Fatalf("reauthentication = %d", status)
+	}
+	if method == "oidc" && f.issuer.Counters().Reauthenticate != 1 {
+		t.Fatal("OIDC export did not require a new provider sign-in")
 	}
 	f.checkDownload(t, row, api, scope)
 }

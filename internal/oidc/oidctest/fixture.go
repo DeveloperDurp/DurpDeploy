@@ -54,10 +54,11 @@ type Options struct {
 
 // Counters records requests received by the fixture endpoints.
 type Counters struct {
-	Discovery int32
-	Authorize int32
-	Token     int32
-	JWKS      int32
+	Discovery      int32
+	Authorize      int32
+	Token          int32
+	JWKS           int32
+	Reauthenticate int32
 }
 
 // AuthorizationRequest captures the latest authorization request without
@@ -99,15 +100,17 @@ type Fixture struct {
 	callbackURL  string
 	initialCode  string
 
-	mu         sync.RWMutex
-	claims     Claims
-	tokenMode  TokenMode
-	privateKey *rsa.PrivateKey
-	keyID      string
-	keyVersion int
-	nextCode   int
-	codes      map[string]authorizationCode
-	capture    Capture
+	mu                sync.RWMutex
+	claims            Claims
+	tokenMode         TokenMode
+	privateKey        *rsa.PrivateKey
+	keyID             string
+	keyVersion        int
+	nextCode          int
+	codes             map[string]authorizationCode
+	capture           Capture
+	authentikReauth   bool
+	reauthentications atomic.Int32
 
 	discoveryFailures atomic.Int32
 	tokenFailures     atomic.Int32

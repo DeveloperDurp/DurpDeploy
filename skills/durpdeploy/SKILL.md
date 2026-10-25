@@ -23,6 +23,9 @@ Open the relative `approval_url` on the same instance in a browser.
 Sign in as the user who owns the requesting token.
 Confirm the displayed scope.
 Complete fresh password or OAuth/OIDC reauthentication.
+For SSO-only accounts, use **Use single sign-on** without a local password.
+Keep the Authentik session active when you confirm another export.
+If confirmation fails immediately after an Authentik sign-in, wait two seconds and start a new confirmation.
 If local MFA is enabled, complete the required factor check.
 Each export requires a new confirmation.
 

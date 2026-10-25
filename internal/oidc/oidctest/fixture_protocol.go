@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -91,6 +92,14 @@ func (f *Fixture) serveAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	f.mu.Lock()
+	if f.authentikReauth {
+		maxAge, _ := strconv.ParseInt(request.MaxAge, 10, 64)
+		if maxAge > 0 &&
+			f.now.Sub(f.claims.AuthTime).Seconds() > float64(maxAge) {
+			f.claims.AuthTime = f.now
+			f.reauthentications.Add(1)
+		}
+	}
 	request.Code = f.newCodeLocked(request.Nonce, request.CodeChallenge)
 	f.capture.Authorization = request
 	f.mu.Unlock()

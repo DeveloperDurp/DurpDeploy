@@ -27,6 +27,12 @@ Keep schedules disabled.
 19. Sign in as a project administrator without the global `admin` role.
 20. Verify that export controls are hidden and direct export requests return `403`.
 
+For Authentik 2026.2.7, repeat the SSO export after an earlier SSO confirmation.
+Use an SSO-only account without a local password.
+Keep the Authentik session active.
+Verify that a new sign-in permits the export without an Authentik logout.
+If the previous sign-in just completed, wait two seconds before you start the confirmation.
+
 For API checks, follow **Export secret variables** in the shipped agent skill.
 Verify that a bearer token without browser approval cannot download secrets.
 Verify that the original claim permits one download after password or OAuth/OIDC confirmation.

@@ -74,9 +74,9 @@ func TestOIDCReauthStart_bindsStoredIdentitySessionAndContinuation(
 		)
 	}
 	authorization := fixture.provider.Capture().Authorization
-	if authorization.Prompt != "login" || authorization.MaxAge != "0" {
+	if authorization.Prompt != "login" || authorization.MaxAge != "1" {
 		t.Fatalf(
-			"reauthentication authorization prompt/max_age = %q/%q, want login/0",
+			"reauthentication authorization prompt/max_age = %q/%q, want login/1",
 			authorization.Prompt,
 			authorization.MaxAge,
 		)

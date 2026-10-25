@@ -55,7 +55,12 @@ e2e_wait_for_server() {
 import json
 import sys
 
-with open(sys.argv[1]) as log:
+try:
+    log = open(sys.argv[1])
+except FileNotFoundError:
+    sys.exit(0)
+
+with log:
     for line in log:
         if not line.startswith("{") or not line.endswith("\n"):
             continue

@@ -152,7 +152,7 @@ func TestOIDCNavigationBrowserE2E(t *testing.T) {
 		),
 	)
 	if issuer.Capture().Authorization.Prompt != "login" ||
-		issuer.Capture().Authorization.MaxAge != "0" {
+		issuer.Capture().Authorization.MaxAge != "1" {
 		t.Fatal("SSO did not request fresh authentication")
 	}
 }
