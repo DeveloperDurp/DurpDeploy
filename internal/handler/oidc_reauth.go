@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/oidc"
@@ -28,6 +29,14 @@ func (h *AuthHandler) SecurityReauthOIDCGet(
 		h.renderOIDCReauthFailure(w)
 		return
 	}
+	continuation := oidcReauthContinuation
+	if exportID := r.URL.Query().Get("export_id"); exportID != "" {
+		if err := h.validateSecretExport(r, exportID); err != nil {
+			secretExportError(w, r, err)
+			return
+		}
+		continuation = secretExportPrefix + exportID
+	}
 	transaction, cookie, err := h.oidcTransactions.Start(
 		r.Context(),
 		oidc.TransactionRequest{
@@ -37,7 +46,7 @@ func (h *AuthHandler) SecurityReauthOIDCGet(
 				LocalUserID:     user.ID,
 				ExpectedIssuer:  identity.Issuer,
 				ExpectedSubject: identity.Subject,
-				Continuation:    oidcReauthContinuation,
+				Continuation:    continuation,
 			},
 		},
 	)
@@ -62,10 +71,27 @@ func (h *AuthHandler) completeOIDCReauthentication(
 ) {
 	user, session, ok := h.securityIdentity(r)
 	if !ok || session.ID != transaction.Reauth.SessionID ||
-		user.ID != transaction.Reauth.LocalUserID ||
-		transaction.Reauth.Continuation != oidcReauthContinuation {
+		user.ID != transaction.Reauth.LocalUserID {
 		h.redirectOIDCLoginFailure(w, r)
 		return
+	}
+	exportID := ""
+	if transaction.Reauth.Continuation != oidcReauthContinuation {
+		if !strings.HasPrefix(
+			transaction.Reauth.Continuation,
+			secretExportPrefix,
+		) {
+			h.redirectOIDCLoginFailure(w, r)
+			return
+		}
+		exportID = strings.TrimPrefix(
+			transaction.Reauth.Continuation,
+			secretExportPrefix,
+		)
+		if err := h.validateSecretExport(r, exportID); err != nil {
+			h.redirectOIDCLoginFailure(w, r)
+			return
+		}
 	}
 	claims, err := h.oidcProvider.Exchange(r.Context(), code, transaction)
 	if err != nil {
@@ -92,7 +118,7 @@ func (h *AuthHandler) completeOIDCReauthentication(
 		h.redirectOIDCLoginFailure(w, r)
 		return
 	}
-	h.finishSecurityReauthentication(w, r, session)
+	h.finishSecurityReauthentication(w, r, session, exportID)
 }
 
 func (h *AuthHandler) renderOIDCReauthFailure(w http.ResponseWriter) {

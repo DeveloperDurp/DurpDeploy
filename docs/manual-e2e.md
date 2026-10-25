@@ -1,5 +1,47 @@
 # Manual checks after `make e2e-test`
 
+## Secret variable exports
+
+Use a disposable project and lifecycle with harmless secret values.
+Retain these examples for repeat checks.
+Keep schedules disabled.
+
+1. Sign in as an instance administrator.
+2. Open the project's **Variables** page.
+3. Select **Export secrets**.
+4. Verify the displayed project name.
+5. Select **Confirm identity**.
+6. Enter an incorrect password.
+7. Verify that no download starts.
+8. Enter the correct password.
+9. If MFA is enabled, complete the factor check.
+10. Select **Download JSON**.
+11. Verify that the file contains only secret-marked project variables and their environment scopes.
+12. Repeat the export with **Use single sign-on**.
+13. Verify that the identity provider requests fresh authentication.
+14. Repeat these checks from the lifecycle's **Shared variables** section.
+15. Cancel a pending export.
+16. Verify that its download endpoint returns `404`.
+17. Leave another export pending for five minutes.
+18. Verify that it expires without returning values.
+19. Sign in as a project administrator without the global `admin` role.
+20. Verify that export controls are hidden and direct export requests return `403`.
+
+For API checks, follow **Export secret variables** in the shipped agent skill.
+Verify that a bearer token without browser approval cannot download secrets.
+Verify that the original claim permits one download after password or OAuth/OIDC confirmation.
+Verify that logout invalidates an approved API export.
+Inspect **Admin → Audit log** for `export_secrets` events without secret values.
+
+Run the automated API and browser cases with these commands:
+
+```bash
+bash scripts/go_test.sh -tags=e2e -run '^TestSecretExport' ./internal/handler/api
+DURPDEPLOY_CONTAINER_RUNTIME=podman bash scripts/ci_browser_shard.sh -- \
+  bash scripts/go_test.sh -tags=e2e,packagebrowser \
+  -run '^TestSecretExportBrowserE2E$' ./internal/handler/api
+```
+
 ## Curated template library
 
 The running suite retains 19 projects named `e2e-library-<slug>-<run-id>`.

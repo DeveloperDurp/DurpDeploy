@@ -4,6 +4,12 @@ package audit
 // registered in server.go. New routes need one map entry; the fallback
 // heuristic catches anything missed with a lossy name.
 var actionMap = map[string]string{
+	"POST /admin/secret-exports":                                         "request_secret_export",
+	"POST /admin/secret-exports/{exportId}/authorize":                    "authorize_secret_export",
+	"POST /admin/secret-exports/{exportId}/cancel":                       "cancel_secret_export",
+	"POST /admin/secret-exports/{exportId}/download":                     "export_secrets",
+	"POST /api/v1/admin/secret-exports":                                  "request_secret_export",
+	"POST /api/v1/admin/secret-exports/{exportId}/download":              "export_secrets",
 	"POST /projects/{id}/template-library/{slug}/apply":                  "apply_library_template",
 	"POST /api/v1/projects/{id}/template-library/{slug}/apply":           "apply_library_template",
 	"POST /projects/{id}/project-templates":                              "create_project_template",

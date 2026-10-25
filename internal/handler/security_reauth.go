@@ -23,11 +23,19 @@ func (h *AuthHandler) SecurityReauthGet(
 		http.Error(w, "unauthenticated", http.StatusUnauthorized)
 		return
 	}
+	exportID := r.URL.Query().Get("export_id")
+	if exportID != "" {
+		if err := h.validateSecretExport(r, exportID); err != nil {
+			secretExportError(w, r, err)
+			return
+		}
+	}
 	if err := pages.SecurityReauthPage(
 		r.URL.Path,
 		session.CsrfToken,
 		"",
 		h.oidcProvider != nil && h.oidcTransactions != nil,
+		exportID,
 	).Render(r.Context(), w); err != nil {
 		http.Error(
 			w,
@@ -51,6 +59,13 @@ func (h *AuthHandler) SecurityReauthPost(
 		h.renderReauthenticationError(w, r, session.CsrfToken)
 		return
 	}
+	exportID := r.PostFormValue("export_id")
+	if exportID != "" {
+		if err := h.validateSecretExport(r, exportID); err != nil {
+			secretExportError(w, r, err)
+			return
+		}
+	}
 	storedUser, err := h.repo.Queries.GetUserByID(r.Context(), user.ID)
 	passwordHash, hasPassword := passwordHashForUser(storedUser, err)
 	passwordMatches, verifyErr := h.verifyPassword(
@@ -71,7 +86,7 @@ func (h *AuthHandler) SecurityReauthPost(
 		return
 	}
 	if factors == 0 {
-		h.finishSecurityReauthentication(w, r, session)
+		h.finishSecurityReauthentication(w, r, session, exportID)
 		return
 	}
 	audit.Suppress(r)
@@ -84,6 +99,10 @@ func (h *AuthHandler) SecurityReauthPost(
 			"create reauthentication challenge",
 			http.StatusInternalServerError,
 		)
+		return
+	}
+	if err := h.bindSecretExportMFA(r, exportID, pending.Token); err != nil {
+		secretExportError(w, r, err)
 		return
 	}
 	if err := pages.SecurityReauthMFAPage(
@@ -176,6 +195,11 @@ func (h *AuthHandler) completeSecurityReauthentication(
 		http.Error(w, "unauthenticated", http.StatusUnauthorized)
 		return
 	}
+	exportID, err := h.secretExportForMFA(r, binding.Token)
+	if err != nil {
+		secretExportError(w, r, err)
+		return
+	}
 	if err := h.challengeService().ConsumeWith(r.Context(), binding, func(
 		ctx context.Context,
 		queries *db.Queries,
@@ -186,7 +210,7 @@ func (h *AuthHandler) completeSecurityReauthentication(
 		h.recordSecurityFailure(w, r, binding)
 		return
 	}
-	h.finishSecurityReauthentication(w, r, session)
+	h.finishSecurityReauthentication(w, r, session, exportID)
 }
 
 func (h *AuthHandler) recordSecurityFailure(
@@ -218,6 +242,7 @@ func (h *AuthHandler) renderReauthenticationError(
 		csrf,
 		reauthenticationError,
 		h.oidcProvider != nil && h.oidcTransactions != nil,
+		r.PostFormValue("export_id"),
 	).
 		Render(r.Context(), w); err != nil {
 		http.Error(

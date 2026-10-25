@@ -1,5 +1,32 @@
 [
   {
+    "rule": "G710",
+    "file": "internal/handler/secret_exports.go",
+    "line": "212",
+    "source_sha256": "ec8c81ab166460b8facc591dc8a7c94645a5613fa79191c5c7bc7af61a79ee2c",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "The redirect uses a fixed same-origin path. The export ID must match a live, user-bound row created with crypto/rand.Text before it reaches the query string. Evidence: Authorize, NewSecretExport, and secret export API/browser E2E tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/secret_export_reauth.go",
+    "line": "55",
+    "source_sha256": "bc5b3e79f3e77c03be84e46a469cbc00c3b3495498563f4c3cfcfb1167300296",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "The redirect starts with /admin/secret-exports/. The ID must match a live crypto/rand.Text row bound to this administrator and session, and approval must update exactly one row. Evidence: validateSecretExport, approveSecretExport, and secret export password/OIDC/MFA tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/oidc_callback.go",
+    "line": "73",
+    "source_sha256": "daacb56b02aa83fc84a064a59a0be57448504e803d1e924e4da32c529083a1ce",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "The handler closure restores session authentication before OIDC reauthentication. Redirects use fixed internal routes or the validated, session-bound export ID. The request code is exchanged with the configured provider, not used as a redirect. Evidence: completeOIDCReauthentication and secret export OIDC E2E tests."
+  },
+  {
     "rule": "G115",
     "file": "internal/logscrub/scrubber.go",
     "line": "352",
@@ -56,8 +83,8 @@
   {
     "rule": "G101",
     "file": "internal/audit/routes.go",
-    "line": "6-202",
-    "source_sha256": "37ae7aecd7f71b74621a5937786afb6848cd1f3153d8538eea7eb40529084903",
+    "line": "6-208",
+    "source_sha256": "032c79b1618f87a7cb9dadac3be8857396403bdc569c505d78c465c8a81c76a8",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie name or audit action/route metadata, not a credential value. Evidence: passkey binding readers/setters or internal/audit/audit.go consumers."

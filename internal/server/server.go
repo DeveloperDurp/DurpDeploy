@@ -177,6 +177,17 @@ func newRouter(
 		pr.Use(webRequestBodyLimit)
 		pr.Use(auth.CSRFMiddleware())
 		pr.Use(audit.Middleware(repo))
+		exports := handler.NewSecretExportHandler(repo)
+		pr.With(auth.RequireRole("admin")).
+			Post("/admin/secret-exports", exports.Start)
+		pr.With(auth.RequireRole("admin")).
+			Get("/admin/secret-exports/{exportId}", exports.Show)
+		pr.With(auth.RequireRole("admin")).
+			Post("/admin/secret-exports/{exportId}/authorize", exports.Authorize)
+		pr.With(auth.RequireRole("admin")).
+			Post("/admin/secret-exports/{exportId}/cancel", exports.Cancel)
+		pr.With(auth.RequireRole("admin")).
+			Post("/admin/secret-exports/{exportId}/download", exports.Download)
 
 		// Home page
 		indexHandler := handler.NewIndexHandler(repo)
@@ -614,6 +625,11 @@ func newRouter(
 		ar.Use(auth.WriteBlockMiddleware())
 		ar.Use(api.RequestBodyLimit)
 		ar.Use(audit.Middleware(repo))
+		exports := handler.NewSecretExportHandler(repo)
+		ar.With(auth.RequireRole("admin")).
+			Post("/admin/secret-exports", exports.APIStart)
+		ar.With(auth.RequireRole("admin")).
+			Post("/admin/secret-exports/{exportId}/download", exports.APIDownload)
 
 		// JSON 404/405 so unmatched /api/v1/* paths return a JSON
 		// error envelope rather than the web HTML 404 page (which

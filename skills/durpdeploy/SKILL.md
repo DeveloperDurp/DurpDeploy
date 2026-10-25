@@ -7,6 +7,40 @@ metadata:
 
 # Operating DurpDeploy over HTTP
 
+## Export secret variables
+
+Require an instance administrator with the global `admin` role.
+Project administrator membership does not grant export permission.
+Use a global bearer token with administrator permission.
+
+Send `POST /api/v1/admin/secret-exports` with `{"scope":"project","scope_id":123}`.
+Use `"scope":"lifecycle"` for shared lifecycle variables.
+The response returns `201` with `id`, `approval_url`, `claim_token`, and `expires_at`.
+The request expires after five minutes.
+Keep `claim_token` private.
+
+Open the relative `approval_url` on the same instance in a browser.
+Sign in as the user who owns the requesting token.
+Confirm the displayed scope.
+Complete fresh password or OAuth/OIDC reauthentication.
+If local MFA is enabled, complete the required factor check.
+Each export requires a new confirmation.
+
+Send `POST /api/v1/admin/secret-exports/{id}/download` with `{"claim_token":"<claim_token>"}` and the original bearer token.
+Keep the approving browser session active until the download completes.
+The response returns a JSON attachment with `scope`, `scope_id`, and `variables`.
+Each variable contains `id`, `name`, plaintext `value`, and nullable `environment_id`.
+Project exports contain local project secrets.
+Lifecycle exports contain shared lifecycle secrets.
+Exports exclude non-secret values, historical snapshots, account passwords, and other stored credentials.
+
+Store the downloaded file in a secure location.
+Keep secret values and claim credentials out of URLs, logs, and tickets.
+Do not retry a successful download with the same request.
+An export permits one download and records an audit event without secret values.
+Invalid, expired, canceled, consumed, or unapproved requests return `404`.
+Insufficient administrator or token permissions return `403`.
+
 ## Curated step and workflow templates
 
 Browse `GET /api/v1/template-library` with a global token.

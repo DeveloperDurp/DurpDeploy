@@ -55,6 +55,12 @@ Member management requires a global administrator or a project administrator wit
 An explicit token must also have an `admin` ceiling.
 Project administrators cannot grant global roles.
 
+Only instance administrators with the global `admin` role can export secret variables.
+Project administrator membership does not grant this permission.
+Each export requires fresh password or OAuth/OIDC reauthentication.
+Local password reauthentication also requires an enrolled MFA factor when MFA is enabled.
+API exports require a global token with administrator permission and approval through the same user's browser session.
+
 Deployment, runbook, and artifact approvals require a global administrator.
 Only global administrators manage shared lifecycle variables, lifecycle stages, environment verification, and lifecycle or environment deletion.
 Lifecycle assignment can expose shared secrets.

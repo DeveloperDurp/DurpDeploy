@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/oidc"
 	"durpdeploy/views/pages"
 )
@@ -71,7 +72,18 @@ func (h *AuthHandler) LoginOIDCCallbackGet(
 		}
 		http.Redirect(w, r, h.takeLoginDestination(w, r), http.StatusSeeOther)
 	case oidc.TransactionModeReauth:
-		h.completeOIDCReauthentication(w, r, query.Get("code"), transaction)
+		// Initial login is public. Reauthentication must resolve its existing
+		// browser session before checking the transaction's identity binding.
+		auth.AuthMiddleware(h.repo)(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				h.completeOIDCReauthentication(
+					w,
+					r,
+					query.Get("code"),
+					transaction,
+				)
+			}),
+		).ServeHTTP(w, r)
 	default:
 		slog.Info(
 			"oidc initial login callback failed",

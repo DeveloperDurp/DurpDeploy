@@ -68,6 +68,7 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
     ;;
   browser-permissions)
     tests=(
+      '^TestSecretExport.*E2E$'
       '^Test(PermissionGuidance(Deployment)?|UsersFormAccessibility|UsersDefaultRole|UsersPhone|ProjectStaleSave|ProjectMemberRoles|UserModalPermissionFeedback|MemberModalErrorFeedback|ProjectPanelScope|ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|MobileFormFocus|RunbookEditor|RunbookDeletion|AlpineEditForms|AlpineDialogs|RunningServer|ProjectTokens|RolePermissions)BrowserE2E$'
       '^TestRunbookDeletion.*APIWebE2E$'
       '^Test(ProjectTokens.*|PermissionRolesExecution.*)(API|APIWeb)E2E$'

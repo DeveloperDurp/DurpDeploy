@@ -616,6 +616,19 @@ type ScheduledDeployment struct {
 	LastError     string         `json:"last_error"`
 }
 
+type SecretExport struct {
+	ID        string `json:"id"`
+	UserID    int64  `json:"user_id"`
+	SessionID string `json:"session_id"`
+	TokenID   string `json:"token_id"`
+	ClaimHash string `json:"claim_hash"`
+	Scope     string `json:"scope"`
+	ScopeID   int64  `json:"scope_id"`
+	AuthHash  string `json:"auth_hash"`
+	Approved  int64  `json:"approved"`
+	ExpiresAt int64  `json:"expires_at"`
+}
+
 type Session struct {
 	ID                string         `json:"id"`
 	UserID            int64          `json:"user_id"`

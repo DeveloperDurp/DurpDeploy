@@ -22,6 +22,7 @@ func (h *AuthHandler) finishSecurityReauthentication(
 	w http.ResponseWriter,
 	r *http.Request,
 	session *db.Session,
+	exportID ...string,
 ) {
 	if err := h.markCurrentSessionReauthenticated(r, session); err != nil {
 		http.Error(
@@ -29,6 +30,10 @@ func (h *AuthHandler) finishSecurityReauthentication(
 			"mark session reauthenticated",
 			http.StatusInternalServerError,
 		)
+		return
+	}
+	if len(exportID) > 0 && exportID[0] != "" {
+		h.approveSecretExport(w, r, exportID[0])
 		return
 	}
 	targetID, reason, found, reset, err :=

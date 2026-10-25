@@ -160,6 +160,25 @@ browser ceremony end-to-end proof is tracked separately from this document.
 
 ---
 
+## Secret variable exports
+
+Secret variable exports require the global `admin` role and fresh authentication for each export.
+The export flow supports local passwords and OAuth/OIDC with the existing MFA requirements.
+A recent login or unrelated security confirmation does not approve an export.
+
+Export requests expire after five minutes and permit one download.
+The server binds approval to the selected project or lifecycle, user, and browser session.
+API requests also bind the original global token and a separately hashed claim credential.
+Logout, session expiry, cancellation, consumption, or loss of administrator permission invalidates the approval.
+
+Downloads contain plaintext secret variables from the selected scope.
+Ordinary reads remain masked.
+Exports exclude account passwords, release snapshots, deployment snapshots, and other stored credentials.
+The server uses `Cache-Control: no-store` and records the scope in the audit log without secret values.
+
+Store downloaded files in a secure location.
+Keep API claim credentials out of URLs, logs, and tickets.
+
 ## CSRF protection
 
 **Implementation:** `internal/auth/csrf.go`

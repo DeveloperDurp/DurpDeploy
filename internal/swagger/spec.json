@@ -1204,6 +1204,180 @@
         ]
       }
     },
+    "/admin/secret-exports": {
+      "post": {
+        "description": "Require an instance administrator and a global bearer token with admin permission.\nOpen approval_url in a browser as the same user. Confirm the selected scope.\nReauthenticate with the local password or OAuth/OIDC, including required MFA.\nEach export requires new authentication. The request expires after five minutes.\nKeep claim_token private. It is returned once and never belongs in a URL.",
+        "tags": [
+          "variables"
+        ],
+        "summary": "Request an export of secret-marked project or shared lifecycle variables.",
+        "operationId": "requestSecretExport",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "scope",
+                "scope_id"
+              ],
+              "properties": {
+                "scope": {
+                  "type": "string",
+                  "enum": [
+                    "project",
+                    "lifecycle"
+                  ]
+                },
+                "scope_id": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 1
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Pending export. No secret values are returned.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "approval_url": {
+                  "description": "Relative browser URL. This identifier does not authorize a download.",
+                  "type": "string"
+                },
+                "claim_token": {
+                  "description": "Single-use download credential. Store it securely until approval.",
+                  "type": "string"
+                },
+                "expires_at": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or scope."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token."
+          },
+          "403": {
+            "description": "Instance administrator and global token required."
+          },
+          "404": {
+            "description": "Project or lifecycle not found."
+          },
+          "413": {
+            "description": "Request exceeds the JSON body limit."
+          },
+          "500": {
+            "description": "Export request failed."
+          }
+        }
+      }
+    },
+    "/admin/secret-exports/{exportId}/download": {
+      "post": {
+        "description": "Require the original bearer token and claim_token after browser reauthentication.\nThe approving browser session must remain valid. Logout invalidates approval.\nProject administrators without the global admin role cannot export secrets.\nOrdinary variable reads remain masked. Non-secret variables and snapshots are excluded.\nSuccessful downloads generate an audit event without secret values.",
+        "tags": [
+          "variables"
+        ],
+        "summary": "Download an approved export once as a JSON attachment.",
+        "operationId": "downloadSecretExport",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "exportId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "claim_token"
+              ],
+              "properties": {
+                "claim_token": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON attachment. Cache-Control is no-store.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "scope": {
+                  "type": "string"
+                },
+                "scope_id": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "variables": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "environment_id": {
+                        "type": "integer",
+                        "format": "int64",
+                        "x-nullable": true
+                      },
+                      "id": {
+                        "type": "integer",
+                        "format": "int64"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "description": "Plaintext secret value.",
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token."
+          },
+          "403": {
+            "description": "Instance administrator and global token required."
+          },
+          "404": {
+            "description": "Export is unapproved, expired, canceled, consumed, or bound to different credentials."
+          },
+          "413": {
+            "description": "Request exceeds the JSON body limit."
+          },
+          "500": {
+            "description": "Export failed. No partial export is returned."
+          }
+        }
+      }
+    },
     "/admin/stats": {
       "get": {
         "produces": [

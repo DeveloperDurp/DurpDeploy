@@ -34,6 +34,7 @@ templ LifecycleVariablesPage(data LifecycleVariables, currentPath string) {
 templ SharedLifecycleVariables(data LifecycleVariables) {
 	if data.Lifecycle.ID != 0 && CanWrite(ctx) && CanManageLifecycleVariables(ctx) {
 		<section id="shared-variables" class="card bg-base-200 p-4 space-y-4" aria-labelledby="shared-variables-title">
+			@SecretExportButton("lifecycle", data.Lifecycle.ID)
 			<div class="flex flex-wrap items-center justify-between gap-4"><div><h2 id="shared-variables-title" class="text-xl font-bold">Shared variables</h2><p class="text-sm opacity-70">Inherited by every project using this lifecycle.</p></div></div>
 			<p class="text-sm">
 				Used by { strconv.Itoa(len(data.Projects)) } projects:

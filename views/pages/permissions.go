@@ -29,6 +29,9 @@ func CanManageAgents(ctx context.Context) bool {
 }
 
 func CanManageLifecycleVariables(ctx context.Context) bool {
-	u := auth.UserFromContext(ctx)
-	return u != nil && u.Role == "admin"
+	return CanManageAgents(ctx)
+}
+
+func CanExportSecrets(ctx context.Context) bool {
+	return CanManageAgents(ctx)
 }

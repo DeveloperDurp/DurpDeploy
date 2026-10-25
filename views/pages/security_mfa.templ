@@ -1,20 +1,35 @@
 package pages
 
-import "durpdeploy/views/layouts"
+import (
+	"durpdeploy/views/layouts"
+	"fmt"
+)
 
-templ SecurityReauthPage(currentPath, csrf, errorMsg string, oidcEnabled bool) {
+func reauthExportID(ids []string) string {
+	if len(ids) > 0 { return ids[0] }
+	return ""
+}
+
+templ SecurityReauthPage(currentPath, csrf, errorMsg string, oidcEnabled bool, exportIDs ...string) {
 	@layouts.Base("Reauthenticate", currentPath) {
 		<div class="w-full px-4 sm:px-6 lg:px-8 py-12">
 			<div class="max-w-md mx-auto">
 				<div class="card bg-base-200 shadow-xl">
 					<div class="card-body">
 						<h1 class="card-title text-2xl font-bold">Confirm your password</h1>
-						<p class="text-sm opacity-70">Confirm your identity before changing security settings.</p>
+						if reauthExportID(exportIDs) != "" {
+							<p class="text-sm opacity-70">Confirm your identity for this secret export. Each export requires a new confirmation.</p>
+						} else {
+							<p class="text-sm opacity-70">Confirm your identity before changing security settings.</p>
+						}
 						if errorMsg != "" {
 							<div class="alert alert-error" role="alert"><span>{ errorMsg }</span></div>
 						}
-						<form method="post" action="/settings/security/reauth" class="space-y-4">
+						<form method="post" action="/settings/security/reauth" class="space-y-4" hx-boost="false">
 							<input type="hidden" name="csrf_token" value={ csrf }/>
+							if reauthExportID(exportIDs) != "" {
+								<input type="hidden" name="export_id" value={ reauthExportID(exportIDs) }/>
+							}
 							<div class="form-control">
 								<label class="label" for="reauth-password"><span class="label-text">Password</span></label>
 								<input id="reauth-password" type="password" name="password" class="input input-bordered" autocomplete="current-password" required/>
@@ -23,8 +38,15 @@ templ SecurityReauthPage(currentPath, csrf, errorMsg string, oidcEnabled bool) {
 						</form>
 						if oidcEnabled {
 							<div class="mt-4">
-								<a href="/settings/security/reauth/oidc" class="btn btn-outline w-full">Use single sign-on</a>
+								if reauthExportID(exportIDs) != "" {
+									<a href={ templ.SafeURL("/settings/security/reauth/oidc?export_id="+reauthExportID(exportIDs)) } class="btn btn-outline w-full" hx-boost="false">Use single sign-on</a>
+								} else {
+									<a href="/settings/security/reauth/oidc" class="btn btn-outline w-full" hx-boost="false">Use single sign-on</a>
+								}
 							</div>
+						}
+						if reauthExportID(exportIDs) != "" {
+							<a class="btn btn-ghost" href={ templ.SafeURL(fmt.Sprintf("/admin/secret-exports/%s", reauthExportID(exportIDs))) }>Back to export</a>
 						}
 					</div>
 				</div>

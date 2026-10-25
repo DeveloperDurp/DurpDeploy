@@ -71,6 +71,17 @@ type requestOutcome struct {
 	reason string
 }
 
+// SetSecretExportScope records the exported scope without secret values.
+func SetSecretExportScope(r *http.Request, scope string, id int64) {
+	if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {
+		state.overridden = &actionOverride{
+			action:     "export_secrets",
+			entityType: scope,
+			entityID:   sql.NullInt64{Int64: id, Valid: true},
+		}
+	}
+}
+
 // SetAgentActor retains the mTLS identity for the middleware audit.
 func SetAgentActor(r *http.Request, agentID agentproto.AgentID) {
 	if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {
