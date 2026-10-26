@@ -115,3 +115,15 @@ publish-chart:
   timeout: 30 minutes
   script:
     - bash scripts/ci_publish.sh chart
+
+release-page:
+  stage: release
+  dependencies: [ci-runtime, version]
+  interruptible: false
+  resource_group: release-publication
+  variables:
+    CI_RUNTIME: none
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  script:
+    - node scripts/ci_release.mjs

@@ -376,6 +376,24 @@ It publishes the scanned image bytes without rebuilding them.
 Image publication must succeed in both registries before chart publication starts.
 Chart publication must succeed in the GitLab registry before its job passes.
 
+### Automatic release pages
+
+The `release-page` job runs after publication succeeds on protected default-branch pushes.
+Merges into `main` create these pipelines.
+The job creates a GitLab Release with the existing software version, such as `v0.0.0-dev.742+g0123456789ab`.
+GitLab creates the release tag at the pipeline commit.
+The job uses `CI_JOB_TOKEN` through the [Releases API](https://docs.gitlab.com/api/releases/).
+It requires no additional secret.
+
+Release notes list every commit since the nearest previous release on the default branch.
+The first release includes the full source history.
+The notes include commit links and a comparison link when a previous release exists.
+Failed publication leaves those changes for the next successful release.
+Retrying the job preserves an existing release for the same version and commit.
+Merge request, tag, manual, and scheduled pipelines do not create release pages.
+Automatic development tags do not start another pipeline.
+Release notes remain available in `artifacts/release/notes.md` for one day.
+
 After merge, the default branch pipeline builds and scans the merged source before publication.
 Publication requires successful lint, source security, configuration security, and image retention jobs from that pipeline.
 

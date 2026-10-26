@@ -33,6 +33,7 @@ type job struct {
 	Extends       string    `yaml:"extends"`
 	Stage         string    `yaml:"stage"`
 	Needs         []need    `yaml:"needs"`
+	Dependencies  []string  `yaml:"dependencies"`
 	Rules         []rule    `yaml:"rules"`
 	Script        []string  `yaml:"script"`
 	Cache         yaml.Node `yaml:"cache"`
@@ -184,6 +185,55 @@ func TestImageRetentionUsesPublicationRules(t *testing.T) {
 	if len(retention) != 1 || len(publication) != 1 ||
 		retention[0].If != publication[0].If {
 		t.Fatal("image retention must run exactly when images can be published")
+	}
+}
+
+func TestReleasePageWaitsForPublicationOnProtectedMainPushes(t *testing.T) {
+	current := pipeline(t)["release-page"]
+	if current.Stage != "release" || len(current.Needs) != 0 ||
+		current.Interruptible == nil || *current.Interruptible ||
+		current.ResourceGroup != "release-publication" ||
+		current.Environment.Name != "" || current.allowsFailure() ||
+		current.When == "always" {
+		t.Fatal(
+			"release pages must wait for publication without production secrets",
+		)
+	}
+	if !slices.Equal(current.Dependencies, []string{"ci-runtime", "version"}) {
+		t.Fatal("release pages must download only runtime and version metadata")
+	}
+	if len(current.Rules) != 1 || current.Rules[0].If !=
+		`$CI_PIPELINE_SOURCE == "push" && `+
+			`$CI_COMMIT_REF_PROTECTED == "true" && `+
+			`$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH` {
+		t.Fatal(
+			"release pages must run only on protected default-branch pushes",
+		)
+	}
+	data, err := os.ReadFile("../../.gitlab-ci.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root struct {
+		Stages   []string
+		Workflow struct {
+			Rules []struct {
+				If   string
+				When string
+			}
+		}
+	}
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		t.Fatal(err)
+	}
+	if slices.Index(root.Stages, "release") <=
+		slices.Index(root.Stages, "publish") {
+		t.Fatal("release pages must follow image and chart publication")
+	}
+	first := root.Workflow.Rules[0]
+	if first.When != "never" || first.If !=
+		`$CI_COMMIT_TAG =~ /^v0\.0\.0-dev\.[0-9]+\+g[0-9a-f]{12}$/` {
+		t.Fatal("automatic release tags must not start duplicate pipelines")
 	}
 }
 

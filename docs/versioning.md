@@ -58,6 +58,10 @@ Prerelease identifiers and build metadata remain part of the embedded semantic v
 CI rejects invalid release tags.
 CI does not choose or increment release numbers.
 
+Protected default-branch pushes also create GitLab release pages after image and chart publication succeeds.
+These pages use the existing development version and include changes since the previous release.
+The automatic tag does not change the embedded software version or choose a stable release number.
+
 ## Local and container builds
 
 Run `make build` to use the same metadata and linker mechanism as CI.
