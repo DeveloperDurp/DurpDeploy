@@ -127,7 +127,7 @@ func assertAgentDeleteCleanupRollbackExecution(
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Authorization", "Bearer ddp_pat_delete-admin")
+	req.Header.Set("Authorization", "Bearer "+agentTestToken("delete-admin"))
 	req.Header.Set("Content-Type", "application/json")
 	res, err := srv.Client().Do(req)
 	if err != nil {

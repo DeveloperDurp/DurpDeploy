@@ -22,6 +22,8 @@ func TestAgentPollTransferWriteFailureRollsBack(t *testing.T) {
 		{"staging insertion", "agent_staging_capabilities", "INSERT"},
 		{"package removal", "agent_artifact_capabilities", "DELETE"},
 		{"package insertion", "agent_artifact_capabilities", "INSERT"},
+		{"policy removal", "agent_resource_policies", "DELETE"},
+		{"policy insertion", "agent_resource_policies", "INSERT"},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			testAgentPollTransferWriteFailure(
@@ -43,6 +45,15 @@ func testAgentPollTransferWriteFailure(
 	repo := remoteFixture(t)
 	agent, err := repo.Queries.GetAgent(t.Context(), "a")
 	if err != nil {
+		t.Fatal(err)
+	}
+	advertisement, err := repo.ResourceLimits().AgentPolicy().Advertisement()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Queries.AddAgentResourcePolicy(t.Context(), db.AddAgentResourcePolicyParams{
+		AgentID: "a", Advertisement: advertisement,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repo.DB.ExecContext(t.Context(), `
@@ -72,7 +83,7 @@ func testAgentPollTransferWriteFailure(
 					Protocol: agentproto.AgentV1,
 				},
 			},
-			Staging: true, Artifact: true,
+			Staging: true, Artifact: true, ResourcePolicy: advertisement,
 		},
 	)
 
@@ -99,5 +110,9 @@ func testAgentPollTransferWriteFailure(
 	if staging != 1 || packages != 1 {
 		t.Fatalf("failed report changed capabilities: staging=%d package=%d",
 			staging, packages)
+	}
+	policy, err := repo.Queries.GetAgentResourcePolicy(t.Context(), "a")
+	if err != nil || policy != advertisement {
+		t.Fatalf("failed report changed policy: value=%q error=%v", policy, err)
 	}
 }

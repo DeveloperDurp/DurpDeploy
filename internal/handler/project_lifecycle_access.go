@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"durpdeploy/internal/auth"
+	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 )
 
@@ -19,6 +20,22 @@ var ErrLifecycleAssignmentForbidden = errors.New(
 var ErrLifecycleRemovalForbidden = errors.New(
 	"Only a project admin can remove a lifecycle assignment",
 )
+
+// UpdateProjectWithLifecycle shares the atomic update across web and API calls.
+func UpdateProjectWithLifecycle(
+	ctx context.Context,
+	repo *repository.Repository,
+	params db.UpdateProjectParams,
+	lifecycleID int64,
+) (db.Project, error) {
+	return repo.UpdateProject(
+		ctx,
+		params,
+		func(txRepo *repository.Repository) error {
+			return ApplyLifecycleSelection(ctx, txRepo, params.ID, lifecycleID)
+		},
+	)
+}
 
 // Lifecycle assignment grants access to shared values through execution.
 // Project admins may retain or remove that grant, but cannot acquire one.

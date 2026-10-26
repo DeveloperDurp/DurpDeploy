@@ -51,6 +51,13 @@ func (d *tokenTelemetryDB) ExecContext(
 }
 
 func TestAPITokenTelemetryE2E(t *testing.T) {
+	t.Run("same token burst", testTokenUsageBurst)
+	t.Run("distinct token bound", testTokenUsageCapacity)
+	t.Run("failed update releases admission", testTokenUsageFailure)
+	t.Run(
+		"blocked telemetry preserves stream revocation",
+		testTokenUsageStreamRevocation,
+	)
 	for _, blocked := range []bool{false, true} {
 		name := "update succeeds"
 		if blocked {
@@ -74,7 +81,13 @@ func testAPITokenTelemetry(t *testing.T, blocked bool) {
 		result:  make(chan error, 1),
 		release: make(chan struct{}),
 	}
-	defer close(probe.release)
+	defer func() {
+		select {
+		case <-probe.release:
+		default:
+			close(probe.release)
+		}
+	}()
 	h.repo.Queries = db.New(probe)
 	router := server.NewRouter(
 		h.repo,
@@ -113,6 +126,36 @@ func testAPITokenTelemetry(t *testing.T, blocked bool) {
 		)
 	}
 	assertTokenTelemetryCompletion(t, probe, blocked)
+	if blocked {
+		// Deadline exhaustion must release admission for a later request.
+		close(probe.release)
+		waitTokenUsage(t, func() bool {
+			retry, err := client.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := retry.Body.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if retry.StatusCode != http.StatusOK {
+				t.Fatalf("retry status=%d", retry.StatusCode)
+			}
+			select {
+			case <-probe.started:
+				return true
+			default:
+				return false
+			}
+		})
+		select {
+		case err := <-probe.result:
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("retry telemetry exit=%v", err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("retry telemetry did not finish")
+		}
+	}
 	if !blocked {
 		var lastUsed sql.NullInt64
 		err := h.repo.DB.QueryRowContext(t.Context(),

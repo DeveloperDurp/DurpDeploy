@@ -5,12 +5,10 @@ import (
 	"errors"
 	"net/http"
 
-	"durpdeploy/internal/agentexecution"
-	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
-	"durpdeploy/internal/interpreter"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/stepdefinition"
 )
 
 type StepHandler struct {
@@ -21,23 +19,7 @@ func NewStepHandler(repo *repository.Repository) *StepHandler {
 	return &StepHandler{repo: repo}
 }
 
-type stepRequest struct {
-	Name                 string   `json:"name"`
-	ScriptBody           string   `json:"script_body"`
-	Interpreter          string   `json:"interpreter"`
-	SortOrder            int64    `json:"sort_order"`
-	TimeoutSeconds       int64    `json:"timeout_seconds"`
-	MaxRetries           int64    `json:"max_retries"`
-	ExecutionTarget      string   `json:"execution_target"`
-	AgentExecutionMode   string   `json:"agent_execution_mode"`
-	AgentSelectors       []string `json:"agent_selectors"`
-	ContainerImage       string   `json:"container_image"`
-	NetworkMode          string   `json:"network_mode"`
-	ApprovalArtifactPath string   `json:"approval_artifact_path"`
-	ApprovalReviewPath   string   `json:"approval_review_path"`
-	ApprovalReviewFormat string   `json:"approval_review_format"`
-	VariableNames        []string `json:"variable_names"`
-}
+type stepRequest = stepdefinition.Definition
 
 type reorderStepsRequest struct {
 	StepIDs []int64 `json:"step_ids"`
@@ -138,58 +120,7 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := trimSpace(req.Name)
-	if name == "" {
-		RespondError(w, http.StatusBadRequest, "Name is required")
-		return
-	}
-	if req.TimeoutSeconds < 0 {
-		RespondError(
-			w,
-			http.StatusBadRequest,
-			"Timeout must be a non-negative integer",
-		)
-		return
-	}
-	if req.MaxRetries < 0 {
-		RespondError(
-			w,
-			http.StatusBadRequest,
-			"Max retries must be a non-negative integer",
-		)
-		return
-	}
-	selectedInterpreter, err := interpreter.Validate(req.Interpreter)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	target, selectors, ok := validatePlacement(
-		w,
-		r,
-		h.repo,
-		req.ExecutionTarget,
-		req.AgentSelectors,
-	)
-	if !ok {
-		return
-	}
-	if err := artifact.ValidateGateConfig(
-		target,
-		req.NetworkMode,
-		req.ApprovalArtifactPath,
-		req.ApprovalReviewPath,
-		req.ApprovalReviewFormat,
-	); err != nil {
-		RespondError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	image, variableNames, ok := validateContainerConfig(
-		w, agentexecution.Config{
-			Target: target, Mode: req.AgentExecutionMode,
-			Image: req.ContainerImage, VariableNames: req.VariableNames,
-		},
-	)
+	prepared, ok := prepareStepFields(w, r, h.repo, req)
 	if !ok {
 		return
 	}
@@ -204,26 +135,15 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	prepared.SortOrder = sortOrder
 	step, err := h.repo.CreateStepWithPlacement(
 		r.Context(),
-		db.CreateStepParams{
-			ProjectID:            projectID,
-			Name:                 name,
-			ScriptBody:           req.ScriptBody,
-			SortOrder:            sortOrder,
-			TimeoutSeconds:       req.TimeoutSeconds,
-			MaxRetries:           req.MaxRetries,
-			Interpreter:          selectedInterpreter,
-			ContainerImage:       image,
-			AgentExecutionMode:   req.AgentExecutionMode,
-			NetworkMode:          req.NetworkMode,
-			ApprovalArtifactPath: req.ApprovalArtifactPath,
-			ApprovalReviewPath:   req.ApprovalReviewPath,
-			ApprovalReviewFormat: req.ApprovalReviewFormat,
-			VariableNames:        marshalVariableNames(variableNames),
-		},
-		target,
-		selectors,
+		prepared.CreateStepParams(
+			projectID,
+			marshalVariableNames(prepared.VariableNames),
+		),
+		prepared.ExecutionTarget,
+		prepared.AgentSelectors,
 	)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -348,82 +268,19 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := trimSpace(req.Name)
-	if name == "" {
-		RespondError(w, http.StatusBadRequest, "Name is required")
-		return
-	}
-	if req.TimeoutSeconds < 0 {
-		RespondError(
-			w,
-			http.StatusBadRequest,
-			"Timeout must be a non-negative integer",
-		)
-		return
-	}
-	if req.MaxRetries < 0 {
-		RespondError(
-			w,
-			http.StatusBadRequest,
-			"Max retries must be a non-negative integer",
-		)
-		return
-	}
-	selectedInterpreter, err := interpreter.Validate(req.Interpreter)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	target, selectors, ok := validatePlacement(
-		w,
-		r,
-		h.repo,
-		req.ExecutionTarget,
-		req.AgentSelectors,
-	)
-	if !ok {
-		return
-	}
-	if err := artifact.ValidateGateConfig(
-		target,
-		req.NetworkMode,
-		req.ApprovalArtifactPath,
-		req.ApprovalReviewPath,
-		req.ApprovalReviewFormat,
-	); err != nil {
-		RespondError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	image, variableNames, ok := validateContainerConfig(
-		w, agentexecution.Config{
-			Target: target, Mode: req.AgentExecutionMode,
-			Image: req.ContainerImage, VariableNames: req.VariableNames,
-		},
-	)
+	prepared, ok := prepareStepFields(w, r, h.repo, req)
 	if !ok {
 		return
 	}
 
 	step, err := h.repo.UpdateStepWithPlacement(
 		r.Context(),
-		db.UpdateStepParams{
-			ID:                   stepID,
-			Name:                 name,
-			ScriptBody:           req.ScriptBody,
-			SortOrder:            req.SortOrder,
-			TimeoutSeconds:       req.TimeoutSeconds,
-			MaxRetries:           req.MaxRetries,
-			Interpreter:          selectedInterpreter,
-			ContainerImage:       image,
-			AgentExecutionMode:   req.AgentExecutionMode,
-			NetworkMode:          req.NetworkMode,
-			ApprovalArtifactPath: req.ApprovalArtifactPath,
-			ApprovalReviewPath:   req.ApprovalReviewPath,
-			ApprovalReviewFormat: req.ApprovalReviewFormat,
-			VariableNames:        marshalVariableNames(variableNames),
-		},
-		target,
-		selectors,
+		prepared.UpdateStepParams(
+			stepID,
+			marshalVariableNames(prepared.VariableNames),
+		),
+		prepared.ExecutionTarget,
+		prepared.AgentSelectors,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

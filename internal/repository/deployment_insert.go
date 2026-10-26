@@ -56,7 +56,7 @@ func (r *Repository) createDeploymentFromDeployment(
 			err,
 		)
 	}
-	steps, err := deploymentStepsFromRelease(stepSource.StepsJson)
+	steps, err := r.deploymentStepsFromRelease(stepSource.StepsJson)
 	if err != nil {
 		return DeploymentResult{}, err
 	}
@@ -96,7 +96,7 @@ func (r *Repository) createDeployment(
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf("get release: %w", err)
 	}
-	steps, err := deploymentStepsFromRelease(release.StepsJson)
+	steps, err := r.deploymentStepsFromRelease(release.StepsJson)
 	if err != nil {
 		return DeploymentResult{}, err
 	}

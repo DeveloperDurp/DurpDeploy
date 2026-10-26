@@ -25,30 +25,9 @@ func CanStreamDeployment(
 		return false
 	}
 	userID := user.ID
-	var role string
-	if session := SessionFromContext(r.Context()); session != nil {
-		current, err := repo.Queries.GetSession(
-			r.Context(),
-			db.GetSessionParams{ID: session.ID, ExpiresAt: time.Now().Unix()},
-		)
-		if err != nil || current.UserID != userID {
-			return false
-		}
-		role = current.Role
-	} else {
-		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if !ok || !strings.HasPrefix(token, "ddp_pat_") || len(token) <= 8 {
-			return false
-		}
-		current, grant, err := loadTokenAccess(
-			r.Context(), repo, HashApiToken(token),
-		)
-		if err != nil || current.UserID != userID {
-			return false
-		}
-		role = current.Role
-		r = SetUser(r, &db.User{ID: userID, Role: current.Role})
-		r = setTokenAccess(r, current.ID, grant)
+	r, role, ok := loadStreamCredentials(r, repo, userID)
+	if !ok {
+		return false
 	}
 	deployment, err := repo.Queries.GetDeployment(r.Context(), deploymentID)
 	if err != nil {
@@ -88,4 +67,33 @@ func CanStreamDeployment(
 		db.IsProjectMemberParams{ProjectID: projectID, UserID: userID},
 	)
 	return err == nil && member == 1
+}
+
+func loadStreamCredentials(
+	r *http.Request, repo *repository.Repository, userID int64,
+) (*http.Request, string, bool) {
+	if session := SessionFromContext(r.Context()); session != nil {
+		current, err := repo.Queries.GetSession(
+			r.Context(),
+			db.GetSessionParams{ID: session.ID, ExpiresAt: time.Now().Unix()},
+		)
+		if err != nil || current.UserID != userID {
+			return nil, "", false
+		}
+		return r, current.Role, true
+	}
+	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok {
+		return nil, "", false
+	}
+	hash := HashApiToken(token)
+	if hash == "" {
+		return nil, "", false
+	}
+	current, grant, err := loadTokenAccess(r.Context(), repo, hash)
+	if err != nil || current.UserID != userID {
+		return nil, "", false
+	}
+	r = SetUser(r, &db.User{ID: userID, Role: current.Role})
+	return setTokenAccess(r, current.ID, grant), current.Role, true
 }

@@ -251,16 +251,17 @@ func (q *Queries) GetScopedDeploymentLog(ctx context.Context, arg GetScopedDeplo
 
 const listDeploymentLogsAfter = `-- name: ListDeploymentLogsAfter :many
 SELECT id, deployment_id, step_name, line, created_at, step_index, step_state, is_step_metadata FROM deployment_logs WHERE deployment_id = ? AND id > ?
-ORDER BY id LIMIT 256
+ORDER BY id LIMIT ?3
 `
 
 type ListDeploymentLogsAfterParams struct {
 	DeploymentID int64 `json:"deployment_id"`
 	ID           int64 `json:"id"`
+	BatchLimit   int64 `json:"batch_limit"`
 }
 
 func (q *Queries) ListDeploymentLogsAfter(ctx context.Context, arg ListDeploymentLogsAfterParams) ([]DeploymentLog, error) {
-	rows, err := q.db.QueryContext(ctx, listDeploymentLogsAfter, arg.DeploymentID, arg.ID)
+	rows, err := q.db.QueryContext(ctx, listDeploymentLogsAfter, arg.DeploymentID, arg.ID, arg.BatchLimit)
 	if err != nil {
 		return nil, err
 	}

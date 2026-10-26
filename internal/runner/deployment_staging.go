@@ -7,12 +7,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
-	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
-	"durpdeploy/internal/staging"
 )
 
 const deploymentStageMount = "/stage"
@@ -72,14 +71,14 @@ func (r *DeploymentRunner) createStagingVolume(
 	name := fmt.Sprintf("durpdeploy-artifact-%d-%s", deploymentID,
 		hex.EncodeToString(nonce[:]))
 	stage := artifactStage{volume: name, keeper: name + "-keeper"}
-	capacity, nodes := artifactStagingCapacity(), artifact.MaxStagingNodes
+	artifactLimits := r.repo.ResourceLimits().Artifact
+	capacity, nodes := artifactStagingCapacity(
+		artifactLimits,
+	), artifactLimits.StagingNodes
 	if mount == deploymentStageMount {
-		capacity = staging.MaxBytes + int64(
-			staging.MaxFiles,
-		)*int64(
-			os.Getpagesize(),
-		)
-		nodes = staging.MaxFiles
+		limits := r.repo.ResourceLimits().Staging
+		capacity = limits.PayloadBytes + limits.Entries*int64(os.Getpagesize())
+		nodes = limits.Entries
 	}
 	r.mu.Lock()
 	stageIndex := len(r.staging[deploymentID])
@@ -126,9 +125,15 @@ func (r *DeploymentRunner) createStagingVolume(
 		"--label=io.durpdeploy.namespace=" + r.engine.scope(),
 		"--network=none", "--read-only", "--cap-drop=ALL",
 		"--security-opt=no-new-privileges", "--user=65534:65534",
-		"--pids-limit=32",
-		fmt.Sprintf("--memory=%d", capacity+(128<<20)),
-		"--cpus=1", "--volume=" + keeperMount,
+		fmt.Sprintf(
+			"--pids-limit=%d",
+			r.repo.ResourceLimits().Container.HelperPIDs,
+		),
+		fmt.Sprintf("--memory=%d", capacity+
+			r.repo.ResourceLimits().Container.HelperMemoryOverheadBytes),
+		"--cpus=" + strconv.FormatFloat(
+			r.repo.ResourceLimits().Container.HelperCPUs, 'f', -1, 64),
+		"--volume=" + keeperMount,
 		"--entrypoint=/usr/bin/tail", artifactHelperImage,
 		"-f", "/dev/null",
 	}

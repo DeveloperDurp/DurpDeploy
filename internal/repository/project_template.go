@@ -434,7 +434,7 @@ func (r *Repository) CreateProjectFromTemplate(
 		); err != nil {
 			return err
 		}
-		if err := copyTemplateSteps(
+		if err := r.copyTemplateSteps(
 			ctx,
 			q,
 			created.ID,

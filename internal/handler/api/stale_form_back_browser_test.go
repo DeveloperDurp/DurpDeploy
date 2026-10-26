@@ -4,6 +4,7 @@ package api_test
 
 import (
 	"fmt"
+	"net/url"
 	"testing"
 
 	"durpdeploy/internal/db"
@@ -67,6 +68,11 @@ select.dispatchEvent(new Event('change', {bubbles:true}));
 return true;
 })()`, fmt.Sprint(env.ID)))
 			f.changeRole(t, scope, "viewer")
+			if scope == "global" {
+				checkGlobalStaleFormLogin(t, b, deploy, f, path,
+					release.ID, env.ID)
+				return
+			}
 			for _, tab := range []*packageBrowser{b, deploy} {
 				tab.evaluate(t, `(() => {
 window.denial = null;
@@ -138,6 +144,51 @@ return dialog ? !toast.visible &&
 			f.assertDescription(t, "Unsaved V02 draft")
 		})
 	}
+}
+
+func checkGlobalStaleFormLogin(
+	t *testing.T, b, deploy *packageBrowser, f staleProjectSaveFixture,
+	path string, releaseID, environmentID int64,
+) {
+	t.Helper()
+	destinations := []string{
+		"/login?" + url.Values{"next": {path}}.Encode(), "/login",
+	}
+	for i, tab := range []*packageBrowser{b, deploy} {
+		tab.call(t, "Page.bringToFront", struct{}{}, &struct{}{})
+		tab.evaluate(t, `document.querySelector(
+'[data-project-form] form, form[action$="/deploy"]').requestSubmit(); true`)
+		tab.waitBackTestURL(t, f.server.URL+destinations[i])
+		tab.screenshot(t, fmt.Sprintf("stale-form-global-login-%d", i))
+	}
+	f.assertDescription(t, f.project.Description.String)
+	f.request(t, "POST", "/api/v1"+path+"/deployments",
+		fmt.Sprintf(`{"release_id":%d,"environment_id":%d}`,
+			releaseID, environmentID), f.token, "", false, 403)
+	var deployments struct{ Total int }
+	decodeStepLogTest(t, f.request(t, "GET", "/api/v1"+path+"/deployments",
+		"", f.adminToken, "", false, 200), &deployments)
+	if deployments.Total != 0 {
+		t.Fatal("revoked stale forms created a deployment")
+	}
+	f.changeRole(t, "global", "maintainer")
+	b.call(t, "Page.bringToFront", struct{}{}, &struct{}{})
+	b.setBackTestSession(t, f.server.URL,
+		memberRoleSession(t, f.h, f.user.ID))
+	b.navigateBackTest(t, f.server.URL+path+"/edit")
+	b.wait(
+		t,
+		`document.querySelector('[data-project-form] form') && window.htmx`,
+	)
+	b.evaluate(t, `(() => {
+const form = document.querySelector('[data-project-form] form');
+form.querySelector('[name=description]').value = 'Unsaved V02 draft';
+form.requestSubmit(); return true;
+})()`)
+	b.wait(t, `document.querySelector('#project-detail')?.textContent
+ .includes('Unsaved V02 draft')`)
+	f.assertDescription(t, "Unsaved V02 draft")
+	b.screenshot(t, "stale-form-global-restored")
 }
 
 func staleFormSecondTab(t *testing.T, first *packageBrowser) *packageBrowser {

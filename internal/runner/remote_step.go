@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"durpdeploy/internal/agentexecution"
 	"durpdeploy/internal/db"
 )
 
@@ -24,6 +25,9 @@ func (r *DeploymentRunner) runRemoteStep(
 	cancelCtx context.Context,
 	request remoteStepRequest,
 ) (result error) {
+	if err := agentexecution.ValidateLimitsWithPolicy(request.step.TimeoutSeconds, request.step.MaxRetries, r.repo.ResourceLimits().Execution); err != nil {
+		return err
+	}
 	if cancelCtx.Err() != nil {
 		return errDeploymentCancelled
 	}
@@ -42,6 +46,16 @@ func (r *DeploymentRunner) runRemoteStep(
 		ctx, request.deploymentID, request.stepIndex,
 	)
 	if err != nil {
+		if errors.Is(err, agentexecution.ErrLimits) {
+			_, logErr := fmt.Fprintf(
+				request.logWriter,
+				"step %q: %v\n",
+				request.step.Name,
+				err,
+			)
+			request.logWriter.Flush()
+			return errors.Join(err, logErr)
+		}
 		return err
 	}
 	if created == 0 {
@@ -77,7 +91,9 @@ func (r *DeploymentRunner) runRemoteStep(
 		created)
 	request.logWriter.Flush()
 
-	timeout := defaultStepTimeout
+	timeout := time.Duration(
+		r.repo.ResourceLimits().Execution.DefaultTimeoutSeconds,
+	) * time.Second
 	if request.step.TimeoutSeconds > 0 {
 		timeout = time.Duration(request.step.TimeoutSeconds) * time.Second
 	}

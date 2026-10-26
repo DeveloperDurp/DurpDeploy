@@ -1,10 +1,91 @@
 package runner
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"testing"
+
+	"durpdeploy/internal/containerenv"
 )
+
+func TestLocalAttemptRejectsMalformedDefaultEnvironment(t *testing.T) {
+	for _, name := range []string{"BAD\x00NAME", "BAD=NAME", "bad name", "2NAME", strings.Repeat("A", 256)} {
+		t.Run(name, func(t *testing.T) {
+			r, repo, trace := podmanFixture(t, `
+case "$3" in
+info) printf '{}';;
+ps|rm|volume) ;;
+run) printf started > "$PODMAN_TRACE";;
+esac
+`)
+			err := r.runStepAttempt(t.Context(), localStepAttempt{
+				step: deploymentStep{
+					ContainerImage: "example.com/worker:1",
+				},
+				logWriter:   attemptLogWriter(t, r, repo, 0),
+				environment: map[string]string{name: "private-value"},
+			})
+			if !errors.Is(err, containerenv.ErrEnvironment) {
+				t.Fatalf("malformed environment: %v", err)
+			}
+			if _, err := os.Stat(trace); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("workload started: %v", err)
+			}
+		})
+	}
+}
+
+func TestLocalEnvironmentExplicitSelectionIgnoresUnselectedEntries(
+	t *testing.T,
+) {
+	request := localStepAttempt{
+		step: deploymentStep{VariableNames: []string{"Mixed_2", "_EMPTY"}},
+		environment: map[string]string{
+			"Mixed_2": "first\nsecond", "_EMPTY": "", "bad name": "private\x00value",
+		},
+	}
+	entries, _, err := request.containerEnvironment()
+	if err != nil || len(entries) != 2 ||
+		entries[0] != "Mixed_2=first\nsecond" ||
+		entries[1] != "_EMPTY=" {
+		t.Fatalf("selected entries=%q error=%v", entries, err)
+	}
+}
+
+func TestLocalAttemptRejectsMalformedSelectedNameWithoutLeaking(t *testing.T) {
+	r, repo, trace := podmanFixture(t, `
+case "$3" in
+info) printf '{}';;
+ps|rm|volume) ;;
+run) printf started > "$PODMAN_TRACE";;
+esac
+`)
+	err := r.runStepAttempt(t.Context(), localStepAttempt{
+		step: deploymentStep{
+			ContainerImage: "example.com/worker:1",
+			VariableNames:  []string{"private=NAME"},
+		},
+		logWriter:   attemptLogWriter(t, r, repo, 0),
+		environment: map[string]string{"private=NAME": "private-value"},
+	})
+	if !errors.Is(err, containerenv.ErrEnvironment) {
+		t.Fatalf("malformed selected environment: %v", err)
+	}
+	logs, logErr := repo.Queries.ListDeploymentLogsByDeployment(t.Context(), 0)
+	var output strings.Builder
+	for _, log := range logs {
+		output.WriteString(log.Line)
+	}
+	if logErr != nil ||
+		strings.Count(output.String(), "invalid execution environment") != 1 ||
+		strings.Contains(output.String(), "private") {
+		t.Fatalf("unsafe validation logs=%+v error=%v", logs, logErr)
+	}
+	if _, err := os.Stat(trace); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("workload started: %v", err)
+	}
+}
 
 func TestLocalAttemptPassesAllVariablesByDefault(t *testing.T) {
 	// Given

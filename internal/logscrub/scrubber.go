@@ -22,18 +22,6 @@ var commonSecretPatterns = []string{
 	`(?i:\b(password|token|key)\s*=\s*[^\s"']+)`,
 }
 
-var extraSecretPatterns []string
-
-func init() {
-	if extra := os.Getenv("DURPDEPLOY_EXTRA_SCRUB_PATTERNS"); extra != "" {
-		for _, pattern := range strings.Split(extra, ",") {
-			if pattern = strings.TrimSpace(pattern); pattern != "" {
-				extraSecretPatterns = append(extraSecretPatterns, pattern)
-			}
-		}
-	}
-}
-
 // Scrubber protects against accidental plaintext exposure. It matches known
 // literal secret values and common credential formats, but not transformed or
 // intentionally disguised data such as Base64 or decorated fragments.
@@ -48,7 +36,25 @@ type pendingPattern struct {
 }
 
 func New(secrets []string, patterns ...string) *Scrubber {
-	additional := append([]string(nil), extraSecretPatterns...)
+	return NewConfigured(
+		secrets,
+		os.Getenv("DURPDEPLOY_EXTRA_SCRUB_PATTERNS"),
+		patterns...)
+}
+
+// NewConfigured keeps common redaction and uses only the supplied startup
+// patterns. Constructing one scrubber never changes another instance's policy.
+func NewConfigured(
+	secrets []string,
+	configured string,
+	patterns ...string,
+) *Scrubber {
+	var additional []string
+	for _, pattern := range strings.Split(configured, ",") {
+		if pattern = strings.TrimSpace(pattern); pattern != "" {
+			additional = append(additional, pattern)
+		}
+	}
 	return newScrubber(secrets, commonSecretPatterns,
 		append(additional, patterns...))
 }

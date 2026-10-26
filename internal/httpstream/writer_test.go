@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -30,15 +31,51 @@ func TestWriterTerminatesBlockedWrite(t *testing.T) {
 	defer testutil.Close(t, server)
 	defer testutil.Close(t, client)
 	w := &pipeWriter{Conn: server, header: make(http.Header)}
-	stream, err := New(middleware.NewWrapResponseWriter(w, 1))
+	stream, err := NewWithTimeout(
+		middleware.NewWrapResponseWriter(w, 1),
+		20*time.Millisecond,
+	)
 	require.NoError(t, err)
-	stream.timeout = 20 * time.Millisecond
 	// When: an event is written to the stalled client.
 	_, err = stream.Write([]byte("data: event\n\n"))
 	// Then: the server-side write deadline ends the operation.
 	var timeout net.Error
 	require.ErrorAs(t, err, &timeout)
 	require.True(t, timeout.Timeout())
+}
+
+type deadlineRecorder struct {
+	*httptest.ResponseRecorder
+	deadlines []time.Time
+}
+
+func (w *deadlineRecorder) SetWriteDeadline(deadline time.Time) error {
+	w.deadlines = append(w.deadlines, deadline)
+	return nil
+}
+
+func TestConfiguredWriterDeadlines(t *testing.T) {
+	for _, timeout := range []time.Duration{time.Second, 2 * time.Minute} {
+		w := &deadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
+		stream, err := NewWithTimeout(w, timeout)
+		require.NoError(t, err)
+		before := time.Now()
+		_, err = stream.Write([]byte("data: event\n\n"))
+		require.NoError(t, err)
+		require.Len(t, w.deadlines, 3)
+		require.True(t, w.deadlines[0].IsZero())
+		require.WithinDuration(
+			t,
+			before.Add(timeout),
+			w.deadlines[1],
+			time.Second,
+		)
+		require.True(t, w.deadlines[2].IsZero())
+	}
+	for _, timeout := range []time.Duration{0, -time.Second} {
+		_, err := NewWithTimeout(httptest.NewRecorder(), timeout)
+		require.Error(t, err)
+	}
 }
 
 type failingFlushWriter struct{ *pipeWriter }

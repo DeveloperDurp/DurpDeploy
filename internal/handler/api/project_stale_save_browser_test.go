@@ -4,6 +4,7 @@ package api_test
 
 import (
 	"fmt"
+	"net/url"
 	"testing"
 )
 
@@ -55,6 +56,10 @@ return true;
 })()`)
 	f.changeRole(t, scope, role)
 	b.evaluate(t, `window.staleSaveForm.requestSubmit(); true`)
+	if scope == "global" {
+		checkStaleSaveRequiresLogin(t, b, f, path, role)
+		return
+	}
 	b.wait(t, `window.staleSaveResult !== null &&
 window.staleSaveForm.querySelector('[role=alert]')?.getClientRects().length > 0`)
 	result := b.evaluate(t, fmt.Sprintf(`(() => {
@@ -108,4 +113,33 @@ return toast.visible && toast.type === 'success' &&
 })()`)
 	}
 	b.screenshot(t, "stale-save-restored-"+scope+"-"+role)
+}
+
+func checkStaleSaveRequiresLogin(
+	t *testing.T, b *packageBrowser, f staleProjectSaveFixture,
+	path, role string,
+) {
+	t.Helper()
+	b.waitBackTestURL(t, f.server.URL+"/login?next="+url.QueryEscape(path))
+	f.assertDescription(t, f.project.Description.String)
+	b.screenshot(t, "stale-save-login-global-"+role)
+	f.changeRole(t, "global", "maintainer")
+	b.setBackTestSession(t, f.server.URL,
+		memberRoleSession(t, f.h, f.user.ID))
+	b.navigateBackTest(t, fmt.Sprintf("%s/projects/%d/edit",
+		f.server.URL, f.project.ID))
+	b.wait(
+		t,
+		`document.querySelector('[data-project-form] form') && window.htmx`,
+	)
+	b.evaluate(t, `(() => {
+const form = document.querySelector('[data-project-form] form');
+form.querySelector('[name=description]').value =
+ 'Keep this unsaved project description';
+form.requestSubmit(); return true;
+})()`)
+	b.wait(t, `document.querySelector('#project-detail')?.textContent
+ .includes('Keep this unsaved project description')`)
+	f.assertDescription(t, "Keep this unsaved project description")
+	b.screenshot(t, "stale-save-reauthenticated-global-"+role)
 }

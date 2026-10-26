@@ -5,25 +5,23 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"durpdeploy/internal/artifact"
+	"durpdeploy/internal/config"
 	"durpdeploy/internal/db"
 )
 
 const artifactMount = "/artifacts"
 
-// Unix-socket runtimes share the server kernel's page size. Each file can waste
-// at most one page; logical ZIP contents remain capped at MaxExtracted.
-func artifactStagingCapacity() int64 {
-	return artifact.MaxExtracted + int64(
-		artifact.MaxFiles,
-	)*int64(
-		os.Getpagesize(),
-	)
+// Unix-socket runtimes share the server kernel's page size. Each staging node
+// can waste one page, including implicit directories. Startup checks overflow.
+func artifactStagingCapacity(limits config.ArtifactLimits) int64 {
+	return limits.ExtractedBytes + limits.StagingNodes*int64(os.Getpagesize())
 }
 
 const artifactHelperImage = "harbor.durp.info/dockerhub/library/alpine@sha256:ce64758a109eb420d874a118f87920e625e12d3634e03b4a5573fd9f6e5d3507"
@@ -84,7 +82,8 @@ func (r *DeploymentRunner) stageArtifact(
 	if !local {
 		return result, nil
 	}
-	directory, err := artifact.ExtractZIP(ctx, download.Path)
+	directory, err := artifact.ExtractZIPWithLimits(ctx, download.Path,
+		r.repo.ResourceLimits().Artifact)
 	if err != nil {
 		return result, err
 	}
@@ -154,6 +153,10 @@ func (r *DeploymentRunner) cleanupArtifact(deploymentID int64) error {
 		output, err := r.engine.command(ctx, r.engine.removeArgs(stage.keeper)...).
 			CombinedOutput()
 		if err = r.engine.removalError(output, err); err != nil {
+			r.recordCleanupFailure(ctx, deploymentID, fmt.Errorf(
+				"remove staging keeper %q: %w: %s",
+				stage.keeper, err, strings.TrimSpace(string(output)),
+			))
 			cleanupErr = errors.Join(cleanupErr, errContainerCleanup, err)
 			continue
 		}
@@ -164,6 +167,10 @@ func (r *DeploymentRunner) cleanupArtifact(deploymentID int64) error {
 				strings.ToLower(string(output)),
 				"no such volume",
 			) {
+			r.recordCleanupFailure(ctx, deploymentID, fmt.Errorf(
+				"remove staging volume %q: %w: %s",
+				stage.volume, err, strings.TrimSpace(string(output)),
+			))
 			cleanupErr = errors.Join(cleanupErr, errContainerCleanup, err)
 		}
 	}
@@ -174,6 +181,40 @@ func (r *DeploymentRunner) cleanupArtifact(deploymentID int64) error {
 	delete(r.staging, deploymentID)
 	r.mu.Unlock()
 	return nil
+}
+
+func (r *DeploymentRunner) recordCleanupFailure(
+	ctx context.Context, deploymentID int64, cleanupErr error,
+) {
+	ctx, cancel := context.WithTimeout(
+		context.WithoutCancel(ctx),
+		5*time.Second,
+	)
+	defer cancel()
+	variables, err := r.repo.ListDeploymentVariables(ctx, deploymentID)
+	var secrets []string
+	message := "Staging cleanup unconfirmed: runtime detail omitted because secret redaction policy is unavailable"
+	if err == nil {
+		for _, variable := range variables {
+			if variable.Secret != 0 {
+				secrets = append(secrets, variable.Value.String)
+			}
+		}
+		message = "Staging cleanup unconfirmed: " + cleanupErr.Error()
+	}
+	writer := &broadcastWriter{
+		broker: r.broker, repo: r.repo, deploymentID: deploymentID,
+		ctx: ctx, scrubber: r.repo.NewScrubber(secrets),
+	}
+	if err := writer.writeLine(writer.scrubber.Scrub(message), ""); err != nil {
+		slog.Error(
+			"persist staging cleanup diagnostic",
+			"deployment_id",
+			deploymentID,
+			"err",
+			err,
+		)
+	}
 }
 
 func (r *DeploymentRunner) reconcileArtifactVolumes(ctx context.Context) error {

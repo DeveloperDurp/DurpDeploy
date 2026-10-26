@@ -2,6 +2,8 @@ package server
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,6 +14,10 @@ import (
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 )
+
+func agentTestToken(id string) string {
+	return fmt.Sprintf("ddp_pat_%x", sha256.Sum256([]byte(id)))
+}
 
 func seedAgentRouteUser(
 	t *testing.T,
@@ -35,7 +41,7 @@ func seedAgentRouteUser(
 	}
 	_, err = h.repo.Queries.CreateApiToken(t.Context(), db.CreateApiTokenParams{
 		ID: id, UserID: user.ID, Name: "fixture", TokenPrefix: "fixture",
-		TokenHash: auth.HashApiToken("ddp_pat_" + id), Scope: "global",
+		TokenHash: auth.HashApiToken(agentTestToken(id)), Scope: "global",
 	})
 	if err != nil {
 		t.Fatal(err)

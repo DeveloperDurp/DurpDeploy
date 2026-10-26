@@ -1,6 +1,8 @@
 package runner
 
 import (
+	"archive/tar"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -21,10 +23,27 @@ func TestShutdownWaitsForApprovedStagingRestore(t *testing.T) {
 	}
 	repo.SetSecretBox(box)
 	dep := stagingDeployment(t, repo)
+	var bundle bytes.Buffer
+	writer := tar.NewWriter(&bundle)
 	data := "approved bundle"
+	if err := writer.WriteHeader(&tar.Header{
+		Name: "plan", Mode: 0644, Size: int64(len(data)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Write([]byte(data)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
 	hash := sha256.Sum256([]byte(data))
 	checksum := hex.EncodeToString(hash[:])
-	ciphertext, err := box.Encrypt(fmt.Sprintf("%d/0/0\n%s", dep.ID, data))
+	bundleHash := sha256.Sum256(bundle.Bytes())
+	bundleChecksum := hex.EncodeToString(bundleHash[:])
+	ciphertext, err := box.Encrypt(
+		fmt.Sprintf("%d/0/0\n%s", dep.ID, bundle.Bytes()),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +56,7 @@ VALUES(?,1)`, dep.ID); err != nil {
 INSERT INTO artifact_gates(deployment_id,step_index,status,artifact_path,
 artifact_sha256,bundle_sha256,bundle_size,review,created_at,expires_at,approved_by)
 VALUES(?,0,'approved','plan',?,?,?,'{}',0,?,1)`,
-		dep.ID, checksum, checksum, len(data), time.Now().Unix()+60); err != nil {
+		dep.ID, checksum, bundleChecksum, bundle.Len(), time.Now().Unix()+60); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repo.DB.ExecContext(t.Context(), `

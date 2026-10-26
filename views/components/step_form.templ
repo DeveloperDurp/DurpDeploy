@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"durpdeploy/internal/agentexecution"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/interpreter"
@@ -274,15 +275,15 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 			</div>
 			<div class="form-control">
 				<label class="label" for={ stepInputID(step, isNew, "timeout") }>
-					<span class="label-text">Timeout (seconds, 0 = 5 min default)</span>
+					<span class="label-text">Timeout (seconds, 0 = configured default)</span>
 				</label>
-				<input id={ stepInputID(step, isNew, "timeout") } type="number" name="timeout_seconds" min="0" value={ strconv.FormatInt(step.TimeoutSeconds, 10) } class="input input-bordered"/>
+				<input id={ stepInputID(step, isNew, "timeout") } type="number" name="timeout_seconds" min="0" max={ strconv.FormatInt(agentexecution.RequestLimits(ctx).MaxTimeoutSeconds, 10) } value={ strconv.FormatInt(step.TimeoutSeconds, 10) } class="input input-bordered"/>
 			</div>
 			<div class="form-control">
 				<label class="label" for={ stepInputID(step, isNew, "retries") }>
 					<span class="label-text">Max retries on failure (0 = no retry)</span>
 			</label>
-			<input id={ stepInputID(step, isNew, "retries") } type="number" name="max_retries" min="0" value={ strconv.FormatInt(step.MaxRetries, 10) } class="input input-bordered"/>
+			<input id={ stepInputID(step, isNew, "retries") } type="number" name="max_retries" min="0" max={ strconv.FormatInt(agentexecution.RequestLimits(ctx).MaxRetries, 10) } value={ strconv.FormatInt(step.MaxRetries, 10) } class="input input-bordered"/>
 		</div>
 		<input type="hidden" name="sort_order" value={ strconv.FormatInt(step.SortOrder, 10) }/>
 		<input type="hidden" name="dialog" value="1"/>
@@ -435,7 +436,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 					<label class="label" for={ fmt.Sprintf("step-%d-retries", step.ID) }>
 					<span class="label-text">Max retries</span>
 				</label>
-				<input id={ fmt.Sprintf("step-%d-retries", step.ID) } type="number" name="max_retries" min="0" value={ strconv.FormatInt(step.MaxRetries, 10) } class="input input-bordered input-sm"/>
+				<input id={ fmt.Sprintf("step-%d-retries", step.ID) } type="number" name="max_retries" min="0" max={ strconv.FormatInt(agentexecution.RequestLimits(ctx).MaxRetries, 10) } value={ strconv.FormatInt(step.MaxRetries, 10) } class="input input-bordered input-sm"/>
 			</div>
 			<input type="hidden" name="sort_order" value={ strconv.FormatInt(step.SortOrder, 10) }/>
 				@StepArtifactFields(step, false)

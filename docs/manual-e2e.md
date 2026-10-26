@@ -1,5 +1,99 @@
 # Manual checks after `make e2e-test`
 
+## Agent policy handshake
+
+Use a disposable paired agent with its scoped mTLS identity and server certificate trust.
+Keep the existing demo and runtime socket unchanged.
+
+1. Start both peers with the default shared resource settings.
+2. Queue a disposable remote deployment through the public API.
+3. Send a poll with an unknown or mismatched `X-DurpDeploy-Resource-Policy` value.
+4. Confirm `409`, no acknowledgement header, and no echoed value.
+5. Confirm that the waiting claim, agent heartbeat, and capabilities remain unchanged.
+6. Repeat with repeated, empty, and comma-joined policy header values.
+7. Send a poll with the matching `resourcepolicy.Limits.Advertisement()` value.
+8. Confirm `200`, one matching acknowledgement header, and the expected encrypted claim.
+9. Poll again while the first claim remains active.
+10. Confirm `204` with one matching acknowledgement header.
+11. Repeat the default-policy claim with a legacy poll that omits the header.
+12. Start a separate server with a custom shared setting and no queued work.
+13. Confirm that absent and default-policy headers return `409`.
+14. Send an idle poll with the matching custom policy advertisement.
+15. Confirm `204` with one matching acknowledgement header.
+
+Test stale polling requests with the default shared policy:
+
+1. Start an idle legacy poll without the policy header.
+2. Send a second poll with the matching policy advertisement for the same agent.
+3. Cancel the second idle request after the server records its heartbeat.
+4. Queue a disposable remote deployment through the public API.
+5. Confirm that the first request returns `204` without claiming the deployment.
+6. Send a new poll with the matching advertisement.
+7. Confirm that the new request receives the queued claim.
+8. Repeat with a first advertised poll and a second legacy poll.
+9. Repeat both directions with a remote step in a mixed deployment.
+
+Restart the server and confirm that an accepted advertisement remains in the capability snapshot.
+Revoke, re-pair, or delete the disposable agent and confirm that its stored advertisement is removed.
+
+Test matching custom remote policies:
+
+1. Set `DURPDEPLOY_LIMITS_CONTAINER_PIDS=96` before starting the disposable server.
+2. Set `DURPDEPLOY_AGENT_LIMITS_CONTAINER_PIDS=96` before starting each disposable agent.
+3. Keep all other shared settings equal on both peers.
+4. Wait for each agent to complete a matching poll.
+5. Create a disposable project through the public API.
+6. Add an agent container step that checks `/sys/fs/cgroup/pids.max` for `96`.
+7. Create a release and deployment through the public API.
+8. Confirm that the deployment succeeds and its staging data is removed.
+9. Repeat with host-to-container package handoff, fan-out, script failure, and cancellation.
+10. Configure one target with different limits and confirm that its polls return `409` without claims.
+11. Confirm that a fan-out queue rejects an incompatible stored target policy without leaving partial runs.
+
+Run `TestConfiguredSharedPolicyRemoteAPIE2E` with the documented agent binary and Podman setup for the automated API scenarios.
+Retain the disposable instances, databases, identities, and HTTP transcripts for manual review.
+
+## Captured resource policy
+
+Use a global administrator bearer token for these API checks.
+Keep tokens and configuration credentials private.
+
+1. Call `GET /api/v1/admin/resource-config`.
+2. Confirm `200`, JSON resource groups, and `Cache-Control: no-store`.
+3. Compare the response with the resolved startup settings in [configuration](configuration.md).
+4. Confirm that the response excludes credentials, database paths, and other startup settings.
+5. Repeat with a viewer, deployer, maintainer, or project-scoped administrator token.
+6. Confirm `403` for each restricted token.
+7. Repeat without a bearer token or with an invalid token.
+8. Confirm `401` for both requests.
+9. Send `POST` to the same path with the administrator token.
+10. Confirm `405` and an unchanged policy on the next `GET`.
+
+Environment changes require a server restart before the response changes.
+The endpoint does not verify an agent's policy or external runtime enforcement.
+
+Artifact fetch timeouts apply to the saved package repository's test endpoint and package retrieval.
+Use a disposable project and a trusted HTTPS fixture with harmless credentials.
+Retain the project and repository after testing.
+
+1. Set the artifact header timeout to one second before startup.
+2. Configure the fixture to delay response headers for two seconds.
+3. Call `POST /api/v1/projects/{id}/package-repository/test` with the fixture version.
+4. Confirm `502` without credentials in the response.
+5. Repeat from **Package repository** with **Test package**.
+6. Confirm a visible validation error.
+7. Test a fast fixture version.
+8. Confirm ZIP validation succeeds and the temporary download is removed.
+9. Restart with a three-second header timeout.
+10. Confirm the delayed version succeeds.
+11. Repeat with a delayed response body and the total fetch timeout.
+
+Run the API and web regression with this command:
+
+```bash
+bash scripts/go_test.sh -tags=e2e -run '^TestConfiguredArtifactTimeoutsAPIWebE2E$' ./internal/handler/api
+```
+
 ## Secret variable exports
 
 Use a disposable project and lifecycle with harmless secret values.
@@ -759,9 +853,16 @@ Save the retained form.
 Confirm that the description now appears on the project page and through the API.
 
 Repeat the check with a project Deployer downgrade.
-Repeat the check with global Viewer and Deployer downgrades.
-Restore both roles after each check.
+Restore the project role after each check.
 Repeat through the project edit dialog.
+
+Repeat with global Viewer and Deployer downgrades.
+Submit the stale form and expect the login page.
+Confirm that the saved description remains unchanged.
+Restore the global role to Maintainer.
+Sign in again and reopen the project editor.
+Enter the description again and save it.
+Confirm that the saved description appears through the API.
 These checks create no schedules.
 
 Run the focused API and browser regressions:
@@ -986,6 +1087,15 @@ Download `/deployments/{id}/logs.txt`.
 Confirm that both surfaces retain the same execution locations.
 Repeat the check with a viewer account.
 
+Compare `/deployments/{id}/logs.txt` with `GET /api/v1/deployments/{id}/logs.txt` byte for byte.
+Repeat with the web and API `logs.txt` links for one runbook execution.
+Confirm that both downloads use `deployment-{deploymentId}.log` and the same attachment headers.
+Check empty history, unnamed steps, cancelled deployments, and history with more than 256 rows.
+Confirm that timestamps use UTC and the complete file ends with a blank line.
+Use `TestTextLogExportAPIWebE2E` and `TestTextLogExportBrowserE2E` for the automated checks.
+
+See [large log export costs](#large-log-export-costs) before changing export pagination.
+
 For a containerized host agent without runtime information, set `DURPDEPLOY_AGENT_HOSTNAME` before starting the agent.
 Confirm that the configured physical hostname appears in its logs.
 Without this setting, an unavailable physical hostname appears as `unknown`.
@@ -1000,6 +1110,75 @@ AGENT_TEST_SOCKET=unix:///run/user/1000/podman/podman.sock DURPDEPLOY_AGENT_E2E_
 ```
 
 ## Deployment staging transfer
+
+For a deployment with `cleanup_unconfirmed`, open its deployment page.
+Expand **Deployment messages**.
+Check the cleanup operation and runtime error.
+Download the logs through `/deployments/{id}/logs.txt` and `/api/v1/deployments/{id}/logs.txt`.
+Confirm that secret variable values are redacted on all three surfaces.
+If the server cannot load its redaction policy, expect a generic diagnostic without runtime output.
+Restore the runtime before retrying cleanup.
+
+Run the isolated cleanup diagnostic checks:
+
+```bash
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=5m -run '^TestDeploymentStaging(CleanupDiagnosticAPIWeb|FailureBrowser)E2E$' ./internal/handler/api
+```
+
+Run the staging encryption cancellation checks:
+
+```bash
+AGENT_TEST_SOCKET=unix:///run/user/1000/podman/podman.sock DURPDEPLOY_AGENT_E2E_BINARY=/absolute/path/to/durpdeploy-agent bash scripts/go_test.sh -tags 'e2e agentstaging' -race -count=1 -timeout=3m -v -run '^TestDeploymentStagingEncryptionCancellationAPIE2E$' ./internal/agentserver
+```
+
+The Linux fixture pauses a real agent upload after its first encrypted chunk.
+Cancel the deployment through the public API.
+Confirm that the request stops, staging metadata is empty, and agent and server cleanup completes.
+Deploy the same release again without cancellation.
+Confirm that its complete 32 MiB snapshot reaches the downstream step.
+
+Run the staging merge budget checks:
+
+```bash
+AGENT_TEST_SOCKET=unix:///run/user/1000/podman/podman.sock DURPDEPLOY_AGENT_E2E_BINARY=/absolute/path/to/durpdeploy-agent bash scripts/go_test.sh -tags 'e2e agentstaging' -race -count=1 -timeout=6m -v -run '^TestDeploymentStagingMergeBudgetAPIE2E$' ./internal/agentserver
+```
+
+The fixture uses two real agents and additional successful output records to exceed each fixed per-step budget.
+The entry-work fixture copies a real published 20,000-entry archive.
+The archive-byte fixture uses metadata without chunks to verify rejection before decryption.
+Confirm that the public deployment API reports failure and logs contain `staging merge budget exceeded`.
+Confirm that the downstream marker is absent and the staging API returns an empty list after cleanup.
+Repeat normal identical, disjoint, conflicting, and canceled fanout deployments through the existing transfer checks.
+
+Run the staging admission API checks with the current server and agent builds:
+
+```bash
+AGENT_TEST_SOCKET=unix:///run/user/1000/podman/podman.sock DURPDEPLOY_AGENT_E2E_BINARY=/absolute/path/to/durpdeploy-agent bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 -timeout=3m -v -run '^TestDeploymentStagingAdmissionAPIE2E$' ./internal/agentserver
+```
+
+By default, the server permits four concurrent staging uploads or downloads and one active transfer per authenticated agent.
+The checks occupy capacity before a real agent transfer.
+Verify that the agent receives `429` with `Retry-After: 1`.
+Verify that the deployment succeeds after capacity returns.
+Confirm that staging cleanup completes and transfer metadata remains available through the public API.
+The archive limits remain unchanged.
+Keep retained schedules disabled.
+
+Run the configured transfer checks through the pinned mTLS API:
+
+```bash
+bash scripts/go_test.sh -race -count=1 -timeout=3m -v -run '^TestConfigured(Staging(Admission|Idle)|TransferDeadlines)APIE2E$' ./internal/agentserver
+```
+
+The checks lower concurrency to two globally and one per agent, then raise it to six globally and three per agent.
+Confirm `429` with `Retry-After: 1` at each configured bound.
+Confirm that disconnects release permits and valid upload and download requests succeed afterward.
+The idle check sets a one-second server deadline and stalls an upload.
+Confirm `400` after the inactivity deadline and a successful upload afterward.
+The deadline checks inspect forwarded one-second and ten-minute socket deadlines during staging and package API transfers.
+Use `DURPDEPLOY_LIMITS_TRANSFER_GLOBAL`, `DURPDEPLOY_LIMITS_TRANSFER_PER_AGENT`, and `DURPDEPLOY_LIMITS_TRANSFER_IDLE_TIMEOUT_SECONDS` to repeat with a disposable server.
+Inspect the resolved values through `GET /api/v1/admin/resource-config` with a global administrator token.
+Restart the server after changing its environment or YAML file.
 
 Run the transfer timeout API checks with the current server and agent builds:
 
@@ -1093,6 +1272,9 @@ Keep schedules disabled. Automated API/web/container coverage is
 
 ## Bounded log history
 
+Use the default log settings for the following historical boundary checks.
+For configured budgets, use the additional checks below.
+
 Startup indexes step metadata and backfills existing log history once.
 Allow extra startup time for databases with large log histories.
 
@@ -1151,6 +1333,48 @@ Automated checks include `TestDeploymentLogHistoryPagesAPIWebE2E` and `TestRunbo
 Browser checks include `TestDeploymentLogHistoryBrowserE2E` and `TestRunbookLogHistoryBrowserE2E`.
 `TestOpenLogStreamRevocationAPIWebE2E` checks open streams after session or token revocation.
 `TestRunbookLogRevocationBrowserE2E` checks browser access after project membership removal.
+
+### Configured log budgets
+
+Start a separate retained instance with these environment variables:
+
+```bash
+export DURPDEPLOY_LIMITS_LOGS_PAGE_BYTES=8192
+export DURPDEPLOY_LIMITS_LOGS_LINE_BYTES=256
+export DURPDEPLOY_LIMITS_LOGS_PREVIEW_BATCH=2
+export DURPDEPLOY_LIMITS_LOGS_PENDING_BYTES=1048576
+export DURPDEPLOY_LIMITS_LOGS_EXPORT_BATCH=3
+export DURPDEPLOY_LIMITS_LOGS_PAGE_ROWS=4
+```
+
+Alternatively, set these fields in `limits.logs` in the optional startup YAML file.
+Set one different environment value and confirm that it overrides the YAML value.
+Read `GET /api/v1/admin/resource-config` as an admin.
+Confirm that its `logs` object contains the captured settings.
+
+Repeat the deployment and runbook history scenarios above.
+Confirm that pages contain at most four rows and 8192 JSON bytes.
+Confirm that previews contain at most 256 UTF-8 bytes per text field.
+Confirm that the web explanation and live retention use the captured budgets.
+Navigate older pages and confirm that each persisted ID appears once.
+Export all logs and confirm that all complete lines remain available.
+Request structured preview and full streams and compare their text.
+Confirm that preview streams shorten long lines while full streams retain them.
+
+Restart with 2097152 page bytes, 32768 line bytes, 65 preview rows, 257 export rows, and 501 page rows.
+Confirm that the history exceeds the previous row and line defaults when sufficient output exists.
+Restart with `DURPDEPLOY_LIMITS_LOGS_PENDING_BYTES=4096`.
+Deploy a disposable step that prints a start marker, then writes 8192 bytes without a newline.
+Make the step wait after writing. Start a waiting child process before writing.
+Confirm that the start marker appears before the limit diagnostic.
+Confirm that the step fails with `pending log output exceeded safety limit` and cleans up owned resources.
+Confirm that ambiguous output does not appear in logs.
+Restart with `DURPDEPLOY_LIMITS_LOGS_PENDING_BYTES=1048577` and repeat the step.
+Confirm that complete output succeeds and remains available in exports.
+Keep all examples and history. Keep schedules disabled.
+
+Automated checks include `TestConfiguredLogsAPIWebE2E`, `TestConfiguredPendingLogsAPIE2E`, and `TestConfiguredLogsBrowserE2E`.
+`TestConfiguredLogsRemoteAPIE2E` checks remote execution with custom server log budgets and unchanged shared policies.
 
 ### Runbook deletion
 
@@ -1234,7 +1458,8 @@ Open deployment and runbook log streams with browser sessions and API tokens.
 Remove the stream user's project membership through the API.
 Verify responsive streams close within approximately two seconds.
 Verify reconnect requests fail and new output does not appear.
-A stalled consumer can delay closure up to 62 seconds.
+With default settings, a stalled consumer can delay closure up to 62 seconds.
+Custom stream-write timeouts change this bound to their event budget plus approximately two seconds for authorization checks.
 
 Configure project and global notification credentials through their API endpoints.
 Inspect GET and PUT responses and both settings pages.
@@ -1300,6 +1525,23 @@ Delete the last entry on the last page.
 Confirm that the list shows the preceding page.
 Compare the list with `GET /api/v1/projects/{id}/schedules?limit=50&offset=50`.
 
+Concurrent schedule edits preserve the saved target, cron, enabled state, and next execution time.
+The scheduler discards stale skip, park, and disable writes.
+Transient storage failures leave the occurrence due for a later tick.
+Intentional lifecycle gate skips advance the cursor without changing `last_fired_at`.
+Run the focused race checks with these commands:
+
+```bash
+bash scripts/go_test.sh -race -tags=e2e -run 'TestSchedule(TransitionsPreserveEditsAPIWeb|TransientReadsRetainDueOccurrence)E2E' ./internal/handler/api
+bash scripts/go_test.sh -tags=e2e,packagebrowser -run '^TestScheduleTransitionsBrowserE2E$' ./internal/handler/api
+```
+
+These isolated checks pause a due occurrence before its conditional write.
+They save public API or browser edits before resuming the scheduler.
+They verify that stale writes leave the saved schedule unchanged.
+Keep retained schedules disabled after manual checks.
+Enable a disposable schedule with **Enable** to repeat normal minute-tick checks.
+
 Home deployment panels refresh every five seconds.
 Home charts refresh every 30 seconds.
 Open browser network tools and filter requests by `/dashboard/activity`.
@@ -1362,6 +1604,56 @@ Docker and rootful Podman are unsupported in this mode.
 Set `DEMO_LOCAL_ONLY` to `0` or `1`.
 Server-only refresh preserves the listener addresses and URL.
 For full refresh, use `DEMO_LOCAL_ONLY=1 DURPDEPLOY_CONTAINER_RUNTIME=podman make demo-refresh-full DEMO_DIR=/absolute/demo/path`.
+
+### Deployment access acceptance test
+
+Use a separate loopback-only demo for the deployment access review.
+Use local rootless Podman with cgroup v2, OpenSSL, and the demo's existing Caddy image.
+Run the following command after the demo launcher completes:
+
+```bash
+python3 scripts/deployment_access_e2e.py /absolute/demo/path
+```
+
+The test creates a project, an environment, approved authors, and execution-only users through the public API.
+The private `inventory.json` records project authors, global administrators, execution resources, and the host's single trusted author domain.
+The inventory check rejects multiple trust levels on one host.
+All scripts on this demo host require the same operator trust.
+Containers share the host kernel.
+Use separate execution hosts before adding another trust level.
+
+The test creates a separate loopback Caddy gateway with client certificate authentication.
+It verifies access with the approved certificate and TLS rejection without a certificate or with an untrusted certificate.
+The API and browser-form requests then pass through that gateway.
+The original demo proxy and backend remain on loopback.
+
+It verifies that Deployer permission permits existing-release execution and blocks content authoring and membership changes.
+It verifies browser write rejection and immediate enforcement of a membership downgrade.
+The workload checks its non-root identity, capabilities, read-only root, disabled network, and absence of private agent paths.
+The trusted workload waits while the test operator applies a 0.5 CPU quota and a 128 MiB memory limit.
+The test updates only the container with its deployment identifier and the selected demo's namespace label.
+The workload then reports its actual cgroup limits.
+The test rejects unlimited values or limits above 0.5 CPU, 128 MiB memory, or 128 processes.
+The workload verifies its 64 MiB `/tmp` filesystem and confirms that a 65 MiB write fails.
+It checks the specific out-of-space error and rejects writable disk-backed mounts.
+Other writable data files use memory-backed filesystems within the 128 MiB memory limit.
+The runtime policy disables swap for this workload.
+The fixture has no staging volume or writable host mounts.
+These limits apply to the test workload, not other demo jobs or application defaults.
+
+The test retains its project, release, successful deployment, accounts, and private evidence directory.
+Open the printed project and deployment links for manual checks.
+Read `login.json` in the private evidence directory for test account credentials.
+The test revokes its API tokens and creates no schedules.
+It retains the healthy gateway for manual checks.
+Use `gateway/client.pem` and `gateway/client.key` from the private evidence directory for gateway requests.
+Run the printed gateway stop command after manual checks.
+Stop the original demo separately with its documented stop command.
+
+Exit status `0` and `issue110_complete: true` mean all four controls passed for this configured demo fixture.
+A failed assertion or cleanup operation returns a nonzero status.
+The result does not certify another deployment or an internet exposure assessment.
+Use the [deployment access review](security.md#deployment-access-review) for each additional deployment.
 
 ### Optional firewall access
 
@@ -1518,6 +1810,7 @@ Use only the disposable E2E examples for edits and deletion checks.
 | Cancel (F3.2) | Deploy `TestProject` release `1.0.1`; click Cancel while running. | Cancelled; the retained snapshot still contains `LongStep`. |
 | Timeout and rerun (F3.2b/c) | Deploy release `1.0.2`, then use Re-run on the failed deployment. | Both fail from the one-second timeout within 25 seconds; rerun note identifies the original deployment. |
 | Retry (F3.2d) | Deploy release `1.0.4`. | Fails after retries; logs show `attempt 1` and `retrying`. |
+| Step execution limits (#95) | Open project step and runbook step editors. Save 10 retries and 86400 timeout seconds. Try 11 and 86401. Repeat through the API. Submit `9223372036854775807` for each field through the API. | Accepted maxima remain in releases and runbook versions. Forms block excessive values. Bypassed forms return 422. Step API writes return 400. Runbook API writes return 422. Rejected writes leave existing data unchanged. Zero retries permits one attempt. Zero timeout uses five minutes. Invalid persisted snapshots fail before execution or dispatch. |
 | Empty project validation (F3.3) | Submit an empty name on New Project (edit the request if browser validation blocks it). | Web response 422; no project created. |
 | Missing variable (F3.4) | Deploy release `2.0.0` in `TestProject`. | Success; logs contain `missing-variable-empty`. |
 | Lifecycle order (F3.5) | Open the printed Lifecycle promotion project link (`LC-Project`, lifecycle `LC`). Inspect dev → test → prod, create a fresh release, deploy to dev, then try prod before test. Then deploy test and prod. | Early prod rejected (422); dev → test → prod succeeds. The suite verifies the retained lifecycle assignment, stage order, and successful `1.0.0` deployment in each stage through the API. Use a fresh release to repeat promotion. |
@@ -1527,10 +1820,16 @@ Use only the disposable E2E examples for edits and deletion checks.
 | Cross-project release (F3.10) | Submit an LC-Project release ID to `DP-cross-proj`'s deploy endpoint. | Rejected (400); no deployment created. |
 | Scheduler (F3.11) | Open TestProject's Schedules. Enable its retained `* * * * *` schedule, wait for a minute tick, then disable it. | A successful `1.0.0` deployment appears with `Scheduled:` in its note. The harness disables this schedule after checking it, before later queue and browser checks. |
 | User management and audit (F3.12) | `/admin/users`: the printed `e2e-newdeployer-…@test.local` is recreated after the deletion test. Its test password is `newdeployer-pass-1234`. Sign in separately; as admin promote/demote it, then delete it and recreate a disposable user for another pass. Try deleting your own admin account. Inspect `/admin/audit`. | Deployer cannot access admin pages; promotion allows access; role change invalidates old sessions; deletion removes the user; self-delete rejected (422); audit records create/update/delete actions. |
+| Atomic account update (#96) | Edit a disposable user through `/admin/users/{id}/edit` and `PUT /api/v1/admin/users/{id}`. Change the name, role, and password together. Repeat with only the role or password changed. Keep an existing browser session and API token for comparison. | Each successful request commits all changes. Role or password changes remove browser sessions and pending MFA challenges. API tokens remain valid with current permissions. A failed write preserves the original profile, password, and browser-auth state. |
+| Role-change authentication (#97) | Promote and demote a disposable user through `PUT /api/v1/admin/users/{id}`. Repeat through OIDC group synchronization. Keep two existing sessions and pending MFA logins. Change only the name in a separate pass. | Role changes reject old sessions and pending MFA completion. Sign in again to use the new role. Name-only updates preserve browser authentication. Existing API tokens use current permissions. Failed synchronization preserves the original account and browser authentication. |
+| Required user role (#98) | Send `PUT /api/v1/admin/users/{id}` with a name and an omitted, empty, null, or unknown role. Include a replacement password. Repeat with each valid role. Inspect `/admin/users/{id}/edit` after a valid update. | Invalid roles return 422 before account writes. Rejected updates preserve the profile, password, sessions, MFA challenges, API tokens, and successful audit count. Each valid role returns 200. The browser form shows the saved role. |
+| Final administrator (#105) | Use a disposable instance with one administrator. Submit a demotion through the API and user form. Create a replacement administrator before retrying. Race demotions and mutual deletions without project memberships. Test host recovery separately. | Sole-admin demotion returns 422 and preserves account and authentication state. The form shows the error and retains the draft. Concurrent local mutations leave one usable administrator. Handoff succeeds after creating the replacement. OIDC mappings remain provider-authoritative. Host recovery remains available. |
+| Consistent release capture (#104) | Create a release from an agent step. Edit its script and selectors together through the API. Inspect the release through the API and browser. Refresh it and inspect it again. Repeat with selector removal and a Local target. | The original release keeps its complete source version. Refresh captures one complete version. Concurrent edits cannot combine an old script with new selectors. Existing deployment snapshots remain frozen. |
 | Modal keyboard scrolling | On a phone, open a user, resource, or runbook step modal. Open the keyboard and scroll to the bottom fields. Repeat in the token project picker and fullscreen script editor. Check notification details, confirmation dialogs, and the project menu. Close the keyboard. | Content scrolls within the visible screen. Fixed controls remain visible. Closing the keyboard restores the modal height. |
 | User form validation | Open New user from `/admin/users`. Submit empty fields. Enter an invalid email and submit again. Repeat with an empty Name in Edit. Correct each input. | A red warning remains beside the fixed controls. Red messages identify invalid fields. Correction clears the messages. Rejected submissions do not save. |
 | User form modal scrolling | Open New user from `/admin/users`. Set the viewport height to 520 pixels. Scroll to the bottom fields. Submit mismatched passwords. Correct the input and create the account. Repeat with Edit. | The fields scroll inside the modal. Create or Save and Cancel remain visible. Errors stay in the modal. The modal fits the viewport. |
-| Modal error feedback | Submit a duplicate project, environment, lifecycle, or template name. Submit an empty step name. Submit mismatched user passwords. Repeat with Edit. Submit an invalid member role in Edit Project. In another admin session, downgrade the editor before submitting an open form. | Each rejected request shows one error inside its modal. No error toast appears behind the modal. Focus moves to the error. Submitted drafts remain available. Corrected submissions still save. |
+| Modal error feedback | Submit a duplicate project, environment, lifecycle, or template name. Submit an empty step name. Submit mismatched user passwords. Repeat with Edit. Submit an invalid member role in Edit Project. In another admin session, downgrade the editor's project role before submitting an open form. | Each rejected request shows one error inside its modal. No error toast appears behind the modal. Focus moves to the error. Submitted drafts remain available. Corrected submissions still save. |
+| Global role changes during modal edits | Open a new-user or edit-user dialog. Submit mismatched passwords and confirm one focused error. Correct the passwords. In another administrator session, downgrade the editor's global role to Viewer. Submit the open form. Restore the global role and sign in again. | The browser navigates to login. The rejected request creates no user and changes no account fields. The existing API token uses the new role and cannot list users. A fresh login restores permitted access. |
 | Audit identities (A08) | Open `/admin/audit` as an admin at 390 and 1280 pixels. Filter by an exact current name or uppercase email. Combine the filter with User ID. Follow an existing user or project target. Inspect a deleted target. Request `/api/v1/admin/audit?user=EMAIL` with an administrator token. | Actor names, emails, and IDs remain visible. Target links open existing records. Deleted targets retain IDs without links. Filters preserve values. The API includes `actor_name`, `actor_email`, and `target_url`. Non-admin access remains forbidden. |
 | Ambiguous audit targets (A08) | Create a release in a disposable project. Inspect its `create_release` entry in `/admin/audit` and `/api/v1/admin/audit?action=create_release`. | The entry retains its recorded ID without a target link. Older creation events can contain enclosing project IDs. Release refresh, deployment creation, runbook creation, and runbook execution also suppress ambiguous links. |
 | Users on phones (A04) | Open `/admin/users` as an admin. Set the viewport to 390 pixels. Use a disposable account with a long email and name. Open Reset MFA. Check the target email. Select Cancel. Open Edit. Close it with Cancel, Escape, and the backdrop. Submit mismatched passwords. Correct the input and save. | Full identities wrap. Roles and actions do not overlap. Each action stays with its account. Edit opens the correct account in a modal. Dismissal returns focus to Edit. Validation keeps the modal open and focuses the error. Save returns to the updated list. Self-reset and self-delete are absent. |
@@ -1591,6 +1890,59 @@ creates this example after its execution checks. Approval waits in earlier
 projects no longer block the new run's projects; release snapshots,
 deployment history, and runbook versions remain available. Each run leaves a
 fresh pending example for manual approval checks.
+# Notification failure diagnostics
+
+Run the isolated notification diagnostics checks:
+
+```bash
+DURPDEPLOY_CONTAINER_RUNTIME=podman DURPDEPLOY_CONTAINER_URL=unix:///run/user/1000/podman/podman.sock bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=3m -v -run '^TestNotificationDiagnosticsAPIWebE2E$' ./internal/handler/api
+```
+
+The fixture fails project-settings, global-settings, and history-insert queries independently.
+Confirm that successful and failed deployments retain their execution results.
+Confirm that settings lookup failures produce failed history results instead of skipped delivery.
+Confirm that API and web history preserve generic failure statuses and show recovery.
+Confirm that warnings contain operation and entity identifiers without driver details or credentials.
+
+# Notification settings cards
+
+Run the notification settings browser checks:
+
+```bash
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -v -run '^Test(NotificationCredentialForms|NotificationCardsViewer|NotificationValidationPreservesForm)BrowserE2E$' ./internal/handler/api
+```
+
+Open `/projects/{id}/notifications` and `/admin/notifications/settings` as an administrator.
+Confirm that both pages show Slack, Email, Gotify, and Discord cards.
+Confirm that credential inputs remain blank when credentials are configured.
+Save an unrelated setting and confirm that configured credentials remain available.
+Replace a credential and confirm that the refreshed input remains blank.
+Select **Clear credential** and save to remove a credential.
+Submit an invalid endpoint and confirm that the draft remains in the form.
+Open the project page as a viewer and confirm that it shows no inputs or Save button.
+Confirm that a viewer receives HTTP 403 for global settings and notification writes.
+Retain the test project and settings. Keep schedules disabled after testing.
+
+# JSON notification delivery
+
+Run the isolated JSON delivery checks:
+
+```bash
+bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=3m -v -run '^TestJSONNotificationDeliveryAPIWebE2E$' ./internal/handler/api
+```
+
+The fixture uses local injected HTTP clients and a fake container runtime.
+It checks Slack, Gotify, and Discord without contacting external services.
+It covers success, HTTP failure, connection loss, and timeout.
+Confirm that each deployment succeeds when notification delivery fails.
+Confirm that stored, API, and web history use `failed: delivery failed` without provider credentials.
+
+For manual checks, configure disposable notification endpoints in a test project.
+Run a deployment through `POST /api/v1/projects/{id}/deployments`.
+Read delivery results through `GET /api/v1/admin/notifications` and `/admin/notifications`.
+Retain the project, release, deployments, and notification history.
+Keep schedules disabled after testing.
+
 # SMTP delivery warnings
 
 Configure the server to use a disposable SMTP relay without STARTTLS.
@@ -1875,6 +2227,472 @@ bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestLifec
 
 The backend checks run concurrent API and web appends on SQLite, PostgreSQL, and SQL Server.
 
+## Configured container process and thread limits
+
+Start an isolated demo with `DURPDEPLOY_LIMITS_CONTAINER_PIDS=8` and `DURPDEPLOY_LIMITS_CONTAINER_HELPER_PIDS=8`.
+Create a Python server step through the deployment API.
+Use bounded process creation and thread creation with cleanup in `finally` blocks.
+Expect the container PID controller to reject creation when its total reaches eight tasks.
+Inspect the workload and staging helper with the selected runtime.
+Expect `HostConfig.PidsLimit` to report eight for both containers.
+
+Complete the deployment and confirm workload and helper removal.
+Keep the project, release, deployment logs, and runbook available for manual review.
+Restart with workload 160 and helper 48, then repeat the checks.
+Expect the runtime limits and bounded creation to use the new values.
+Expect startup to reject zero or negative PID settings.
+
+Create an agent step with either custom PID setting.
+If the target agent lacks a matching policy, expect rejection before remote queueing or payload encryption.
+Configure matching shared limits on the target agent and restart it.
+Wait for a successful poll, then deploy again.
+Expect successful remote execution and confirmed cleanup.
+For legacy agents without policy advertisements, keep the default workload 128 and helper 32.
+
+Run the focused API and runtime checks:
+
+```bash
+bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestConfigured(ContainerPIDs|PIDRemoteRejection)APIE2E$' ./internal/handler/api
+```
+
+### Configured server container resources
+
+Start an isolated server with `DURPDEPLOY_LIMITS_CONTAINER_TMPFS_BYTES=1048576`.
+Set `DURPDEPLOY_LIMITS_CONTAINER_HELPER_CPUS=0.5` and `DURPDEPLOY_LIMITS_CONTAINER_HELPER_MEMORY_OVERHEAD_BYTES=8388608`.
+Create a Python container step through `POST /api/v1/projects/{id}/steps`.
+Read `/tmp` capacity with `os.statvfs('/tmp')`.
+Expect 1048576 bytes for ordinary execution.
+Fill a disposable `/tmp` file and expect `ENOSPC` at the configured capacity.
+Remove that file before continuing.
+Inspect the staging helper's CPU and memory controls through the runtime.
+Expect 0.5 CPUs and memory equal to staging capacity plus 8388608 bytes.
+Cancel the deployment through the API.
+Confirm the `cancelled` status and removal of its containers and staging volumes.
+
+Repeat with 134217728 temporary bytes, 1.5 helper CPUs, and 268435456 overhead bytes.
+Repeat with an approval-generation step and expect the artifact download budget in addition to temporary bytes.
+Attempt remote execution with each custom container setting and an incompatible target agent.
+Expect a policy incompatibility diagnostic before queueing or payload encryption.
+Configure matching shared policies on both peers and restart them.
+Repeat remote execution and confirm successful completion and cleanup.
+
+Run the repeatable API acceptance tests:
+
+```bash
+bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestConfiguredContainer(Resources|ResourcesRemoteRejection)APIE2E$' ./internal/handler/api
+```
+
+## Configured HTTP body limits
+
+Start an isolated demo with `DURPDEPLOY_LIMITS_HTTP_JSON_BYTES=1024` and `DURPDEPLOY_LIMITS_HTTP_FORM_BYTES=2048`.
+Set `DURPDEPLOY_LIMITS_HTTP_PASSWORD_FORM_BYTES=512` and `DURPDEPLOY_LIMITS_HTTP_REPOSITORY_FORM_BYTES=768`.
+Send a valid project JSON request padded to exactly 1024 bytes.
+Expect HTTP 201 and a new project.
+Add one byte and send the request again.
+Expect HTTP 413 without a new project or successful audit event.
+
+Repeat the requests with chunked transfer encoding.
+Repeat through `/api/lint`, public API health, and an API empty-body action.
+Expect the configured JSON limit on each route.
+Use the project creation form with a description longer than 2048 characters.
+Expect rejection without a new project.
+Shorten the description and submit again.
+
+Repeat login and reauthentication at their configured password form boundary.
+Expect existing 400 and 422 responses above that boundary.
+Repeat package-repository changes at their separate form boundary.
+Restart with larger limits and repeat the checks.
+Keep all accepted projects available for manual review.
+
+Run the focused configured API and browser checks:
+
+```bash
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=5m -run '^TestConfigured(RequestBody(APIWeb|Browser|Isolation)|PasswordCompatibility)E2E$' ./internal/handler/api
+```
+
+## Configured HTTP timeouts
+
+Start an isolated demo with `DURPDEPLOY_LIMITS_HTTP_READ_HEADER_TIMEOUT_SECONDS=1`.
+Set `DURPDEPLOY_LIMITS_HTTP_READ_TIMEOUT_SECONDS=4`.
+Send an incomplete HTTP request and leave the headers unfinished.
+Expect the server to close the connection after approximately one second.
+Restart with a three-second header timeout and repeat the check.
+Finish the headers after one second and expect the request to complete.
+
+Set `DURPDEPLOY_LIMITS_HTTP_STREAM_WRITE_TIMEOUT_SECONDS=1` and restart the server.
+Open a deployment log stream through its API endpoint or deployment page.
+Keep the stream quiet for more than one second, then run a step that emits output.
+Expect the new output to arrive without a quiet-stream timeout.
+A client that stops reading must still release a blocked event write within the configured deadline.
+
+## API token usage telemetry
+
+Create one token for repeated requests and keep another token unused.
+Send concurrent authenticated requests to `GET /api/v1/users/me` with the first token.
+Call `GET /api/v1/tokens` with an operator token.
+Expect an approximate Unix-second `last_used_at` for the used token.
+Expect no `last_used_at` field for the unused token.
+Repeat requests within the configured reporting interval, which defaults to one minute.
+Expect the recorded timestamp to remain unchanged during that interval.
+
+Open `/settings/tokens` on desktop and phone.
+Compare its last-used timestamp with the API response.
+Open `/admin/tokens` on desktop and compare the same timestamp.
+Revoke a disposable token through the API.
+Expect its next authenticated request to return `401` immediately.
+Keep the token records for repeated checks.
+
+Usage recording is best effort.
+Database errors or full telemetry capacity can delay or omit updates.
+Authentication and stream revocation checks continue to read current credentials.
+
+Use [startup configuration](configuration.md) to change telemetry limits before starting an isolated demo.
+Set `DURPDEPLOY_LIMITS_TOKEN_TELEMETRY_INTERVAL_SECONDS=10` for a shorter reporting interval.
+Repeat token requests after ten seconds and compare the recorded timestamp.
+Expect a newer timestamp after the next completed usage write.
+
+Set `DURPDEPLOY_LIMITS_TOKEN_TELEMETRY_CONCURRENCY` to change concurrent usage-write admission.
+Set `DURPDEPLOY_LIMITS_TOKEN_TELEMETRY_WRITE_TIMEOUT_SECONDS` to change the independent database-write deadline.
+Restart the demo after each configuration change.
+Keep its token records and deployment history for repeated checks.
+
+Run the focused checks:
+
+```bash
+bash scripts/go_test.sh -race -count=1 -run '^TestAPITokenTelemetryE2E$' ./internal/handler/api
+bash scripts/go_test.sh -race -count=1 -run '^TestConfiguredTokenTelemetryE2E$' ./internal/handler/api
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestAPITokenTelemetryBrowserE2E$' ./internal/handler/api
+bash scripts/go_test.sh -count=1 -run '^TestAPITokenUsageAcrossDatabases$' ./internal/repository
+```
+
+The API checks delay telemetry during request bursts and verify bounded work, deadlines, retry admission, and immediate stream revocation.
+The backend checks verify minute boundaries, out-of-order observations, and revoked-token guards on SQLite, PostgreSQL, and SQL Server.
+The backend fixtures set revocation state directly to isolate the telemetry update guard.
+
+## Project panel batching
+
+Open two projects that use the same environment.
+Keep one successful deployment and at least six later failed attempts in the first project.
+Keep newer successful deployments in the second project.
+Open the first project list card and detail page.
+Expect its latest failed attempt and five failed history dots.
+Expect its older successful version in the detail table.
+Expect no version from the second project in the first project panel.
+
+Open a project without deployments.
+Expect `No deployments yet` on its list card.
+Expect empty environment rows on its detail page.
+Repeat with both projects assigned to the same lifecycle.
+Repeat as a viewer who has access to only the first project.
+Expect the second project to remain hidden.
+
+Call `GET /api/v1/projects/{id}/deployments?env_id={environmentId}`.
+Compare the history order and successful deployment with the panel.
+Update the environment name through `PUT /api/v1/environments/{id}`.
+Reload the list and detail pages.
+Expect the updated name in both panels.
+Keep the projects, releases, and deployment history for repeated checks.
+
+Run the isolated query-count, history, and browser checks:
+
+```bash
+bash scripts/go_test.sh -tags=e2e -race -count=1 -run '^TestProjectPanel(Batch|Scope)APIWebE2E$' ./internal/handler/api
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestProjectPanelScopeBrowserE2E$' ./internal/handler/api
+bash scripts/go_test.sh -count=1 -run '^Test(ProjectEnvironmentDeploymentHistory|ProjectPanelBatchEmpty)$' ./internal/repository
+```
+
+The query-count check increases project and environment counts within one batch.
+The backend checks compare batched results with individual history queries on SQLite, PostgreSQL, and SQL Server.
+The backend checks also exercise bind limits and inspect query plans.
+These checks use disposable databases and do not change retained examples.
+
+## Deployment panel database failures
+
+Open a project with an environment and no deployments.
+Expect an empty deployment history with a successful page response.
+Repeat with a lifecycle assigned to the project.
+Call `GET /api/v1/projects/{id}/deployments?env_id={environmentId}`.
+Expect `200` with an empty `items` array and `total: 0`.
+
+Run the isolated failure checks:
+
+```bash
+bash scripts/go_test.sh -tags=e2e -race -count=1 -run '^TestProjectPanelFailureAPIWebE2E$' ./internal/handler/api
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestProjectPanelFailureBrowserE2E$' ./internal/handler/api
+```
+
+The checks fail each panel query independently.
+Expect `500` from the project list and detail pages during each storage failure.
+Expect successful empty pages after storage recovers.
+The checks also verify storage failures through the public deployment history API.
+These checks use disposable databases and do not change retained examples.
+
+## API token format
+
+Run the focused token and stream checks:
+
+```bash
+bash scripts/go_test.sh -race -count=1 -run '^Test(HashApiToken|MintApiToken|ApiTokenMiddleware|ApiTokenFormat)' ./internal/auth
+bash scripts/go_test.sh -race -count=1 -run '^Test(HTTPStreams|OpenLogStreams|StreamAccess)' ./cmd/server
+bash scripts/go_test.sh -tags=e2e -race -count=1 -run '^TestTokenFormatAPIWebE2E$' ./internal/handler/api
+```
+
+Send malformed bearer tokens to `/api/v1/users/me`, a deployment log stream, and a deployment event stream.
+Check short values, wrong lengths, and nonhexadecimal suffixes.
+Expect HTTP 401 with the existing JSON error envelope before a credential lookup.
+Use a complete minted token and confirm normal API access.
+Revoke the token through the public API and confirm subsequent requests fail.
+Check that an independent browser session still opens Projects.
+Confirm open-stream revocation and membership checks still close unauthorized connections.
+Keep retained test identities and history. Leave schedules disabled.
+
+## Browser framing policy
+
+Run the isolated HTTP and browser checks:
+
+```bash
+bash scripts/go_test.sh -race -count=1 -run '^TestBrowserFramingHTTP$' ./internal/server
+bash scripts/go_test.sh -tags=e2e -race -count=1 -run '^TestFramingPolicyAPIWebE2E$' ./internal/handler/api
+DURPDEPLOY_CONTAINER_RUNTIME=podman bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestFramingPolicyBrowserE2E$' ./internal/handler/api
+```
+
+For a retained authenticated instance, open Projects as a top-level page.
+Expect normal navigation and Viewer read access.
+Follow a navigation link and confirm that HTMX updates the page without a document reload.
+Open Login and confirm that the form remains usable.
+
+Embed Projects in a parent page from the same origin.
+Expect the authenticated page to render inside the frame.
+Repeat from another port on the same host, then from another site.
+Expect both cross-origin frames to fail with a `frame-ancestors` browser diagnostic.
+Repeat with Login as the framed page.
+Expect the cross-origin login frame to fail.
+Check the framed request to distinguish framing enforcement from cookie exclusion.
+The same-site request must include its session cookie before the browser blocks rendering.
+
+Repeat requests through the supported Caddy proxy.
+Expect one `Content-Security-Policy: frame-ancestors 'self'` header and one `X-Frame-Options: SAMEORIGIN` header.
+Check successful pages, login, redirects, errors, HTMX responses, and authenticated API responses.
+Expect existing status codes, JSON bodies, authentication, and CSRF checks to remain unchanged.
+Keep retained examples and test identities. Leave schedules disabled.
+
+## Proxy request body limits
+
+Run the actual Caddy regression with a local Linux container engine:
+
+```bash
+bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m \
+  -run '^TestProxyBodyAPIWebE2E$' ./internal/handler/api
+```
+
+The demo and development proxies use `scripts/https_proxy_config.sh`.
+If a demo is running, use `make demo-refresh-full DEMO_DIR=/absolute/demo/path` to replace its proxy.
+Restart the development server to load changed proxy settings.
+The transport waits one second for a backend continue response before sending a body with `Expect: 100-continue`.
+This permits early backend rejections without an upload race.
+The application retains its 4 MiB JSON and 16 MiB form limits.
+
+Compare direct and proxied TLS requests at each limit and one byte above it.
+Use HTTP/1.1 and HTTP/2, with and without `Expect: 100-continue`.
+Confirm the negotiated HTTP version for each request.
+Expect valid boundary requests to succeed.
+Expect oversized API requests to return `413` with `{"error":"Request body too large"}`.
+Expect oversized web forms to return `413` with `Request body too large`.
+Confirm rejected requests create no project and add no successful mutation audit record.
+After each rejection, request `/healthz` and expect `200`.
+Keep retained examples and test identities. Leave schedules disabled.
+
+## Large log export costs
+
+The export iterator reads at most 256 rows per batch.
+It closes each database cursor before calling the output function.
+A starting ID watermark excludes later log inserts.
+The computed sort and OFFSET reads repeat for each batch.
+
+Local samples used commit `b321dca5`, Go 1.26.9, and migrated SQLite with one connection and WAL.
+The Linux x86_64 host had 16 logical CPUs.
+Each log line contained 256 bytes, with mixed unscoped, global-sequence, and step-attempt rows.
+Three sequential iterator samples followed seeding without a database cache flush.
+Timing excluded seeding and reference queries.
+It included row hashing, connection checks, and heap sampling after each 256 callbacks.
+Performance samples used a normal build. Separate correctness checks used race detection.
+
+| Log rows | Line payload | Inferred page reads | Iterator elapsed range | Median cumulative Go allocation |
+| --- | --- | --- | --- | --- |
+| 1,024 | 0.25 MiB | 5 | 0.011–0.012 s | 0.68 MiB |
+| 8,192 | 2 MiB | 33 | 0.568–0.602 s | 5.41 MiB |
+| 32,768 | 8 MiB | 129 | 10.969–11.248 s | 21.63 MiB |
+
+Page counts follow the existing loop, including its final empty read for these exact batch multiples.
+They exclude the watermark and HTTP metadata queries.
+First callbacks arrived within 1.90–22.84 ms across these samples.
+SQLite query plans used a temporary B-tree for the computed ordering.
+Cumulative allocation measures all allocated Go bytes, rather than simultaneously retained memory.
+Sampled Go heap growth ranged from 0.68 to 3.04 MiB above each starting value.
+These samples do not bound process memory, database workspace, or operating-system caches.
+
+Authenticated downloads used one administrator and one assigned viewer on the same host.
+Each role downloaded each volume once through the API and once through the web route.
+Timing covered the HTTP request through complete body reading, before evidence-file writing.
+All four downloads per volume matched the independent single-query reference bytes and ordering.
+
+| Log rows | Download bytes | API elapsed range | Web route elapsed range |
+| --- | --- | --- | --- |
+| 1,024 | 294,025 | 0.013–0.020 s | 0.019–0.020 s |
+| 8,192 | 2,351,241 | 0.571–0.578 s | 0.580–0.589 s |
+| 32,768 | 9,404,553 | 10.922–10.952 s | 11.022–11.042 s |
+
+Larger local exports cost more than proportional row growth in this sample.
+These results establish no production limit, latency guarantee, or performance estimate for another database engine.
+Cross-backend correctness checks covered 600 mixed rows on SQLite, PostgreSQL, and SQL Server.
+They preserved ordering across batches, watermark exclusion, callback failures, cancellation, and cursor release.
+The SQL Server checks executed the unchanged iterator through its query rewriter.
+This baseline proposes no query replacement.
+
+Repeat the measurements before changing export queries:
+
+1. Use an isolated deployment and the target database engine.
+2. Record software identity, row count, line sizes, scope distribution, concurrency, hardware, and cache conditions.
+3. Separate seeding and reference-query costs from export timing.
+4. Record complete download time, first-row delay, output bytes, allocation totals, and peak memory separately.
+5. Count page queries separately from metadata and watermark queries.
+6. Compare the complete output with an independent ordering reference.
+7. Confirm that later inserts remain outside the starting watermark.
+8. Confirm that callbacks, cancelled requests, and failed writes release database connections.
+9. Run the same ordering checks through the SQL Server adapter.
+10. Retain the deployment, logs, requests, and measurement settings. Keep schedules disabled.
+
+Run the focused iterator and export checks:
+
+```bash
+bash scripts/go_test.sh -race -count=1 -timeout=3m \
+  -run '^TestDeploymentLogIteration' ./internal/repository
+bash scripts/go_test.sh -race -count=1 -timeout=3m \
+  -run '^TestTextLogExport(Cancellation|WriteFailure)$' ./internal/handler
+bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=3m \
+  -run '^TestTextLogExportAPIWebE2E$' ./internal/handler/api
+```
+
+## Remote step polling capacity
+
+The runner checks each active remote step every 250 ms.
+Each check reads one run list containing the selected agents.
+Agent fan-out increases row processing and transfer accounting within that check.
+
+Local samples used commit `daeb7e11`, Go 1.26.9, race detection, and migrated SQLite with one database connection.
+The Linux x86_64 host had 16 logical CPUs.
+Simulated agents isolated runner database work from agent transport and heartbeat costs.
+Each steady measurement window lasted approximately three seconds.
+Counts include only `ListRemoteStepRunsForRunner` calls during that window.
+
+| Active remote steps | Agents per step | List queries | Approximate queries per second | Approximate agent rows per second |
+| --- | --- | --- | --- | --- |
+| 1 | 1 | 12 | 4 | 4 |
+| 1 | 8 | 12 | 4 | 32 |
+| 8 | 1 | 96 | 32 | 32 |
+| 8 | 8 | 96 | 32 | 256 |
+
+Row rates use the fixed agent count per returned run list.
+All targeted run rows reached `cancel_requested` within 2.18–36.45 ms across these fixtures.
+Controller timings cover the cancellation signal and database request transition.
+Deployments remained running throughout a controlled 300 ms cleanup acknowledgment delay.
+Per-fixture maximum completion delays after acknowledgment ranged from 66.52 to 179.72 ms.
+
+Three public API samples used a real pinned agent over mTLS on the same host.
+The agent version was `v0.1.2-0.20261017113854-411042912a65`.
+A task-owned script marker confirmed execution before cancellation.
+Terminal status checks used a nominal 50 ms interval, plus request and recording overhead.
+
+| Delay after script readiness | Cancellation API response | Cancellation to agent acknowledgment | Cancellation to observed terminal status | Acknowledgment to terminal visibility |
+| --- | --- | --- | --- | --- |
+| 0 ms | 11.5 ms | 10.113 s | 10.271 s | 158 ms |
+| 300 ms | 26.2 ms | 9.766 s | 9.929 s | 162 ms |
+| 900 ms | 19.1 ms | 9.210 s | 9.457 s | 247 ms |
+
+All three deployments became `cancelled` after agent acknowledgment and confirmed staging cleanup.
+These short local samples depend on request timing, instrumentation, and database load.
+Use deployment-specific load and latency targets before proposing an interval or notification change.
+
+Repeat the measurements before changing polling:
+
+1. Use a disposable project, immutable release, and isolated agent.
+2. Record database engine, software identity, concurrency, fan-out, hardware, and sample duration.
+3. Count matching queries with database statistics or a temporary `db.DBTX.QueryContext` recorder.
+4. Measure agent polls, heartbeats, authentication, transfers, and other database work separately.
+5. Record cancellation requests, successful agent acknowledgments, terminal visibility, and the observation interval.
+6. Confirm that deployment completion waits for cleanup acknowledgment.
+7. Confirm that staging transfer time does not consume execution timeout.
+8. Confirm that unacknowledged cleanup prevents normal completion.
+9. Retain deployments and logs. Leave schedules disabled.
+
+Run the focused cancellation contracts:
+
+```bash
+bash scripts/go_test.sh -race -count=1 -timeout=3m \
+  -run '^Test(ControllerCancel.*|RunnerRequestsCancellationBeforeTimeoutFailure.*|RunnerPreservesOriginalFailureWhileCancellingSiblings)$' \
+  ./internal/runner
+```
+
+Run the public API timeout checks with the selected engine and a staging-capable agent binary:
+
+```bash
+AGENT_TEST_SOCKET="unix://${XDG_RUNTIME_DIR}/podman/podman.sock" \
+DURPDEPLOY_AGENT_E2E_BINARY=/absolute/path/durpdeploy-agent \
+bash scripts/go_test.sh -tags 'e2e agentstaging' -race -count=1 \
+  -timeout=5m -run '^TestDeploymentStagingTransferPausesStepTimeoutAPIE2E$' \
+  ./internal/agentserver
+```
+
+## Native Windows environment collisions
+
+Native Windows execution remains future platform work.
+See the [agent prerequisite](agents.md#native-windows-environment-prerequisite) and [Windows platform issue](https://github.com/DeveloperDurp/DurpDeploy/issues/72).
+The following checks apply when implementing that capability.
+They do not describe a current Windows execution guarantee.
+
+Before enabling Windows targets, test the effective variable set after exact-name overrides and selections.
+Use safe marker values for these checks.
+This matrix covers name collisions. Existing reserved-name restrictions still apply.
+
+| Variable setup | Future Windows target | Unix target |
+| --- | --- | --- |
+| Global `PATH` and global `Path` | Reject before dispatch | Preserve both names |
+| Global `PATH` and selected environment `Path` | Reject before dispatch | Preserve both names |
+| Global `PATH` and selected environment `PATH` | Keep the environment override | Keep the environment override |
+| Global `PATH` and another environment's `Path` | Ignore the unselected value | Ignore the unselected value |
+
+Repeat with case-colliding names confined to one selected environment.
+Repeat through API and web variable editing, immutable releases, and reruns.
+Confirm that rejection precedes agent dispatch and script execution.
+Confirm that collision errors expose no variable values or secrets.
+Repeat across Linux and Windows servers without changing target-specific results.
+Repeat with each supported Windows interpreter and host execution mode.
+Confirm that Unix targets preserve distinct names and existing reserved-name protections.
+Retain the projects, releases, deployments, and safe error examples.
+Keep schedules disabled.
+
+## Legacy environment preflight
+
+Run the isolated execution checks with the matching agent binary:
+
+```bash
+AGENT_TEST_SOCKET=unix:///run/user/1000/podman/podman.sock \
+  DURPDEPLOY_AGENT_E2E_BINARY=/absolute/path/to/agent \
+  bash scripts/go_test.sh -tags 'e2e agentstaging' -race -count=1 \
+  -run '^TestDeploymentEnvironmentPreflightAPIE2E$' ./internal/agentserver
+```
+
+The check creates valid variables through the public API, then injects legacy entries into release snapshots.
+Expect malformed names and NUL values to fail before the script starts.
+Expect the deployment log to report `invalid execution environment` without private values.
+Expect selected variables, environment overrides, empty values, multiline values, and secret masking to remain valid.
+The isolated check does not change retained examples or enable schedules.
+
+For a retained legacy failure, open the deployment page and expand Deployment messages.
+Expect the validation error and a failed deployment status.
+For a retained valid deployment, expand its step logs.
+Expect successful script output and redacted secret values.
+Keep the projects, environments, releases, and deployment history for repeated checks.
 ## Stale-form permission navigation (V02)
 
 Use a disposable project with a release, environment, and Maintainer test account.
@@ -1893,8 +2711,12 @@ Use the same account in two browser tabs.
 10. If the denial repeats, select Go back again.
 11. Restore the project role to Maintainer.
 12. Repeat with the global role changed to Viewer.
-13. Restore both roles to Maintainer.
-14. Save the retained draft and confirm the saved description through the API.
+13. Submit the stale forms and expect the login page.
+14. Confirm that the saved description and deployment history remain unchanged.
+15. Restore both roles to Maintainer.
+16. Sign in again and reopen the project editor.
+17. Enter the description again and save it.
+18. Confirm the saved description through the API.
 
 The verified sequence adds two deployment-form history entries when release selection reloads the page.
 The first Go back revisits `/projects/{id}/deploy` and repeats the denial.
@@ -2071,3 +2893,242 @@ Issue #48 retains its independent `FuzzScrubberStreaming` target and discovery c
 After this fix merges, run that corpus against the merged revision.
 An earlier stacked integration requires separate approval.
 The invalid-byte alias oracle associated with `3e1a1c989b26e560` is outside this regression.
+
+## Configured artifact download budget
+
+Use the retained `artifact-download/lower-r2` and `artifact-download/higher-r2` fixtures under `.opencode/optimization-roadmap/resource-config/`.
+Read each fixture's private `manual/credentials.json` for its generated login.
+Open `http://localhost:58111/projects/1/package-repository` for the 1024-byte instance.
+Test version `large`.
+Expect the ZIP validation error because the package contains 1697 bytes.
+Test version `fast`.
+Expect successful validation with a 161-byte ZIP.
+
+Open `http://localhost:59979/projects/1/package-repository` for the 2048-byte instance.
+Test version `large`.
+Expect successful validation of the same package.
+Repeat both requests through `POST /api/v1/projects/1/package-repository/test` with an administrator bearer token.
+Expect `502` for the lower budget and `200` for the higher budget.
+Inspect `GET /api/v1/admin/resource-config` for the captured `artifact.download_bytes` value.
+Keep both servers and their private HTTPS upstream running for manual review.
+
+The automated API check also accepts a prefixed ZIP above the old 300 MiB ceiling.
+Unit checks cover exact boundaries, streaming bodies, private-file cleanup, and extraction above that ceiling.
+Custom download budgets require matching stored agent policies before remote queueing and claims.
+Other artifact, staging, and execution budgets remain separate.
+
+## Configured artifact safety budgets
+
+Use the retained fixtures under `.opencode/optimization-roadmap/resource-config/artifact-safety/`.
+Read each fixture's private `manual/credentials.json` for its generated login.
+Open `/projects/1/package-repository` on each instance.
+Test version `large` through the form or `POST /api/v1/projects/1/package-repository/test`.
+The fixture ZIP contains two entries, four staging nodes, and 64 extracted bytes.
+
+| Budget | Lower instance | Higher instance | Values |
+| --- | --- | --- | --- |
+| Extracted bytes | `http://localhost:37883` | `http://localhost:46273` | 63 and 64 bytes |
+| ZIP entries | `http://localhost:49711` | `http://localhost:39255` | 1 and 2 entries |
+| Staging nodes | `http://localhost:44333` | `http://localhost:39111` | 3 and 4 nodes |
+| Metadata reads | `http://localhost:52099` | `http://localhost:38059` | 1 and 8192 bytes |
+
+Expect a visible ZIP validation error on each lower-budget instance.
+Expect API status `422` on each lower-budget instance.
+Expect successful validation and API status `200` on each higher-budget instance.
+Inspect `GET /api/v1/admin/resource-config` to confirm each captured policy.
+Keep the servers and private HTTPS fixture running for review.
+
+Automated checks also execute the package through a real server container with a custom policy.
+They inspect the artifact helper memory limit and Docker volume capacity.
+Approval checks reject a three-entry context under two nodes and accept it under three nodes.
+The approval test cancels the accepted deployment and confirms its terminal state.
+The resume test lowers the node budget before approval and expects failure without a downstream attempt.
+The same test verifies successful resume with a matching budget and preserves stored hashes and encrypted chunks.
+Raised-limit unit checks exceed the previous byte, entry, node, and metadata defaults.
+Remote package queues and payload claims require matching stored agent policies for custom safety budgets.
+
+## Captured default step timeout
+
+These retained instances use the configured default timeout for saved zero-timeout steps.
+The server preserves explicit positive timeouts and stored release snapshots.
+
+| Default | Retained example | Expected result |
+| --- | --- | --- |
+| 3 seconds | `http://localhost:47961/deployments/1` | The four-second script times out and fails. |
+| 6 seconds | `http://localhost:56657/deployments/1` | The same four-second script succeeds. |
+| 600 seconds | `http://localhost:40747/deployments/1` | A zero-timeout step uses the raised default and succeeds. |
+| Explicit 12 seconds | `http://localhost:47961/deployments/2` | The four-second script succeeds despite the three-second default. |
+| Remote compatibility | `http://localhost:47961/deployments/3` | The custom execution policy fails before remote dispatch. |
+
+Keep the credentials private in `.opencode/optimization-roadmap/resource-config/execution/default-<seconds>/credentials.json`.
+Open the retained project from each deployment.
+Create another deployment from the retained release and environment.
+Expect the same terminal status and confirmed cleanup.
+Inspect the failed local deployment log for `timed out after 3s`.
+Inspect the remote example for the resource-policy compatibility diagnostic.
+
+Open a step form and inspect the timeout field.
+Confirm that its label says `0 = configured default`.
+Save a zero timeout and confirm that the API still returns zero.
+Inspect `GET /api/v1/admin/resource-config` to confirm the captured default.
+Change startup configuration only after stopping the owned instance and confirming workload cleanup.
+Restart the server to apply the new default.
+
+The three-second instance overrides a six-second YAML value through its environment variable.
+The six-second instance uses YAML without that environment override.
+The 600-second instance uses the environment variable without an execution YAML section.
+The automated API test also checks unchanged deployment snapshot timeouts and removal of owned containers and volumes.
+The repository test rejects queueing, direct claims, and both payload claim paths before encryption.
+## Captured retry and timeout maxima
+
+These retained instances use the same startup limits for forms, APIs, snapshots, and execution.
+
+| Policy | Retained example | Expected result |
+| --- | --- | --- |
+| Zero retries, 3 seconds | `http://localhost:52333/deployments/1` | The failing script runs once. |
+| 11 retries, 172800 seconds | `http://localhost:60467/deployments/1` | The failing script runs 12 times. |
+| Zero step values | `/deployments/2` on either instance | The script succeeds with one attempt and the captured default timeout. |
+
+Keep credentials private in `.opencode/optimization-roadmap/resource-config/execution-validation/<lower-or-higher>/credentials.json`.
+Open `/projects/1/steps-page` on each instance.
+Edit the step and enter a timeout or retry count above its policy maximum.
+Save the form and expect browser validation to keep it open.
+Enter values within the policy and save again.
+Inspect the step through `GET /api/v1/projects/1/steps`.
+Confirm that the API returns the saved values.
+
+Open `/projects/1/runbooks/1/edit` and edit its step.
+Repeat the boundary check for the timeout and retry fields.
+Send excessive values through the step API and expect HTTP 400.
+Send excessive runbook values and expect HTTP 422.
+Confirm that rejected updates preserve the saved step and runbook.
+
+Inspect `GET /api/v1/admin/resource-config` to confirm the captured execution policy.
+The lower instance overrides higher YAML maxima through environment variables.
+The higher instance uses YAML without those environment overrides.
+Create another deployment from the retained first release and environment.
+Count `execution-attempt` log lines and expect one or 12 attempts.
+Confirm that the runtime removes the owned containers and volumes after completion.
+
+If you lower a maximum, expect incompatible saved releases and runbook versions to fail validation before execution.
+Correct the project step and refresh its release through the API or web form.
+Expect refresh to replace the release steps while preserving existing deployment snapshots.
+With maximum retries `9007199254740993`, create a runbook through the API with that exact retry count.
+Open its editor and create another version without changing the step.
+Read that version through the API and confirm that `max_retries` remains `9007199254740993`.
+Use `http://localhost:44355/projects/1/runbooks/1` for the retained exact-retry example.
+Use releases `refresh-api` and `refresh-web` in the same project for the refresh recovery examples.
+The server now uses a three-second maximum. Deployment #1 retains its original 600-second timeout and two retries.
+Keep that instance's credentials private in `.opencode/optimization-roadmap/resource-config/execution-validation/r2/precision/credentials.json`.
+The automated checks also cover schedules, retries, project-template application, frozen snapshots, overflow, and remote compatibility.
+Custom execution policies require matching stored agent policies before remote queueing and claims.
+
+## Captured staging payload and entry budgets
+
+Use these retained examples for the server staging configuration.
+Keep credentials private under `.opencode/optimization-roadmap/resource-config/staging-payload/<instance>/credentials.json`.
+
+| Instance | Retained example | Expected result |
+| --- | --- | --- |
+| `lower` | `http://localhost:46579/deployments/2` | A 24-byte approval context exceeds the 23-byte budget and fails. |
+| `exact` | `http://localhost:42595/deployments/3` | The 24-byte context with three entries reaches approval before test cancellation. |
+| `exact` after restart | `http://localhost:42595/deployments/4` | The saved context exceeds the new two-entry budget and fails before downstream execution. |
+| `raised` | `http://localhost:37639/deployments/1` | The script confirms filesystem capacity for 536875008 payload bytes and 20001 entries. |
+
+Inspect `GET /api/v1/admin/resource-config` with an admin token.
+Confirm the captured `staging.payload_bytes` and `staging.entries` values.
+The lower instance overrides a 24-byte YAML value with a 23-byte environment variable.
+The other instances use YAML values.
+The exact instance now uses two entries because the restart test lowered its policy.
+
+Open the retained deployment and inspect its step logs.
+Expect a policy diagnostic when saved approval context exceeds the current budget.
+Confirm that the downstream step has no running attempt after rejection.
+Confirm that the runtime removes owned workload containers, staging helpers, and staging volumes.
+Keep deployment history, release snapshots, approval data, and test identities.
+
+Open the retained project and select Deploy to repeat the check through the web form.
+Select its `staging-1` release and matching environment.
+Expect the lower instance to fail and the raised instance to succeed.
+With two entries, the exact instance rejects its three-file generation script.
+To repeat exact acceptance, restore three entries after stopping the owned server and confirming workload cleanup.
+Restart the server and deploy again.
+Expect approval at 24 payload bytes and three entries.
+Cancel the review after checking it.
+
+The focused API tests cover both deployment surfaces, exact boundaries, current-policy restore, preserved encrypted data, and cleanup.
+Repository tests reject incompatible agent policies before remote queueing, direct claims, or payload encryption.
+Matching agent policies permit remote staging with the configured budgets.
+
+## Captured staging archive budgets
+
+Use these retained examples for the server archive configuration.
+Keep credentials private under `.opencode/optimization-roadmap/resource-config/staging-archive/<instance>/credentials.json`.
+
+| Instance | Retained example | Expected result |
+| --- | --- | --- |
+| `lower` | `http://localhost:37035/deployments/3` | The web deployment fails because its 4096-byte context exceeds the 4095-byte archive budget. |
+| `exact` | `http://localhost:45291/deployments/3` | The 4096-byte context reaches approval before test cancellation. |
+| `exact` after restart | `http://localhost:45291/deployments/4` | Approval returns `409` after the budget decreases to 4095 bytes. Test cancellation follows. |
+| `raised` | `http://localhost:48111/deployments/1` | The capacity probe succeeds with a 570426368-byte archive budget above the historical ceiling. |
+
+Inspect `GET /api/v1/admin/resource-config` with an admin token.
+Confirm `staging.archive_bytes` and the associated payload and entry budgets.
+The lower instance overrides a 4096-byte YAML archive value with a 4095-byte environment variable.
+The exact instance now uses 4095 archive bytes because the restart test lowered its budget.
+
+Open the lower project and select Deploy.
+Select release `staging-1` and its matching environment.
+Expect capture to fail before the downstream step starts.
+Open the raised project and repeat its capacity probe.
+Expect a successful deployment and confirmed workload cleanup.
+
+To repeat exact acceptance, stop the owned exact server after confirming workload cleanup.
+Set `limits.staging.archive_bytes` to `4096` in its `startup.yaml` file.
+Restart that server and deploy release `staging-1` in project #2.
+Expect approval at exactly 4096 archive bytes, 24 payload bytes, and three entries.
+Cancel the deployment after checking approval.
+
+To repeat restart rejection, retain a pending approval at 4096 bytes.
+Stop the owned server after confirming workload cleanup.
+Lower its archive budget to 4095 bytes and restart it.
+Submit approval through the API or web page.
+For API approval, expect `409`.
+For web approval, expect a `303` redirect with `artifact_decision=conflict`.
+Expect an unchanged approval state and no downstream execution.
+Raise the budget or cancel the deployment before making another plan.
+
+The focused tests cover oversized uploads, canonical archive growth, sparse archives above the historical ceiling, and bounded merged output.
+Database checks cover SQLite, PostgreSQL, SQL Server, preserved hashes and chunks, foreign keys, and guarded rollback.
+Rollback refuses saved sizes above the historical ceiling and preserves the current schema and data.
+
+## Captured aggregate merge budgets
+
+Use these retained two-agent examples for the server merge settings.
+Keep credentials private under `.opencode/optimization-roadmap/resource-config/merge/<instance>/state.json`.
+Keep each instance's database, server identity, agent identities, and logs in the same directory.
+
+| Instance | Retained deployment | Expected result |
+| --- | --- | --- |
+| `bytes` | `http://127.0.0.1:33939/deployments/1` | Aggregate input is 5120 bytes. The 5119-byte budget rejects the merge. |
+| `entries` | `http://127.0.0.1:38377/deployments/1` | Two entry visits exceed the one-visit budget. |
+| `outputs` | `http://127.0.0.1:42297/deployments/1` | Two outputs exceed the one-output budget. |
+| `exact` | `http://127.0.0.1:40779/deployments/1` | The merge succeeds at exactly 5120 bytes, two visits, and two outputs. |
+| `raised` | `http://127.0.0.1:44901/deployments/1` | The same deployment succeeds with budgets above all three historical defaults. |
+
+Inspect `GET /api/v1/admin/resource-config` with the retained admin token.
+Confirm the captured `merge.archive_bytes`, `merge.entry_visits`, and `merge.agent_outputs` values.
+The bytes instance overrides a 5120-byte YAML value with a 5119-byte environment value.
+The other instances use YAML values.
+
+Sign in with the generated login from the instance's private `state.json` file.
+Open project #1 and select Deploy.
+Select release `merge-1` and environment `Merge budget <instance>`.
+Expect the three lower budgets to fail before the Merge consumer step starts.
+Expect the exact and raised budgets to succeed with `merged-downstream-ok` in their logs.
+Confirm `GET /api/v1/deployments/<id>/staging` returns an empty array after completion.
+Confirm both agent staging directories are empty and the runtime retains no owned workload containers or staging volumes.
+
+Create the instance's `stop` file to stop only that fixture and its two agents.
+Keep its database, identity files, logs, requests, and deployment history.
+The automated checks also cover raised ceilings, cumulative visits, cancellation, invalid startup ranges, and preflight rejection before decryption.

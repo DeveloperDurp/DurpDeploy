@@ -20,11 +20,22 @@ func (r *DeploymentRunner) SetEventBus(bus *events.Bus) {
 	r.bus = bus
 }
 
-// KillAll closes admission, cancels attempts, and drains local cleanup only.
+// KillAll closes admission, cancels attempts, and drains local cleanup and
+// admitted terminal-status retries. Retries have a 30-second shutdown budget.
 // Remote cancellation still requires agent acknowledgement or lease expiry.
 func (r *DeploymentRunner) KillAll() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	r.killAll(ctx)
+}
+
+func (r *DeploymentRunner) killAll(retryCtx context.Context) {
 	r.mu.Lock()
 	r.stopping = true
+	retryCancels := make([]context.CancelFunc, 0, len(r.completionCancels))
+	for _, cancel := range r.completionCancels {
+		retryCancels = append(retryCancels, cancel)
+	}
 	names := make([]string, 0, len(r.attempts))
 	for _, cancel := range r.cancels {
 		cancel()
@@ -36,8 +47,17 @@ func (r *DeploymentRunner) KillAll() {
 		}
 	}
 	r.mu.Unlock()
+	stop := context.AfterFunc(retryCtx, func() {
+		for _, cancel := range retryCancels {
+			cancel()
+		}
+	})
+	defer stop()
 	for _, name := range names {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		// Container removal must continue after the terminal-retry budget expires.
+		ctx, cancel := context.WithTimeout(
+			context.WithoutCancel(retryCtx), 10*time.Second,
+		)
 		output, err := r.engine.command(ctx, r.engine.removeArgs(name)...).
 			CombinedOutput()
 		cancel()
@@ -71,6 +91,7 @@ func (r *DeploymentRunner) KillAll() {
 			)
 		}
 	}
+	r.completionWork.Wait()
 }
 
 func (r *DeploymentRunner) beginLocalWork() bool {

@@ -140,6 +140,8 @@ func TestTemplateMenuBrowserE2E(t *testing.T) {
 	)
 	b.screenshot(t, "template-saved-return-to-templates")
 	f.changeRole(t, "global", "viewer")
+	f.session = memberRoleSession(t, f.h, f.user.ID)
+	b.setBackTestSession(t, f.server.URL, f.session)
 	b.navigateBackTest(t, f.server.URL+"/templates?type=projects")
 	b.wait(
 		t,

@@ -5,12 +5,10 @@ import (
 	"errors"
 	"net/http"
 
-	"durpdeploy/internal/agentexecution"
-	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
-	"durpdeploy/internal/interpreter"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/stepdefinition"
 )
 
 type StepTemplateHandler struct {
@@ -34,6 +32,18 @@ type stepTemplateRequest struct {
 	ApprovalReviewPath   string   `json:"approval_review_path"`
 	ApprovalReviewFormat string   `json:"approval_review_format"`
 	VariableNames        []string `json:"variable_names"`
+}
+
+func (req stepTemplateRequest) definition() stepdefinition.Definition {
+	return stepdefinition.Definition{
+		Name: req.Name, ScriptBody: req.ScriptBody,
+		Interpreter: req.Interpreter, ExecutionTarget: req.ExecutionTarget,
+		AgentExecutionMode: req.AgentExecutionMode, AgentSelectors: req.AgentSelectors,
+		ContainerImage: req.ContainerImage, NetworkMode: req.NetworkMode,
+		ApprovalArtifactPath: req.ApprovalArtifactPath,
+		ApprovalReviewPath:   req.ApprovalReviewPath,
+		ApprovalReviewFormat: req.ApprovalReviewFormat, VariableNames: req.VariableNames,
+	}
 }
 
 // swagger:route GET /templates templates listTemplates
@@ -158,62 +168,18 @@ func (h *StepTemplateHandler) CreateTemplate(
 		return
 	}
 
-	name := trimSpace(req.Name)
-	if name == "" {
-		RespondError(w, http.StatusBadRequest, "Name is required")
-		return
-	}
-	selectedInterpreter, err := interpreter.Validate(req.Interpreter)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	target, selectors, ok := validatePlacement(
-		w,
-		r,
-		h.repo,
-		req.ExecutionTarget,
-		req.AgentSelectors,
-	)
-	if !ok {
-		return
-	}
-	if err := artifact.ValidateGateConfig(
-		target,
-		req.NetworkMode,
-		req.ApprovalArtifactPath,
-		req.ApprovalReviewPath,
-		req.ApprovalReviewFormat,
-	); err != nil {
-		RespondError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	image, variableNames, ok := validateContainerConfig(
-		w, agentexecution.Config{
-			Target: target, Mode: req.AgentExecutionMode,
-			Image: req.ContainerImage, VariableNames: req.VariableNames,
-		},
-	)
+	prepared, ok := prepareStepFields(w, r, h.repo, req.definition())
 	if !ok {
 		return
 	}
 
 	tpl, err := h.repo.CreateStepTemplateWithPlacement(
 		r.Context(),
-		db.CreateStepTemplateParams{
-			Name:                 name,
-			ScriptBody:           req.ScriptBody,
-			Interpreter:          selectedInterpreter,
-			ContainerImage:       image,
-			AgentExecutionMode:   req.AgentExecutionMode,
-			NetworkMode:          req.NetworkMode,
-			ApprovalArtifactPath: req.ApprovalArtifactPath,
-			ApprovalReviewPath:   req.ApprovalReviewPath,
-			ApprovalReviewFormat: req.ApprovalReviewFormat,
-			VariableNames:        marshalVariableNames(variableNames),
-		},
-		target,
-		selectors,
+		prepared.CreateTemplateParams(
+			marshalVariableNames(prepared.VariableNames),
+		),
+		prepared.ExecutionTarget,
+		prepared.AgentSelectors,
 	)
 	if err != nil {
 		if handler.IsUniqueViolation(err) {
@@ -321,63 +287,19 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		return
 	}
 
-	name := trimSpace(req.Name)
-	if name == "" {
-		RespondError(w, http.StatusBadRequest, "Name is required")
-		return
-	}
-	selectedInterpreter, err := interpreter.Validate(req.Interpreter)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	target, selectors, ok := validatePlacement(
-		w,
-		r,
-		h.repo,
-		req.ExecutionTarget,
-		req.AgentSelectors,
-	)
-	if !ok {
-		return
-	}
-	if err := artifact.ValidateGateConfig(
-		target,
-		req.NetworkMode,
-		req.ApprovalArtifactPath,
-		req.ApprovalReviewPath,
-		req.ApprovalReviewFormat,
-	); err != nil {
-		RespondError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	image, variableNames, ok := validateContainerConfig(
-		w, agentexecution.Config{
-			Target: target, Mode: req.AgentExecutionMode,
-			Image: req.ContainerImage, VariableNames: req.VariableNames,
-		},
-	)
+	prepared, ok := prepareStepFields(w, r, h.repo, req.definition())
 	if !ok {
 		return
 	}
 
 	updated, err := h.repo.UpdateStepTemplateWithPlacement(
 		r.Context(),
-		db.UpdateStepTemplateParams{
-			ID:                   id,
-			Name:                 name,
-			ScriptBody:           req.ScriptBody,
-			Interpreter:          selectedInterpreter,
-			ContainerImage:       image,
-			AgentExecutionMode:   req.AgentExecutionMode,
-			NetworkMode:          req.NetworkMode,
-			ApprovalArtifactPath: req.ApprovalArtifactPath,
-			ApprovalReviewPath:   req.ApprovalReviewPath,
-			ApprovalReviewFormat: req.ApprovalReviewFormat,
-			VariableNames:        marshalVariableNames(variableNames),
-		},
-		target,
-		selectors,
+		prepared.UpdateTemplateParams(
+			id,
+			marshalVariableNames(prepared.VariableNames),
+		),
+		prepared.ExecutionTarget,
+		prepared.AgentSelectors,
 	)
 	if err != nil {
 		if handler.IsUniqueViolation(err) {

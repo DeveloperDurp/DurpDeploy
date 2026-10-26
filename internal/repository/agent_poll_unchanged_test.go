@@ -32,12 +32,19 @@ func TestAgentPollUnchangedCapabilitiesAvoidWrites(t *testing.T) {
 		Staging: true, Artifact: true,
 	}
 	report.ExecutionModes = []agentproto.ExecutionMode{agentproto.ExecutionHost}
+	report.ResourcePolicy, err = repo.ResourceLimits().
+		AgentPolicy().
+		Advertisement()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := repo.RecordAgentPollCapabilities(t.Context(), heartbeat, report); err != nil {
 		t.Fatal(err)
 	}
 	for _, table := range []string{
 		"agent_interpreters", "agent_execution_modes", "agent_container_runtimes",
 		"agent_container_interpreters", "agent_staging_capabilities", "agent_artifact_capabilities",
+		"agent_resource_policies",
 	} {
 		for _, operation := range []string{"INSERT", "DELETE", "UPDATE"} {
 			query := fmt.Sprintf(`CREATE TRIGGER reject_%s_%s BEFORE %s ON %s

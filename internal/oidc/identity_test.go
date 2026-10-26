@@ -166,6 +166,14 @@ func TestIdentity_InvalidatesSessionsOnRoleDowngrade(t *testing.T) {
 			err,
 		)
 	}
+	count, err := repo.Queries.CountAdministrators(context.Background())
+	if err != nil || count != 0 {
+		t.Fatalf(
+			"provider-authoritative final-admin demotion was blocked: count=%d err=%v",
+			count,
+			err,
+		)
+	}
 }
 
 func TestIdentity_PreservesSessionsWhenRoleDoesNotChange(t *testing.T) {

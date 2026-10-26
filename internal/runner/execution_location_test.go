@@ -35,6 +35,7 @@ esac
 	logs, err := repo.Queries.ListDeploymentLogsAfter(
 		t.Context(),
 		db.ListDeploymentLogsAfterParams{
+			BatchLimit:   256,
 			DeploymentID: request.logWriter.deploymentID,
 		},
 	)
@@ -104,7 +105,8 @@ esac
 
 	// Then: its execution budget remains available.
 	logs, err := repo.Queries.ListDeploymentLogsAfter(
-		t.Context(), db.ListDeploymentLogsAfterParams{DeploymentID: 0},
+		t.Context(),
+		db.ListDeploymentLogsAfterParams{DeploymentID: 0, BatchLimit: 256},
 	)
 	if err != nil {
 		t.Fatal(err)

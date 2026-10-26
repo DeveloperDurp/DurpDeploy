@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"durpdeploy/internal/config"
 	"durpdeploy/internal/events"
 )
 
@@ -22,30 +23,55 @@ import (
 // - DURPDEPLOY_LITESTREAM_CHECK_COMMAND: the shell command to run (e.g. "litestream ltx ...")
 // - DURPDEPLOY_LITESTREAM_CHECK_INTERVAL: how often to check (default 1h)
 func StartLitestreamCheck(ctx context.Context, bus *events.Bus) error {
-	command := os.Getenv("DURPDEPLOY_LITESTREAM_CHECK_COMMAND")
+	settings, err := LoadCheckConfig(os.LookupEnv)
+	if err != nil {
+		return err
+	}
+	return StartLitestreamCheckWithConfig(ctx, bus, settings)
+}
+
+type CheckConfig struct {
+	Command  string
+	Interval time.Duration
+}
+
+func LoadCheckConfig(lookup config.Lookup) (CheckConfig, error) {
+	command, _ := lookup("DURPDEPLOY_LITESTREAM_CHECK_COMMAND")
 	if command == "" {
+		return CheckConfig{}, nil
+	}
+	raw, _ := lookup("DURPDEPLOY_LITESTREAM_CHECK_INTERVAL")
+	if raw == "" {
+		raw = config.Defaults().Litestream.CheckInterval
+	}
+	interval, err := time.ParseDuration(raw)
+	if err != nil || interval <= 0 {
+		return CheckConfig{}, errors.New(
+			"DURPDEPLOY_LITESTREAM_CHECK_INTERVAL must be a positive duration",
+		)
+	}
+	return CheckConfig{Command: command, Interval: interval}, nil
+}
+
+// StartLitestreamCheckWithConfig uses settings validated before startup effects.
+func StartLitestreamCheckWithConfig(
+	ctx context.Context,
+	bus *events.Bus,
+	settings CheckConfig,
+) error {
+	if settings.Command == "" {
 		return nil
 	}
-
-	interval := time.Hour
-	if raw := os.Getenv("DURPDEPLOY_LITESTREAM_CHECK_INTERVAL"); raw != "" {
-		d, err := time.ParseDuration(raw)
-		if err != nil {
-			return fmt.Errorf("parse backup check interval: %w", err)
-		}
-		if d <= 0 {
-			return fmt.Errorf("backup check interval must be positive")
-		}
-		interval = d
+	if settings.Interval <= 0 {
+		return errors.New("backup check interval must be positive")
 	}
-
 	go func() {
-		ticker := time.NewTicker(interval)
+		ticker := time.NewTicker(settings.Interval)
 		defer ticker.Stop()
 		slog.Info(
 			"litestream health check started",
 			"interval",
-			interval,
+			settings.Interval,
 		)
 
 		// track last state to avoid spamming "healthy" notifications
@@ -56,7 +82,7 @@ func StartLitestreamCheck(ctx context.Context, bus *events.Bus) error {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				err := runCheck(ctx, command)
+				err := runCheck(ctx, settings.Command)
 				if ctx.Err() != nil {
 					return
 				}

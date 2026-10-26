@@ -28,6 +28,9 @@ func checkLibraryPermissionDenied(t *testing.T, scope, role string) {
 	f := newLibraryE2E(t)
 	entry := f.preview(t, "http-health-check")
 	f.changeRole(t, scope, role)
+	if scope == "global" {
+		f.session = memberRoleSession(t, f.h, f.user.ID)
+	}
 	f.json(t, "GET", f.path, nil, 200)
 	f.json(t, "GET", f.path+"/http-health-check", nil, 200)
 	f.json(

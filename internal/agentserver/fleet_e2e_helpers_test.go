@@ -1,7 +1,9 @@
 package agentserver_test
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +19,10 @@ import (
 	"durpdeploy/internal/server"
 	"github.com/robfig/cron/v3"
 )
+
+func fleetTestToken(role string) string {
+	return fmt.Sprintf("ddp_pat_%x", sha256.Sum256([]byte(role)))
+}
 
 func fleetAdminServer(
 	t *testing.T,
@@ -44,7 +50,7 @@ func fleetAdminServer(
 				Name:        role,
 				TokenPrefix: "fleet",
 				TokenHash: auth.HashApiToken(
-					"ddp_pat_fleet_" + role,
+					fleetTestToken(role),
 				),
 				Scope: "global",
 			},
@@ -94,7 +100,7 @@ func fleetRequest(
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Authorization", "Bearer ddp_pat_fleet_"+role)
+	req.Header.Set("Authorization", "Bearer "+fleetTestToken(role))
 	req.Header.Set("Content-Type", "application/json")
 	res, err := srv.Client().Do(req)
 	if err != nil {

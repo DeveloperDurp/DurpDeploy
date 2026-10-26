@@ -268,7 +268,7 @@ SELECT lifecycles.id, lifecycles.name, lifecycles.description, lifecycles.create
     SELECT COUNT(*) FROM lifecycle_stages
     WHERE lifecycle_id = lifecycles.id
 ) AS stage_count
-FROM lifecycles ORDER BY name
+FROM lifecycles ORDER BY name ASC
 `
 
 type ListLifecyclesWithStageCountsRow struct {

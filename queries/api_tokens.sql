@@ -41,4 +41,7 @@ SELECT id, user_id, name, token_prefix, token_hash, scope, token_role, last_used
 UPDATE api_tokens SET revoked_at = strftime('%s','now') WHERE id = ? AND revoked_at IS NULL;
 
 -- name: TouchApiTokenLastUsed :exec
-UPDATE api_tokens SET last_used_at = ? WHERE id = ?;
+UPDATE api_tokens SET last_used_at = sqlc.narg(last_used_at)
+WHERE id = sqlc.arg(id) AND revoked_at IS NULL
+  AND (last_used_at IS NULL OR last_used_at <= sqlc.arg(stale_before))
+  AND (last_used_at IS NULL OR last_used_at < sqlc.narg(last_used_at));

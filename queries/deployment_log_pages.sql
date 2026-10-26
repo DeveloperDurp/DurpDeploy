@@ -23,7 +23,7 @@ SELECT id, deployment_id,
     is_step_metadata
 FROM deployment_logs
 WHERE deployment_id = sqlc.arg(deployment_id) AND id > sqlc.arg(after_id)
-ORDER BY id LIMIT 64;
+ORDER BY id LIMIT sqlc.arg(batch_limit);
 
 -- name: ListDeploymentLogStateMetadata :many
 SELECT l.id, l.step_index, l.step_name, l.step_state,

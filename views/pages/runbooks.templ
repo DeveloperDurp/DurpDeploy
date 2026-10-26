@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"durpdeploy/internal/agentexecution"
 	"durpdeploy/internal/db"
 	"durpdeploy/views/components"
 	"durpdeploy/views/layouts"
@@ -152,8 +153,8 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, art
 									<label class="form-control"><span class="label-text">Script</span><textarea name="step_script" class="textarea textarea-bordered font-mono min-h-36" x-model="draft.script_body" required></textarea></label>
 									<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
 										<label class="form-control"><span class="label-text">Interpreter</span><select name="step_interpreter" class="select select-bordered" x-model="draft.interpreter"><option value="bash">Bash</option><option value="pwsh">PowerShell</option><option value="python3">Python</option></select></label>
-										<label class="form-control"><span class="label-text">Timeout (seconds)</span><input name="step_timeout" type="number" min="0" class="input input-bordered" x-model="draft.timeout_seconds"/></label>
-										<label class="form-control"><span class="label-text">Retries</span><input name="step_retries" type="number" min="0" class="input input-bordered" x-model="draft.max_retries"/></label>
+										<label class="form-control"><span class="label-text">Timeout (seconds)</span><input name="step_timeout" type="number" min="0" max={ strconv.FormatInt(agentexecution.RequestLimits(ctx).MaxTimeoutSeconds, 10) } class="input input-bordered" x-model="draft.timeout_seconds"/></label>
+										<label class="form-control"><span class="label-text">Retries</span><input name="step_retries" type="number" min="0" max={ strconv.FormatInt(agentexecution.RequestLimits(ctx).MaxRetries, 10) } class="input input-bordered" x-model="draft.max_retries"/></label>
 										<label class="form-control"><span class="label-text">Execution target</span><select name="step_target" class="select select-bordered" x-model="draft.execution_target" @change="changeTarget"><option value="local">Server container</option><option value="agent">Agent</option></select></label>
 									</div>
 									<label class="form-control" x-show="draft.execution_target === 'agent'"><span class="label-text">Agent labels (comma separated)</span><input name="step_selectors" class="input input-bordered" x-model="draft.agent_selectors_text" x-bind:disabled="draft.execution_target !== 'agent'"/></label>

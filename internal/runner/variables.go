@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 )
 
@@ -14,9 +15,15 @@ type ResolvedVariable struct {
 	Secret bool
 }
 
-func ResolveReleaseVariables(variables []db.ReleaseVariable, environmentID int64) ([]ResolvedVariable, error) {
+func ResolveReleaseVariables(
+	variables []db.ReleaseVariable,
+	environmentID int64,
+) ([]ResolvedVariable, error) {
 	ordered := append([]db.ReleaseVariable(nil), variables...)
-	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].ID < ordered[j].ID })
+	sort.SliceStable(
+		ordered,
+		func(i, j int) bool { return ordered[i].ID < ordered[j].ID },
+	)
 
 	global := make(map[string]ResolvedVariable)
 	environment := make(map[string]ResolvedVariable)
@@ -24,7 +31,10 @@ func ResolveReleaseVariables(variables []db.ReleaseVariable, environmentID int64
 	environmentOrder := make([]string, 0, len(ordered))
 	for _, variable := range ordered {
 		if strings.TrimSpace(variable.Name) == "" {
-			return nil, fmt.Errorf("release variable name must not be empty")
+			return nil, fmt.Errorf(
+				"%w: release variable name must not be empty",
+				containerenv.ErrEnvironment,
+			)
 		}
 		resolved := ResolvedVariable{
 			Name: variable.Name, Value: variable.Value.String, Secret: variable.Secret != 0,
@@ -45,6 +55,18 @@ func ResolveReleaseVariables(variables []db.ReleaseVariable, environmentID int64
 		global[variable.Name] = resolved
 	}
 
+	return resolvedVariablesInOrder(
+		global,
+		environment,
+		globalOrder,
+		environmentOrder,
+	), nil
+}
+
+func resolvedVariablesInOrder(
+	global, environment map[string]ResolvedVariable,
+	globalOrder, environmentOrder []string,
+) []ResolvedVariable {
 	result := make([]ResolvedVariable, 0, len(global)+len(environment))
 	seen := make(map[string]struct{}, len(global)+len(environment))
 	for _, name := range globalOrder {
@@ -61,5 +83,5 @@ func ResolveReleaseVariables(variables []db.ReleaseVariable, environmentID int64
 		}
 		result = append(result, environment[name])
 	}
-	return result, nil
+	return result
 }

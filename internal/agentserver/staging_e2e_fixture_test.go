@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/auth"
+	startupconfig "durpdeploy/internal/config"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/handler"
@@ -54,6 +55,7 @@ type stagingFixtureConfig struct {
 	runtimeBinary    string
 	wrap             func(http.Handler) http.Handler
 	serverContainers bool
+	mergeLimits      *startupconfig.MergeLimits
 }
 
 func newStagingE2EConfigured(
@@ -76,6 +78,18 @@ func newStagingE2EConfigured(
 		"DURPDEPLOY_CONTAINER_NAMESPACE",
 		fmt.Sprintf("stage-e2e-%d", time.Now().UnixNano()),
 	)
+	var settings []startupconfig.Config
+	if config.mergeLimits != nil {
+		captured, err := startupconfig.LoadWithLookup(os.LookupEnv)
+		if err != nil {
+			t.Fatal(err)
+		}
+		captured.Limits.Merge = *config.mergeLimits
+		if err := captured.Limits.Validate(); err != nil {
+			t.Fatal(err)
+		}
+		settings = append(settings, captured)
+	}
 	f := newAgentFixtureWithDSN(
 		t,
 		filepath.Join(
@@ -83,6 +97,7 @@ func newStagingE2EConfigured(
 			"stage.db",
 		)+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)",
 		nil,
+		settings...,
 	)
 	box, err := secret.NewBox(make([]byte, 32))
 	if err != nil {

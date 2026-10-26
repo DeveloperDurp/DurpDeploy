@@ -180,9 +180,12 @@ UNION ALL
 SELECT 'artifact', '' FROM agent_artifact_capabilities
 WHERE agent_artifact_capabilities.agent_id = ?1
 UNION ALL
+SELECT 'resource_policy', advertisement FROM agent_resource_policies
+WHERE agent_resource_policies.agent_id = ?1
+UNION ALL
 SELECT 'protocol', COALESCE(agent_protocol, '') FROM agents
 WHERE agents.id = ?1
-ORDER BY category, capability
+ORDER BY category ASC, capability ASC
 `
 
 type ListAgentPollCapabilitiesRow struct {

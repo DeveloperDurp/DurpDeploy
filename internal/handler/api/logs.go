@@ -2,14 +2,11 @@ package api
 
 import (
 	"database/sql"
-	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 
-	"durpdeploy/internal/db"
 	"durpdeploy/internal/httpstream"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
@@ -33,7 +30,8 @@ func NewLogHandler(
 // Stream deployment logs. The format=structured SSE option emits indexed
 // step logs and lifecycle states, supports after and Last-Event-ID cursors,
 // and ends with a complete event. Default SSE and NDJSON remain text streams.
-// Add preview=true to structured streams for marked 16 KiB display previews.
+// Add preview=true for marked previews using the configured line byte budget.
+// The default preview budget is 16 KiB per text field.
 //
 //	Produces:
 //	- text/event-stream
@@ -120,79 +118,10 @@ func (h *LogHandler) exportDeploymentLogs(
 	r *http.Request,
 	depID int64,
 ) {
-	deployment, err := h.repo.Queries.GetDeployment(r.Context(), depID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Deployment not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	release, err := h.repo.Queries.GetRelease(r.Context(), deployment.ReleaseID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	project, err := h.repo.Queries.GetProject(r.Context(), release.ProjectID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	environment, err := h.repo.Queries.GetEnvironment(
-		r.Context(),
-		deployment.EnvironmentID,
-	)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set(
-		"Content-Disposition",
-		fmt.Sprintf(`attachment; filename="deployment-%d.log"`, depID),
-	)
-	w.WriteHeader(http.StatusOK)
-
-	if _, err := fmt.Fprintf(
-		w,
-		"=== deployment #%d | project=%s | release=%s | env=%s | status=%s ===\n",
-		depID,
-		project.Name,
-		release.Version,
-		environment.Name,
-		deployment.Status,
-	); err != nil {
-		return
-	}
-	err = h.repo.ForEachDeploymentLogByDeploymentAsc(
-		r.Context(),
-		depID,
-		func(lg db.DeploymentLog) error {
-			ts := time.Unix(lg.CreatedAt, 0).UTC().Format("2006-01-02 15:04:05")
-			if lg.StepName.Valid {
-				_, err := fmt.Fprintf(
-					w,
-					"[%s] [%s] %s\n",
-					ts,
-					lg.StepName.String,
-					lg.Line,
-				)
-				return err
-			}
-			_, err := fmt.Fprintf(w, "[%s] %s\n", ts, lg.Line)
-			return err
-		},
-	)
-	if err != nil {
-		return
-	}
-	_, _ = fmt.Fprintln(w)
-
+	httpstream.ExportTextLogs(w, r, h.repo, depID,
+		func(status int, message string) {
+			RespondError(w, status, message)
+		})
 }
 
 // GetLog returns a single deployment log entry.

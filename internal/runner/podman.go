@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"durpdeploy/internal/config"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 )
@@ -33,34 +34,45 @@ func newContainerEndpoint() (containerEndpoint, error) {
 func newContainerEndpointWith(
 	kindOverride, binaryOverride string,
 ) (containerEndpoint, error) {
-	rawEnabled := os.Getenv("DURPDEPLOY_EMBEDDED_AGENT_ENABLED")
-	if rawEnabled == "" {
-		rawEnabled = "true"
+	return newContainerEndpointWithLookup(
+		kindOverride,
+		binaryOverride,
+		os.LookupEnv,
+	)
+}
+
+func newContainerEndpointWithLookup(
+	kindOverride, binaryOverride string, lookup config.Lookup,
+) (containerEndpoint, error) {
+	selected := lookup
+	if kindOverride != "" {
+		selected = func(key string) (string, bool) {
+			if key == "DURPDEPLOY_CONTAINER_RUNTIME" {
+				return kindOverride, true
+			}
+			return lookup(key)
+		}
 	}
-	enabled, err := strconv.ParseBool(rawEnabled)
+	settings, err := LoadContainerConfig(selected)
 	if err != nil {
-		return containerEndpoint{}, fmt.Errorf(
-			"DURPDEPLOY_EMBEDDED_AGENT_ENABLED must be true or false",
-		)
+		return containerEndpoint{}, err
 	}
-	if !enabled {
+	if settings.Enabled == "false" {
 		return containerEndpoint{}, fmt.Errorf("embedded agent is disabled")
 	}
-
 	kind := kindOverride
 	if kind == "" {
-		kind = os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME")
+		kind = settings.Runtime
 	}
 	if kind == "" {
 		kind = detectContainerRuntime()
 	}
 	if kind != "docker" && kind != "podman" {
 		return containerEndpoint{}, fmt.Errorf(
-			"DURPDEPLOY_CONTAINER_RUNTIME must be docker or podman",
+			"no supported container client is available",
 		)
 	}
-	raw := os.Getenv("DURPDEPLOY_CONTAINER_URL")
-	namespace := os.Getenv("DURPDEPLOY_CONTAINER_NAMESPACE")
+	raw := settings.URL
 	if raw == "" {
 		if kind == "docker" {
 			raw = os.Getenv("DOCKER_HOST")
@@ -68,36 +80,82 @@ func newContainerEndpointWith(
 			raw = os.Getenv("CONTAINER_HOST")
 		}
 	}
-	if namespace == "" {
-		namespace = "durpdeploy"
-	}
-	if !podmanNamespace.MatchString(namespace) {
-		return containerEndpoint{}, fmt.Errorf(
-			"DURPDEPLOY_CONTAINER_NAMESPACE contains invalid characters",
-		)
-	}
-	if raw != "" {
-		u, parseErr := url.Parse(raw)
-		if parseErr != nil || u.Scheme != "unix" || u.Host != "" ||
-			u.RawQuery != "" || u.Fragment != "" ||
-			!filepath.IsAbs(u.Path) {
-			return containerEndpoint{}, fmt.Errorf(
-				"DURPDEPLOY_CONTAINER_URL must be an absolute unix socket URL",
-			)
-		}
+	if err := validateContainerURL(raw); err != nil {
+		return containerEndpoint{}, err
 	}
 	binary := binaryOverride
 	if binary == "" {
 		binary, err = exec.LookPath(kind)
 		if err != nil {
 			return containerEndpoint{}, fmt.Errorf(
-				"find %s client: %w", kind, err,
+				"find %s client: %w",
+				kind,
+				err,
 			)
 		}
 	}
 	return containerEndpoint{
-		kind: kind, binary: binary, url: raw, namespace: namespace,
+		kind: kind, binary: binary, url: raw, namespace: settings.Namespace,
 	}, nil
+}
+
+// LoadContainerConfig validates application settings without contacting an
+// engine. An unavailable engine can still leave remote execution available.
+func LoadContainerConfig(lookup config.Lookup) (config.Container, error) {
+	get := func(key string) string {
+		value, _ := lookup(key)
+		return value
+	}
+	rawEnabled := get("DURPDEPLOY_EMBEDDED_AGENT_ENABLED")
+	if rawEnabled == "" {
+		rawEnabled = config.Defaults().Container.Enabled
+	}
+	enabled, err := strconv.ParseBool(rawEnabled)
+	if err != nil {
+		return config.Container{}, fmt.Errorf(
+			"DURPDEPLOY_EMBEDDED_AGENT_ENABLED must be true or false",
+		)
+	}
+	if !enabled {
+		return config.Container{Enabled: "false"}, nil
+	}
+	kind := get("DURPDEPLOY_CONTAINER_RUNTIME")
+	if kind != "" && kind != "docker" && kind != "podman" {
+		return config.Container{}, fmt.Errorf(
+			"DURPDEPLOY_CONTAINER_RUNTIME must be docker or podman",
+		)
+	}
+	raw := get("DURPDEPLOY_CONTAINER_URL")
+	namespace := get("DURPDEPLOY_CONTAINER_NAMESPACE")
+	if namespace == "" {
+		namespace = config.Defaults().Container.Namespace
+	}
+	if !podmanNamespace.MatchString(namespace) {
+		return config.Container{}, fmt.Errorf(
+			"DURPDEPLOY_CONTAINER_NAMESPACE contains invalid characters",
+		)
+	}
+	if err := validateContainerURL(raw); err != nil {
+		return config.Container{}, err
+	}
+	return config.Container{
+		Enabled: "true", Runtime: kind, URL: raw, Namespace: namespace,
+	}, nil
+}
+
+func validateContainerURL(raw string) error {
+	if raw == "" {
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "unix" || u.Host != "" ||
+		u.User != nil || u.Opaque != "" || u.RawQuery != "" ||
+		u.ForceQuery || u.Fragment != "" || !filepath.IsAbs(u.Path) {
+		return fmt.Errorf(
+			"DURPDEPLOY_CONTAINER_URL must be an absolute unix socket URL",
+		)
+	}
+	return nil
 }
 
 func newPodmanEndpoint() (containerEndpoint, error) {
@@ -197,7 +255,11 @@ func newRunnerWithKind(
 	broker *LogBroker,
 	kind, testBinary string,
 ) *DeploymentRunner {
-	endpoint, localErr := newContainerEndpointWith(kind, testBinary)
+	endpoint, localErr := newContainerEndpointWithLookup(
+		kind,
+		testBinary,
+		repo.StartupLookup,
+	)
 	r := &DeploymentRunner{
 		repo:     repo,
 		broker:   broker,

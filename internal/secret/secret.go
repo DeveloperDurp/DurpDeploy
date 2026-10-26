@@ -15,10 +15,12 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"durpdeploy/internal/config"
 )
 
-// KeyEnvVar and KeyFilePath are the two supported sources for the 32-byte
-// AES-256 key, checked in that order (file first, then env).
+// KeyEnvVar overrides KeyFilePath. The central resolver supplies environment
+// or YAML values through KeyEnvVar before the legacy file fallback.
 const (
 	KeyEnvVar   = "DURPDEPLOY_SECRET_KEY"
 	KeyFilePath = "/etc/durpdeploy/key"
@@ -30,11 +32,29 @@ type Box struct {
 	aead cipher.AEAD
 }
 
-// LoadKey reads the key from KeyFilePath, falling back to KeyEnvVar
-// (base64-encoded, 32 bytes after decoding). Returns an error — callers
-// must refuse to start — if neither source is configured.
+// LoadKey reads KeyEnvVar before the legacy KeyFilePath fallback.
 func LoadKey() ([]byte, error) {
-	if data, err := os.ReadFile(KeyFilePath); err == nil {
+	return LoadKeyWithLookup(os.LookupEnv)
+}
+
+func LoadKeyWithLookup(lookup config.Lookup) ([]byte, error) {
+	return loadKey(lookup, func() ([]byte, error) {
+		return os.ReadFile(KeyFilePath)
+	})
+}
+
+func loadKey(
+	lookup config.Lookup,
+	readFile func() ([]byte, error),
+) ([]byte, error) {
+	if raw, _ := lookup(KeyEnvVar); raw != "" {
+		key, err := decodeKey(raw)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", KeyEnvVar, err)
+		}
+		return key, nil
+	}
+	if data, err := readFile(); err == nil {
 		key, err := decodeKey(string(data))
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", KeyFilePath, err)
@@ -42,14 +62,6 @@ func LoadKey() ([]byte, error) {
 		return key, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("read key file %s: %w", KeyFilePath, err)
-	}
-
-	if v := os.Getenv(KeyEnvVar); v != "" {
-		key, err := decodeKey(v)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", KeyEnvVar, err)
-		}
-		return key, nil
 	}
 
 	return nil, fmt.Errorf(

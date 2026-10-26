@@ -12,13 +12,13 @@ type swaggerLogPage struct {
 	NextBefore int64 `json:"next_before"`
 	// Highest returned ID. Use this as the live stream's after cursor.
 	LastID int64 `json:"last_id"`
-	// Maximum number of returned rows (500).
+	// Configured maximum number of returned rows. Default: 500.
 	Limit int64 `json:"limit"`
 	// Requested exclusive upper ID. Zero selects the latest page.
 	Before int64 `json:"before"`
-	// Maximum JSON response size in bytes, including the envelope (1048576).
+	// Configured JSON response budget, including the envelope. Default: 1048576 bytes.
 	ByteLimit int `json:"byte_limit"`
-	// Maximum UTF-8 bytes per displayed text field, including markers (16384).
+	// Configured UTF-8 bytes per displayed field, including markers. Default: 16384.
 	LineByteLimit int `json:"line_byte_limit"`
 }
 

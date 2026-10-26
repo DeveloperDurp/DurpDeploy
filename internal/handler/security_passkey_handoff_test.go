@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"durpdeploy/internal/db"
@@ -23,6 +25,7 @@ func TestSecurity_PasskeyVerificationActivatesOnlyAfterValidAssertion(
 		Enabled: true, Origin: "https://example.org", RPID: "example.org",
 	}})
 	current := seedSession(t, h.repo, h.server, "admin")
+	token := seedAPIToken(t, h, current.user.ID)
 	credentialID, publicKey, assertion := officialUVAssertion(t)
 	handle := bytes.Repeat([]byte{1}, 32)
 	if _, err := h.repo.Queries.CreateWebAuthnUser(
@@ -147,6 +150,50 @@ func TestSecurity_PasskeyVerificationActivatesOnlyAfterValidAssertion(
 		t.Fatal(
 			"passkey test did not atomically commit only the verified staged factor",
 		)
+	}
+	assertVerifiedPasskeyAudit(t, h, token, current.user.ID, pending.Token)
+}
+
+func assertVerifiedPasskeyAudit(
+	t *testing.T, h *authHarness, token string, userID int64, challenge string,
+) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
+		h.server+"/api/v1/admin/audit?action=mfa_passkey_add", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct{ Items []db.AuditLog }
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusOK || len(result.Items) != 1 ||
+		result.Items[0].Action != "mfa_passkey_add" ||
+		result.Items[0].UserID.Int64 != userID ||
+		strings.Contains(string(body), challenge) {
+		t.Fatalf(
+			"passkey activation audit: status=%d body=%s",
+			response.StatusCode,
+			body,
+		)
+	}
+	if countSecurityRows(
+		t,
+		h,
+		"SELECT COUNT(*) FROM audit_log WHERE action = 'create_security' AND user_id = ?",
+		userID,
+	) != 0 {
+		t.Fatal("passkey activation used the fallback audit action")
 	}
 }
 

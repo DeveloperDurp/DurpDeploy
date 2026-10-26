@@ -51,6 +51,11 @@ func (request AgentPollCapabilities) matchesStoredCapabilities(
 			Category: "artifact",
 		})
 	}
+	if request.ResourcePolicy != "" {
+		reported = append(reported, db.ListAgentPollCapabilitiesRow{
+			Category: "resource_policy", Capability: request.ResourcePolicy,
+		})
+	}
 	slices.SortFunc(reported, func(a, b db.ListAgentPollCapabilitiesRow) int {
 		if order := cmp.Compare(a.Category, b.Category); order != 0 {
 			return order

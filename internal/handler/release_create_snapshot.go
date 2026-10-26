@@ -23,7 +23,7 @@ func CreateReleaseWithProvenance(
 	projectID int64, version string, source provenance.Source,
 	request repository.IdempotencyRequest,
 ) (db.Release, error) {
-	if err := source.Validate(); err != nil {
+	if err := source.ValidateWithScrubber(repo.NewScrubber(nil)); err != nil {
 		return db.Release{}, err
 	}
 	snapshot, err := buildReleaseSnapshot(ctx, repo, projectID)

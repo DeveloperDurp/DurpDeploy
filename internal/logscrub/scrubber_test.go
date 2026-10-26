@@ -6,9 +6,7 @@ import (
 )
 
 func TestAdditionalPatternsPreserveConfiguredAndDefaultRedaction(t *testing.T) {
-	previous := extraSecretPatterns
-	extraSecretPatterns = []string{`configured-proof`}
-	t.Cleanup(func() { extraSecretPatterns = previous })
+	t.Setenv("DURPDEPLOY_EXTRA_SCRUB_PATTERNS", `configured-proof`)
 	scrubber := New([]string{"release-proof"}, `(?i:hostname-proof)`)
 	got := scrubber.Scrub(
 		"release-proof configured-proof HoStNaMe-PrOoF Bearer common-proof",

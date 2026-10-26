@@ -3,6 +3,7 @@
 package agentserver_test
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -15,6 +16,13 @@ import (
 )
 
 func (s *stagingE2E) assertRuntimeStagingPurged(t *testing.T) {
+	t.Helper()
+	s.assertRuntimeStagingPurgedContext(t.Context(), t)
+}
+
+func (s *stagingE2E) assertRuntimeStagingPurgedContext(
+	ctx context.Context, t *testing.T,
+) {
 	t.Helper()
 	filters := []string{
 		"io.durpdeploy.namespace=" + os.Getenv(
@@ -43,7 +51,7 @@ func (s *stagingE2E) assertRuntimeStagingPurged(t *testing.T) {
 		)
 	}
 	for _, filter := range filters {
-		output, err := exec.Command("podman", "--remote", "--url="+os.Getenv("AGENT_TEST_SOCKET"), "volume", "ls", "--quiet", "--filter=label="+filter).
+		output, err := exec.CommandContext(ctx, "podman", "--remote", "--url="+os.Getenv("AGENT_TEST_SOCKET"), "volume", "ls", "--quiet", "--filter=label="+filter).
 			CombinedOutput()
 		if err != nil || strings.TrimSpace(string(output)) != "" {
 			t.Fatalf(
@@ -55,7 +63,7 @@ func (s *stagingE2E) assertRuntimeStagingPurged(t *testing.T) {
 		}
 	}
 	var chunks int
-	if err := s.f.repo.DB.QueryRow("SELECT COUNT(*) FROM deployment_staging_chunks").Scan(&chunks); err != nil ||
+	if err := s.f.repo.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM deployment_staging_chunks").Scan(&chunks); err != nil ||
 		chunks != 0 {
 		t.Fatalf("encrypted staging chunks retained: %d (%v)", chunks, err)
 	}

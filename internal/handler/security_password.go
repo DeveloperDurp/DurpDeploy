@@ -50,7 +50,7 @@ func (h *AuthHandler) changeOwnPassword(
 	}
 	encoded := strings.ReplaceAll(form.Encode(), "~", "%7E")
 	if strings.ContainsAny(input.NewPassword, "\r\n") ||
-		int64(len(encoded)) > MaxPasswordFormBodyBytes {
+		int64(len(encoded)) > h.repo.ResourceLimits().HTTP.PasswordFormBytes {
 		return errPasswordBrowserInput
 	}
 	var updateErr error

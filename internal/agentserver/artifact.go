@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
@@ -64,7 +65,9 @@ func (s *Server) Artifact(w http.ResponseWriter, r *http.Request) {
 		})
 		defer finish()
 	}
-	stream, err := newStagingIO(w, r)
+	stream, err := newStagingIO(w, r, time.Duration(
+		s.repository.ResourceLimits().Transfer.IdleTimeoutSeconds,
+	)*time.Second)
 	if err != nil {
 		w.WriteHeader(500)
 		return

@@ -34,9 +34,9 @@ UPDATE scheduled_deployments SET project_id = ?, release_id = ?, environment_id 
 UPDATE scheduled_deployments SET next_run_at = ?, updated_at = unixepoch() WHERE id = ?;
 
 -- name: AdvanceScheduledDeploymentOccurrence :execrows
-UPDATE scheduled_deployments SET next_run_at = sqlc.arg(next_run_at), last_fired_at = sqlc.arg(fired_at), updated_at = unixepoch()
+UPDATE scheduled_deployments SET next_run_at = sqlc.arg(next_run_at), last_fired_at = sqlc.narg(fired_at), enabled = sqlc.arg(enabled), last_error = sqlc.arg(last_error), updated_at = unixepoch()
 WHERE id = sqlc.arg(id) AND enabled = 1 AND next_run_at = sqlc.arg(observed_run_at)
-AND release_id = sqlc.arg(release_id) AND environment_id = sqlc.arg(environment_id)
+AND project_id = sqlc.arg(project_id) AND release_id = sqlc.arg(release_id) AND environment_id = sqlc.arg(environment_id)
 AND cron = sqlc.arg(cron) AND COALESCE(note, '') = COALESCE(sqlc.narg(note), '');
 
 -- name: DisableScheduledDeploymentWithReason :execrows

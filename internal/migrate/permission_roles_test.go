@@ -12,10 +12,11 @@ import (
 )
 
 func TestPermissionRolesUpgrade(t *testing.T) {
-	forEachRemoteClaimDatabase(t, testPermissionRolesUpgrade)
+	forEachRemoteClaimDatabase(t, checkPermissionRolesUpgrade)
 }
 
-func testPermissionRolesUpgrade(t *testing.T, fixture remoteClaimTestDB) {
+func checkPermissionRolesUpgrade(t *testing.T, fixture remoteClaimTestDB) {
+	t.Helper()
 	fixture.baselineVersion = 63
 	if fixture.gooseDialect == "mssql" {
 		fixture.baselineVersion = 48
@@ -34,24 +35,17 @@ func testPermissionRolesUpgrade(t *testing.T, fixture remoteClaimTestDB) {
 	requireNoError(t, err, "create project")
 	var users []db.User
 	for _, role := range []string{"viewer", "deployer", "admin"} {
-		users = append(
-			users,
-			seedPermissionRoleIdentity(t, conn, q, project.ID, role),
-		)
+		users = append(users, seedPermissionRoleUser(t, conn, project.ID, role))
 	}
-	rolesVersion := fixture.baselineVersion + 1
+	roleVersion := fixture.baselineVersion + 1
 	requireNoError(
-		t,
-		goose.UpTo(conn, ".", rolesVersion),
-		"upgrade roles",
+		t, goose.UpTo(conn, ".", roleVersion), "upgrade roles",
 	)
 	requireNoError(
-		t,
-		goose.UpTo(conn, ".", rolesVersion),
-		"repeat startup",
+		t, goose.UpTo(conn, ".", roleVersion), "repeat startup",
 	)
 	for _, before := range users {
-		assertPermissionRoleIdentity(t, q, project.ID, before)
+		assertPermissionRoleUser(t, q, project.ID, before)
 	}
 	for _, table := range []string{"oidc_identities", "mfa_totp", "sessions"} {
 		var count int
@@ -89,7 +83,7 @@ func testPermissionRolesUpgrade(t *testing.T, fixture remoteClaimTestDB) {
 	}
 	version, err := goose.GetDBVersion(conn)
 	requireNoError(t, err, "read version")
-	if err := goose.Down(conn, "."); err == nil {
+	if err := goose.DownTo(conn, ".", fixture.baselineVersion); err == nil {
 		t.Fatal("unsafe rollback succeeded")
 	}
 	after, err := goose.GetDBVersion(conn)
@@ -104,26 +98,14 @@ func testPermissionRolesUpgrade(t *testing.T, fixture remoteClaimTestDB) {
 	)
 }
 
-func TestPermissionRolesFreshSQLiteConstraints(t *testing.T) {
-	conn, err := Run(":memory:")
-	requireNoError(t, err, "fresh migration")
-	t.Cleanup(func() { testutil.Close(t, conn) })
-	for _, role := range roles.All() {
-		_, err := db.New(conn).CreateUser(t.Context(), db.CreateUserParams{
-			Email: fmt.Sprintf("%s@fresh.test", role), Name: role,
-			PasswordHash: "hash", Role: role,
-		})
-		requireNoError(t, err, "create role")
-	}
-}
-
-func seedPermissionRoleIdentity(
+func seedPermissionRoleUser(
 	t *testing.T,
 	conn *sql.DB,
-	q *db.Queries,
 	projectID int64,
 	role string,
 ) db.User {
+	t.Helper()
+	q := db.New(conn)
 	ctx := t.Context()
 	user, err := q.CreateUser(ctx, db.CreateUserParams{
 		Email: role + "@upgrade.test", PasswordHash: "retained hash",
@@ -179,12 +161,13 @@ func seedPermissionRoleIdentity(
 	return user
 }
 
-func assertPermissionRoleIdentity(
+func assertPermissionRoleUser(
 	t *testing.T,
 	q *db.Queries,
 	projectID int64,
 	before db.User,
 ) {
+	t.Helper()
 	ctx := t.Context()
 	want := before
 	if want.Role == "deployer" {
@@ -234,5 +217,18 @@ func assertPermissionRoleIdentity(
 	requireNoError(t, err, "read retained token project")
 	if len(ids) != 1 || ids[0] != projectID {
 		t.Fatal("token project was lost")
+	}
+}
+
+func TestPermissionRolesFreshSQLiteConstraints(t *testing.T) {
+	conn, err := Run(":memory:")
+	requireNoError(t, err, "fresh migration")
+	t.Cleanup(func() { testutil.Close(t, conn) })
+	for _, role := range roles.All() {
+		_, err := db.New(conn).CreateUser(t.Context(), db.CreateUserParams{
+			Email: fmt.Sprintf("%s@fresh.test", role), Name: role,
+			PasswordHash: "hash", Role: role,
+		})
+		requireNoError(t, err, "create role")
 	}
 }

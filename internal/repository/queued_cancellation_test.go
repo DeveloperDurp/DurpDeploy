@@ -55,8 +55,13 @@ func TestQueuedCancellationLogsAcrossDatabases(t *testing.T) {
 		) {
 			t.Fatalf("repeated cancellation error=%v", err)
 		}
-		logs, err := restarted.Queries.ListDeploymentLogsAfter(t.Context(),
-			db.ListDeploymentLogsAfterParams{DeploymentID: queued})
+		logs, err := restarted.Queries.ListDeploymentLogsAfter(
+			t.Context(),
+			db.ListDeploymentLogsAfterParams{
+				DeploymentID: queued,
+				BatchLimit:   256,
+			},
+		)
 		if err != nil || len(logs) != 2 {
 			t.Fatalf("persisted cancellation records=%+v error=%v", logs, err)
 		}
@@ -114,7 +119,7 @@ WHEN NEW.step_index = 1 BEGIN SELECT RAISE(ABORT, 'queued log failed'); END`); e
 		)
 	}
 	logs, err := repo.Queries.ListDeploymentLogsAfter(t.Context(),
-		db.ListDeploymentLogsAfterParams{DeploymentID: queued})
+		db.ListDeploymentLogsAfterParams{DeploymentID: queued, BatchLimit: 256})
 	if err != nil || len(logs) != 0 {
 		t.Fatalf("partial records survived=%+v error=%v", logs, err)
 	}

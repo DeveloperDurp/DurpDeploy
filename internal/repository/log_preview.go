@@ -23,23 +23,26 @@ type LogPreview struct {
 	Truncated bool `json:"truncated,omitempty"`
 }
 
-func previewText(value string) (string, bool) {
-	if len(value) <= LogLineByteLimit && utf8.ValidString(value) {
+func previewText(value string, limit int) (string, bool) {
+	if len(value) <= limit && utf8.ValidString(value) {
 		return value, false
 	}
 	// Repair invalid text before applying the byte cap, including sliced runes.
 	text := strings.ToValidUTF8(value, "�")
-	end := min(len(text), LogLineByteLimit-len(logPreviewSuffix))
+	end := min(len(text), limit-len(logPreviewSuffix))
 	for end > 0 && end < len(text) && !utf8.RuneStart(text[end]) {
 		end--
 	}
 	return text[:end] + logPreviewSuffix, true
 }
 
-func logPreviewFromRow(row db.ListDeploymentLogPreviewsAfterRow) LogPreview {
-	line, shortened := previewText(row.Line)
-	name, nameShortened := previewText(row.StepName)
-	state, stateShortened := previewText(row.StepState)
+func logPreviewFromRow(
+	row db.ListDeploymentLogPreviewsAfterRow,
+	limit int,
+) LogPreview {
+	line, shortened := previewText(row.Line, limit)
+	name, nameShortened := previewText(row.StepName, limit)
+	state, stateShortened := previewText(row.StepState, limit)
 	return LogPreview{
 		DeploymentLog: db.DeploymentLog{
 			ID: row.ID, DeploymentID: row.DeploymentID,
@@ -58,17 +61,19 @@ func logPreviewFromRow(row db.ListDeploymentLogPreviewsAfterRow) LogPreview {
 func (r *Repository) ReadLogPreviewsAfter(
 	ctx context.Context, deploymentID, after int64,
 ) ([]LogPreview, error) {
+	limits := r.ResourceLimits().Logs
 	rows, err := r.Queries.ListDeploymentLogPreviewsAfter(ctx,
 		db.ListDeploymentLogPreviewsAfterParams{
 			DeploymentID: deploymentID, AfterID: after,
-			PreviewLimit: LogLineByteLimit + 1,
+			PreviewLimit: limits.LineBytes + 1,
+			BatchLimit:   limits.PreviewBatch,
 		})
 	if err != nil {
 		return nil, err
 	}
 	logs := make([]LogPreview, len(rows))
 	for i, row := range rows {
-		logs[i] = logPreviewFromRow(row)
+		logs[i] = logPreviewFromRow(row, int(limits.LineBytes))
 	}
 	return logs, nil
 }

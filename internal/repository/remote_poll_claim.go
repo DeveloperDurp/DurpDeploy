@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"durpdeploy/internal/agentexecution"
+	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
@@ -109,28 +111,52 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 					agentID,
 					candidate,
 				)
+				if errors.Is(err, agentexecution.ErrLimits) {
+					// The claim schema uses a shared capability failure category.
+					// Keep the exact validation error in the deployment log.
+					if _, err := q.CreateDeploymentLog(ctx, db.CreateDeploymentLogParams{
+						DeploymentID: candidate, Line: err.Error(),
+					}); err != nil {
+						return err
+					}
+					return failWaitingRemotePayload(
+						ctx,
+						q,
+						candidate,
+						agentID,
+						now,
+						"remote_execution_capability_unavailable",
+					)
+				}
 				if err != nil {
 					return err
 				}
 				prepared, err := prepare(snapshot)
 				if err != nil {
-					if errors.Is(err, agentproto.ErrUnsupportedProtocol) {
-						if err := q.FailWaitingRemotePayload(
-							ctx,
-							db.FailWaitingRemotePayloadParams{
-								DeploymentID: candidate, AgentID: agentID,
-								Now: sql.NullInt64{Int64: now, Valid: true},
-							},
-						); err != nil {
-							return err
+					if errors.Is(err, containerenv.ErrEnvironment) {
+						if _, logErr := q.CreateDeploymentLog(ctx, db.CreateDeploymentLogParams{
+							DeploymentID: candidate, Line: err.Error(),
+						}); logErr != nil {
+							return logErr
 						}
-						return q.FailUnsupportedRemoteDeploymentStatus(ctx,
-							db.FailUnsupportedRemoteDeploymentStatusParams{
-								Now: sql.NullInt64{
-									Int64: now,
-									Valid: true,
-								}, AgentID: agentID,
-							})
+						return failWaitingRemotePayload(
+							ctx,
+							q,
+							candidate,
+							agentID,
+							now,
+							"remote_execution_capability_unavailable",
+						)
+					}
+					if errors.Is(err, agentproto.ErrUnsupportedProtocol) {
+						return failWaitingRemotePayload(
+							ctx,
+							q,
+							candidate,
+							agentID,
+							now,
+							"remote_payload_requires_agent_3",
+						)
 					}
 					return err
 				}
@@ -170,4 +196,20 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 		return RemoteClaim{}, false, err
 	}
 	return result, claimed, nil
+}
+
+func failWaitingRemotePayload(ctx context.Context, q *db.Queries,
+	deploymentID int64, agentID string, now int64, reason string,
+) error {
+	if err := q.FailWaitingRemotePayload(ctx, db.FailWaitingRemotePayloadParams{
+		DeploymentID: deploymentID, AgentID: agentID,
+		Now:    sql.NullInt64{Int64: now, Valid: true},
+		Reason: sql.NullString{String: reason, Valid: true},
+	}); err != nil {
+		return err
+	}
+	return q.FailUnsupportedRemoteDeploymentStatus(ctx,
+		db.FailUnsupportedRemoteDeploymentStatusParams{
+			Now: sql.NullInt64{Int64: now, Valid: true}, AgentID: agentID,
+		})
 }

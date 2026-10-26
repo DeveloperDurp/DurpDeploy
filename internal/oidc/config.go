@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"os"
 	"strings"
+
+	"durpdeploy/internal/config"
 )
 
 var ErrInvalidConfig = errors.New("invalid OIDC configuration")
@@ -26,7 +28,11 @@ type Config struct {
 }
 
 func LoadConfig() (Config, error) {
-	values := oidcEnvValues()
+	return LoadConfigWithLookup(os.LookupEnv)
+}
+
+func LoadConfigWithLookup(lookup config.Lookup) (Config, error) {
+	values := oidcEnvValues(lookup)
 	if !values.anySet() {
 		return Config{}, nil
 	}
@@ -69,11 +75,11 @@ func LoadConfig() (Config, error) {
 		}
 	}
 	if displayName == "" {
-		displayName = "SSO"
+		displayName = config.Defaults().OIDC.DisplayName
 	}
 	groupClaim := values.groupClaim.value
 	if groupClaim == "" {
-		groupClaim = "groups"
+		groupClaim = config.Defaults().OIDC.GroupClaim
 	}
 
 	return Config{
@@ -112,7 +118,11 @@ type oidcEnv struct {
 	requireEmailVerified envValue
 }
 
-func oidcEnvValues() oidcEnv {
+func oidcEnvValues(lookup config.Lookup) oidcEnv {
+	readEnv := func(key string) envValue {
+		value, set := lookup(key)
+		return envValue{value: value, set: set}
+	}
 	return oidcEnv{
 		publicURL:            readEnv("DURPDEPLOY_URL"),
 		issuer:               readEnv("DURPDEPLOY_OIDC_ISSUER"),
@@ -126,11 +136,6 @@ func oidcEnvValues() oidcEnv {
 		groupClaim:           readEnv("DURPDEPLOY_OIDC_GROUP_CLAIM"),
 		requireEmailVerified: readEnv("DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED"),
 	}
-}
-
-func readEnv(key string) envValue {
-	value, set := os.LookupEnv(key)
-	return envValue{value: value, set: set}
 }
 
 func (e oidcEnv) anySet() bool {

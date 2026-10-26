@@ -21,9 +21,8 @@ func TestStagingIOBoundsStalls(t *testing.T) {
 			done := make(chan error, 1)
 			listener := httptest.NewServer(http.HandlerFunc(
 				func(w http.ResponseWriter, r *http.Request) {
-					stream, err := newStagingIO(w, r)
+					stream, err := newStagingIO(w, r, 50*time.Millisecond)
 					if err == nil {
-						stream.timeout = 50 * time.Millisecond
 						if direction == "read" {
 							_, err = stream.Read(make([]byte, 1))
 						} else {

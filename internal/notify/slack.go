@@ -4,10 +4,7 @@
 package notify
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"durpdeploy/internal/events"
@@ -38,32 +35,6 @@ func (s *SlackNotifier) Notify(
 		return true, nil
 	}
 
-	body, err := json.Marshal(map[string]string{"text": event.Message})
-	if err != nil {
-		return false, err
-	}
-	req, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodPost,
-		event.SlackWebhookURL,
-		bytes.NewReader(body),
-	)
-	if err != nil {
-		return false, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return false, err
-	}
-	//nolint:errcheck // Delivery status is checked before read-only body cleanup.
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		return false, fmt.Errorf(
-			"slack webhook returned status %d",
-			resp.StatusCode,
-		)
-	}
-	return false, nil
+	return false, postJSON(ctx, s.httpClient, event.SlackWebhookURL,
+		map[string]string{"text": event.Message}, "slack webhook")
 }

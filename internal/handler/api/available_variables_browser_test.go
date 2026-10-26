@@ -248,7 +248,7 @@ func checkViewerDraft(t *testing.T, b *packageBrowser) {
 			string(
 				b.evaluate(
 					t,
-					`({formSame:window.viewerForm===document.querySelector('#step-edit-content form'),forms:[...document.querySelectorAll('#step-edit-content form')].map(x=>({same:x===window.viewerForm,html:x.outerHTML.slice(0,200)})),connected:window.viewerForm.isConnected,draftSame:window.viewerSnapshot===JSON.stringify([...new FormData(window.viewerForm)]),start:window.viewerTextarea.selectionStart,end:window.viewerTextarea.selectionEnd,top:window.viewerTextarea.scrollTop,beforeTop:window.viewerPosition,focusSame:document.activeElement===window.viewerOpener,parentOpen:document.querySelector('#step-edit-dialog').open})`,
+					`({formSame:window.viewerForm===document.querySelector('#step-edit-content form'),forms:[...document.querySelectorAll('#step-edit-content form')].map(x=>({same:x===window.viewerForm,html:x.outerHTML.slice(0,200)})),connected:window.viewerForm.isConnected,draftSame:window.viewerSnapshot===JSON.stringify([...new FormData(window.viewerForm)]),start:window.viewerTextarea.selectionStart,end:window.viewerTextarea.selectionEnd,top:window.viewerTextarea.scrollTop,beforeTop:window.viewerPosition,formTop:window.viewerScrollArea.scrollTop,beforeFormTop:window.viewerScrollPosition,focusSame:document.activeElement===window.viewerOpener,parentOpen:document.querySelector('#step-edit-dialog').open})`,
 				),
 			),
 		)
@@ -260,11 +260,15 @@ func checkViewerDraft(t *testing.T, b *packageBrowser) {
 
 func checkViewerFailedLoad(t *testing.T, b *packageBrowser) {
 	t.Helper()
+	// Exercise the form insertion before the modal's after-settle handler runs.
 	b.evaluate(
 		t,
-		`document.querySelector('[x-ref=addStepButton]').click(); true`,
+		`htmx.config.defaultSettleDelay = 1000; document.querySelector('[x-ref=addStepButton]').click(); true`,
 	)
-	b.wait(t, `!!document.querySelector('#step-edit-content form')`)
+	b.wait(
+		t,
+		`document.querySelector('#step-edit-dialog').matches(':modal') && document.querySelector('#step-edit-content form') && !document.querySelector('.htmx-request,.htmx-settling')`,
+	)
 	prepareViewerDraft(t, b, false)
 	b.evaluate(
 		t,

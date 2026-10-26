@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/agentserver"
+	"durpdeploy/internal/config"
 	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/repository"
@@ -32,17 +33,24 @@ type agentListenerConfig struct {
 }
 
 func loadAgentListenerConfig() (agentListenerConfig, error) {
-	addr := os.Getenv("DURPDEPLOY_AGENT_LISTEN_ADDR")
-	publicURL := os.Getenv("DURPDEPLOY_AGENT_PUBLIC_URL")
-	dir := os.Getenv("DURPDEPLOY_AGENT_IDENTITY_DIR")
+	return loadAgentListenerConfigWithLookup(os.LookupEnv)
+}
+
+func loadAgentListenerConfigWithLookup(
+	lookup config.Lookup,
+) (agentListenerConfig, error) {
+	addr, _ := lookup("DURPDEPLOY_AGENT_LISTEN_ADDR")
+	publicURL, _ := lookup("DURPDEPLOY_AGENT_PUBLIC_URL")
+	dir, _ := lookup("DURPDEPLOY_AGENT_IDENTITY_DIR")
+	defaults := config.Defaults().AgentListener
 	if addr == "" {
-		addr = "0.0.0.0:23187"
+		addr = defaults.ListenAddr
 	}
 	if publicURL == "" {
-		publicURL = "https://localhost:23187"
+		publicURL = defaults.PublicURL
 	}
 	if dir == "" {
-		dir = ".agent-identity"
+		dir = defaults.IdentityDir
 	}
 	_, port, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -140,7 +148,8 @@ func startAgentListener(
 		return nil, fmt.Errorf("DURPDEPLOY_AGENT_LISTEN_ADDR: %w", err)
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	srv := newHTTPServer(config.addr, server.NewAgentRouter(agents))
+	srv := newConfiguredHTTPServer(config.addr,
+		server.NewAgentRouter(agents), deps.repo.ResourceLimits().HTTP)
 	srv.BaseContext = func(net.Listener) context.Context { return ctx }
 	result := &agentListener{
 		server:   srv,

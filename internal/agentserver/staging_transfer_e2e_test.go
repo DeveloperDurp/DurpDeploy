@@ -3,250 +3,370 @@
 package agentserver_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
 )
 
 func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
-	s := newStagingE2E(t)
+	s := newStagingE2EWithTransfers(
+		t,
+		"",
+		func(next http.Handler) http.Handler {
+			return http.HandlerFunc(
+				func(w http.ResponseWriter, r *http.Request) {
+					if strings.Contains(r.URL.Path, "/staging/") {
+						started := time.Now()
+						t.Logf(
+							"staging request started: %s %s",
+							r.Method,
+							r.URL.Path,
+						)
+						defer func() {
+							t.Logf("staging request finished: %s %s elapsed=%s",
+								r.Method, r.URL.Path, time.Since(started))
+						}()
+					}
+					next.ServeHTTP(w, r)
+				},
+			)
+		},
+	)
 	for _, scenario := range []string{"handoff", "fanout", "identical", "conflict", "failure", "cancel", "isolation", "assertion", "permissions", "renamed-directory", "escaped-directory", "renamed-root", "escaped-root-workspace", "background-writer", "detached-writer", "cleanup-recovery", "capacity"} {
 		t.Run(scenario, func(t *testing.T) {
-			var project, environment struct{ ID int64 }
-			decode := func(data []byte, target any) {
-				t.Helper()
-				if err := json.Unmarshal(data, target); err != nil {
-					t.Fatal(err)
-				}
-			}
-			decode(
-				s.api(
-					t,
-					"POST",
-					"/projects",
-					map[string]string{"name": "staging-" + scenario},
-					201,
-				),
-				&project,
-			)
-			decode(
-				s.api(
-					t,
-					"POST",
-					"/environments",
-					map[string]string{"name": "staging-" + scenario},
-					201,
-				),
-				&environment,
-			)
-			for _, id := range []string{"test-agent", "second-agent"} {
-				s.api(
-					t,
-					"POST",
-					"/admin/agents/"+id+"/environments",
-					map[string]int64{"environment_id": environment.ID},
-					204,
-				)
-			}
-			base := fmt.Sprintf("/projects/%d", project.ID)
-			add := func(target, mode, selector, script string) {
-				t.Helper()
-				step := map[string]any{
-					"name":             "staging",
-					"script_body":      "set -eu\n" + script,
-					"execution_target": target,
-					"interpreter":      "bash",
-					"timeout_seconds":  120,
-					"variable_names":   []string{"SELECTED"},
-				}
-				if target == "local" || mode == "container" {
-					step["container_image"] = "harbor.durp.info/dockerhub/library/bash:5.2"
-				}
-				if target == "agent" {
-					step["agent_execution_mode"] = mode
-				}
-				if selector != "" {
-					step["agent_selectors"] = []string{selector}
-				}
-				s.api(t, "POST", base+"/steps", step, 201)
-			}
-			s.api(
-				t,
-				"POST",
-				base+"/variables",
-				map[string]any{
-					"name": "SELECTED", "value": "selected",
-					"secret": scenario == "conflict",
-				},
-				201,
-			)
-			s.api(
-				t,
-				"POST",
-				base+"/variables",
-				map[string]string{"name": "UNRELATED", "value": "hidden"},
-				201,
-			)
-			if scenario == "capacity" {
-				add(
-					"local",
-					"",
-					"",
-					`trap 'stat -f -c "bytes=%S*%b free=%f inodes=%c free_inodes=%d" "$DURPDEPLOY_STAGE_DIR"; find "$DURPDEPLOY_STAGE_DIR" -maxdepth 1 | wc -l' EXIT; for ((n=1; n<20000; n++)); do printf x > "$DURPDEPLOY_STAGE_DIR/s$n"; done; head -c 536850913 /dev/zero > "$DURPDEPLOY_STAGE_DIR/large"`,
-				)
-				add(
-					"agent",
-					"container",
-					"second-agent",
-					`test "$(stat -c %s "$DURPDEPLOY_STAGE_DIR/large")" = 536850913; test -f "$DURPDEPLOY_STAGE_DIR/s19999"; echo transfer-ok`,
-				)
-			} else if scenario == "isolation" {
-				add(
-					"agent",
-					"host",
-					"test-agent",
-					`test ! -e "$DURPDEPLOY_STAGE_DIR/seed"; test ! -e "$DURPDEPLOY_STAGE_DIR/from-agent"; echo isolated`,
-				)
-			} else {
-				add(
-					"local",
-					"",
-					"",
-					`printf seed > "$DURPDEPLOY_STAGE_DIR/seed"; printf delete > "$DURPDEPLOY_STAGE_DIR/delete-me"`,
-				)
-				if scenario == "handoff" {
-					add(
-						"agent",
-						"host",
-						"test-agent",
-						`test "$SELECTED" = selected; test "${UNRELATED-unset}" = unset; test "$(cat "$DURPDEPLOY_STAGE_DIR/seed")" = seed; printf agent > "$DURPDEPLOY_STAGE_DIR/from-agent"; rm "$DURPDEPLOY_STAGE_DIR/delete-me"`,
-					)
-					add(
-						"agent",
-						"container",
-						"second-agent",
-						`test "$(cat "$DURPDEPLOY_STAGE_DIR/from-agent")" = agent; test ! -e "$DURPDEPLOY_STAGE_DIR/delete-me"; printf container > "$DURPDEPLOY_STAGE_DIR/from-container"`,
-					)
-				} else {
-					script := `test "$(cat "$DURPDEPLOY_STAGE_DIR/seed")" = seed; printf "$LANG" > "$DURPDEPLOY_STAGE_DIR/$LANG"`
-					switch scenario {
-					case "identical":
-						script = `printf identical > "$DURPDEPLOY_STAGE_DIR/shared"`
-					case "conflict":
-						script = `mkdir -p "$DURPDEPLOY_STAGE_DIR/$SELECTED"; printf "$LANG" > "$DURPDEPLOY_STAGE_DIR/$SELECTED/shared"`
-					case "failure":
-						script = `printf partial > "$DURPDEPLOY_STAGE_DIR/partial"; exit 7`
-					case "assertion":
-						script = `test "$(cat "$DURPDEPLOY_STAGE_DIR/seed")" = wrong; echo assertion-missed`
-					case "permissions":
-						script = `mkdir -p "$DURPDEPLOY_STAGE_DIR/locked/nested"; printf secret > "$DURPDEPLOY_STAGE_DIR/locked/nested/data"; chmod 000 "$DURPDEPLOY_STAGE_DIR/locked/nested" "$DURPDEPLOY_STAGE_DIR/locked"; exit 7`
-					case "renamed-directory":
-						script = `mv "$DURPDEPLOY_STAGE_DIR" "$DURPDEPLOY_STAGE_DIR-renamed"; mkdir "$DURPDEPLOY_STAGE_DIR"; printf replacement > "$DURPDEPLOY_STAGE_DIR/seed"`
-					case "escaped-directory":
-						script = `mv "$DURPDEPLOY_STAGE_DIR" "$(dirname "$(dirname "$DURPDEPLOY_STAGE_DIR")")/retained"`
-					case "renamed-root":
-						script = `root=$(dirname "$(dirname "$DURPDEPLOY_STAGE_DIR")"); mv "$root" "$(dirname "$root")/retained"`
-					case "escaped-root-workspace":
-						script = `root=$(dirname "$(dirname "$DURPDEPLOY_STAGE_DIR")"); mv "$DURPDEPLOY_STAGE_DIR" "$(dirname "$root")/retained-workspace"`
-					case "background-writer":
-						script = `(sleep 2; mkdir -p "$DURPDEPLOY_STAGE_DIR"; printf retained > "$DURPDEPLOY_STAGE_DIR/retained") >/dev/null 2>&1 &`
-					case "detached-writer":
-						script = `setsid bash -c 'echo $$ > "$DURPDEPLOY_STAGE_DIR/group"; (echo "$BASHPID" > "$DURPDEPLOY_STAGE_DIR/child"; sleep 30) &' >/dev/null 2>&1 & while test ! -s "$DURPDEPLOY_STAGE_DIR/group" || test ! -s "$DURPDEPLOY_STAGE_DIR/child"; do sleep 0.01; done; echo "detached-group=$(cat "$DURPDEPLOY_STAGE_DIR/group")"; echo "detached-child=$(cat "$DURPDEPLOY_STAGE_DIR/child")"; rm "$DURPDEPLOY_STAGE_DIR/group" "$DURPDEPLOY_STAGE_DIR/child"`
-					case "cleanup-recovery":
-						script = `printf retained > "$DURPDEPLOY_STAGE_DIR/retained"; chmod 000 "$(dirname "$(dirname "$DURPDEPLOY_STAGE_DIR")")"; exit 7`
-					case "cancel":
-						script = `printf partial > "$DURPDEPLOY_STAGE_DIR/partial"; sleep 90`
-					}
-					add("agent", "host", "", script)
-				}
-				final := `test "$(cat "$DURPDEPLOY_STAGE_DIR/seed")" = seed; echo transfer-ok`
-				if scenario == "handoff" {
-					final = `test "$(cat "$DURPDEPLOY_STAGE_DIR/from-container")" = container; test ! -e "$DURPDEPLOY_STAGE_DIR/delete-me"; echo transfer-ok`
-				}
-				if scenario == "fanout" {
-					final = `test -f "$DURPDEPLOY_STAGE_DIR/test-agent"; test -f "$DURPDEPLOY_STAGE_DIR/second-agent"; echo transfer-ok`
-				}
-				if scenario == "identical" {
-					final = `test "$(cat "$DURPDEPLOY_STAGE_DIR/shared")" = identical; echo transfer-ok`
-				}
-				add("local", "", "", final)
-			}
-			var release, deployment struct{ ID int64 }
-			decode(
-				s.api(
-					t,
-					"POST",
-					base+"/releases",
-					map[string]string{"version": "v1"},
-					201,
-				),
-				&release,
-			)
-			decode(
-				s.api(
-					t,
-					"POST",
-					base+"/deployments",
-					map[string]int64{
-						"release_id":     release.ID,
-						"environment_id": environment.ID,
-					},
-					201,
-				),
-				&deployment,
-			)
-			want := "succeeded"
-			if scenario == "conflict" || scenario == "failure" ||
-				scenario == "assertion" ||
-				scenario == "permissions" || scenario == "renamed-directory" ||
-				scenario == "escaped-directory" || scenario == "renamed-root" || scenario == "escaped-root-workspace" ||
-				scenario == "cleanup-recovery" {
-				want = "failed"
-			}
-			if scenario == "cancel" {
-				s.cancelRunningStaging(t, deployment.ID)
-				want = "cancelled"
-			}
-			if scenario == "capacity" {
-				// VFS must copy 512 MiB and 20,000 files before cleanup.
-				s.waitFor(t, deployment.ID, want, 10*time.Minute, time.Second)
-			} else {
-				s.wait(t, deployment.ID, want)
-			}
-			if scenario == "background-writer" {
-				time.Sleep(3 * time.Second)
-			}
-			s.assertRuntimeStagingPurged(t)
-			logs := string(
-				s.api(
-					t,
-					"GET",
-					fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID),
-					nil,
-					200,
-				),
-			)
-			if scenario == "detached-writer" {
-				assertDetachedStagingChildren(t, logs)
-			}
-			if scenario == "assertion" &&
-				strings.Contains(logs, "assertion-missed") {
-				t.Fatal("failed assertion was ignored")
-			}
-			if scenario == "conflict" &&
-				!strings.Contains(logs, "conflicting staging changes") {
-				t.Fatalf("conflict missing in logs: %s", logs)
-			}
-			if scenario == "conflict" {
-				s.assertConflictNotificationsRedacted(t, deployment.ID, logs)
-			}
-			if want == "succeeded" && scenario != "isolation" &&
-				!strings.Contains(logs, "transfer-ok") {
-				t.Fatalf("final step missing: %s", logs)
-			}
-			s.assertTransferPurged(t, scenario, deployment.ID)
+			s.checkTransferScenario(t, scenario)
 		})
 	}
+}
+
+func (s *stagingE2E) checkTransferScenario(t *testing.T, scenario string) {
+	t.Helper()
+	var project, environment struct{ ID int64 }
+	decode := func(data []byte, target any) {
+		t.Helper()
+		if err := json.Unmarshal(data, target); err != nil {
+			t.Fatal(err)
+		}
+	}
+	decode(
+		s.api(
+			t,
+			"POST",
+			"/projects",
+			map[string]string{"name": "staging-" + scenario},
+			201,
+		),
+		&project,
+	)
+	decode(
+		s.api(
+			t,
+			"POST",
+			"/environments",
+			map[string]string{"name": "staging-" + scenario},
+			201,
+		),
+		&environment,
+	)
+	for _, id := range []string{"test-agent", "second-agent"} {
+		s.api(
+			t,
+			"POST",
+			"/admin/agents/"+id+"/environments",
+			map[string]int64{"environment_id": environment.ID},
+			204,
+		)
+	}
+	base := fmt.Sprintf("/projects/%d", project.ID)
+	s.api(
+		t,
+		"POST",
+		base+"/variables",
+		map[string]any{
+			"name": "SELECTED", "value": "selected",
+			"secret": scenario == "conflict",
+		},
+		201,
+	)
+	s.api(
+		t,
+		"POST",
+		base+"/variables",
+		map[string]string{"name": "UNRELATED", "value": "hidden"},
+		201,
+	)
+	s.addTransferSteps(t, base, scenario)
+	var release, deployment struct{ ID int64 }
+	decode(
+		s.api(
+			t,
+			"POST",
+			base+"/releases",
+			map[string]string{"version": "v1"},
+			201,
+		),
+		&release,
+	)
+	decode(
+		s.api(
+			t,
+			"POST",
+			base+"/deployments",
+			map[string]int64{
+				"release_id":     release.ID,
+				"environment_id": environment.ID,
+			},
+			201,
+		),
+		&deployment,
+	)
+	want := "succeeded"
+	if scenario == "conflict" || scenario == "failure" ||
+		scenario == "assertion" ||
+		scenario == "permissions" || scenario == "renamed-directory" ||
+		scenario == "escaped-directory" || scenario == "renamed-root" || scenario == "escaped-root-workspace" ||
+		scenario == "cleanup-recovery" {
+		want = "failed"
+	}
+	if scenario == "cancel" {
+		s.cancelRunningStaging(t, deployment.ID)
+		want = "cancelled"
+	}
+	if scenario == "capacity" {
+		s.observeTransferCapacity(t, deployment.ID)
+		s.waitFor(t, deployment.ID, want, 10*time.Minute, time.Second)
+	} else {
+		s.wait(t, deployment.ID, want)
+	}
+	if scenario == "background-writer" {
+		time.Sleep(3 * time.Second)
+	}
+	s.assertTransferResult(t, scenario, want, deployment.ID)
+}
+
+func (s *stagingE2E) addTransferStep(
+	t *testing.T,
+	base, target, mode, selector, script string,
+) {
+	t.Helper()
+	t.Helper()
+	step := map[string]any{
+		"name":             "staging",
+		"script_body":      "set -eu\n" + script,
+		"execution_target": target,
+		"interpreter":      "bash",
+		"timeout_seconds":  120,
+		"variable_names":   []string{"SELECTED"},
+	}
+	if target == "local" || mode == "container" {
+		step["container_image"] = "harbor.durp.info/dockerhub/library/bash:5.2"
+	}
+	if target == "agent" {
+		step["agent_execution_mode"] = mode
+	}
+	if selector != "" {
+		step["agent_selectors"] = []string{selector}
+	}
+	s.api(t, "POST", base+"/steps", step, 201)
+}
+
+func (s *stagingE2E) addTransferSteps(t *testing.T, base, scenario string) {
+	t.Helper()
+	switch scenario {
+	case "capacity":
+		s.addTransferStep(
+			t,
+			base,
+			"local",
+			"",
+			"",
+			`trap 'stat -f -c "bytes=%S*%b free=%f inodes=%c free_inodes=%d" "$DURPDEPLOY_STAGE_DIR"; find "$DURPDEPLOY_STAGE_DIR" -maxdepth 1 | wc -l' EXIT; for ((n=1; n<20000; n++)); do printf x > "$DURPDEPLOY_STAGE_DIR/s$n"; done; head -c 536850913 /dev/zero > "$DURPDEPLOY_STAGE_DIR/large"`,
+		)
+		s.addTransferStep(
+			t,
+			base,
+			"agent",
+			"container",
+			"second-agent",
+			`test "$(stat -c %s "$DURPDEPLOY_STAGE_DIR/large")" = 536850913; test -f "$DURPDEPLOY_STAGE_DIR/s19999"; echo transfer-ok`,
+		)
+	case "isolation":
+		s.addTransferStep(
+			t,
+			base,
+			"agent",
+			"host",
+			"test-agent",
+			`test ! -e "$DURPDEPLOY_STAGE_DIR/seed"; test ! -e "$DURPDEPLOY_STAGE_DIR/from-agent"; echo isolated`,
+		)
+	default:
+		s.addTransferStep(
+			t,
+			base,
+			"local",
+			"",
+			"",
+			`printf seed > "$DURPDEPLOY_STAGE_DIR/seed"; printf delete > "$DURPDEPLOY_STAGE_DIR/delete-me"`,
+		)
+		if scenario == "handoff" {
+			s.addTransferStep(
+				t,
+				base,
+				"agent",
+				"host",
+				"test-agent",
+				`test "$SELECTED" = selected; test "${UNRELATED-unset}" = unset; test "$(cat "$DURPDEPLOY_STAGE_DIR/seed")" = seed; printf agent > "$DURPDEPLOY_STAGE_DIR/from-agent"; rm "$DURPDEPLOY_STAGE_DIR/delete-me"`,
+			)
+			s.addTransferStep(
+				t,
+				base,
+				"agent",
+				"container",
+				"second-agent",
+				`test "$(cat "$DURPDEPLOY_STAGE_DIR/from-agent")" = agent; test ! -e "$DURPDEPLOY_STAGE_DIR/delete-me"; printf container > "$DURPDEPLOY_STAGE_DIR/from-container"`,
+			)
+		} else {
+			script := `test "$(cat "$DURPDEPLOY_STAGE_DIR/seed")" = seed; printf "$LANG" > "$DURPDEPLOY_STAGE_DIR/$LANG"`
+			switch scenario {
+			case "identical":
+				script = `printf identical > "$DURPDEPLOY_STAGE_DIR/shared"`
+			case "conflict":
+				script = `mkdir -p "$DURPDEPLOY_STAGE_DIR/$SELECTED"; printf "$LANG" > "$DURPDEPLOY_STAGE_DIR/$SELECTED/shared"`
+			case "failure":
+				script = `printf partial > "$DURPDEPLOY_STAGE_DIR/partial"; exit 7`
+			case "assertion":
+				script = `test "$(cat "$DURPDEPLOY_STAGE_DIR/seed")" = wrong; echo assertion-missed`
+			case "permissions":
+				script = `mkdir -p "$DURPDEPLOY_STAGE_DIR/locked/nested"; printf secret > "$DURPDEPLOY_STAGE_DIR/locked/nested/data"; chmod 000 "$DURPDEPLOY_STAGE_DIR/locked/nested" "$DURPDEPLOY_STAGE_DIR/locked"; exit 7`
+			case "renamed-directory":
+				script = `mv "$DURPDEPLOY_STAGE_DIR" "$DURPDEPLOY_STAGE_DIR-renamed"; mkdir "$DURPDEPLOY_STAGE_DIR"; printf replacement > "$DURPDEPLOY_STAGE_DIR/seed"`
+			case "escaped-directory":
+				script = `mv "$DURPDEPLOY_STAGE_DIR" "$(dirname "$(dirname "$DURPDEPLOY_STAGE_DIR")")/retained"`
+			case "renamed-root":
+				script = `root=$(dirname "$(dirname "$DURPDEPLOY_STAGE_DIR")"); mv "$root" "$(dirname "$root")/retained"`
+			case "escaped-root-workspace":
+				script = `root=$(dirname "$(dirname "$DURPDEPLOY_STAGE_DIR")"); mv "$DURPDEPLOY_STAGE_DIR" "$(dirname "$root")/retained-workspace"`
+			case "background-writer":
+				script = `(sleep 2; mkdir -p "$DURPDEPLOY_STAGE_DIR"; printf retained > "$DURPDEPLOY_STAGE_DIR/retained") >/dev/null 2>&1 &`
+			case "detached-writer":
+				script = `setsid bash -c 'echo $$ > "$DURPDEPLOY_STAGE_DIR/group"; (echo "$BASHPID" > "$DURPDEPLOY_STAGE_DIR/child"; sleep 30) &' >/dev/null 2>&1 & while test ! -s "$DURPDEPLOY_STAGE_DIR/group" || test ! -s "$DURPDEPLOY_STAGE_DIR/child"; do sleep 0.01; done; echo "detached-group=$(cat "$DURPDEPLOY_STAGE_DIR/group")"; echo "detached-child=$(cat "$DURPDEPLOY_STAGE_DIR/child")"; rm "$DURPDEPLOY_STAGE_DIR/group" "$DURPDEPLOY_STAGE_DIR/child"`
+			case "cleanup-recovery":
+				script = `printf retained > "$DURPDEPLOY_STAGE_DIR/retained"; chmod 000 "$(dirname "$(dirname "$DURPDEPLOY_STAGE_DIR")")"; exit 7`
+			case "cancel":
+				script = `printf partial > "$DURPDEPLOY_STAGE_DIR/partial"; sleep 90`
+			}
+			s.addTransferStep(t, base, "agent", "host", "", script)
+		}
+		final := `test "$(cat "$DURPDEPLOY_STAGE_DIR/seed")" = seed; echo transfer-ok`
+		if scenario == "handoff" {
+			final = `test "$(cat "$DURPDEPLOY_STAGE_DIR/from-container")" = container; test ! -e "$DURPDEPLOY_STAGE_DIR/delete-me"; echo transfer-ok`
+		}
+		if scenario == "fanout" {
+			final = `test -f "$DURPDEPLOY_STAGE_DIR/test-agent"; test -f "$DURPDEPLOY_STAGE_DIR/second-agent"; echo transfer-ok`
+		}
+		if scenario == "identical" {
+			final = `test "$(cat "$DURPDEPLOY_STAGE_DIR/shared")" = identical; echo transfer-ok`
+		}
+		s.addTransferStep(t, base, "local", "", "", final)
+	}
+}
+
+func (s *stagingE2E) observeTransferCapacity(t *testing.T, deploymentID int64) {
+	t.Helper()
+	started := time.Now()
+	t.Cleanup(func() {
+		if !t.Failed() {
+			return
+		}
+		s.observeFailedTransferCapacity(t, deploymentID, started)
+	})
+}
+
+func (s *stagingE2E) observeFailedTransferCapacity(
+	t *testing.T,
+	deploymentID int64,
+	started time.Time,
+) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(
+		context.WithoutCancel(t.Context()), 3*time.Minute,
+	)
+	defer cancel()
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	previous := ""
+	for {
+		row, err := s.f.repo.Queries.GetDeployment(
+			ctx,
+			deploymentID,
+		)
+		if err != nil {
+			t.Logf("capacity observation ended: %v", err)
+			return
+		}
+		if row.Status != previous {
+			t.Logf("capacity observation: status=%s elapsed=%s",
+				row.Status, time.Since(started))
+			previous = row.Status
+		}
+		if row.Status == "succeeded" {
+			s.assertRuntimeStagingPurgedContext(ctx, t)
+			return
+		}
+		if row.Status == "failed" ||
+			row.Status == "cancelled" ||
+			row.Status == "cleanup_unconfirmed" {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			t.Logf(
+				"capacity observation expired: %v",
+				ctx.Err(),
+			)
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func (s *stagingE2E) assertTransferResult(
+	t *testing.T,
+	scenario, want string,
+	deploymentID int64,
+) {
+	t.Helper()
+	s.assertRuntimeStagingPurged(t)
+	logs := string(
+		s.api(
+			t,
+			"GET",
+			fmt.Sprintf("/deployments/%d/logs.txt", deploymentID),
+			nil,
+			200,
+		),
+	)
+	if scenario == "detached-writer" {
+		assertDetachedStagingChildren(t, logs)
+	}
+	if scenario == "assertion" &&
+		strings.Contains(logs, "assertion-missed") {
+		t.Fatal("failed assertion was ignored")
+	}
+	if scenario == "conflict" &&
+		!strings.Contains(logs, "conflicting staging changes") {
+		t.Fatalf("conflict missing in logs: %s", logs)
+	}
+	if scenario == "conflict" {
+		s.assertConflictNotificationsRedacted(t, deploymentID, logs)
+	}
+	if want == "succeeded" && scenario != "isolation" &&
+		!strings.Contains(logs, "transfer-ok") {
+		t.Fatalf("final step missing: %s", logs)
+	}
+	s.assertTransferPurged(t, scenario, deploymentID)
 }

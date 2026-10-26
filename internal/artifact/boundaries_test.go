@@ -55,6 +55,8 @@ func TestValidateZIPRejectsSizeAndTreeCollisions(t *testing.T) {
 		{"file then child", []zip.FileHeader{{Name: "a"}, {Name: "a/b"}}},
 		{"child then file", []zip.FileHeader{{Name: "a/b"}, {Name: "a"}}},
 		{"duplicate", []zip.FileHeader{{Name: "a"}, {Name: "a"}}},
+		{"duplicate directory", []zip.FileHeader{{Name: "a/"}, {Name: "a/"}}},
+		{"duplicate directory after child", []zip.FileHeader{{Name: "a/b"}, {Name: "a/"}, {Name: "a/"}}},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
 			// Given

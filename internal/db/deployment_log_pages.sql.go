@@ -21,13 +21,14 @@ SELECT id, deployment_id,
     is_step_metadata
 FROM deployment_logs
 WHERE deployment_id = ?2 AND id > ?3
-ORDER BY id LIMIT 64
+ORDER BY id LIMIT ?4
 `
 
 type ListDeploymentLogPreviewsAfterParams struct {
 	PreviewLimit int64 `json:"preview_limit"`
 	DeploymentID int64 `json:"deployment_id"`
 	AfterID      int64 `json:"after_id"`
+	BatchLimit   int64 `json:"batch_limit"`
 }
 
 type ListDeploymentLogPreviewsAfterRow struct {
@@ -44,7 +45,12 @@ type ListDeploymentLogPreviewsAfterRow struct {
 }
 
 func (q *Queries) ListDeploymentLogPreviewsAfter(ctx context.Context, arg ListDeploymentLogPreviewsAfterParams) ([]ListDeploymentLogPreviewsAfterRow, error) {
-	rows, err := q.db.QueryContext(ctx, listDeploymentLogPreviewsAfter, arg.PreviewLimit, arg.DeploymentID, arg.AfterID)
+	rows, err := q.db.QueryContext(ctx, listDeploymentLogPreviewsAfter,
+		arg.PreviewLimit,
+		arg.DeploymentID,
+		arg.AfterID,
+		arg.BatchLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

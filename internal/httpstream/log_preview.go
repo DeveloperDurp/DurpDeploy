@@ -38,6 +38,7 @@ func (options logStream) readLogs(
 	rows, err := options.repo.Queries.ListDeploymentLogsAfter(ctx,
 		db.ListDeploymentLogsAfterParams{
 			DeploymentID: options.deploymentID, ID: after,
+			BatchLimit: options.repo.ResourceLimits().Logs.ExportBatch,
 		})
 	if err != nil {
 		return nil, err

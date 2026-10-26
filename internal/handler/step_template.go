@@ -142,18 +142,11 @@ func (h *StepTemplateHandler) CreateTemplate(
 		return
 	}
 
-	params := db.CreateStepTemplateParams{
-		Name:                 name,
-		ScriptBody:           script,
-		Interpreter:          selectedInterpreter,
-		ContainerImage:       containerImage,
-		AgentExecutionMode:   r.FormValue("agent_execution_mode"),
-		NetworkMode:          r.FormValue("network_mode"),
-		ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
-		ApprovalReviewPath:   r.FormValue("approval_review_path"),
-		ApprovalReviewFormat: r.FormValue("approval_review_format"),
-		VariableNames:        marshalStepVariableNames(variableNames),
-	}
+	fields := formStepFields(r)
+	fields.Interpreter = selectedInterpreter
+	params := fields.CreateTemplateParams(
+		marshalStepVariableNames(variableNames),
+	)
 
 	_, err = h.repo.CreateStepTemplateWithPlacement(
 		r.Context(),
@@ -330,19 +323,12 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		return
 	}
 
-	params := db.UpdateStepTemplateParams{
-		ID:                   id,
-		Name:                 name,
-		ScriptBody:           script,
-		Interpreter:          selectedInterpreter,
-		ContainerImage:       containerImage,
-		AgentExecutionMode:   r.FormValue("agent_execution_mode"),
-		NetworkMode:          r.FormValue("network_mode"),
-		ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
-		ApprovalReviewPath:   r.FormValue("approval_review_path"),
-		ApprovalReviewFormat: r.FormValue("approval_review_format"),
-		VariableNames:        marshalStepVariableNames(variableNames),
-	}
+	fields := formStepFields(r)
+	fields.Interpreter = selectedInterpreter
+	params := fields.UpdateTemplateParams(
+		id,
+		marshalStepVariableNames(variableNames),
+	)
 
 	selectors, err := h.repo.Queries.ListTemplateAgentSelectors(
 		r.Context(),

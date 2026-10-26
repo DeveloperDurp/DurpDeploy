@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/audit"
@@ -51,6 +52,28 @@ func (s *Server) stagingClaim(
 	}, true
 }
 
+func (s *Server) admitStagingTransfer(
+	w http.ResponseWriter,
+	r *http.Request,
+	run db.RemoteStepRun,
+) (func(), bool) {
+	finish, ok := s.repository.TryBeginStagingTransfer(
+		db.GetStagingSnapshotParams{
+			DeploymentID: run.DeploymentID,
+			StepIndex:    run.StepIndex, Producer: run.AgentID,
+		},
+	)
+	if !ok {
+		w.Header().Set("Retry-After", "1")
+		// Do not drain a slow rejected HTTP/1 upload before sending 429.
+		if r.ProtoMajor == 1 {
+			w.Header().Set("Connection", "close")
+		}
+		w.WriteHeader(http.StatusTooManyRequests)
+	}
+	return finish, ok
+}
+
 func (s *Server) DownloadStaging(w http.ResponseWriter, r *http.Request) {
 	claim, ok := s.stagingClaim(w, r)
 	if !ok {
@@ -61,15 +84,14 @@ func (s *Server) DownloadStaging(w http.ResponseWriter, r *http.Request) {
 		writeStagingError(w, err)
 		return
 	}
-	finishTransfer := s.repository.BeginStagingTransfer(
-		db.GetStagingSnapshotParams{
-			DeploymentID: run.DeploymentID,
-			StepIndex:    run.StepIndex,
-			Producer:     run.AgentID,
-		},
-	)
+	finishTransfer, ok := s.admitStagingTransfer(w, r, run)
+	if !ok {
+		return
+	}
 	defer finishTransfer()
-	stream, err := newStagingIO(w, r)
+	stream, err := newStagingIO(w, r, time.Duration(
+		s.repository.ResourceLimits().Transfer.IdleTimeoutSeconds,
+	)*time.Second)
 	if err != nil {
 		slog.WarnContext(r.Context(), "configure staging transfer", "err", err)
 		writeStagingError(w, err)
@@ -123,20 +145,20 @@ func (s *Server) UploadStaging(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(409)
 		return
 	}
-	if r.ContentLength > staging.MaxArchive {
+	limit := s.repository.ResourceLimits().Staging.ArchiveBytes
+	if r.ContentLength > limit {
 		w.WriteHeader(413)
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, staging.MaxArchive)
-	finishTransfer := s.repository.BeginStagingTransfer(
-		db.GetStagingSnapshotParams{
-			DeploymentID: run.DeploymentID,
-			StepIndex:    run.StepIndex,
-			Producer:     run.AgentID,
-		},
-	)
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
+	finishTransfer, ok := s.admitStagingTransfer(w, r, run)
+	if !ok {
+		return
+	}
 	defer finishTransfer()
-	stream, err := newStagingIO(w, r)
+	stream, err := newStagingIO(w, r, time.Duration(
+		s.repository.ResourceLimits().Transfer.IdleTimeoutSeconds,
+	)*time.Second)
 	if err != nil {
 		slog.WarnContext(r.Context(), "configure staging transfer", "err", err)
 		writeStagingError(w, err)

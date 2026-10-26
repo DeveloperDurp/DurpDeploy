@@ -42,36 +42,37 @@ func (r *Repository) ReadLogPage(
 	if before > 0 {
 		through = before - 1
 	}
-	page := LogPage{Limit: LogPageLimit, Before: before,
-		ByteLimit: LogPageByteLimit, LineByteLimit: LogLineByteLimit,
+	limits := r.ResourceLimits().Logs
+	page := LogPage{Limit: limits.PageRows, Before: before,
+		ByteLimit: int(limits.PageBytes), LineByteLimit: int(limits.LineBytes),
 		Items: []LogPreview{}}
 	// Reserve space for the JSON envelope, counters, and final newline.
-	remaining := LogPageByteLimit - 1024
+	remaining := int(limits.PageBytes) - 1024
 readPages:
 	for {
 		rows, err := r.Queries.ListDeploymentLogsBefore(ctx,
 			db.ListDeploymentLogsBeforeParams{
 				DeploymentID: deploymentID, ThroughID: through,
-				PageLimit:    LogPreviewBatchLimit,
-				PreviewLimit: LogLineByteLimit + 1,
+				PageLimit:    limits.PreviewBatch,
+				PreviewLimit: limits.LineBytes + 1,
 			})
 		if err != nil {
 			return LogPage{}, err
 		}
 		for _, row := range rows {
-			log := logPreviewFromRow(db.ListDeploymentLogPreviewsAfterRow(row))
+			log := logPreviewFromRow(db.ListDeploymentLogPreviewsAfterRow(row), int(limits.LineBytes))
 			encoded, err := json.Marshal(log)
 			if err != nil {
 				return LogPage{}, err
 			}
-			if len(page.Items) == int(LogPageLimit) || len(encoded)+1 > remaining {
+			if int64(len(page.Items)) == limits.PageRows || len(encoded)+1 > remaining {
 				page.NextBefore = page.Items[len(page.Items)-1].ID
 				break readPages
 			}
 			remaining -= len(encoded) + 1
 			page.Items = append(page.Items, log)
 		}
-		if len(rows) < LogPreviewBatchLimit {
+		if int64(len(rows)) < limits.PreviewBatch {
 			break
 		}
 		through = rows[len(rows)-1].ID - 1

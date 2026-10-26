@@ -36,12 +36,13 @@ func webRequestBodyLimit(next http.Handler) http.Handler {
 		if auth.RejectRestrictedWrite(w, r) {
 			return
 		}
-		limit := handler.MaxFormBodyBytes
+		limits := handler.RequestBodyLimits(r)
+		limit := limits.FormBytes
 		if r.URL.Path == "/settings/security/password" {
-			limit = maxPasswordFormBodyBytes
+			limit = limits.PasswordFormBytes
 		}
 		if strings.Contains(r.URL.Path, "/package-repository") {
-			limit = 64 << 10
+			limit = limits.RepositoryFormBytes
 		}
 		body, err := handler.ReadRequestBody(w, r, limit)
 		closeErr := r.Body.Close()

@@ -49,7 +49,7 @@ func userFormAction(isNew bool) string {
 	return "edit"
 }
 
-// UserFormFragment is the form-only view, used by HTMX 422 retargets
+// UserFormFragment is the form view, used by HTMX 422 retargets
 // via WriteFormError. isNew picks the action URL and the submit label.
 templ UserFormFragment(user *db.User, errorMsg string, isNew bool) {
 	@UserFormContent(user, errorMsg, isNew)

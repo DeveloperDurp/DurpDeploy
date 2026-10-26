@@ -73,7 +73,7 @@ WHERE status IN ('queued', 'pending', 'pending_approval')
 
 -- name: FailWaitingRemotePayload :exec
 UPDATE remote_deployment_claims SET state = 'failed',
-    reason = 'remote_payload_requires_agent_3', finished_at = sqlc.arg(now),
+    reason = sqlc.arg(reason), finished_at = sqlc.arg(now),
     updated_at = sqlc.arg(now)
 WHERE deployment_id = sqlc.arg(deployment_id) AND agent_id = sqlc.arg(agent_id)
   AND state = 'waiting';

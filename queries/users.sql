@@ -21,3 +21,9 @@ DELETE FROM users WHERE id = ?;
 
 -- name: DeleteSessionsByUser :exec
 DELETE FROM sessions WHERE user_id = ?;
+
+-- name: LockLocalAdministration :execrows
+UPDATE local_administration_lock SET version = 1 - version WHERE id = 1;
+
+-- name: CountAdministrators :one
+SELECT COUNT(*) FROM users WHERE role = 'admin';

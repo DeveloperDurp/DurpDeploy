@@ -2,11 +2,12 @@
 package httpstream
 
 import (
+	"errors"
 	"net/http"
 	"time"
-)
 
-const writeTimeout = time.Minute
+	"durpdeploy/internal/config"
+)
 
 type Writer struct {
 	w          http.ResponseWriter
@@ -16,12 +17,28 @@ type Writer struct {
 
 // New fails closed if middleware prevents control of the socket deadline.
 func New(w http.ResponseWriter) (*Writer, error) {
+	return NewWithTimeout(
+		w,
+		time.Duration(
+			config.Defaults().Limits.HTTP.StreamWriteTimeoutSeconds,
+		)*time.Second,
+	)
+}
+
+// NewWithTimeout applies one positive deadline to each event write.
+func NewWithTimeout(
+	w http.ResponseWriter,
+	timeout time.Duration,
+) (*Writer, error) {
+	if timeout <= 0 {
+		return nil, errors.New("stream write timeout must be positive")
+	}
 	controller := http.NewResponseController(w)
 	if err := controller.SetWriteDeadline(time.Time{}); err != nil {
 		return nil, err
 	}
 	return &Writer{
-		w: w, controller: controller, timeout: writeTimeout,
+		w: w, controller: controller, timeout: timeout,
 	}, nil
 }
 

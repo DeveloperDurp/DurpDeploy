@@ -88,6 +88,17 @@ func artifactHTTPSFixture(
 				w.WriteHeader(404)
 				return
 			}
+			if text == "slow-headers" || text == "slow-body" {
+				if text == "slow-body" {
+					w.WriteHeader(http.StatusOK)
+					w.(http.Flusher).Flush()
+				}
+				select {
+				case <-time.After(1500 * time.Millisecond):
+				case <-r.Context().Done():
+					return
+				}
+			}
 			if text == "invalid" {
 				if _, err := io.WriteString(w, "not a ZIP"); err != nil {
 					t.Error(err)

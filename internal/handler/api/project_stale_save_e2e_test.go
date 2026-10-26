@@ -1,7 +1,9 @@
 package api_test
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"testing"
@@ -84,6 +86,17 @@ func TestProjectStaleSaveAPIWebE2E(t *testing.T) {
 				}
 				f.request(t, "PUT", "/api/v1"+path, string(body),
 					f.token, "", false, 403)
+				if scope == "global" {
+					_, err := f.h.repo.Queries.GetSession(t.Context(),
+						db.GetSessionParams{ID: f.session})
+					if !errors.Is(err, sql.ErrNoRows) {
+						t.Fatalf(
+							"global role edit retained old session: %v",
+							err,
+						)
+					}
+					f.session = memberRoleSession(t, f.h, f.user.ID)
+				}
 				form := url.Values{
 					"name": {
 						f.project.Name,

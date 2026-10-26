@@ -99,8 +99,8 @@ func revocationOperations() []revocationOperation {
 				)
 				return rows == 1, err
 			},
-			runTx: func(ctx context.Context, _ *Repository, q *db.Queries, fixture revocationRaceFixture) (bool, error) {
-				rows, err := claimRemoteDeployment(
+			runTx: func(ctx context.Context, repo *Repository, q *db.Queries, fixture revocationRaceFixture) (bool, error) {
+				rows, err := repo.claimRemoteDeployment(
 					ctx, q, raceClaimParamsQueries(ctx, q, fixture),
 				)
 				return rows == 1, err

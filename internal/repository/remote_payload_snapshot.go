@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"durpdeploy/internal/agentexecution"
 	"durpdeploy/internal/db"
 	agentartifact "github.com/DeveloperDurp/durpdeploy-agent/artifact"
 )
@@ -23,6 +24,7 @@ type RemotePayloadSnapshot struct {
 	ExecutionModes        []string
 	ContainerRuntimes     []string
 	ContainerInterpreters []string
+	ResourcePolicy        string
 }
 
 func (r *Repository) remotePayloadSnapshot(
@@ -34,6 +36,10 @@ func (r *Repository) remotePayloadSnapshot(
 	agent, err := q.GetAgent(ctx, agentID)
 	if err != nil {
 		return RemotePayloadSnapshot{}, fmt.Errorf("get claim agent: %w", err)
+	}
+	policy, err := r.remoteResourcePolicy(ctx, q, agentID)
+	if err != nil {
+		return RemotePayloadSnapshot{}, err
 	}
 	host, err := q.ListAgentInterpreters(ctx, agentID)
 	if err != nil {
@@ -73,6 +79,15 @@ func (r *Repository) remotePayloadSnapshot(
 	if err != nil {
 		return RemotePayloadSnapshot{}, fmt.Errorf("list claim steps: %w", err)
 	}
+	for _, step := range steps {
+		if err := agentexecution.ValidateLimitsWithPolicy(step.TimeoutSeconds, step.MaxRetries, r.ResourceLimits().Execution); err != nil {
+			return RemotePayloadSnapshot{}, fmt.Errorf(
+				"step %q: %w",
+				step.Name,
+				err,
+			)
+		}
+	}
 	variables, err := r.deploymentVariables(ctx, q, deploymentID)
 	if err != nil {
 		return RemotePayloadSnapshot{}, fmt.Errorf(
@@ -87,7 +102,7 @@ func (r *Repository) remotePayloadSnapshot(
 			SHA256: packageRow.Sha256,
 			Size:   packageRow.Size,
 		}
-		if err := pin.Validate(); err != nil {
+		if err := pin.ValidateWithPolicy(r.ResourceLimits().AgentPolicy().Artifact); err != nil {
 			return RemotePayloadSnapshot{}, fmt.Errorf(
 				"invalid deployment package pin: %w",
 				err,
@@ -106,5 +121,6 @@ func (r *Repository) remotePayloadSnapshot(
 		Variables:        variables,
 		HostInterpreters: host, ExecutionModes: modes,
 		ContainerRuntimes: runtimes, ContainerInterpreters: container,
+		ResourcePolicy: policy,
 	}, nil
 }

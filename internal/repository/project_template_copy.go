@@ -204,7 +204,7 @@ func templateAgentSelectors(selectors, labels []string) ([]string, error) {
 	return canonical, nil
 }
 
-func copyTemplateSteps(
+func (r *Repository) copyTemplateSteps(
 	ctx context.Context,
 	q *db.Queries,
 	projectID int64,
@@ -216,7 +216,7 @@ func copyTemplateSteps(
 		return err
 	}
 	for i, s := range snapshot.Steps {
-		if err := validateTemplateStep(s); err != nil {
+		if err := r.validateTemplateStep(s); err != nil {
 			return err
 		}
 		selectors := s.AgentSelectors
@@ -265,12 +265,15 @@ func copyTemplateSteps(
 	return nil
 }
 
-func validateTemplateStep(s ProjectTemplateStep) error {
+func (r *Repository) validateTemplateStep(s ProjectTemplateStep) error {
 	if strings.TrimSpace(s.Name) == "" ||
 		(s.ExecutionTarget != "local" && s.ExecutionTarget != "agent") ||
 		s.TimeoutSeconds < 0 ||
 		s.MaxRetries < 0 {
 		return templateInvalid("invalid step configuration")
+	}
+	if err := agentexecution.ValidateLimitsWithPolicy(s.TimeoutSeconds, s.MaxRetries, r.ResourceLimits().Execution); err != nil {
+		return templateInvalid(err.Error())
 	}
 	if _, err := interpreter.Validate(s.Interpreter); err != nil {
 		return templateInvalid(err.Error())

@@ -1,9 +1,7 @@
 package notify
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -36,15 +34,6 @@ func (g *GotifyNotifier) Notify(
 		return true, nil
 	}
 
-	body, err := json.Marshal(map[string]any{
-		"title":    "durpdeploy",
-		"message":  event.Message,
-		"priority": 5,
-	})
-	if err != nil {
-		return false, err
-	}
-
 	u, err := url.Parse(event.GotifyURL)
 	if err != nil {
 		return false, fmt.Errorf("invalid gotify url: %w", err)
@@ -54,25 +43,9 @@ func (g *GotifyNotifier) Notify(
 	q.Set("token", event.GotifyToken)
 	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodPost,
-		u.String(),
-		bytes.NewReader(body),
-	)
-	if err != nil {
-		return false, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := g.httpClient.Do(req)
-	if err != nil {
-		return false, err
-	}
-	//nolint:errcheck // Delivery status is checked before read-only body cleanup.
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		return false, fmt.Errorf("gotify returned status %d", resp.StatusCode)
-	}
-	return false, nil
+	return false, postJSON(ctx, g.httpClient, u.String(), map[string]any{
+		"title":    "durpdeploy",
+		"message":  event.Message,
+		"priority": 5,
+	}, "gotify")
 }

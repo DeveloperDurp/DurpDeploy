@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"durpdeploy/internal/db"
@@ -99,10 +100,10 @@ func splitEmails(v sql.NullString) []string {
 	return emails
 }
 
-// Publish loads the target project's notification settings, runs every
-// registered notifier, and records the event plus each notifier's outcome.
-// Errors loading the project or writing the history row are swallowed
-// (best-effort observability; must never fail the deployment itself).
+// Publish loads notification settings, delivers when they are available,
+// and records the event plus each channel's outcome.
+// Settings and history failures produce diagnostics without provider or driver
+// details. Delivery remains best effort and never changes deployment outcomes.
 func (b *Bus) Publish(ctx context.Context, evt Event) {
 	if evt.DeploymentID != 0 {
 		deployment, err := b.repo.Queries.GetDeployment(ctx, evt.DeploymentID)
@@ -139,7 +140,10 @@ func (b *Bus) Publish(ctx context.Context, evt Event) {
 			}
 		}
 	}
+	settingsAvailable := true
+	scope := "project"
 	if evt.ProjectID == 0 {
+		scope = "global"
 		// Project-less/system-wide event (e.g. backup health): load
 		// channels from the global_notifications singleton instead of a
 		// project row.
@@ -151,6 +155,8 @@ func (b *Bus) Publish(ctx context.Context, evt Event) {
 			evt.GotifyURL = global.GotifyUrl.String
 			evt.GotifyToken = global.GotifyToken.String
 			evt.DiscordWebhookURL = global.DiscordWebhookUrl.String
+		} else {
+			settingsAvailable = false
 		}
 	} else if project, err := b.repo.Queries.GetProject(
 		ctx,
@@ -161,10 +167,23 @@ func (b *Bus) Publish(ctx context.Context, evt Event) {
 		evt.GotifyURL = project.GotifyUrl.String
 		evt.GotifyToken = project.GotifyToken.String
 		evt.DiscordWebhookURL = project.DiscordWebhookUrl.String
+	} else {
+		settingsAvailable = false
+	}
+	logger := slog.With("event_type", evt.Type,
+		"deployment_id", evt.DeploymentID, "project_id", evt.ProjectID,
+		"environment_id", evt.EnvironmentID)
+	if !settingsAvailable {
+		logger.WarnContext(ctx, "load notification settings failed",
+			"settings_scope", scope)
 	}
 
 	results := make(map[string]string, len(b.notifiers))
 	for _, n := range b.notifiers {
+		if !settingsAvailable {
+			results[n.Name()] = "failed: delivery failed"
+			continue
+		}
 		skipped, err := n.Notify(ctx, evt)
 		switch {
 		case skipped:
@@ -182,8 +201,8 @@ func (b *Bus) Publish(ctx context.Context, evt Event) {
 	// FK columns (deployment_id/project_id/environment_id) must only be
 	// marked Valid when an id was actually supplied — otherwise a zero
 	// value would reference a nonexistent row 0 and fail the FK
-	// constraint, silently dropping the whole history row.
-	_, _ = b.repo.Queries.CreateNotificationEvent(
+	// constraint and prevent the history insert.
+	_, err := b.repo.Queries.CreateNotificationEvent(
 		ctx,
 		db.CreateNotificationEventParams{
 			EventType: string(evt.Type),
@@ -203,4 +222,7 @@ func (b *Bus) Publish(ctx context.Context, evt Event) {
 			Results: string(resultsJSON),
 		},
 	)
+	if err != nil {
+		logger.WarnContext(ctx, "write notification history failed")
+	}
 }

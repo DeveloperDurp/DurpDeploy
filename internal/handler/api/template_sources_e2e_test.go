@@ -65,6 +65,7 @@ func TestTemplateSourcesAPIWebE2E(t *testing.T) {
 	}
 	for _, role := range []string{"viewer", "deployer"} {
 		f.changeRole(t, "global", role)
+		f.session = memberRoleSession(t, f.h, f.user.ID)
 		f.request(
 			t,
 			"GET",

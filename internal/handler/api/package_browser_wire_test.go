@@ -27,8 +27,11 @@ type packageBrowserWire struct {
 }
 
 type packageBrowserEvent struct {
-	Method  string `json:"method"`
-	Session string `json:"sessionId"`
+	Method     string `json:"method"`
+	Session    string `json:"sessionId"`
+	Parameters struct {
+		Issue json.RawMessage `json:"issue"`
+	} `json:"params"`
 }
 
 func connectPackageBrowser(endpoint string) (*packageBrowserWire, error) {

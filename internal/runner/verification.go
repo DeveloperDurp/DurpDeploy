@@ -48,7 +48,7 @@ func (r *DeploymentRunner) verifyDeployment(
 	writer := &broadcastWriter{
 		broker: r.broker, repo: r.repo, deploymentID: deploymentID,
 		stepName: "Post-deployment verification", ctx: ctx,
-		scrubber: NewScrubber(secretValues),
+		scrubber: r.repo.NewScrubber(secretValues),
 	}
 	defer writer.Flush()
 	if _, err := fmt.Fprintln(writer, "Verification started"); err != nil {
@@ -64,7 +64,11 @@ func (r *DeploymentRunner) verifyDeployment(
 			err = decryptErr
 			break
 		}
-		writer.scrubber = verificationHTTPScrubber(target, secretValues)
+		writer.scrubber = verificationHTTPScrubberWith(
+			target,
+			secretValues,
+			r.repo.NewScrubber,
+		)
 		err = verification.CheckHTTP(checkCtx, verification.Settings{
 			Kind: verification.HTTP, Target: target,
 			TimeoutSeconds: check.TimeoutSeconds,
@@ -82,9 +86,17 @@ func (r *DeploymentRunner) verifyDeployment(
 }
 
 func verificationHTTPScrubber(target string, secrets []string) *Scrubber {
+	return verificationHTTPScrubberWith(target, secrets, NewScrubber)
+}
+
+func verificationHTTPScrubberWith(
+	target string,
+	secrets []string,
+	makeScrubber func([]string, ...string) *Scrubber,
+) *Scrubber {
 	u, err := url.Parse(target)
 	if err != nil {
-		return NewScrubber(append(secrets, target))
+		return makeScrubber(append(secrets, target))
 	}
 	secrets = append(secrets, target, u.RequestURI(), u.RawQuery, u.Host)
 	values := strings.Split(u.Path, "/")
@@ -110,7 +122,7 @@ func verificationHTTPScrubber(target string, secrets []string) *Scrubber {
 				url.QueryEscape(value), url.PathEscape(value))
 		}
 	}
-	return NewScrubber(secrets, verificationHTTPHostPatterns(u.Hostname())...)
+	return makeScrubber(secrets, verificationHTTPHostPatterns(u.Hostname())...)
 }
 
 func verificationHTTPHostPatterns(hostname string) []string {

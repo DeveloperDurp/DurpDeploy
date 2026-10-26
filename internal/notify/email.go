@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"durpdeploy/internal/config"
 	"durpdeploy/internal/events"
 )
 
@@ -25,12 +26,20 @@ type SMTPConfig struct {
 // environment. There is no per-project SMTP server — only the recipient
 // list (project.notify_emails) varies per project.
 func LoadSMTPConfigFromEnv() SMTPConfig {
+	return LoadSMTPConfig(os.LookupEnv)
+}
+
+func LoadSMTPConfig(lookup config.Lookup) SMTPConfig {
+	get := func(key string) string {
+		value, _ := lookup(key)
+		return value
+	}
 	return SMTPConfig{
-		Host: os.Getenv("DURPDEPLOY_SMTP_HOST"),
-		Port: os.Getenv("DURPDEPLOY_SMTP_PORT"),
-		From: os.Getenv("DURPDEPLOY_SMTP_FROM"),
-		User: os.Getenv("DURPDEPLOY_SMTP_USER"),
-		Pass: os.Getenv("DURPDEPLOY_SMTP_PASS"),
+		Host: get("DURPDEPLOY_SMTP_HOST"),
+		Port: get("DURPDEPLOY_SMTP_PORT"),
+		From: get("DURPDEPLOY_SMTP_FROM"),
+		User: get("DURPDEPLOY_SMTP_USER"),
+		Pass: get("DURPDEPLOY_SMTP_PASS"),
 	}
 }
 

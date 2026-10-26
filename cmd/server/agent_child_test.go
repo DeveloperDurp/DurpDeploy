@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"durpdeploy/internal/testutil"
+	"encoding/base64"
 	"errors"
 	"net"
 	"os"
@@ -45,10 +46,16 @@ func testAgentChildFailure(t *testing.T) {
 		"-test.run=^TestServerAgentChild$",
 	)
 	cmd.Dir = t.TempDir()
-	cmd.Env = append(os.Environ(), "TASK4_CHILD=1",
+	cmd.Env = append(
+		os.Environ(),
+		"TASK4_CHILD=1",
+		"DURPDEPLOY_SECRET_KEY="+base64.StdEncoding.EncodeToString(
+			make([]byte, 32),
+		),
 		"DURPDEPLOY_AGENT_LISTEN_ADDR="+addr,
 		"DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost",
-		"DURPDEPLOY_AGENT_IDENTITY_DIR="+dir)
+		"DURPDEPLOY_AGENT_IDENTITY_DIR="+dir,
+	)
 	output, err := cmd.CombinedOutput()
 	var exit *exec.ExitError
 	if !errors.As(err, &exit) || exit.ExitCode() != 1 || ctx.Err() != nil {

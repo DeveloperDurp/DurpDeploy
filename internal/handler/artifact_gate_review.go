@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"durpdeploy/internal/artifact"
+	"durpdeploy/internal/logscrub"
 	"durpdeploy/internal/runner"
 	"durpdeploy/views/pages"
 )
@@ -37,7 +38,11 @@ func (h *ArtifactGateHandler) Review(w http.ResponseWriter, r *http.Request) {
 			gateHTTPError(w, r, 500, "Review variables unavailable")
 			return
 		}
-		preview, err = readTerraformGateReview(file, step.ReviewPath, secrets)
+		preview, err = readTerraformGateReview(
+			file,
+			step.ReviewPath,
+			h.repo.NewScrubber(secrets),
+		)
 		if err != nil {
 			gateHTTPError(w, r, 409, "Review unavailable")
 			return
@@ -146,7 +151,7 @@ func (h *ArtifactGateHandler) artifactReviewSecrets(
 func readTerraformGateReview(
 	file io.Reader,
 	path string,
-	secrets []string,
+	scrubber *logscrub.Scrubber,
 ) (artifact.TerraformReviewResponse, error) {
 	reader := tar.NewReader(file)
 	for {
@@ -160,6 +165,6 @@ func readTerraformGateReview(
 		if header.Typeflag != tar.TypeReg {
 			return artifact.TerraformReviewResponse{}, artifact.ErrGateConfig
 		}
-		return artifact.TerraformPreviewReader(reader, secrets)
+		return artifact.TerraformPreviewReaderWithScrubber(reader, scrubber)
 	}
 }

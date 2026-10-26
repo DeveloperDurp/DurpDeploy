@@ -77,6 +77,11 @@ type AgentPairing struct {
 	ServerPullEndpoint   sql.NullString `json:"server_pull_endpoint"`
 }
 
+type AgentResourcePolicy struct {
+	AgentID       string `json:"agent_id"`
+	Advertisement string `json:"advertisement"`
+}
+
 type AgentStagingCapability struct {
 	AgentID string `json:"agent_id"`
 }
@@ -370,6 +375,11 @@ type LifecycleVariable struct {
 	EnvironmentID sql.NullInt64  `json:"environment_id"`
 	Secret        int64          `json:"secret"`
 	CreatedAt     int64          `json:"created_at"`
+}
+
+type LocalAdministrationLock struct {
+	ID      int64 `json:"id"`
+	Version int64 `json:"version"`
 }
 
 type MfaChallenge struct {

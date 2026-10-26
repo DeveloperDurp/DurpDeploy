@@ -178,6 +178,9 @@ func (h *RunbookHandler) Execute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		if writeArtifactError(w, err) {
+			return
+		}
 		http.Error(w, "Cannot execute runbook", http.StatusInternalServerError)
 		return
 	}

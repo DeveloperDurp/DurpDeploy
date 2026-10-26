@@ -32,7 +32,7 @@ PY
 done
 [[ $failed == 0 ]]
 grep -Fqx \
-  'sonar.test.inclusions=**/*_test.go,internal/testdns/**,internal/testenv/**,internal/testutil/sqlitefixture/**,scripts/*.mjs,scripts/*_test.py,scripts/run_named_go_tests_verify.go,scripts/go_test_cleanup.go' \
+  'sonar.test.inclusions=**/*_test.go,internal/testdns/**,internal/testenv/**,internal/testutil/sqlitefixture/**,scripts/*.mjs,scripts/*_test.py,scripts/run_named_go_tests_verify.go,scripts/go_test_cleanup.go,scripts/deployment_access_e2e.py' \
   "$repo_root/sonar-project.properties"
 bash "$repo_root/scripts/check-security-contract.sh" "$workflow_dir/security.yml"
 printf 'CI contract: PASS\n'

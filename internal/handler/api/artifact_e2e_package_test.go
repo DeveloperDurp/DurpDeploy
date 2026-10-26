@@ -44,6 +44,7 @@ func (f *artifactE2E) verifyPackageVersionCheck(t *testing.T) {
 		strings.Contains(page, "artifact-secret") {
 		t.Fatal("web package test failed or exposed credentials")
 	}
+	f.verifyPackageDirectoryEntries(t)
 	// Then: testing does not create a release or alter the configuration.
 	if after := f.api(
 		t,

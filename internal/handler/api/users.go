@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -227,6 +228,10 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 //
 // Update a user.
 //
+// Provide name and role for every update. An omitted or invalid role returns 422.
+// Password is optional.
+// A local update that removes the final administrator role returns 422.
+//
 //	Consumes:
 //	- application/json
 //
@@ -262,33 +267,26 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusUnprocessableEntity, "name is required")
 		return
 	}
-	if req.Role != "" && !isValidRole(req.Role) {
+	if !isValidRole(req.Role) {
 		RespondError(w, http.StatusUnprocessableEntity, "invalid role")
 		return
 	}
 
-	if err := h.repo.Queries.UpdateUser(r.Context(), db.UpdateUserParams{
+	user, err := auth.UpdateAccount(r.Context(), h.repo, db.UpdateUserParams{
 		ID:   id,
 		Name: req.Name,
 		Role: req.Role,
-	}); err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	if req.Password != "" {
-		if err := auth.UpdatePassword(r.Context(), h.repo, auth.PasswordChange{
-			UserID:   id,
-			Password: req.Password,
-		}); err != nil {
-			RespondError(w, http.StatusInternalServerError, err.Error())
+	}, req.Password)
+	if err != nil {
+		if errors.Is(err, auth.ErrLastAdministrator) {
+			RespondError(
+				w,
+				http.StatusUnprocessableEntity,
+				auth.ErrLastAdministrator.Error(),
+			)
 			return
 		}
-	}
-
-	user, err := h.repo.Queries.GetUserByID(r.Context(), id)
-	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "User not found")
 			return
 		}
@@ -311,6 +309,9 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 //
 // Delete a user.
 //
+// A local deletion that removes the final administrator returns 422.
+// Self-deletion remains forbidden.
+//
 //	Security:
 //	  bearer:
 //
@@ -320,6 +321,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  403: body:ForbiddenError
+//	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
@@ -341,7 +343,11 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.repo.Queries.DeleteUser(r.Context(), id); err != nil {
+	if err := auth.DeleteAccount(r.Context(), h.repo, id); err != nil {
+		if errors.Is(err, auth.ErrLastAdministrator) {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

@@ -49,7 +49,7 @@ func (r *Repository) SaveRunbook(
 			if locked == 0 {
 				return sql.ErrNoRows
 			}
-			if err := validateRunbookArtifact(ctx, q, arg); err != nil {
+			if err := r.validateRunbookArtifact(ctx, q, arg); err != nil {
 				return err
 			}
 			var txErr error

@@ -61,7 +61,7 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := body.Validate(); err != nil {
+	if err := body.ValidateWithScrubber(h.repo.NewScrubber(nil)); err != nil {
 		RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}

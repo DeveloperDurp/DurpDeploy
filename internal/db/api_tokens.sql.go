@@ -517,15 +517,19 @@ func (q *Queries) RevokeApiToken(ctx context.Context, id string) error {
 }
 
 const touchApiTokenLastUsed = `-- name: TouchApiTokenLastUsed :exec
-UPDATE api_tokens SET last_used_at = ? WHERE id = ?
+UPDATE api_tokens SET last_used_at = ?1
+WHERE id = ?2 AND revoked_at IS NULL
+  AND (last_used_at IS NULL OR last_used_at <= ?3)
+  AND (last_used_at IS NULL OR last_used_at < ?1)
 `
 
 type TouchApiTokenLastUsedParams struct {
-	LastUsedAt sql.NullInt64 `json:"last_used_at"`
-	ID         string        `json:"id"`
+	LastUsedAt  sql.NullInt64 `json:"last_used_at"`
+	ID          string        `json:"id"`
+	StaleBefore sql.NullInt64 `json:"stale_before"`
 }
 
 func (q *Queries) TouchApiTokenLastUsed(ctx context.Context, arg TouchApiTokenLastUsedParams) error {
-	_, err := q.db.ExecContext(ctx, touchApiTokenLastUsed, arg.LastUsedAt, arg.ID)
+	_, err := q.db.ExecContext(ctx, touchApiTokenLastUsed, arg.LastUsedAt, arg.ID, arg.StaleBefore)
 	return err
 }

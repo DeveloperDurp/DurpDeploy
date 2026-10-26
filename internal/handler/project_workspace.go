@@ -36,7 +36,12 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	panel, err := h.buildPanelForProject(r, project, false)
+	data, err := h.loadProjectPanelData(r, []db.Project{project}, environments)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	panel, err := h.buildPanelForProject(r, project, data, false)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -73,147 +78,139 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectHandler) buildPanelForProject(
 	r *http.Request,
 	project db.Project,
+	data *projectPanelData,
 	filterEmpty bool,
 ) (pages.LifecyclePanel, error) {
-	envsByID, err := h.envsByID(r)
-	if err != nil {
-		return pages.LifecyclePanel{}, err
-	}
-	releasesByID, err := h.releasesByID(r, project.ID)
-	if err != nil {
-		return pages.LifecyclePanel{}, err
-	}
-
 	if !project.LifecycleID.Valid {
-		return h.buildFreeFloatingPanel(
-			r,
-			project,
-			envsByID,
-			releasesByID,
-			filterEmpty,
-		)
+		return buildFreeFloatingPanel(project.ID, data, filterEmpty), nil
 	}
 
-	lc, err := h.repo.Queries.GetLifecycle(
-		r.Context(),
-		project.LifecycleID.Int64,
-	)
-	if err != nil {
-		return pages.LifecyclePanel{}, err
+	lc, loaded := data.lifecycles[project.LifecycleID.Int64]
+	if !loaded {
+		var err error
+		lc, err = h.repo.Queries.GetLifecycle(
+			r.Context(),
+			project.LifecycleID.Int64,
+		)
+		if err != nil {
+			return pages.LifecyclePanel{}, err
+		}
+		stages, err := h.repo.Queries.ListLifecycleStages(r.Context(), lc.ID)
+		if err != nil {
+			return pages.LifecyclePanel{}, err
+		}
+		data.lifecycles[lc.ID], data.stages[lc.ID] = lc, stages
 	}
-	stages, err := h.repo.Queries.ListLifecycleStages(r.Context(), lc.ID)
-	if err != nil {
-		return pages.LifecyclePanel{}, err
-	}
+	stages := data.stages[lc.ID]
 	views := make([]pages.LifecyclePanelStage, len(stages))
 	for i, s := range stages {
-		views[i] = h.populateStageView(r, project.ID, pages.LifecyclePanelStage{
-			Stage:       s,
-			Environment: envsByID[s.EnvironmentID],
-		}, releasesByID)
+		views[i] = populateStageView(
+			project.ID,
+			pages.LifecyclePanelStage{
+				Stage:       s,
+				Environment: data.envsByID[s.EnvironmentID],
+			},
+			data,
+		)
 	}
 	return pages.LifecyclePanel{Lifecycle: lc, Stages: views}, nil
 }
 
-// buildFreeFloatingPanel renders one row per env, ordered by env ID. When
+// buildFreeFloatingPanel preserves the loaded environment order. When
 // filterEmpty is true, envs the project has not deployed to are dropped —
 // the projects list page uses this so the dot strip stays signal-rich.
-func (h *ProjectHandler) buildFreeFloatingPanel(
-	r *http.Request,
-	project db.Project,
-	envsByID map[int64]db.Environment,
-	releasesByID map[int64]db.Release,
+func buildFreeFloatingPanel(
+	projectID int64,
+	data *projectPanelData,
 	filterEmpty bool,
-) (pages.LifecyclePanel, error) {
-	allEnvs, err := h.repo.Queries.ListEnvironments(r.Context())
-	if err != nil {
-		return pages.LifecyclePanel{}, err
-	}
-	views := make([]pages.LifecyclePanelStage, 0, len(allEnvs))
-	for _, e := range allEnvs {
-		stage := h.populateStageView(r, project.ID, pages.LifecyclePanelStage{
-			Stage: db.LifecycleStage{
-				EnvironmentID: e.ID,
-				SortOrder:     e.ID,
+) pages.LifecyclePanel {
+	views := make([]pages.LifecyclePanelStage, 0, len(data.environments))
+	for _, e := range data.environments {
+		stage := populateStageView(
+			projectID,
+			pages.LifecyclePanelStage{
+				Stage: db.LifecycleStage{
+					EnvironmentID: e.ID,
+					SortOrder:     e.ID,
+				},
+				Environment: e,
 			},
-			Environment: e,
-		}, releasesByID)
+			data,
+		)
 		if filterEmpty && stage.LatestAttempt == nil {
 			continue
 		}
 		views = append(views, stage)
 	}
 	return pages.LifecyclePanel{
-		Stages: views, HasEnvironments: len(allEnvs) > 0,
-	}, nil
+		Stages: views, HasEnvironments: len(data.environments) > 0,
+	}
 }
 
 // populateStageView fills the latest-deploy / latest-attempt / streak fields
 // for a single stage view. Shared by lifecycle and free-floating paths.
-func (h *ProjectHandler) populateStageView(
-	r *http.Request,
+func populateStageView(
 	projectID int64,
 	v pages.LifecyclePanelStage,
-	releasesByID map[int64]db.Release,
+	data *projectPanelData,
 ) pages.LifecyclePanelStage {
-	ctx := r.Context()
-	if dep, err := h.repo.Queries.GetLatestSuccessfulDeploymentForProjectEnv(
-		ctx,
-		db.GetLatestSuccessfulDeploymentForProjectEnvParams{
-			ProjectID: projectID, EnvironmentID: v.Environment.ID,
-		},
-	); err == nil &&
-		dep.ReleaseID != 0 {
-		if rel, ok := releasesByID[dep.ReleaseID]; ok {
-			d := dep
-			v.LatestDeployment = &d
-			v.LatestVersion = rel.Version
+	for _, row := range data.deployments[[2]int64{projectID, v.Environment.ID}] {
+		deployment := row.Deployment
+		if deployment.Status == "succeeded" && v.LatestDeployment == nil {
+			v.LatestDeployment = &deployment
+			v.LatestVersion = row.Version
 		}
-	}
-	recents, err := h.repo.Queries.ListRecentDeploymentsForProjectEnv(
-		ctx,
-		db.ListRecentDeploymentsForProjectEnvParams{
-			ProjectID:     projectID,
-			EnvironmentID: v.Environment.ID,
-			Limit:         5,
-		},
-	)
-	if err == nil && len(recents) > 0 {
-		latest := recents[0]
-		v.LatestAttempt = &latest
-		if rel, ok := releasesByID[latest.ReleaseID]; ok {
-			v.AttemptVersion = rel.Version
+		if len(v.RecentAttempts) < 5 {
+			v.RecentAttempts = append(v.RecentAttempts, deployment)
+			if v.LatestAttempt == nil {
+				v.LatestAttempt = &deployment
+				v.AttemptVersion = row.Version
+			}
 		}
-		v.RecentAttempts = recents
 	}
 	return v
 }
 
-func (h *ProjectHandler) envsByID(
-	r *http.Request,
-) (map[int64]db.Environment, error) {
-	envs, err := h.repo.Queries.ListEnvironments(r.Context())
-	if err != nil {
-		return nil, err
-	}
-	m := make(map[int64]db.Environment, len(envs))
-	for _, e := range envs {
-		m[e.ID] = e
-	}
-	return m, nil
+type projectPanelData struct {
+	environments []db.Environment
+	envsByID     map[int64]db.Environment
+	deployments  map[[2]int64][]db.ListProjectPanelDeploymentsRow
+	lifecycles   map[int64]db.Lifecycle
+	stages       map[int64][]db.LifecycleStage
 }
 
-func (h *ProjectHandler) releasesByID(
+func (h *ProjectHandler) loadProjectPanelData(
 	r *http.Request,
-	projectID int64,
-) (map[int64]db.Release, error) {
-	rels, err := h.repo.Queries.ListReleasesByProject(r.Context(), projectID)
+	projects []db.Project,
+	environments []db.Environment,
+) (*projectPanelData, error) {
+	data := &projectPanelData{
+		environments: environments,
+		envsByID:     make(map[int64]db.Environment, len(environments)),
+		deployments:  make(map[[2]int64][]db.ListProjectPanelDeploymentsRow),
+		lifecycles:   make(map[int64]db.Lifecycle),
+		stages:       make(map[int64][]db.LifecycleStage),
+	}
+	projectIDs := make([]int64, 0, len(projects))
+	for _, project := range projects {
+		projectIDs = append(projectIDs, project.ID)
+	}
+	environmentIDs := make([]int64, 0, len(environments))
+	for _, env := range environments {
+		data.envsByID[env.ID] = env
+		environmentIDs = append(environmentIDs, env.ID)
+	}
+	rows, err := h.repo.ProjectPanelDeployments(
+		r.Context(),
+		projectIDs,
+		environmentIDs,
+	)
 	if err != nil {
 		return nil, err
 	}
-	m := make(map[int64]db.Release, len(rels))
-	for _, rel := range rels {
-		m[rel.ID] = rel
+	for _, row := range rows {
+		key := [2]int64{row.ProjectID, row.Deployment.EnvironmentID}
+		data.deployments[key] = append(data.deployments[key], row)
 	}
-	return m, nil
+	return data, nil
 }

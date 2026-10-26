@@ -4,22 +4,38 @@ import (
 	"context"
 	"durpdeploy/internal/testutil"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
+	"durpdeploy/internal/config"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 )
 
 func TestPendingLogLimitDropsAmbiguousOutputAndKeepsState(t *testing.T) {
+	for _, limit := range []int{128, 1 << 20, (1 << 20) + 1} {
+		t.Run(fmt.Sprint(limit), func(t *testing.T) {
+			testPendingLogLimit(t, limit)
+		})
+	}
+}
+
+func testPendingLogLimit(t *testing.T, limit int) {
+	t.Helper()
 	// Given: output with no safe newline is retained for redaction.
 	conn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { testutil.Close(t, conn) })
-	repo := repository.New(conn)
+	settings := config.Defaults()
+	settings.Limits.Logs.PendingBytes = int64(limit)
+	if err := settings.Limits.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	repo := repository.NewConfigured(conn, settings)
 	project, err := repo.Queries.CreateProject(
 		t.Context(),
 		db.CreateProjectParams{Name: "pending"},
@@ -75,7 +91,7 @@ func TestPendingLogLimitDropsAmbiguousOutputAndKeepsState(t *testing.T) {
 		cancelAttempt: cancel,
 	}
 	if _, err := writer.Write(
-		[]byte(strings.Repeat("X", maxPendingLogBytes)),
+		[]byte(strings.Repeat("X", limit)),
 	); err != nil {
 		t.Fatal(err)
 	}

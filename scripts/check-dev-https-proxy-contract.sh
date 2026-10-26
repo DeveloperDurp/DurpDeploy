@@ -259,7 +259,8 @@ EOF
 	done
 }
 
-bash -n "$root/scripts/dev_https_proxy.sh" "$root/scripts/e2e_db_test.sh"
+bash -n "$root/scripts/dev_https_proxy.sh" "$root/scripts/e2e_db_test.sh" \
+	"$root/scripts/https_proxy_config.sh"
 make -C "$root" -n dev dev-postgres dev-mssql >/dev/null
 
 grep -Fq \

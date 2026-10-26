@@ -67,15 +67,15 @@ templ ProjectMenuDialog(project db.Project) {
 templ NotificationSettingsSection(project db.Project) {
 	<div class="mt-8">
 		<div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-			@SlackNotificationCard(project)
-			@EmailNotificationCard(project)
-			@GotifyNotificationCard(project)
-			@DiscordNotificationCard(project)
+			@SlackNotificationCard(project.SlackWebhookUrl.String != "")
+			@EmailNotificationCard(project.NotifyEmails.String)
+			@GotifyNotificationCard(project.GotifyUrl.String, project.GotifyToken.String != "")
+			@DiscordNotificationCard(project.DiscordWebhookUrl.String != "")
 		</div>
 	</div>
 }
 
-templ SlackNotificationCard(project db.Project) {
+templ SlackNotificationCard(configured bool) {
 	<div class="card bg-base-200 p-4">
 		<h3 class="font-bold mb-2">Slack</h3>
 		if CanWrite(ctx) {
@@ -83,11 +83,11 @@ templ SlackNotificationCard(project db.Project) {
 				<label class="label">
 					<span class="label-text">Webhook URL</span>
 				</label>
-				@NotificationCredentialInput("slack_webhook_url", "Slack webhook URL", project.SlackWebhookUrl.String != "")
+				@NotificationCredentialInput("slack_webhook_url", "Slack webhook URL", configured)
 			</div>
 		} else {
 			<p class="text-sm text-gray-400">
-				if project.SlackWebhookUrl.String != "" {
+				if configured {
 					configured
 				} else {
 					not configured
@@ -97,7 +97,7 @@ templ SlackNotificationCard(project db.Project) {
 	</div>
 }
 
-templ EmailNotificationCard(project db.Project) {
+templ EmailNotificationCard(emails string) {
 	<div class="card bg-base-200 p-4">
 		<h3 class="font-bold mb-2">Email</h3>
 		if CanWrite(ctx) {
@@ -108,15 +108,15 @@ templ EmailNotificationCard(project db.Project) {
 				<input
 					type="text"
 					name="notify_emails"
-					value={ project.NotifyEmails.String }
+					value={ emails }
 					placeholder="alice@example.com, bob@example.com"
 					class="input input-bordered input-sm w-full"
 				/>
 			</div>
 		} else {
 			<p class="text-sm text-gray-400">
-				if project.NotifyEmails.String != "" {
-					{ project.NotifyEmails.String }
+				if emails != "" {
+					{ emails }
 				} else {
 					not configured
 				}
@@ -125,7 +125,7 @@ templ EmailNotificationCard(project db.Project) {
 	</div>
 }
 
-templ GotifyNotificationCard(project db.Project) {
+templ GotifyNotificationCard(serverURL string, tokenConfigured bool) {
 	<div class="card bg-base-200 p-4">
 		<h3 class="font-bold mb-2">Gotify</h3>
 		if CanWrite(ctx) {
@@ -136,7 +136,7 @@ templ GotifyNotificationCard(project db.Project) {
 				<input
 					type="text"
 					name="gotify_url"
-					value={ project.GotifyUrl.String }
+					value={ serverURL }
 					placeholder="https://gotify.example.com"
 					class="input input-bordered input-sm w-full"
 				/>
@@ -145,11 +145,11 @@ templ GotifyNotificationCard(project db.Project) {
 				<label class="label">
 					<span class="label-text">App token</span>
 				</label>
-				@NotificationCredentialInput("gotify_token", "Gotify app token", project.GotifyToken.String != "")
+				@NotificationCredentialInput("gotify_token", "Gotify app token", tokenConfigured)
 			</div>
 		} else {
 			<p class="text-sm text-gray-400">
-				if project.GotifyUrl.String != "" {
+				if serverURL != "" {
 					configured
 				} else {
 					not configured
@@ -159,7 +159,7 @@ templ GotifyNotificationCard(project db.Project) {
 	</div>
 }
 
-templ DiscordNotificationCard(project db.Project) {
+templ DiscordNotificationCard(configured bool) {
 	<div class="card bg-base-200 p-4">
 		<h3 class="font-bold mb-2">Discord</h3>
 		if CanWrite(ctx) {
@@ -167,11 +167,11 @@ templ DiscordNotificationCard(project db.Project) {
 				<label class="label">
 					<span class="label-text">Webhook URL</span>
 				</label>
-				@NotificationCredentialInput("discord_webhook_url", "Discord webhook URL", project.DiscordWebhookUrl.String != "")
+				@NotificationCredentialInput("discord_webhook_url", "Discord webhook URL", configured)
 			</div>
 		} else {
 			<p class="text-sm text-gray-400">
-				if project.DiscordWebhookUrl.String != "" {
+				if configured {
 					configured
 				} else {
 					not configured

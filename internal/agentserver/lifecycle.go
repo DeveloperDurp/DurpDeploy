@@ -197,7 +197,7 @@ func (s *Server) remoteLogScrubber(
 			secrets = append(secrets, variable.Value)
 		}
 	}
-	return runner.NewScrubber(secrets), nil
+	return s.repository.NewScrubber(secrets), nil
 }
 
 func (s *Server) broadcastLogs(

@@ -42,7 +42,7 @@ func testAgentRevokeSurface(t *testing.T, surface string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Authorization", "Bearer ddp_pat_delete-admin")
+	req.Header.Set("Authorization", "Bearer "+agentTestToken("delete-admin"))
 	req.AddCookie(&http.Cookie{Name: "session", Value: "delete-admin"})
 	req.Header.Set("X-CSRF-Token", "csrf")
 	if surface == "htmx" {

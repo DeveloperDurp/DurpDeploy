@@ -8,8 +8,6 @@ import (
 	"durpdeploy/internal/httpstream"
 )
 
-const stagingIdleTimeout = 5 * time.Minute
-
 type stagingIO struct {
 	controller *http.ResponseController
 	body       io.Reader
@@ -17,7 +15,9 @@ type stagingIO struct {
 	timeout    time.Duration
 }
 
-func newStagingIO(w http.ResponseWriter, r *http.Request) (*stagingIO, error) {
+func newStagingIO(
+	w http.ResponseWriter, r *http.Request, timeout time.Duration,
+) (*stagingIO, error) {
 	controller := http.NewResponseController(w)
 	if err := controller.SetReadDeadline(time.Time{}); err != nil {
 		return nil, err
@@ -25,7 +25,7 @@ func newStagingIO(w http.ResponseWriter, r *http.Request) (*stagingIO, error) {
 	if err := controller.SetWriteDeadline(time.Time{}); err != nil {
 		return nil, err
 	}
-	return &stagingIO{controller, r.Body, w, stagingIdleTimeout}, nil
+	return &stagingIO{controller, r.Body, w, timeout}, nil
 }
 
 func (stream *stagingIO) Read(data []byte) (int, error) {

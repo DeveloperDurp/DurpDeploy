@@ -73,7 +73,11 @@ func (h *ArtifactHandler) Save(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	r.Body = http.MaxBytesReader(
+		w,
+		r.Body,
+		h.repo.ResourceLimits().HTTP.RepositoryFormBytes,
+	)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid form", 400)
 		return
@@ -140,7 +144,11 @@ func (h *ArtifactHandler) Test(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	r.Body = http.MaxBytesReader(
+		w,
+		r.Body,
+		h.repo.ResourceLimits().HTTP.RepositoryFormBytes,
+	)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid form", 400)
 		return

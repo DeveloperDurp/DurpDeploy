@@ -1204,6 +1204,43 @@
         ]
       }
     },
+    "/admin/resource-config": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get the server's captured resource policy.",
+        "operationId": "resourceConfig",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/ResourceConfigResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/admin/secret-exports": {
       "post": {
         "description": "Require an instance administrator and a global bearer token with admin permission.\nOpen approval_url in a browser as the same user. Confirm the selected scope.\nReauthenticate with the local password or OAuth/OIDC, including required MFA.\nEach export requires new authentication. The request expires after five minutes.\nKeep claim_token private. It is returned once and never belongs in a URL.",
@@ -1765,6 +1802,7 @@
         ]
       },
       "put": {
+        "description": "Provide name and role for every update. An omitted or invalid role returns 422.\nPassword is optional.\nA local update that removes the final administrator role returns 422.",
         "consumes": [
           "application/json"
         ],
@@ -1859,6 +1897,7 @@
         ]
       },
       "delete": {
+        "description": "A local deletion that removes the final administrator returns 422.\nSelf-deletion remains forbidden.",
         "tags": [
           "admin-users"
         ],
@@ -1904,6 +1943,12 @@
             "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
             "schema": {
               "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
@@ -2663,11 +2708,11 @@
     },
     "/deployments/{id}/logs/page": {
       "get": {
-        "description": "Text fields over 16 KiB are shortened. Use next_before for older rows.",
+        "description": "Defaults are 500 rows, 1 MiB per page, and 16 KiB per text field.\nRead limit, byte_limit, and line_byte_limit for effective budgets.\nUse next_before for older rows. Full exports preserve complete output.",
         "tags": [
           "logs"
         ],
-        "summary": "Read log previews within 500 rows and 1 MiB, ordered by increasing ID.",
+        "summary": "Read log previews within configured row and byte budgets, ordered by increasing ID.",
         "operationId": "pageDeploymentLogs",
         "parameters": [
           {
@@ -2730,7 +2775,7 @@
     },
     "/deployments/{id}/logs/stream": {
       "get": {
-        "description": "Stream deployment logs. The format=structured SSE option emits indexed\nstep logs and lifecycle states, supports after and Last-Event-ID cursors,\nand ends with a complete event. Default SSE and NDJSON remain text streams.\nAdd preview=true to structured streams for marked 16 KiB display previews.",
+        "description": "Stream deployment logs. The format=structured SSE option emits indexed\nstep logs and lifecycle states, supports after and Last-Event-ID cursors,\nand ends with a complete event. Default SSE and NDJSON remain text streams.\nAdd preview=true for marked previews using the configured line byte budget.\nThe default preview budget is 16 KiB per text field.",
         "produces": [
           "text/event-stream",
           "application/x-ndjson"
@@ -11237,6 +11282,57 @@
       },
       "x-go-package": "durpdeploy/views/pages"
     },
+    "ArtifactLimits": {
+      "type": "object",
+      "properties": {
+        "dial_timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DialTimeoutSeconds"
+        },
+        "download_bytes": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DownloadBytes"
+        },
+        "extracted_bytes": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ExtractedBytes"
+        },
+        "fetch_timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "FetchTimeoutSeconds"
+        },
+        "files": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Files"
+        },
+        "header_timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "HeaderTimeoutSeconds"
+        },
+        "metadata_bytes": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "MetadataBytes"
+        },
+        "staging_nodes": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "StagingNodes"
+        },
+        "tls_timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "TLSTimeoutSeconds"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/config"
+    },
     "AuditLog": {
       "type": "object",
       "title": "AuditLog is a recorded state-changing action.",
@@ -11415,6 +11511,37 @@
       },
       "x-go-name": "swaggerConflictError",
       "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "ContainerLimits": {
+      "type": "object",
+      "properties": {
+        "helper_cpus": {
+          "type": "number",
+          "format": "double",
+          "x-go-name": "HelperCPUs"
+        },
+        "helper_memory_overhead_bytes": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "HelperMemoryOverheadBytes"
+        },
+        "helper_pids": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "HelperPIDs"
+        },
+        "pids": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "PIDs"
+        },
+        "tmpfs_bytes": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "TmpfsBytes"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/config"
     },
     "CreateTokenRequest": {
       "type": "object",
@@ -11955,6 +12082,29 @@
       "x-go-name": "swaggerErrorResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "ExecutionLimits": {
+      "description": "For example: DURPDEPLOY_LIMITS_EXECUTION_MAX_RETRIES.",
+      "type": "object",
+      "title": "Resource environment names are derived from the YAML path below limits.",
+      "properties": {
+        "default_timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DefaultTimeoutSeconds"
+        },
+        "max_retries": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "MaxRetries"
+        },
+        "max_timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "MaxTimeoutSeconds"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/config"
+    },
     "ForbiddenError": {
       "type": "object",
       "title": "Forbidden error response.",
@@ -12083,6 +12233,57 @@
       },
       "x-go-name": "swaggerGlobalNotificationRequest",
       "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "HTTPLimits": {
+      "type": "object",
+      "properties": {
+        "form_bytes": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "FormBytes"
+        },
+        "idle_timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "IdleTimeoutSeconds"
+        },
+        "json_bytes": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "JSONBytes"
+        },
+        "password_form_bytes": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "PasswordFormBytes"
+        },
+        "read_header_timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ReadHeaderTimeoutSeconds"
+        },
+        "read_timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ReadTimeoutSeconds"
+        },
+        "repository_form_bytes": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "RepositoryFormBytes"
+        },
+        "stream_write_timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "StreamWriteTimeoutSeconds"
+        },
+        "write_timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "WriteTimeoutSeconds"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/config"
     },
     "InheritedVariable": {
       "type": "object",
@@ -12440,6 +12641,41 @@
       "x-go-name": "swaggerLifecycleVariableList",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "Limits": {
+      "description": "Numeric suffixes specify units; byte counts use bytes, not megabytes.",
+      "type": "object",
+      "title": "Limits is a value snapshot. Consumers must not read environment variables.",
+      "properties": {
+        "artifact": {
+          "$ref": "#/definitions/ArtifactLimits"
+        },
+        "container": {
+          "$ref": "#/definitions/ContainerLimits"
+        },
+        "execution": {
+          "$ref": "#/definitions/ExecutionLimits"
+        },
+        "http": {
+          "$ref": "#/definitions/HTTPLimits"
+        },
+        "logs": {
+          "$ref": "#/definitions/LogLimits"
+        },
+        "merge": {
+          "$ref": "#/definitions/MergeLimits"
+        },
+        "staging": {
+          "$ref": "#/definitions/StagingLimits"
+        },
+        "token_telemetry": {
+          "$ref": "#/definitions/TokenTelemetryLimits"
+        },
+        "transfer": {
+          "$ref": "#/definitions/TransferLimits"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/config"
+    },
     "ListAccessibleProjectTemplatesRow": {
       "type": "object",
       "properties": {
@@ -12497,6 +12733,42 @@
       "x-go-name": "swaggerLogEntry",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "LogLimits": {
+      "type": "object",
+      "properties": {
+        "export_batch": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ExportBatch"
+        },
+        "line_bytes": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "LineBytes"
+        },
+        "page_bytes": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "PageBytes"
+        },
+        "page_rows": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "PageRows"
+        },
+        "pending_bytes": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "PendingBytes"
+        },
+        "preview_batch": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "PreviewBatch"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/config"
+    },
     "LogLineListResponse": {
       "type": "array",
       "title": "LogLineListResponse is a list of streamed log lines.",
@@ -12517,7 +12789,7 @@
           "x-go-name": "Before"
         },
         "byte_limit": {
-          "description": "Maximum JSON response size in bytes, including the envelope (1048576).",
+          "description": "Configured JSON response budget, including the envelope. Default: 1048576 bytes.",
           "type": "integer",
           "format": "int64",
           "x-go-name": "ByteLimit"
@@ -12536,13 +12808,13 @@
           "x-go-name": "LastID"
         },
         "limit": {
-          "description": "Maximum number of returned rows (500).",
+          "description": "Configured maximum number of returned rows. Default: 500.",
           "type": "integer",
           "format": "int64",
           "x-go-name": "Limit"
         },
         "line_byte_limit": {
-          "description": "Maximum UTF-8 bytes per displayed text field, including markers (16384).",
+          "description": "Configured UTF-8 bytes per displayed field, including markers. Default: 16384.",
           "type": "integer",
           "format": "int64",
           "x-go-name": "LineByteLimit"
@@ -12610,6 +12882,27 @@
       },
       "x-go-name": "swaggerLogStreamParams",
       "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "MergeLimits": {
+      "type": "object",
+      "properties": {
+        "agent_outputs": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "AgentOutputs"
+        },
+        "archive_bytes": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ArchiveBytes"
+        },
+        "entry_visits": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "EntryVisits"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/config"
     },
     "NotFoundError": {
       "type": "object",
@@ -13818,6 +14111,9 @@
       "x-go-name": "swaggerRequestEntityTooLargeError",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "ResourceConfigResponse": {
+      "$ref": "#/definitions/Limits"
+    },
     "RollbackPreview": {
       "type": "object",
       "properties": {
@@ -14533,6 +14829,27 @@
       "x-go-name": "swaggerSpecResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "StagingLimits": {
+      "type": "object",
+      "properties": {
+        "archive_bytes": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ArchiveBytes"
+        },
+        "entries": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Entries"
+        },
+        "payload_bytes": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "PayloadBytes"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/config"
+    },
     "StatusResponse": {
       "type": "object",
       "title": "Status message response.",
@@ -15156,6 +15473,48 @@
       "x-go-name": "swaggerTokenScopeResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "TokenTelemetryLimits": {
+      "type": "object",
+      "properties": {
+        "concurrency": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Concurrency"
+        },
+        "interval_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "IntervalSeconds"
+        },
+        "write_timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "WriteTimeoutSeconds"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/config"
+    },
+    "TransferLimits": {
+      "type": "object",
+      "properties": {
+        "global": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Global"
+        },
+        "idle_timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "IdleTimeoutSeconds"
+        },
+        "per_agent": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "PerAgent"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/config"
+    },
     "UnauthorizedError": {
       "type": "object",
       "title": "Unauthorized error response.",
@@ -15220,6 +15579,9 @@
     "UserRequest": {
       "type": "object",
       "title": "UserRequest is the body for create/update user.",
+      "required": [
+        "role"
+      ],
       "properties": {
         "email": {
           "type": "string",
@@ -15235,6 +15597,12 @@
         },
         "role": {
           "type": "string",
+          "enum": [
+            "viewer",
+            "deployer",
+            "maintainer",
+            "admin"
+          ],
           "x-go-name": "Role"
         }
       },

@@ -23,7 +23,7 @@ func TestLogPreviewText(t *testing.T) {
 			wantShortened := len(value) > LogLineByteLimit ||
 				!utf8.ValidString(value)
 			// When: the display preview is produced.
-			text, shortened := previewText(value)
+			text, shortened := previewText(value, LogLineByteLimit)
 			// Then: previews fit the byte cap and untouched text remains exact.
 			if !utf8.ValidString(text) || len(text) > LogLineByteLimit ||
 				shortened != wantShortened || (!shortened && text != value) {

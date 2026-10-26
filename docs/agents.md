@@ -35,6 +35,22 @@ Read these entries in live step logs, saved logs, public log APIs, and log downl
 Older agents can provide their identity without hostname or container details.
 Historical logs retain their original information.
 
+## Native Windows environment prerequisite
+
+The pinned agent requires Linux for execution.
+Native Windows support remains tracked in [the Windows platform issue](https://github.com/DeveloperDurp/DurpDeploy/issues/72).
+PowerShell selection does not establish a Windows execution target.
+
+Before enabling native Windows targets, reject case-colliding effective variable names before dispatch.
+Use the execution target's environment rules, independently of the server operating system.
+Check collisions within one scope and between global and selected environment values.
+Preserve exact-name environment overrides and case-sensitive Unix resolution.
+Do not choose a winner through map iteration or silently merge differently spelled names.
+Keep values and secrets out of collision errors.
+
+Use the [future platform checks](manual-e2e.md#native-windows-environment-collisions) before enabling this capability.
+These requirements do not enable Windows execution or add current collision validation.
+
 ## Fleet maintenance and health
 
 **Delete** removes the agent's server registration, pairing credentials, and
@@ -300,6 +316,8 @@ directory. It preserves the claim recovery marker until the result is
 acknowledged and owned containers are reconciled. Never delete this state to
 clear a cleanup warning.
 
+Before changing remote-step polling, measure [query load and cancellation](manual-e2e.md#remote-step-polling-capacity).
+
 For opt-in container execution, set:
 
 ```bash
@@ -315,7 +333,7 @@ the socket URL to the mounted path. Container-mode workloads receive no runtime
 socket. Host-mode scripts run inside the supervisor and inherit socket access
 and the operator's runtime authority; use only scripts trusted with that account.
 Do not grant socket permissions automatically or configure TCP/SSH endpoints.
-See the pinned agent's [container setup](https://github.com/DeveloperDurp/durpdeploy-agent/blob/411042912a656acc579fe30bc792f266d398d08b/docs/agents.md#container-step-execution-agent3).
+See the pinned agent's [container setup](https://github.com/DeveloperDurp/durpdeploy-agent/blob/261682484e744e03afd76adc95b5fd6d68190357/docs/agents.md#container-step-execution-agent3).
 
 Remote steps use `agent_execution_mode: "host"` by default. Select
 `"container"` and an image to opt in. Labels still route the step, and only
@@ -488,7 +506,7 @@ fail closed if a tag was rewritten:
 ```bash
 set -euo pipefail
 AGENT_MODULE=github.com/DeveloperDurp/durpdeploy-agent
-AGENT_VERSION=v0.1.2-0.20261017113854-411042912a65 # use the value recorded from the server checkout
+AGENT_VERSION=v0.1.2-0.20261024215522-261682484e74 # use the value recorded from the server checkout
 AGENT_SUM='h1:...' # use the value recorded from the server checkout
 AGENT_COMMIT=... # use the value recorded from the server checkout
 AGENT_DOWNLOAD=$(go mod download -json "$AGENT_MODULE@$AGENT_VERSION")
@@ -525,8 +543,21 @@ later.
 The server accepts `agent/1` for legacy Bash-only host agents, `agent/2` for
 host interpreter capabilities, and `agent/3` for remote containers. Upgrade
 the server first, then enable container agents. Prefer the exact agent revision
-pinned by the server. This change pins the reviewed PR revision; the agent tag
-is a later release step.
+pinned by the server. This change pins the merged configuration revision.
+The agent tag is a later release step.
+
+This dependency update retains the default shared resource limits.
+Custom agent policies require matching server acknowledgment before work can execute.
+The server checks the advertised shared policy before heartbeat updates and dispatch.
+Successful polls return one matching `X-DurpDeploy-Resource-Policy` acknowledgement.
+Malformed, repeated, empty, unknown, and mismatched headers return `409` without changing waiting claims.
+Legacy agents can omit this header only when the server uses the default shared policy.
+The server stores accepted advertisements in the durable capability snapshot.
+Claim preparation rejects stale polls that report a different advertisement from the stored snapshot.
+A legacy default poll clears the explicit advertisement. Revocation, re-pairing, and deletion also clear it.
+Custom remote dispatch requires a matching stored policy from every target agent.
+Queue admission rolls back all new fan-out runs when any target policy is incompatible.
+Claim preparation rechecks compatibility under the agent claim lock before issuing work.
 
 Create the service account and private state directory:
 

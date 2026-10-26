@@ -46,6 +46,9 @@ func (h *RunbookHandler) Schedule(w http.ResponseWriter, r *http.Request) {
 			r.Context(),
 			pinned.ReleaseID,
 		); err != nil {
+			if writeArtifactError(w, err) {
+				return
+			}
 			if errors.Is(err, repository.ErrLegacyServerStep) {
 				http.Error(
 					w,

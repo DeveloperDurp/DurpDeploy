@@ -3,7 +3,7 @@
 deployment_list_e2e() {
     local owned foreign env foreign_env release foreign_release user jar token csrf
     local prefix="list-access-$(date +%s)-$$" password="list-access-password-1234"
-    local owned_dep foreign_dep role query body code
+    local owned_dep foreign_dep role query body code previous_role=maintainer
     local project_prefix=$prefix
     [[ -z "${E2E_RUN_ID:-}" ]] || project_prefix=list-access
     echo "=== Deployment list authorization ==="
@@ -43,6 +43,18 @@ assert result["total"] == 0 and result["items"] == []
 
     for role in maintainer deployer viewer; do
         api_put "{\"name\":\"List User\",\"role\":\"$role\"}" "$BASE/api/v1/admin/users/$user" >/dev/null
+        if [[ "$role" != "$previous_role" ]]; then
+            code=$(curl -sS -b "$jar" -o /dev/null -w '%{http_code}' "$BASE/deployments")
+            [[ "$code" == 303 ]] || {
+                echo "FAIL: $role change retained the old browser session ($code)"; return 1;
+            }
+            code=$(curl -sS -c "$jar" -o /dev/null -w '%{http_code}' -X POST \
+                --data-urlencode "email=$prefix@test.local" --data-urlencode "password=$password" "$BASE/login")
+            [[ "$code" == 303 ]] || {
+                echo "FAIL: $role list user login got $code"; return 1;
+            }
+        fi
+        previous_role=$role
         # When listing with pagination, totals and IDs contain only owned rows.
         curl -fsS -H "Authorization: Bearer $token" "$BASE/api/v1/deployments?limit=1" | python3 -c '
 import json,sys

@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -16,9 +17,11 @@ import (
 	"durpdeploy/internal/testutil/sqlitefixture"
 )
 
+const apiFixturePragmas = "_pragma=foreign_keys(1)&" +
+	"_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+
 func apiFixtureDSN(path string) string {
-	return "file:" + path +
-		"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
+	return "file:" + path + "?" + apiFixturePragmas
 }
 
 func newAPITestDatabase(t *testing.T) *sql.DB {
@@ -33,8 +36,33 @@ func newAPITestDatabase(t *testing.T) *sql.DB {
 		}
 	})
 	return sqlitefixture.Open(t, filepath.Join(directory, "test.db"),
-		"_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
+		apiFixturePragmas,
 	)
+}
+
+func TestAPIFixtureReadsDuringWrite(t *testing.T) {
+	conn := newAPITestDatabase(t)
+	writer, err := conn.Conn(t.Context())
+	require.NoError(t, err)
+	t.Cleanup(func() { testutil.Close(t, writer) })
+	_, err = writer.ExecContext(t.Context(), "BEGIN EXCLUSIVE")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, err := writer.ExecContext(context.Background(), "ROLLBACK")
+		require.NoError(t, err)
+	})
+	_, err = writer.ExecContext(t.Context(),
+		"INSERT INTO projects(name) VALUES('uncommitted-log-writer')")
+	require.NoError(t, err)
+
+	// Browser authentication must read committed state during log writes.
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	var count int
+	err = conn.QueryRowContext(ctx, "SELECT count(*) FROM projects").
+		Scan(&count)
+	require.NoError(t, err)
+	require.Zero(t, count, "the reader saw an uncommitted write")
 }
 
 func TestAPIFixtureDatabaseCloseDrainsConnections(t *testing.T) {

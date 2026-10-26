@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/agentserver"
+	"durpdeploy/internal/config"
 	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/migrate"
@@ -50,6 +51,7 @@ func newAgentFixtureWithDSN(
 	t *testing.T,
 	dsn string,
 	requestStarted func(*http.Request),
+	settings ...config.Config,
 ) agentFixture {
 	t.Helper()
 	conn, err := migrate.Run(dsn)
@@ -58,6 +60,9 @@ func newAgentFixtureWithDSN(
 	}
 	t.Cleanup(func() { testutil.Close(t, conn) })
 	repo := repository.New(conn)
+	if len(settings) > 0 {
+		repo = repository.NewConfigured(conn, settings[0])
+	}
 	broker := runner.NewLogBroker()
 	bus := events.NewBus(repo)
 	identity, err := agenttls.LoadOrCreate(t.TempDir(), "https://127.0.0.1")

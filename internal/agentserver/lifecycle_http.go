@@ -11,6 +11,7 @@ import (
 	"durpdeploy/internal/repository"
 
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
+	"github.com/DeveloperDurp/durpdeploy-agent/resourcepolicy"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -53,6 +54,10 @@ func writeTransitionStatus(
 }
 
 func writePollErrorStatus(w http.ResponseWriter, err error) {
+	if errors.Is(err, resourcepolicy.ErrIncompatible) {
+		w.WriteHeader(http.StatusConflict)
+		return
+	}
 	if repository.IsSQLiteBusy(err) {
 		w.Header().Set("Retry-After", "1")
 		w.WriteHeader(http.StatusServiceUnavailable)

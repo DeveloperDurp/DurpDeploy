@@ -107,6 +107,9 @@ func (h *RunbookHandler) CreateSchedule(
 			r.Context(),
 			pinned.ReleaseID,
 		); err != nil {
+			if writeArtifactError(w, err) {
+				return
+			}
 			if errors.Is(err, repository.ErrLegacyServerStep) {
 				RespondError(
 					w,

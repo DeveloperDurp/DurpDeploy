@@ -325,20 +325,26 @@ func (q *Queries) FailUnsupportedWaitingRemoteDeploymentClaims(ctx context.Conte
 
 const failWaitingRemotePayload = `-- name: FailWaitingRemotePayload :exec
 UPDATE remote_deployment_claims SET state = 'failed',
-    reason = 'remote_payload_requires_agent_3', finished_at = ?1,
-    updated_at = ?1
-WHERE deployment_id = ?2 AND agent_id = ?3
+    reason = ?1, finished_at = ?2,
+    updated_at = ?2
+WHERE deployment_id = ?3 AND agent_id = ?4
   AND state = 'waiting'
 `
 
 type FailWaitingRemotePayloadParams struct {
-	Now          sql.NullInt64 `json:"now"`
-	DeploymentID int64         `json:"deployment_id"`
-	AgentID      string        `json:"agent_id"`
+	Reason       sql.NullString `json:"reason"`
+	Now          sql.NullInt64  `json:"now"`
+	DeploymentID int64          `json:"deployment_id"`
+	AgentID      string         `json:"agent_id"`
 }
 
 func (q *Queries) FailWaitingRemotePayload(ctx context.Context, arg FailWaitingRemotePayloadParams) error {
-	_, err := q.db.ExecContext(ctx, failWaitingRemotePayload, arg.Now, arg.DeploymentID, arg.AgentID)
+	_, err := q.db.ExecContext(ctx, failWaitingRemotePayload,
+		arg.Reason,
+		arg.Now,
+		arg.DeploymentID,
+		arg.AgentID,
+	)
 	return err
 }
 

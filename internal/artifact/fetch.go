@@ -11,32 +11,69 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"durpdeploy/internal/config"
 )
 
 type Client struct {
 	HTTP    *http.Client
 	TempDir string
+	limits  *config.ArtifactLimits
 }
 
 func NewClient() *Client {
+	return NewClientWithLimits(config.Defaults().Limits.Artifact)
+}
+
+func NewClientWithLimits(limits config.ArtifactLimits) *Client {
 	return &Client{
-		HTTP: &http.Client{Transport: NewTransport(), Timeout: 5 * time.Minute},
+		limits: &limits,
+		HTTP: &http.Client{
+			Transport: newTransport(limits),
+			Timeout:   time.Duration(limits.FetchTimeoutSeconds) * time.Second,
+		},
 	}
 }
 
 // NewTransport enforces the outbound network boundary for operator URLs.
 func NewTransport() *http.Transport {
+	return newTransport(config.Defaults().Limits.Artifact)
+}
+
+func newTransport(limits config.ArtifactLimits) *http.Transport {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil // Repository credentials must not reach environment proxies.
-	transport.DialContext = dialRepository
-	transport.TLSHandshakeTimeout = 10 * time.Second
-	transport.ResponseHeaderTimeout = 30 * time.Second
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		return dialRepositoryWithTimeout(ctx, network, address,
+			time.Duration(limits.DialTimeoutSeconds)*time.Second)
+	}
+	transport.TLSHandshakeTimeout = time.Duration(
+		limits.TLSTimeoutSeconds,
+	) * time.Second
+	transport.ResponseHeaderTimeout = time.Duration(
+		limits.HeaderTimeoutSeconds,
+	) * time.Second
 	return transport
 }
 
 func dialRepository(
 	ctx context.Context,
 	network, address string,
+) (net.Conn, error) {
+	return dialRepositoryWithTimeout(
+		ctx,
+		network,
+		address,
+		time.Duration(
+			config.Defaults().Limits.Artifact.DialTimeoutSeconds,
+		)*time.Second,
+	)
+}
+
+func dialRepositoryWithTimeout(
+	ctx context.Context,
+	network, address string,
+	timeout time.Duration,
 ) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(address)
 	if err != nil {
@@ -54,7 +91,7 @@ func dialRepository(
 		}
 	}
 	var dialer net.Dialer
-	dialer.Timeout = 30 * time.Second
+	dialer.Timeout = timeout
 	for _, ip := range ips {
 		conn, err := dialer.DialContext(
 			ctx,
@@ -110,6 +147,11 @@ func (c *Client) Fetch(
 	source Repository,
 	pin Pin,
 ) (result Download, err error) {
+	limits := config.Defaults().Limits.Artifact
+	if c.limits != nil {
+		limits = *c.limits
+	}
+	limit := limits.DownloadBytes
 	response, err := c.request(ctx, source, pin)
 	if err != nil {
 		return result, err
@@ -129,7 +171,7 @@ func (c *Client) Fetch(
 		return result, &FetchError{fmt.Sprintf(
 			"package repository returned HTTP %d", response.StatusCode)}
 	}
-	if response.ContentLength > MaxDownload {
+	if response.ContentLength > limit {
 		return result, &FetchError{"package exceeds the download size limit"}
 	}
 	file, err := os.CreateTemp(c.TempDir, "durpdeploy-artifact-*.zip")
@@ -143,7 +185,7 @@ func (c *Client) Fetch(
 	hash := sha256.New()
 	size, err := io.Copy(
 		io.MultiWriter(file, hash),
-		io.LimitReader(response.Body, MaxDownload+1),
+		io.LimitReader(response.Body, limit+1),
 	)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -151,14 +193,14 @@ func (c *Client) Fetch(
 		}
 		return result, ErrFetch
 	}
-	if size > MaxDownload {
-		return result, ErrFetch
+	if size > limit {
+		return result, &FetchError{"package exceeds the download size limit"}
 	}
 	digest := hex.EncodeToString(hash.Sum(nil))
 	if pin.SHA256 != "" && (digest != pin.SHA256 || size != pin.Size) {
 		return result, ErrChecksum
 	}
-	if err := ValidateZIP(ctx, file.Name()); err != nil {
+	if err := ValidateZIPWithLimits(ctx, file.Name(), limits); err != nil {
 		return result, err
 	}
 	return Download{Path: file.Name(), SHA256: digest, Size: size}, nil

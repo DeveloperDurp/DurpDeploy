@@ -143,9 +143,9 @@ func TestLoginDestinationHTMXAPIWebE2E(t *testing.T) {
 	for _, scenario := range []loginRedirectCase{
 		{"boosted", "GET", "/projects", "", map[string]string{"HX-Request": "true", "HX-Boosted": "true"}, 200},
 		{"history", "GET", "/environments", "", map[string]string{"HX-History-Restore-Request": "true"}, 401},
-		{"fragment", "GET", "/projects/1/steps", f.baseURL + "/projects?name=context", map[string]string{"HX-Request": "true"}, 303},
-		{"expired-write", "POST", "/projects", f.baseURL + "/projects/1", map[string]string{"HX-Request": "true"}, 303},
-		{"external-current", "GET", "/projects/1/steps", "https://evil.test/", map[string]string{"HX-Request": "true"}, 303},
+		{"fragment", "GET", "/projects/1/steps", f.baseURL + "/projects?name=context", map[string]string{"HX-Request": "true"}, 200},
+		{"expired-write", "POST", "/projects", f.baseURL + "/projects/1", map[string]string{"HX-Request": "true"}, 200},
+		{"external-current", "GET", "/projects/1/steps", "https://evil.test/", map[string]string{"HX-Request": "true"}, 200},
 		{"native-write", "POST", "/projects", "", nil, 303},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
@@ -184,6 +184,9 @@ func checkLoginRedirectScenario(
 	}
 	response.Body.Close()
 	location := response.Header.Get("HX-Redirect")
+	if scenario.status != http.StatusSeeOther && location == "" {
+		t.Fatal("HTMX response did not request a full login navigation")
+	}
 	if location == "" {
 		location = response.Header.Get("Location")
 	}

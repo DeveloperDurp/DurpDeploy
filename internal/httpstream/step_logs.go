@@ -70,7 +70,12 @@ func (options logStream) open(
 	}
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
-	stream, err := New(w)
+	stream, err := NewWithTimeout(
+		w,
+		time.Duration(
+			options.repo.ResourceLimits().HTTP.StreamWriteTimeoutSeconds,
+		)*time.Second,
+	)
 	if err != nil {
 		auth.RenderRequestError(
 			w, r, http.StatusInternalServerError, "Streaming unsupported",

@@ -13,7 +13,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"durpdeploy/internal/agentexecution"
-	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/interpreter"
@@ -37,24 +36,12 @@ func parseStepContainerConfig(
 	r *http.Request,
 	target string,
 ) (string, []string, string) {
-	image := r.FormValue("container_image")
-	names := parseStepVariableNames(r.FormValue("variable_names"))
-	if err := artifact.ValidateGateConfig(
-		target,
-		r.FormValue("network_mode"),
-		r.FormValue("approval_artifact_path"),
-		r.FormValue("approval_review_path"),
-		r.FormValue("approval_review_format"),
-	); err != nil {
-		return image, names, err.Error()
+	fields := formStepFields(r)
+	fields.ExecutionTarget = target
+	if err := ValidateStepExecutionFields(fields); err != nil {
+		return fields.ContainerImage, fields.VariableNames, err.Error()
 	}
-	if err := ValidateStepExecutionConfig(agentexecution.Config{
-		Target: target, Mode: r.FormValue("agent_execution_mode"),
-		Image: image, VariableNames: names,
-	}); err != "" {
-		return image, names, err
-	}
-	return image, names, ""
+	return fields.ContainerImage, fields.VariableNames, ""
 }
 
 func parseStepVariableNames(raw string) []string {
@@ -379,11 +366,13 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		}
 		maxRetries = m
 	}
-
 	containerImage, variableNames, containerErr := parseStepContainerConfig(
 		r,
 		target,
 	)
+	if err := agentexecution.ValidateLimitsWithPolicy(timeoutSeconds, maxRetries, h.repo.ResourceLimits().Execution); err != nil {
+		containerErr = err.Error()
+	}
 	if containerErr != "" {
 		step := db.Step{
 			ProjectID:            projectID,
@@ -465,22 +454,13 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	params := db.CreateStepParams{
-		ProjectID:            projectID,
-		Name:                 name,
-		ScriptBody:           script,
-		SortOrder:            sortOrder,
-		TimeoutSeconds:       timeoutSeconds,
-		MaxRetries:           maxRetries,
-		Interpreter:          selectedInterpreter,
-		ContainerImage:       containerImage,
-		AgentExecutionMode:   r.FormValue("agent_execution_mode"),
-		NetworkMode:          r.FormValue("network_mode"),
-		ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
-		ApprovalReviewPath:   r.FormValue("approval_review_path"),
-		ApprovalReviewFormat: r.FormValue("approval_review_format"),
-		VariableNames:        marshalStepVariableNames(variableNames),
-	}
+	fields := formStepFields(r)
+	fields.Interpreter, fields.SortOrder = selectedInterpreter, sortOrder
+	fields.TimeoutSeconds, fields.MaxRetries = timeoutSeconds, maxRetries
+	params := fields.CreateStepParams(
+		projectID,
+		marshalStepVariableNames(variableNames),
+	)
 
 	var selectors []string
 	if agentLabel != "" {
@@ -737,11 +717,13 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		}
 		maxRetries = m
 	}
-
 	containerImage, variableNames, containerErr := parseStepContainerConfig(
 		r,
 		target,
 	)
+	if err := agentexecution.ValidateLimitsWithPolicy(timeoutSeconds, maxRetries, h.repo.ResourceLimits().Execution); err != nil {
+		containerErr = err.Error()
+	}
 	if containerErr != "" {
 		step := db.Step{
 			ID:                   stepID,
@@ -815,22 +797,13 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	params := db.UpdateStepParams{
-		ID:                   stepID,
-		Name:                 name,
-		ScriptBody:           script,
-		SortOrder:            sortOrder,
-		TimeoutSeconds:       timeoutSeconds,
-		MaxRetries:           maxRetries,
-		Interpreter:          selectedInterpreter,
-		ContainerImage:       containerImage,
-		AgentExecutionMode:   r.FormValue("agent_execution_mode"),
-		NetworkMode:          r.FormValue("network_mode"),
-		ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
-		ApprovalReviewPath:   r.FormValue("approval_review_path"),
-		ApprovalReviewFormat: r.FormValue("approval_review_format"),
-		VariableNames:        marshalStepVariableNames(variableNames),
-	}
+	fields := formStepFields(r)
+	fields.Interpreter, fields.SortOrder = selectedInterpreter, sortOrder
+	fields.TimeoutSeconds, fields.MaxRetries = timeoutSeconds, maxRetries
+	params := fields.UpdateStepParams(
+		stepID,
+		marshalStepVariableNames(variableNames),
+	)
 
 	var selectors []string
 	if agentLabel != "" {

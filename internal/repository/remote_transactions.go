@@ -28,7 +28,7 @@ func (r *Repository) ClaimRemoteDeployment(
 			); err != nil {
 				return err
 			}
-			changed, err = claimRemoteDeployment(ctx, q, arg)
+			changed, err = r.claimRemoteDeployment(ctx, q, arg)
 			return err
 		},
 	)
@@ -41,13 +41,16 @@ func (r *Repository) ClaimRemoteDeployment(
 	return changed, nil
 }
 
-func claimRemoteDeployment(
+func (r *Repository) claimRemoteDeployment(
 	ctx context.Context,
 	q *db.Queries,
 	arg db.ClaimRemoteDeploymentParams,
 ) (int64, error) {
 	locked, err := q.LockClaimAgent(ctx, arg.AgentID)
 	if err != nil || locked == 0 {
+		return 0, err
+	}
+	if _, err := r.remoteResourcePolicy(ctx, q, arg.AgentID); err != nil {
 		return 0, err
 	}
 	return q.ClaimRemoteDeployment(ctx, arg)

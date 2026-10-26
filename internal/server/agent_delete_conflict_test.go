@@ -30,7 +30,7 @@ func testAgentDeleteConflict(t *testing.T, surface, bufferedTable string) {
 		)
 		req.Header.Set("X-CSRF-Token", "csrf")
 	}
-	req.Header.Set("Authorization", "Bearer ddp_pat_delete-admin")
+	req.Header.Set("Authorization", "Bearer "+agentTestToken("delete-admin"))
 	want := http.StatusConflict
 	if surface == "htmx" {
 		req.Header.Set("HX-Request", "true")

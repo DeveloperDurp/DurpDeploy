@@ -18,7 +18,7 @@ case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run) printf 'buffered-secret'; head -c 1048577 /dev/zero | tr '\000' X; exec sleep 30;;
-rm) printf 'cleanup failed\n'; exit 7;;
+rm) printf 'cleanup failed diagnostic-secret\n'; exit 7;;
 esac
 `)
 	writer := attemptLogWriter(t, r, repo, 1)
@@ -43,26 +43,29 @@ esac
 	logs, err := repo.Queries.ListDeploymentLogsByDeployment(t.Context(), 1)
 	require.NoError(t, err)
 	var diagnostic, failure bool
+	var runtimeReason bool
 	for _, log := range logs {
 		require.NotContains(t, log.Line, "buffered-secret")
 		require.NotContains(t, log.Line, "diagnostic-secret")
 		require.NotContains(t, log.Line, "XXXXX")
 		diagnostic = diagnostic ||
 			strings.Contains(log.Line, "container cleanup unconfirmed")
+		runtimeReason = runtimeReason ||
+			strings.Contains(log.Line, "cleanup failed [REDACTED]")
 		failure = failure || log.StepState.String == "failed"
 	}
 	require.True(t, diagnostic)
 	require.True(t, failure)
+	require.True(t, runtimeReason)
 }
 
 func TestLocalCleanupFailureRetainsOverflowStatusAndTailOrdering(t *testing.T) {
-	for _, mode := range []string{"overflow", "tail"} {
+	for mode, output := range map[string]string{
+		"overflow": "printf buffered-secret; head -c 1048577 /dev/zero | tr '\\000' X; exec sleep 30",
+		"tail":     "printf safe-tail",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			// Given: the real runner uses a runtime that cannot confirm container removal.
-			output := "printf safe-tail"
-			if mode == "overflow" {
-				output = "printf buffered-secret; head -c 1048577 /dev/zero | tr '\\000' X; exec sleep 30"
-			}
 			r, repo, _ := podmanFixture(t, `
 case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;

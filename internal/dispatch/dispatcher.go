@@ -21,8 +21,9 @@ type Dispatcher struct {
 // PollRequest includes capabilities reported outside the JSON envelope.
 type PollRequest struct {
 	agentproto.PollRequest
-	Staging  bool
-	Artifact bool
+	Staging        bool
+	Artifact       bool
+	ResourcePolicy string
 }
 
 func New(repo *repository.Repository) *Dispatcher {
@@ -34,6 +35,9 @@ func (d *Dispatcher) Poll(
 	agentID agentproto.AgentID,
 	request PollRequest,
 ) (agentproto.PollResponse, bool, error) {
+	if err := d.repository.ResourceLimits().AgentPolicy().CheckCompatibility(request.ResourcePolicy); err != nil {
+		return agentproto.PollResponse{}, false, err
+	}
 	response, claimed, err := d.claim(ctx, agentID, request)
 	if errors.Is(err, errStaleAgentPoll) {
 		return agentproto.PollResponse{}, false, nil

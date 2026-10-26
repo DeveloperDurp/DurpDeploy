@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
@@ -37,6 +38,11 @@ func prepareRemoteClaim(
 	if err != nil {
 		return repository.RemotePreparedClaim{}, err
 	}
+	for _, variable := range resolved {
+		if err := containerenv.ValidateEntry(variable.Name, variable.Value); err != nil {
+			return repository.RemotePreparedClaim{}, err
+		}
+	}
 	steps := make([]executor.Step, len(snapshot.Steps))
 	protocol := agentproto.AgentV1
 	if snapshot.Agent.AgentProtocol.Valid {
@@ -48,31 +54,9 @@ func prepareRemoteClaim(
 		}
 	}
 	for index, step := range snapshot.Steps {
-		var names []string
-		if step.VariableNames != "" {
-			if err := json.Unmarshal(
-				[]byte(step.VariableNames),
-				&names,
-			); err != nil {
-				return repository.RemotePreparedClaim{}, fmt.Errorf(
-					"decode step variables: %w",
-					err,
-				)
-			}
-		}
-		if protocol != agentproto.AgentV3 && len(names) != 0 {
-			selected, err := selectRemoteVariables(
-				[]db.DeploymentStep{step},
-				resolved,
-			)
-			if err != nil {
-				return repository.RemotePreparedClaim{}, err
-			}
-			if !slices.Equal(selected, resolved) {
-				return repository.RemotePreparedClaim{}, agentproto.ErrUnsupportedProtocol
-			}
-			// Every legacy step must receive the same selected variables.
-			names = nil
+		names, err := remoteClaimVariableNames(step, resolved, protocol)
+		if err != nil {
+			return repository.RemotePreparedClaim{}, err
 		}
 		steps[index] = executor.Step{
 			Name:           step.Name,
@@ -124,6 +108,40 @@ func prepareRemoteClaim(
 	return repository.RemotePreparedClaim{
 		Token: token, TokenHash: tokenHash[:], Ciphertext: ciphertext,
 	}, nil
+}
+
+func remoteClaimVariableNames(
+	step db.DeploymentStep,
+	resolved []runner.ResolvedVariable,
+	protocol agentproto.ProtocolVersion,
+) ([]string, error) {
+	var names []string
+	if step.VariableNames != "" {
+		if err := json.Unmarshal(
+			[]byte(step.VariableNames),
+			&names,
+		); err != nil {
+			return nil, fmt.Errorf(
+				"decode step variables: %w",
+				err,
+			)
+		}
+	}
+	if protocol != agentproto.AgentV3 && len(names) != 0 {
+		selected, err := selectRemoteVariables(
+			[]db.DeploymentStep{step},
+			resolved,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if !slices.Equal(selected, resolved) {
+			return nil, agentproto.ErrUnsupportedProtocol
+		}
+		// Every legacy step must receive the same selected variables.
+		names = nil
+	}
+	return names, nil
 }
 
 func selectRemoteVariables(

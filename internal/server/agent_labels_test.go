@@ -42,7 +42,7 @@ func TestAdminEnvironmentAgentRoutesRemoved(t *testing.T) {
 			)
 			request.Header.Set(
 				"Authorization",
-				"Bearer ddp_pat_labels-only-admin",
+				"Bearer "+agentTestToken("labels-only-admin"),
 			)
 			request.Header.Set("Content-Type", "application/json")
 			response := httptest.NewRecorder()
@@ -108,8 +108,15 @@ func TestAdminAgentLabelsCanBeAddedAndRemoved(t *testing.T) {
 	router.ServeHTTP(detailResponse, detail)
 	if detailResponse.Code != http.StatusOK ||
 		!strings.Contains(detailResponse.Body.String(), ">linux<") ||
-		strings.Contains(detailResponse.Body.String(), "Environment assignments") {
-		t.Fatalf("detail status=%d body=%s", detailResponse.Code, detailResponse.Body)
+		strings.Contains(
+			detailResponse.Body.String(),
+			"Environment assignments",
+		) {
+		t.Fatalf(
+			"detail status=%d body=%s",
+			detailResponse.Code,
+			detailResponse.Body,
+		)
 	}
 
 	remove := browserFormRequest(
@@ -125,7 +132,11 @@ func TestAdminAgentLabelsCanBeAddedAndRemoved(t *testing.T) {
 
 	// Then
 	if removeResponse.Code != http.StatusSeeOther {
-		t.Fatalf("delete status=%d body=%s", removeResponse.Code, removeResponse.Body)
+		t.Fatalf(
+			"delete status=%d body=%s",
+			removeResponse.Code,
+			removeResponse.Body,
+		)
 	}
 	labels, err = h.repo.Queries.ListAgentLabels(t.Context(), "agent-a")
 	if err != nil || len(labels) != 0 {
@@ -145,7 +156,10 @@ func TestAdminAgentLabelsAPI(t *testing.T) {
 		"/api/v1/admin/agents/agent-a/labels",
 		strings.NewReader(`{"label":"arm64"}`),
 	)
-	request.Header.Set("Authorization", "Bearer ddp_pat_label-api-admin")
+	request.Header.Set(
+		"Authorization",
+		"Bearer "+agentTestToken("label-api-admin"),
+	)
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 
@@ -161,7 +175,10 @@ func TestAdminAgentLabelsAPI(t *testing.T) {
 		"/api/v1/admin/agents/agent-a",
 		nil,
 	)
-	detail.Header.Set("Authorization", "Bearer ddp_pat_label-api-admin")
+	detail.Header.Set(
+		"Authorization",
+		"Bearer "+agentTestToken("label-api-admin"),
+	)
 	detailResponse := httptest.NewRecorder()
 	router.ServeHTTP(detailResponse, detail)
 	var body struct {
@@ -180,11 +197,18 @@ func TestAdminAgentLabelsAPI(t *testing.T) {
 		"/api/v1/admin/agents/agent-a/labels",
 		strings.NewReader(`{"label":"arm64"}`),
 	)
-	remove.Header.Set("Authorization", "Bearer ddp_pat_label-api-admin")
+	remove.Header.Set(
+		"Authorization",
+		"Bearer "+agentTestToken("label-api-admin"),
+	)
 	remove.Header.Set("Content-Type", "application/json")
 	removeResponse := httptest.NewRecorder()
 	router.ServeHTTP(removeResponse, remove)
 	if removeResponse.Code != http.StatusNoContent {
-		t.Fatalf("delete status=%d body=%s", removeResponse.Code, removeResponse.Body)
+		t.Fatalf(
+			"delete status=%d body=%s",
+			removeResponse.Code,
+			removeResponse.Body,
+		)
 	}
 }

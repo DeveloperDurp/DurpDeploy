@@ -26,17 +26,22 @@ var artifactID = regexp.MustCompile(
 	`^[A-Za-z0-9][A-Za-z0-9._:/-]*(@sha256:[a-fA-F0-9]{64})?$`,
 )
 
-var credentials = logscrub.New(
+var credentials = logscrub.NewConfigured(
 	nil,
+	"",
 	`(?i:glpat-[A-Za-z0-9_-]+|github_pat_[A-Za-z0-9_]+|ddp_pat_[a-f0-9]{64}|gh[sour]_[A-Za-z0-9]{36,})`,
 	`eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`,
 )
 
 func (s Source) Validate() error {
+	return s.ValidateWithScrubber(logscrub.New(nil))
+}
+
+func (s Source) ValidateWithScrubber(scrubber *logscrub.Scrubber) error {
 	for _, value := range []string{
 		s.RepositoryURL, s.CommitSHA, s.ArtifactRef, s.CIRunURL,
 	} {
-		if err := validatePublicValue(value); err != nil {
+		if err := validatePublicValue(value, scrubber); err != nil {
 			return err
 		}
 	}
@@ -64,7 +69,7 @@ func (s Source) Validate() error {
 	return nil
 }
 
-func validatePublicValue(value string) error {
+func validatePublicValue(value string, scrubber *logscrub.Scrubber) error {
 	if len(value) > 2048 || !utf8.ValidString(value) ||
 		strings.IndexFunc(value, unicode.IsSpace) >= 0 ||
 		strings.IndexFunc(value, unicode.IsControl) >= 0 {
@@ -74,6 +79,9 @@ func validatePublicValue(value string) error {
 	}
 	decoded, err := url.PathUnescape(value)
 	if err != nil || credentials.Scrub(decoded) != decoded {
+		return errors.New("provenance must not contain credentials")
+	}
+	if scrubber != nil && scrubber.Scrub(decoded) != decoded {
 		return errors.New("provenance must not contain credentials")
 	}
 	return nil

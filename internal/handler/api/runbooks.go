@@ -175,8 +175,11 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 	for i := range req.Steps {
 		step := &req.Steps[i]
 		step.Name = strings.TrimSpace(step.Name)
-		if step.Name == "" || strings.TrimSpace(step.ScriptBody) == "" ||
-			step.TimeoutSeconds < 0 || step.MaxRetries < 0 {
+		if err := agentexecution.ValidateLimitsWithPolicy(step.TimeoutSeconds, step.MaxRetries, h.repo.ResourceLimits().Execution); err != nil {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		if step.Name == "" || strings.TrimSpace(step.ScriptBody) == "" {
 			RespondError(
 				w,
 				http.StatusUnprocessableEntity,
@@ -231,7 +234,7 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 		if step.AgentExecutionMode == "" {
 			step.AgentExecutionMode = "host"
 		}
-		step.SortOrder = i
+		step.SortOrder = int64(i)
 	}
 	steps, err := json.Marshal(req.Steps)
 	if err != nil {

@@ -11,17 +11,20 @@ import (
 )
 
 const advanceScheduledDeploymentOccurrence = `-- name: AdvanceScheduledDeploymentOccurrence :execrows
-UPDATE scheduled_deployments SET next_run_at = ?1, last_fired_at = ?2, updated_at = unixepoch()
-WHERE id = ?3 AND enabled = 1 AND next_run_at = ?4
-AND release_id = ?5 AND environment_id = ?6
-AND cron = ?7 AND COALESCE(note, '') = COALESCE(?8, '')
+UPDATE scheduled_deployments SET next_run_at = ?1, last_fired_at = ?2, enabled = ?3, last_error = ?4, updated_at = unixepoch()
+WHERE id = ?5 AND enabled = 1 AND next_run_at = ?6
+AND project_id = ?7 AND release_id = ?8 AND environment_id = ?9
+AND cron = ?10 AND COALESCE(note, '') = COALESCE(?11, '')
 `
 
 type AdvanceScheduledDeploymentOccurrenceParams struct {
 	NextRunAt     int64          `json:"next_run_at"`
 	FiredAt       sql.NullInt64  `json:"fired_at"`
+	Enabled       int64          `json:"enabled"`
+	LastError     string         `json:"last_error"`
 	ID            int64          `json:"id"`
 	ObservedRunAt int64          `json:"observed_run_at"`
+	ProjectID     int64          `json:"project_id"`
 	ReleaseID     int64          `json:"release_id"`
 	EnvironmentID int64          `json:"environment_id"`
 	Cron          string         `json:"cron"`
@@ -32,8 +35,11 @@ func (q *Queries) AdvanceScheduledDeploymentOccurrence(ctx context.Context, arg 
 	result, err := q.db.ExecContext(ctx, advanceScheduledDeploymentOccurrence,
 		arg.NextRunAt,
 		arg.FiredAt,
+		arg.Enabled,
+		arg.LastError,
 		arg.ID,
 		arg.ObservedRunAt,
+		arg.ProjectID,
 		arg.ReleaseID,
 		arg.EnvironmentID,
 		arg.Cron,

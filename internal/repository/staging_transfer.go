@@ -8,14 +8,52 @@ import (
 )
 
 type stagingTransferState struct {
-	mu   sync.Mutex
-	runs map[db.GetStagingSnapshotParams]*stagingTransfer
+	mu       sync.Mutex
+	runs     map[db.GetStagingSnapshotParams]*stagingTransfer
+	admitted map[string]int64
+	active   int64
 }
 
 type stagingTransfer struct {
 	active  int
 	started time.Time
 	elapsed time.Duration
+}
+
+// TryBeginStagingTransfer applies the captured global and per-agent budgets.
+// Rejected work does not wait or pause the run's timeout.
+// The caller must defer the returned completion function after admission.
+func (r *Repository) TryBeginStagingTransfer(
+	key db.GetStagingSnapshotParams,
+) (func(), bool) {
+	transfers := r.stagingTransfers
+	limits := r.ResourceLimits().Transfer
+	transfers.mu.Lock()
+	if transfers.admitted[key.Producer] >= limits.PerAgent ||
+		transfers.active >= limits.Global {
+		transfers.mu.Unlock()
+		return nil, false
+	}
+	if transfers.admitted == nil {
+		transfers.admitted = make(map[string]int64)
+	}
+	transfers.admitted[key.Producer]++
+	transfers.active++
+	transfers.mu.Unlock()
+	finish := r.BeginStagingTransfer(key)
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			finish()
+			transfers.mu.Lock()
+			transfers.active--
+			transfers.admitted[key.Producer]--
+			if transfers.admitted[key.Producer] == 0 {
+				delete(transfers.admitted, key.Producer)
+			}
+			transfers.mu.Unlock()
+		})
+	}, true
 }
 
 // BeginStagingTransfer counts the union of concurrent requests for one run.

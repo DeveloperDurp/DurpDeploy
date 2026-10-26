@@ -3,6 +3,8 @@
 Run `durpdeploy version` before and after an upgrade to record the installed software identity.
 Read [software versioning](versioning.md) for build numbers, container tags, and API diagnostics.
 
+Before expanding access, complete the [deployment access review](security.md#deployment-access-review).
+
 Run DurpDeploy with Docker Compose behind Caddy for HTTPS. The stack includes
 SQLite storage, an embedded container executor, and a Litestream backup sidecar.
 You need Docker with Compose, a DNS name pointing to the host, and inbound
@@ -11,25 +13,42 @@ For existing installations, follow the [agent port migration](agents.md#migrate-
 
 ## HTTP connection limits
 
-Both Go listeners enforce these limits, whether a proxy is present or not:
+Both Go listeners enforce these defaults, whether a proxy is present or not.
+Use [startup configuration](configuration.md) to change the timeouts through environment variables or optional YAML.
 
-| Phase | Limit |
+| Phase | Default |
 | --- | --- |
 | Request headers | 5 seconds |
 | Whole request read, including headers and body | 30 seconds |
 | Ordinary response writes | 60 seconds after headers are read |
 | Idle keep-alive connection | 60 seconds |
 
-Read limits are absolute deadlines, not inactivity timers. Slowly sending a
-few bytes does not extend them. Existing password-form and agent-protocol
-body-size limits still apply. A timeout can close the connection without an
-HTTP error response; clients must not depend on a particular status code.
+Read limits use absolute deadlines.
+Sending a few bytes does not extend a deadline.
+Password-form and agent-protocol body limits still apply.
+A timeout can close the connection without an HTTP error response.
+Do not depend on a specific status code.
 
-Deployment and runbook log streams (SSE and NDJSON), plus deployment SSE
-events, have no total response lifetime limit. Each event write and flush
-has a fresh 60-second deadline; a failed write ends the stream. The deadline
-is cleared between events, so quiet periods do not expire healthy streams.
-Clients must keep consuming output and reconnect after a disconnect.
+Browser/API request bodies use these configurable defaults.
+Use [startup configuration](configuration.md) to change each byte limit.
+
+| Body | Default |
+| --- | --- |
+| API JSON and `/api/lint` | 4 MiB |
+| General web forms, including multipart | 16 MiB |
+| Login, reauthentication, and password changes | 64 KiB |
+| Package-repository web forms | 64 KiB |
+
+Larger bodies use more memory before validation.
+Specialized form limits must not exceed the general form limit.
+Separate agent-protocol body limits remain unchanged.
+
+Deployment and runbook log streams, including SSE and NDJSON, have no total response lifetime limit.
+Each event write and flush has a default 60-second deadline.
+The configured stream write timeout replaces that default.
+A failed write ends the stream.
+The server clears the deadline between events, so quiet streams remain open.
+Consume output continuously and reconnect after a disconnect.
 
 Caddy fronts browser/API traffic, not the direct mTLS agent listener. Keep
 the plain HTTP browser backend on a private network or loopback in production.
@@ -367,6 +386,24 @@ The original package directory stays separate from writable staging.
 Agents verify the authenticated checksum and size before extracting the package.
 Managed package files and volumes follow the staging cleanup barrier.
 
+The server admits four staging uploads or downloads at once, with one active request per agent.
+Excess requests receive HTTP `429` and `Retry-After: 1` without starting expensive transfer work.
+Agents retry these responses with the same claim and archive.
+Admission applies per server process and preserves existing archive and idle limits.
+Temporary upload, canonical, and encrypted spools still require operator-provided disk capacity.
+
+Each remote step permits at most 64 agent outputs and 2 GiB of canonical input archives, including the base.
+Merge work permits 200,000 entry visits per step.
+The server counts the base once, then base and output entries for each agent.
+Duplicate outputs consume these budgets.
+
+The server processes outputs individually and closes each producer spool after copying accepted changes.
+Excess input fails the step with `staging merge budget exceeded` before downstream execution.
+Existing cleanup and final 512 MiB and 20,000-entry limits remain active.
+
+Staging publication checks cancellation before each encrypted 1 MiB chunk.
+Canceled publication closes temporary spools and does not publish partial snapshot data.
+
 Run the public API transfer suite with a staging-capable agent binary:
 
 ```bash
@@ -393,6 +430,11 @@ Remote-agent container limits are tracked separately in
 logs free of terminal control codes.
 It receives its script on stdin and all compatible resolved release
 variables by default; `variable_names` restricts the step when it is non-empty.
+The server validates effective environment entries after overrides and variable selection.
+Names require 1–255 ASCII letters, digits, or underscores, starting with a letter or underscore.
+Values must not contain NUL. Empty and multiline values remain valid.
+Invalid legacy entries fail before script execution with a validation error in deployment logs.
+The error does not include variable names or values. Target-specific reserved-name restrictions still apply.
 Images supply their own interpreter and tools. Tags are mutable even
 inside an immutable release snapshot, so use digest-pinned references for
 reproducibility. The mounted runtime socket gives the DurpDeploy process
@@ -498,6 +540,19 @@ Log in as the recovery administrator and edit the original account. Password
 changes invalidate that user's browser sessions and pending challenges; revoke
 leaked API tokens separately. Remove the temporary recovery account afterward.
 Deleting and recreating the original user loses memberships and token records.
+
+### Graceful shutdown and terminal results
+
+Shutdown closes runner admission and drains local cleanup before the database closes.
+Shutdown also joins terminal-status retries admitted before shutdown starts.
+Each retry keeps its existing 30-second deadline.
+Shutdown uses a 30-second budget for admitted retries.
+
+An expired shutdown deadline cancels outstanding retry database operations.
+Failed writes after retry admission closes remain available for startup recovery.
+Startup recovery also reconciles writes that exceed the retry deadline.
+Cancellation and unconfirmed cleanup retain their existing status rules.
+Remote cancellation still requires agent acknowledgment or lease expiry.
 
 ### The dashboard loads but deploys fail
 

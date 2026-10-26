@@ -44,6 +44,8 @@ func newMobileBrowserFixtures(t *testing.T) mobileBrowserFixtures {
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	// Each SQLite :memory: connection has a separate database.
+	conn.SetMaxOpenConns(1)
 	t.Cleanup(func() {
 		if err := conn.Close(); err != nil {
 			t.Errorf("close database: %v", err)
@@ -187,8 +189,7 @@ func viewerWriteIsRejected(t *testing.T, fixtures mobileBrowserFixtures) {
 		t.Fatalf("viewer request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.AddCookie(&http.Cookie{Name: "session", Value: viewer.sessionToken})
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := viewer.client.Do(req)
 	if err != nil {
 		t.Fatalf("viewer POST: %v", err)
 	}

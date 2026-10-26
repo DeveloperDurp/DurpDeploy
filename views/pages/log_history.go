@@ -69,5 +69,7 @@ func deploymentPageLogView(
 	view.LastID = history.Page.LastID
 	view.Historical = history.Page.Before != 0
 	view.OlderBefore = history.Page.NextBefore
+	view.Limit = history.Page.Limit
+	view.ByteLimit = history.Page.ByteLimit
 	return view
 }

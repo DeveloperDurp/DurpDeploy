@@ -10,6 +10,7 @@ import (
 	"durpdeploy/internal/agentexecution"
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/stepdefinition"
 )
 
 var (
@@ -178,28 +179,34 @@ func deploymentResult(deployment db.Deployment) DeploymentResult {
 	return DeploymentResult{Deployment: deployment, Mode: mode}
 }
 
-func deploymentStepsFromRelease(raw string) ([]DeploymentStepSnapshot, error) {
+func (r *Repository) deploymentStepsFromRelease(
+	raw string,
+) ([]DeploymentStepSnapshot, error) {
+	return r.decodeDeploymentSteps(raw, false)
+}
+
+func (r *Repository) decodeDeploymentSteps(
+	raw string,
+	forRefresh bool,
+) ([]DeploymentStepSnapshot, error) {
+	// Deployment position follows the array, including legacy snapshots whose
+	// sort_order metadata was ignored by this decoder.
 	var source []struct {
-		Name                 string   `json:"name"`
-		ScriptBody           string   `json:"script_body"`
-		Interpreter          string   `json:"interpreter"`
-		TimeoutSeconds       int64    `json:"timeout_seconds"`
-		MaxRetries           int64    `json:"max_retries"`
-		ExecutionTarget      string   `json:"execution_target"`
-		AgentExecutionMode   string   `json:"agent_execution_mode"`
-		AgentSelectors       []string `json:"agent_selectors"`
-		ContainerImage       string   `json:"container_image"`
-		NetworkMode          string   `json:"network_mode"`
-		ApprovalArtifactPath string   `json:"approval_artifact_path"`
-		ApprovalReviewPath   string   `json:"approval_review_path"`
-		ApprovalReviewFormat string   `json:"approval_review_format"`
-		VariableNames        []string `json:"variable_names"`
+		stepdefinition.Definition
+		SortOrder json.RawMessage `json:"sort_order"`
 	}
 	if err := json.Unmarshal([]byte(raw), &source); err != nil {
 		return nil, fmt.Errorf("decode release steps: %w", err)
 	}
 	steps := make([]DeploymentStepSnapshot, len(source))
 	for i, step := range source {
+		// Refresh replaces historical limits with validated project steps.
+		// Retain malformed/negative and legacy-image checks on the old source.
+		if !forRefresh || step.TimeoutSeconds < 0 || step.MaxRetries < 0 {
+			if err := agentexecution.ValidateLimitsWithPolicy(step.TimeoutSeconds, step.MaxRetries, r.ResourceLimits().Execution); err != nil {
+				return nil, fmt.Errorf("step %q: %w", step.Name, err)
+			}
+		}
 		target := step.ExecutionTarget
 		if target == "" {
 			target = "local"

@@ -101,13 +101,26 @@ func postAgent(
 	fixture agentFixture,
 	path string,
 	body string,
+	headers ...http.Header,
 ) *http.Response {
 	t.Helper()
-	response, err := fixture.client.Post(
+	request, err := http.NewRequest(
+		http.MethodPost,
 		fixture.server.URL+path,
-		"application/json",
 		strings.NewReader(body),
 	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	for _, header := range headers {
+		for name, values := range header {
+			for _, value := range values {
+				request.Header.Add(name, value)
+			}
+		}
+	}
+	response, err := fixture.client.Do(request)
 	if err != nil {
 		t.Fatal(err)
 	}

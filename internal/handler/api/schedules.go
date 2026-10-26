@@ -1,6 +1,7 @@
 package api
 
 import (
+	"cmp"
 	"database/sql"
 	"errors"
 	"net/http"
@@ -151,10 +152,7 @@ func (h *ScheduleHandler) CreateSchedule(
 	if !readJSONBool(w, r, &req) {
 		return
 	}
-	cronExpr := req.CronExpr
-	if cronExpr == "" {
-		cronExpr = req.Cron
-	}
+	cronExpr := cmp.Or(req.CronExpr, req.Cron)
 	if req.ReleaseID == 0 || req.EnvironmentID == 0 || cronExpr == "" {
 		RespondError(
 			w,
@@ -184,6 +182,9 @@ func (h *ScheduleHandler) CreateSchedule(
 		r.Context(),
 		release.ID,
 	); err != nil {
+		if writeArtifactError(w, err) {
+			return
+		}
 		if errors.Is(err, repository.ErrLegacyServerStep) {
 			RespondError(
 				w,
@@ -362,10 +363,7 @@ func (h *ScheduleHandler) UpdateSchedule(
 	if !readJSONBool(w, r, &req) {
 		return
 	}
-	cronExpr := req.CronExpr
-	if cronExpr == "" {
-		cronExpr = req.Cron
-	}
+	cronExpr := cmp.Or(req.CronExpr, req.Cron)
 	if req.ReleaseID == 0 || req.EnvironmentID == 0 || cronExpr == "" {
 		RespondError(
 			w,
@@ -394,6 +392,9 @@ func (h *ScheduleHandler) UpdateSchedule(
 		r.Context(),
 		release.ID,
 	); err != nil {
+		if writeArtifactError(w, err) {
+			return
+		}
 		if errors.Is(err, repository.ErrLegacyServerStep) {
 			RespondError(
 				w,
@@ -562,6 +563,9 @@ func (h *ScheduleHandler) ToggleSchedule(
 			r.Context(),
 			existing.ReleaseID,
 		); err != nil {
+			if writeArtifactError(w, err) {
+				return
+			}
 			if errors.Is(err, repository.ErrLegacyServerStep) {
 				RespondError(
 					w,

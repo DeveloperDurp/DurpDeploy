@@ -128,6 +128,9 @@ func decodePollResponse(
 	response *http.Response,
 ) agentproto.PollResponse {
 	t.Helper()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("poll status=%d want=%d", response.StatusCode, http.StatusOK)
+	}
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		t.Fatal(err)

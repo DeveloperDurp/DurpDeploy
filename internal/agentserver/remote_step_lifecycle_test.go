@@ -10,6 +10,7 @@ import (
 	"durpdeploy/internal/db"
 
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
+	"github.com/DeveloperDurp/durpdeploy-agent/resourcepolicy"
 )
 
 func TestRemoteStepResultCompletesRun(t *testing.T) {
@@ -224,18 +225,28 @@ func claimedRemoteStepWithMode(
 			t.Fatal(err)
 		}
 	}
+	advertisement, err := fixture.repo.ResourceLimits().
+		AgentPolicy().
+		Advertisement()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.repo.Queries.AddAgentResourcePolicy(t.Context(), db.AddAgentResourcePolicyParams{
+		AgentID: "test-agent", Advertisement: advertisement,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	created, err := fixture.repo.QueueRemoteStepRuns(
-		t.Context(),
-		deploymentID,
-		0,
+		t.Context(), deploymentID, 0,
 	)
 	if err != nil || created != 1 {
 		t.Fatalf("queue remote step rows=%d error=%v", created, err)
 	}
-
 	poll := decodePollResponse(
 		t,
-		postAgent(t, fixture, agentproto.PollPath, body),
+		postAgent(t, fixture, agentproto.PollPath, body, http.Header{
+			resourcepolicy.CapabilityHeader: {advertisement},
+		}),
 	)
 	claim := fmt.Sprintf(
 		`{"protocol":"agent/1","claim_token":%q}`,

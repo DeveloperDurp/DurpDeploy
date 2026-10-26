@@ -122,7 +122,7 @@ matrix_csrf_viewer_role_write_rejection() {
 }
 
 matrix_api_token_machine_credential_separation() {
-    local admin_jar admin_csrf token sessions_before tokens_before admin_id
+    local admin_jar admin_csrf token unknown_token sessions_before tokens_before admin_id
 
     authz_scenario_init api-token-machine-credential-separation
     admin_jar=$(auth_mfa_cookie_jar admin)
@@ -151,6 +151,11 @@ matrix_api_token_machine_credential_separation() {
     auth_mfa_assert_status 401
     authz_json_error 'invalid authorization format'
     auth_mfa_http_request - GET /api/v1/users/me '' '' 'Authorization: Bearer ddp_pat_bad'
+    auth_mfa_assert_status 401
+    authz_json_error 'invalid token format'
+    unknown_token="ddp_pat_$(openssl rand -hex 32)"
+    auth_mfa_secret_add "$unknown_token"
+    auth_mfa_api_request "$unknown_token" GET /api/v1/users/me
     auth_mfa_assert_status 401
     authz_json_error 'invalid or revoked token'
     auth_mfa_http_request - GET /projects '' '' "Authorization: Bearer $token"

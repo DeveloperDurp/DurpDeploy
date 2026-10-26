@@ -104,7 +104,8 @@ func redirectToLogin(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	if r.Header.Get("HX-Boosted") == "true" {
+	if r.Header.Get("HX-Request") == "true" ||
+		r.Header.Get("HX-Boosted") == "true" {
 		w.Header().Set("HX-Redirect", location)
 		w.WriteHeader(http.StatusOK)
 		return

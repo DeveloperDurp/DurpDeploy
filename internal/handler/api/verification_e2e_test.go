@@ -332,7 +332,11 @@ func waitVerificationLog(t *testing.T, f *artifactE2E, path, text string) {
 		}
 		select {
 		case <-deadline.C:
-			t.Fatalf("verification output did not appear: %q", text)
+			t.Fatalf(
+				"verification output did not appear: %q; last deployment logs: %s",
+				text,
+				logs,
+			)
 		case <-time.After(50 * time.Millisecond):
 		}
 	}

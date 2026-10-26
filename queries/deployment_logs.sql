@@ -45,7 +45,7 @@ WHERE deployment_id = ?;
 
 -- name: ListDeploymentLogsAfter :many
 SELECT * FROM deployment_logs WHERE deployment_id = ? AND id > ?
-ORDER BY id LIMIT 256;
+ORDER BY id LIMIT sqlc.arg(batch_limit);
 
 -- name: CreateRemoteDeploymentLog :one
 INSERT INTO deployment_logs (deployment_id, step_name, line, created_at, is_step_metadata)

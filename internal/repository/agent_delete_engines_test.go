@@ -89,6 +89,15 @@ func testAgentDeleteEngineOutcome(
 	t.Helper()
 	given := seedAgentDeleteEngineHistory(t, repo, outcome)
 	f, pairing := given.fixture, given.pairing
+	advertisement, err := repo.ResourceLimits().AgentPolicy().Advertisement()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Queries.AddAgentResourcePolicy(t.Context(), db.AddAgentResourcePolicyParams{
+		AgentID: f.agentID, Advertisement: advertisement,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := repo.Queries.GetRegisteredAgentPairing(
 		t.Context(), f.agentID,
 	); err != nil {

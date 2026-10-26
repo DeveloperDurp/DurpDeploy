@@ -17,6 +17,9 @@ func TestProjectEditModalBrowserE2E(t *testing.T) {
 		map[string]string{"name": "duplicate-project"},
 		201,
 	)
+	var lifecycle struct{ ID int64 }
+	decodeLifecycleTest(t, f.api(t, "POST", "/api/v1/lifecycles",
+		map[string]string{"name": "modal lifecycle"}, 201), &lifecycle)
 	member := seedAPIUser(t, f.h.repo, "modal-member@example.test", "deployer")
 	seedAPIUser(t, f.h.repo,
 		strings.Repeat("modal-member-", 10)+"@example.test", "deployer")
@@ -67,7 +70,10 @@ func TestProjectEditModalBrowserE2E(t *testing.T) {
 		t,
 		`!document.querySelector('#project-edit-dialog').open && document.activeElement?.hasAttribute('hx-get')`,
 	)
-	var project struct{ Name, Description string }
+	var project struct {
+		Name, Description string
+		LifecycleID       *int64 `json:"lifecycle_id"`
+	}
 	decodeStepLogTest(t, f.api(t, "GET", api, nil, 200), &project)
 	if project.Name != f.project.Name {
 		t.Fatal("Back saved unsaved project fields")
@@ -164,11 +170,39 @@ func TestProjectEditModalBrowserE2E(t *testing.T) {
 		t,
 		`document.querySelector('#project-edit-dialog').open && !document.querySelector('#project-edit-content tbody').textContent.includes('modal-member@example.test')`,
 	)
+	// A lifecycle-write failure must roll back the submitted metadata.
+	if _, err := f.h.repo.DB.ExecContext(t.Context(), `
+CREATE TRIGGER reject_modal_lifecycle BEFORE UPDATE OF lifecycle_id ON projects
+BEGIN SELECT RAISE(ABORT, 'injected lifecycle write failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	b.wait(t, `!document.querySelector('.htmx-settling, .htmx-request')`)
+	b.evaluate(t, fmt.Sprintf(`
+document.body.addEventListener('htmx:afterRequest', event => {
+ window.projectUpdateStatus = event.detail.xhr.status;
+}, {once: true});
+document.querySelector('#project-edit-content input[name="name"]').value = 'failed-modal-edit';
+document.querySelector('#project-edit-content textarea').value = 'failed description';
+document.querySelector('#project-edit-content select[name="lifecycle_id"]').value = %q;
+document.querySelector('#project-edit-content button[form]').click(); true`,
+		fmt.Sprint(lifecycle.ID)))
+	b.wait(t, `window.projectUpdateStatus === 500`)
+	decodeStepLogTest(t, f.api(t, "GET", api, nil, 200), &project)
+	if project.Name != f.project.Name ||
+		project.Description != f.project.Description.String ||
+		project.LifecycleID != nil {
+		t.Fatal("failed modal edit committed project metadata or lifecycle")
+	}
+	b.screenshot(t, "project-update-rolled-back")
+	if _, err := f.h.repo.DB.ExecContext(t.Context(),
+		"DROP TRIGGER reject_modal_lifecycle"); err != nil {
+		t.Fatal(err)
+	}
 	// Save refreshes detail without changing the project URL or reloading bundles.
 	b.wait(t, `!document.querySelector('.htmx-settling, .htmx-request')`)
 	b.evaluate(
 		t,
-		`window.modalSaveSentinel = true; document.querySelector('#project-edit-content input[name="name"]').value = 'modal-saved-project'; document.querySelector('#project-edit-content button[form]').click(); true`,
+		`window.modalSaveSentinel = true; document.querySelector('#project-edit-content input[name="name"]').value = 'modal-saved-project'; document.querySelector('#project-edit-content textarea').value = 'saved description'; document.querySelector('#project-edit-content button[form]').click(); true`,
 	)
 	b.wait(
 		t,
@@ -186,9 +220,15 @@ func TestProjectEditModalBrowserE2E(t *testing.T) {
 		t.Fatal("modal Save navigated or reloaded the document")
 	}
 	decodeStepLogTest(t, f.api(t, "GET", api, nil, 200), &project)
-	if project.Name != "modal-saved-project" {
-		t.Fatal("modal Save did not persist through the API")
+	if project.Name != "modal-saved-project" ||
+		project.Description != "saved description" ||
+		project.LifecycleID == nil ||
+		*project.LifecycleID != lifecycle.ID {
+		t.Fatal(
+			"modal Save did not persist metadata and lifecycle through the API",
+		)
 	}
+	b.screenshot(t, "project-update-committed")
 	open()
 	b.evaluate(
 		t,

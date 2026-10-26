@@ -133,12 +133,8 @@ openssl x509 -req -sha256 -days 7 \
 	-out "$tls_dir/dev-cert.pem" >/dev/null 2>&1
 chmod 600 "$tls_dir/ca-key.pem" "$tls_dir/dev-key.pem"
 
-cat >"$config" <<EOF
-:443 {
-	tls /etc/caddy/dev-cert.pem /etc/caddy/dev-key.pem
-	reverse_proxy $backend
-}
-EOF
+bash "$(dirname -- "${BASH_SOURCE[0]}")/https_proxy_config.sh" \
+	:443 /etc/caddy/dev-cert.pem /etc/caddy/dev-key.pem "$backend" >"$config"
 
 echo "WARNING: development HTTPS uses a temporary local CA; browser trust warnings are expected."
 echo "Starting HTTPS proxy at https://localhost:${port} -> ${backend}"

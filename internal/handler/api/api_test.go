@@ -19,6 +19,7 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"durpdeploy/internal/auth"
+	"durpdeploy/internal/config"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/handler/api"
@@ -35,9 +36,20 @@ type harness struct {
 }
 
 func newAPIHarness(t *testing.T, binary ...string) *harness {
+	return newConfiguredAPIHarness(t, nil, binary...)
+}
+
+func newConfiguredAPIHarness(
+	t *testing.T,
+	settings *config.Config,
+	binary ...string,
+) *harness {
 	conn := newAPITestDatabase(t)
 
 	repo := repository.New(conn)
+	if settings != nil {
+		repo = repository.NewConfigured(conn, *settings)
+	}
 	broker := runner.NewLogBroker()
 	var rnr *runner.DeploymentRunner
 	if len(binary) == 0 {

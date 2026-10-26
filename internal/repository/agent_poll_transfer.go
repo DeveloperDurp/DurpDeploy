@@ -24,7 +24,17 @@ func (request AgentPollCapabilities) recordTransferCapabilities(
 		return err
 	}
 	if request.Artifact {
-		return q.AddAgentArtifactCapability(ctx, agentID)
+		if err := q.AddAgentArtifactCapability(ctx, agentID); err != nil {
+			return err
+		}
+	}
+	if err := q.ClearAgentResourcePolicy(ctx, agentID); err != nil {
+		return err
+	}
+	if request.ResourcePolicy != "" {
+		return q.AddAgentResourcePolicy(ctx, db.AddAgentResourcePolicyParams{
+			AgentID: agentID, Advertisement: request.ResourcePolicy,
+		})
 	}
 	return nil
 }

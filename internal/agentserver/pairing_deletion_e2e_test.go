@@ -170,7 +170,7 @@ func deleteAgentOnPairingAck(
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		request.Header.Set("Authorization", "Bearer ddp_pat_fleet_admin")
+		request.Header.Set("Authorization", "Bearer "+fleetTestToken("admin"))
 		response, err := (*admin).Client().Do(request)
 		if err != nil {
 			t.Error(err)

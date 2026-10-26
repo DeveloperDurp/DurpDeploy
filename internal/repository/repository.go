@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 
 	"durpdeploy/internal/artifact"
+	"durpdeploy/internal/config"
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/secret"
@@ -19,6 +21,32 @@ type Repository struct {
 	remoteWorkReady  chan struct{}
 	ArtifactClient   *artifact.Client
 	stagingTransfers *stagingTransferState
+	startup          *config.Config
+}
+
+// NewConfigured retains one immutable startup snapshot. Do not log or expose
+// the snapshot: it can contain credentials for startup-only consumers.
+func NewConfigured(dbConn *sql.DB, settings config.Config) *Repository {
+	r := New(dbConn)
+	r.startup = &settings
+	r.ArtifactClient = artifact.NewClientWithLimits(settings.Limits.Artifact)
+	return r
+}
+
+// StartupLookup keeps legacy test constructors compatible with their explicit
+// process environment. Configured production repositories use only the snapshot.
+func (r *Repository) StartupLookup(key string) (string, bool) {
+	if r == nil || r.startup == nil {
+		return os.LookupEnv(key)
+	}
+	return r.startup.LookupEnv(key)
+}
+
+func (r *Repository) ResourceLimits() config.Limits {
+	if r == nil || r.startup == nil {
+		return config.Defaults().Limits
+	}
+	return r.startup.Limits
 }
 
 func New(dbConn *sql.DB) *Repository {

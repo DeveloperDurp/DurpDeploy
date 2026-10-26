@@ -91,6 +91,10 @@ func checkProjectEnvironmentDeploymentHistory(t *testing.T, name string) {
 	if err != nil || len(recent) != 0 {
 		t.Fatalf("empty project recent: %+v, %v", recent, err)
 	}
+	for range 6 {
+		createProjectPanelDeployment(t, repo, 1, 1, 500, "failed")
+	}
+	checkProjectPanelBatch(t, repo, name, other.ID, environment.ID)
 }
 
 type projectPanelHistory struct {

@@ -75,6 +75,26 @@ cancel and shutdown ask the runtime to remove the step container. Startup
 reconciles orphaned attempts. Killing the container client does not confirm
 cleanup. An unconfirmed outcome requires inspection before retrying.
 
+### Deployment access review
+
+Before expanding network exposure or script authoring access, record these deployment decisions.
+Keep the deployment inventory private. Record secret references without their values.
+
+| Decision | Required record and check |
+| --- | --- |
+| Script authors | List approved authors, projects, service identities, and permitted execution resources. |
+| Execution resources | Record allowed network destinations, mounts, and secret references for each resource. |
+| Execution access | For existing-release deployment execution, assign [Deployer permission](roles.md#capabilities). Review global roles, project memberships, and token ceilings. |
+| Network exposure | Until a separate exposure assessment is complete, keep external access behind a VPN or access gateway. |
+| Execution hosts | Separate execution hosts by trust level. Check host-mode identity access and container-mode kernel sharing. |
+| Resource limits | Configure CPU, RAM, process, and disk limits at the runtime or host boundary that owns execution. Verify limits on actual jobs. |
+
+Control-plane service limits do not automatically constrain sibling step containers.
+DurpDeploy does not impose per-step CPU or RAM quotas.
+Use the [execution boundary](#execution-boundary) and [agent boundary](agents.md#agent-execution-boundary) to check each resource.
+
+A separate exposure assessment must cover the planned network access, credential theft, and authorized script execution.
+
 ---
 
 ## Authentication
@@ -123,6 +143,22 @@ browser session and records `reauthenticated_at`. Factor changes, disablement,
 password changes, and administrator resets invalidate the affected browser
 sessions and pending challenges.
 
+API tokens contain `ddp_pat_` followed by exactly 64 hexadecimal characters.
+API authentication and durable stream checks use the same parser before hashing or credential lookup.
+Malformed tokens return HTTP 401 JSON errors. Valid tokens keep their existing SHA-256 representation.
+
+API token lists report `last_used_at` as approximate, best-effort usage telemetry.
+The default recording interval is one minute during normal use.
+Each API router defaults to eight telemetry queries with independent five-second deadlines.
+Startup configuration can change these three telemetry limits.
+See [startup configuration](configuration.md) for environment variables and YAML settings.
+
+Repeated concurrent use of one token shares its in-flight update.
+Full admission capacity skips telemetry without queuing or delaying the response.
+Database errors can delay or omit updates.
+Conditional writes preserve monotonic timestamps and skip revoked tokens.
+Authentication, permission, and stream revocation checks continue to read current credentials.
+
 Browser MFA protects browser sessions only. API tokens are single bearer
 factors: `/api/v1/*` does not prompt for MFA, and MFA disablement or an
 administrator reset does not revoke API tokens. Revoke API tokens separately
@@ -159,6 +195,13 @@ It intentionally preserves API tokens. This is an operational contract. The
 browser ceremony end-to-end proof is tracked separately from this document.
 
 ---
+
+## Browser framing
+
+The shared HTTP server sets `Content-Security-Policy: frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN`.
+Browsers permit same-origin frames and block cross-origin frames, including parents on a different port of the same site.
+The policy also covers login, errors, and responses forwarded through the supported Caddy proxy.
+This framing policy does not restrict scripts or replace authentication, CSRF checks, or cookie protections.
 
 ## Secret variable exports
 
@@ -258,6 +301,13 @@ Routes in `/admin/users/*` are gated by `RequireRole("admin")`. The
   (`create_user`, `update_user`, `delete_user`) and the project-member routes
   (`add_project_member`, `remove_project_member`).
 
+Passkey registration records `mfa_passkey_add` after successful verification.
+Staged registration, option retrieval, and cancellation do not record a completed addition.
+
+Route coverage checks compare registered web, API, and agent writes with audit declarations and documented exclusions.
+These checks also require authentication on protected writes.
+Run `bash scripts/go_test.sh -run '^TestRegisteredWrite' ./internal/audit` to check route coverage.
+
 ---
 
 ## Middleware stacks
@@ -295,10 +345,10 @@ Do not reorder or skip any of these.
 The `value` columns in `variables`, `release_variables`, `lifecycle_variables`,
 and `deployment_variable_snapshots` use AES-256-GCM encryption before database storage:
 
-- **Key source:** `/etc/durpdeploy/key` (file, checked first) or
-  `DURPDEPLOY_SECRET_KEY` (env, base64-encoded 32 bytes). The server calls
-  `secret.LoadKey()` at startup and **refuses to boot** (`log.Fatalf`) if
-  neither is configured — there is no "run with plaintext secrets" mode.
+- **Key source:** `DURPDEPLOY_SECRET_KEY`, then YAML `secret_key`, then the legacy `/etc/durpdeploy/key` file.
+  Each source contains 32 bytes encoded as Base64.
+  The server validates the resolved key before startup effects.
+  It refuses startup without a valid key.
 - **Encrypt path:** `Repository.CreateVariable` / `UpdateVariable` encrypt
   `value` before the INSERT/UPDATE. Release snapshot creation
   (`ReleaseHandler.CreateRelease` / `RefreshRelease`) re-encrypts each
@@ -351,8 +401,7 @@ Keep the printed replacement key private and available until it is installed.
 
 This one-shot command (`cmd/server/main.go: runSecretKey`):
 
-1. Loads the **current** key via `secret.LoadKey()` (same file/env lookup
-   the server uses).
+1. Loads the current key through the same resolved startup configuration as the server.
 2. Generates a fresh random 32-byte key.
 3. In one transaction, re-encrypts project variables, release variables,
    lifecycle variables, deployment variable captures, package-repository credentials,
@@ -368,9 +417,13 @@ Docker, use `sudo chown 10001:10001 secrets/durpdeploy_key`; for rootless Podman
 use `podman unshare chown 10001:10001 secrets/durpdeploy_key`. Preserve the
 appropriate user-namespace mapping for other engines. Repeat the
 [key-readability check](deploy.md#quick-start-docker-compose-recommended-for-self-hosting)
-before restarting. The mounted `/etc/durpdeploy/key` file takes precedence
-over `DURPDEPLOY_SECRET_KEY`; changing only the environment variable would
-leave the old file key in use. Recreate the app and resume replication:
+before restarting.
+
+The environment key takes precedence over YAML and the mounted key file.
+The YAML key takes precedence over the mounted key file.
+Update the selected source with the exact rotated key.
+Use the same startup configuration for rotation and server startup.
+Recreate the app and resume replication:
 
 ```bash
 docker compose up -d --force-recreate app litestream

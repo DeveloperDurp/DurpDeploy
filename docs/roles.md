@@ -4,6 +4,12 @@ DurpDeploy uses four permission levels: `viewer < deployer < maintainer < admin`
 Each user has one global role.
 Administrators manage global roles through **Admin → Users** or the public user API.
 
+Local user updates and deletions must leave at least one administrator.
+The web form and API reject a mutation that would remove the final administrator with 422.
+Create or promote a replacement administrator before handing over the role.
+OIDC role synchronization remains provider-authoritative and can remove the final administrator role.
+Use the [host recovery procedure](deploy.md#forgot-the-admin-password) if no administrator remains.
+
 ## Capabilities
 
 | Role | Read accessible data and logs | Deployment execution | Content authoring |

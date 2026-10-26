@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"durpdeploy/internal/artifact"
+	"durpdeploy/internal/agentexecution"
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/interpreter"
 )
@@ -32,6 +32,9 @@ type localStepAttempt struct {
 func (r *DeploymentRunner) runStepAttempt(
 	runCtx context.Context, request localStepAttempt,
 ) (result error) {
+	if err := agentexecution.ValidateLimitsWithPolicy(request.step.TimeoutSeconds, request.step.MaxRetries, r.repo.ResourceLimits().Execution); err != nil {
+		return err
+	}
 	if !r.beginLocalWork() {
 		return context.Canceled
 	}
@@ -78,7 +81,10 @@ func (r *DeploymentRunner) runStepAttempt(
 		return err
 	}
 	host := r.engine.hostname(runCtx)
-	timeout := defaultStepTimeout
+	limits := r.repo.ResourceLimits()
+	timeout := time.Duration(
+		limits.Execution.DefaultTimeoutSeconds,
+	) * time.Second
 	if request.step.TimeoutSeconds > 0 {
 		timeout = time.Duration(request.step.TimeoutSeconds) * time.Second
 	}
@@ -101,7 +107,10 @@ func (r *DeploymentRunner) runStepAttempt(
 	}
 	selectedEnv, envArgs, err := request.containerEnvironment()
 	if err != nil {
-		return err
+		_, logErr := fmt.Fprintf(request.logWriter,
+			"step %q: failed before execution: %v\n", request.step.Name, err)
+		request.logWriter.Flush()
+		return errors.Join(err, logErr)
 	}
 	nonce := make([]byte, 12)
 	if _, err := rand.Read(nonce); err != nil {
@@ -122,13 +131,14 @@ func (r *DeploymentRunner) runStepAttempt(
 		timeoutFlag = "--timeout="
 	}
 	network := request.step.NetworkMode
-	tmpfs := "--tmpfs=/tmp:rw,nosuid,size=64m"
+	tmpfs := fmt.Sprintf("--tmpfs=/tmp:rw,nosuid,size=%d",
+		limits.Container.TmpfsBytes)
 	if request.step.ApprovalArtifactPath != "" ||
 		request.approved.volume != "" {
 		// Providers execute in /tmp; staging and approved context stay noexec.
 		tmpfs = fmt.Sprintf(
 			"--tmpfs=/tmp:rw,exec,nosuid,nodev,size=%d",
-			artifact.MaxDownload+(64<<20),
+			limits.Artifact.DownloadBytes+limits.Container.TmpfsBytes,
 		)
 	}
 	if network == "" {
@@ -144,7 +154,7 @@ func (r *DeploymentRunner) runStepAttempt(
 		"--security-opt=no-new-privileges", "--user=65534:65534",
 		tmpfs,
 		"--env=HOME=/tmp", "--env=TERM=dumb",
-		"--pids-limit=128")
+		fmt.Sprintf("--pids-limit=%d", r.repo.ResourceLimits().Container.PIDs))
 	if r.engine.kind == "podman" {
 		args = append(args, "--image-volume=ignore", "--http-proxy=false")
 	}
@@ -209,9 +219,10 @@ func (r *DeploymentRunner) runStepAttempt(
 				),
 			)
 			line := request.logWriter.scrubber.Scrub(fmt.Sprintf(
-				"step %q: container cleanup unconfirmed: %v",
+				"step %q: container cleanup unconfirmed: %v: %s",
 				request.step.Name,
 				err,
+				strings.TrimSpace(string(output)),
 			))
 			if persistErr := request.logWriter.writeLine(
 				line,

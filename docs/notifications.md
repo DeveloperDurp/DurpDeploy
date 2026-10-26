@@ -66,3 +66,13 @@ Administrators inspect delivery status at `/admin/notifications`:
 - **Warning:** the SMTP provider accepted the message without TLS.
 - **Failed:** delivery returned an error; inspect the row details.
 - **Skipped:** the channel or required SMTP configuration is absent.
+
+Notification delivery remains best effort and does not change the deployment result.
+If project or global settings cannot be loaded, the server skips delivery and records a generic failed status.
+A successful settings lookup with a disabled channel still records `skipped`.
+
+Inspect server warnings named `load notification settings failed` and `write notification history failed`.
+Each warning identifies the event type and deployment, project, and environment IDs.
+Settings warnings also identify the project or global scope.
+The warnings omit driver errors, event messages, destinations, and credentials.
+If a history insert fails, the warning remains available even though no history row was saved.

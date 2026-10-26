@@ -121,6 +121,11 @@ Check **API target** before you authorize a token.
 
 ## Base URL
 
+Open browser pages as top-level documents or within same-origin frames.
+The server sends `Content-Security-Policy: frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN` on HTTP responses.
+Cross-origin frames are blocked, including parents on another port of the same site.
+These headers do not change bearer API authentication or browser CSRF requirements.
+
 Replace `$BASE` (e.g. `https://durpdeploy.example.com` or
 `http://localhost:8080`) throughout. The server listens on `:8080` by
 default behind a reverse proxy in production. `/healthz` is public and checks
@@ -141,6 +146,24 @@ It contains `backend`, `policy`, and an optional `warning` without connection de
 Treat `plaintext_allowed`, `tls_unverified`, `tls_ca_verified`, and `tls_pinned` as operator-approved exceptions with warnings.
 `tls_verified` requires server verification.
 `local` identifies SQLite or PostgreSQL Unix-socket transport.
+
+Administrators can call `GET /api/v1/admin/resource-config` with a global administrator bearer token.
+The response contains the server's captured resource-limit groups without credentials or other startup settings.
+The JSON object has no wrapper and uses `Cache-Control: no-store`.
+Project-scoped tokens and roles below administrator receive `403`. Missing or invalid bearer tokens receive `401`.
+Restart the server to apply environment or YAML changes.
+The endpoint reports server policy, without attesting to agent compatibility or external runtime enforcement.
+Agent mTLS polls check `X-DurpDeploy-Resource-Policy` before heartbeat updates or dispatch.
+Successful polls acknowledge the complete shared policy with one matching header.
+Invalid or mismatched advertisements return `409` without changing waiting claims.
+Legacy polls without this header require the default shared policy.
+Accepted advertisements persist with agent capabilities. Legacy default polls clear the explicit advertisement.
+Claim preparation checks that the polling request matches the stored policy snapshot.
+Revocation, re-pairing, and agent deletion clear the stored advertisement.
+Custom remote execution requires matching stored policies from every target agent.
+Queue admission rejects incompatible targets without partial fan-out runs. Claim preparation rechecks policy under the agent claim lock.
+The artifact timeout fields control server-side repository tests and package retrieval after a restart.
+A repository test that exceeds an applicable timeout returns `502` without exposing credentials.
 
 ## Project groups
 
@@ -221,6 +244,10 @@ durpdeploy audit prune --days 180
 
 ### API tokens (recommended for agents)
 
+Use the complete token: `ddp_pat_` followed by exactly 64 hexadecimal characters.
+Malformed tokens return HTTP 401 before a credential lookup, including on API log and event streams.
+Token expiry and revocation remain checked on each request and during open streams.
+
 Mint a token on the server host with the CLI above, or in the web UI at
 `/settings/tokens` if scripting: POST the form `name=<label>&csrf_token=$CSRF`,
 then GET the redirect Location (an opaque single-use flash reference,
@@ -240,7 +267,8 @@ Use `POST /api/v1/users/me/password` to change your own local password.
 Send an unrestricted global bearer token and these JSON fields:
 `current_password`, `new_password`, and `password_confirmation`.
 Use matching new passwords with at least eight characters.
-New passwords must leave room for all password fields, email, and CSRF in the 64 KiB encoded form limit.
+New passwords must leave room for all password fields, email, and CSRF in the configured encoded password form limit.
+The default password form limit is 64 KiB.
 Do not include line breaks in new passwords.
 The operation supports every user role, including Viewer.
 Project-scoped tokens and tokens with a permission ceiling receive `403`.
@@ -290,6 +318,13 @@ Replace scope with `PATCH /api/v1/tokens/{token_id}` using `scope`, `role`, and 
 Provide an explicit `scope` on updates.
 Use `{"scope":"global"}` only when you intend to remove restrictions.
 Use `DELETE /api/v1/tokens/{token_id}` to revoke the token.
+
+Token list responses report `last_used_at` as an approximate Unix-second timestamp.
+The default recording interval is one minute during normal use.
+The server operator can configure the interval, write concurrency, and write timeout at startup.
+Recording is best effort, so database failures or heavy load can delay or omit updates.
+Authentication and revocation checks use current credentials on every request.
+
 Scoped tokens and tokens with a permission ceiling cannot access token management APIs.
 Use the owner's browser session or a global token for these operations.
 
@@ -508,6 +543,25 @@ while this flag is true; polling updates it automatically.
 }
 ```
 
+Set `max_retries` from zero through the configured maximum, which defaults to 10.
+Zero retries permits one attempt.
+Set `timeout_seconds` from zero through the configured maximum, which defaults to 86400 seconds (24 hours).
+Zero timeout uses the captured server default, which is 300 seconds unless configured otherwise.
+Set `DURPDEPLOY_LIMITS_EXECUTION_DEFAULT_TIMEOUT_SECONDS` or YAML `limits.execution.default_timeout_seconds`, then restart the server.
+Set `DURPDEPLOY_LIMITS_EXECUTION_MAX_RETRIES` and `DURPDEPLOY_LIMITS_EXECUTION_MAX_TIMEOUT_SECONDS` to change the maxima.
+Use `limits.execution.max_retries` and `limits.execution.max_timeout_seconds` in YAML.
+Keep the default timeout within the maximum timeout.
+Read the captured limits through `GET /api/v1/admin/resource-config` with administrator authorization.
+Explicit positive step timeouts retain their saved values.
+Custom execution policies require matching stored agent policies before queueing and claims.
+These limits apply to project steps, runbook steps, and immutable execution snapshots.
+Invalid step API input returns 400.
+Invalid runbook or execution snapshot input returns 422.
+Invalid persisted snapshots fail before execution or remote dispatch.
+If a release exceeds lowered maxima, correct project steps and refresh the release.
+Refresh validates replacement steps and preserves existing deployment snapshots.
+Legacy releases without server container images still require a new release.
+
 `local` means mandatory server-container execution; specify an image with
 `bash`, `pwsh`, or `python3` installed. `agent` runs on matching remote agents.
 Local step containers have no DurpDeploy-imposed RAM ceiling or CPU quota,
@@ -530,6 +584,12 @@ Agent-container steps apply the same reserved-name restrictions as local contain
 Steps, template versions, releases, and runbook versions preserve these fields.
 An empty `variable_names` list passes all resolved variables; a non-empty
 list restricts that step, including remote host steps.
+The server validates effective entries after environment overrides and variable selection.
+Names require 1–255 ASCII letters, digits, or underscores, starting with a letter or underscore.
+Values must not contain NUL. Empty and multiline values remain valid.
+Invalid legacy entries fail the deployment before dispatch or local script execution.
+Deployment logs report the validation error without variable names or values.
+Target-specific reserved-name restrictions still apply.
 The admin agent API reports `execution_modes`, `container_runtimes`, and
 `container_interpreters` from the last valid poll.
 Upgrade the server before enabling agent containers. Keep old agents on host
@@ -812,26 +872,34 @@ Schedule creation and updates return `404` if the selected release is deleted
 before the write commits.
 An old image-less server release cannot be scheduled. Existing schedules
 pointing at one disable on their due run and expose an actionable `last_error`.
+Concurrent schedule edits take priority over an older scheduler observation.
+Skipped, parked, and disabled occurrences preserve the edited schedule and its next execution time.
+Transient storage failures leave the occurrence due for a later scheduler tick.
+Intentional lifecycle gate skips advance to the next cron occurrence without changing `last_fired_at`.
 
 ## Request bodies
 
-API JSON bodies and `/api/lint` bodies are limited to **4 MiB (4,194,304
-encoded bytes)**, including all script text, escaping, and JSON overhead.
-Send exactly one JSON object matching the documented request schema. Unknown
-fields (including nested fields), top-level `null`, additional documents, and
-trailing non-whitespace data return `400 {"error":"Invalid JSON body"}`.
-Oversized input returns `413 {"error":"Request body too large"}` before any
-mutation, including chunked requests. Whitespace after the object is allowed
-and counts toward the ceiling. Control actions with no fields accept an empty
-body or `{}`; additional fields are rejected.
+API JSON bodies and `/api/lint` bodies default to **4 MiB (4,194,304 encoded bytes)**.
+The limit includes script text, escaping, and JSON overhead.
+Send exactly one JSON object that matches the documented request schema.
+Unknown fields, top-level `null`, extra documents, and trailing non-whitespace data return `400 {"error":"Invalid JSON body"}`.
+Nested fields use the same strict schema validation.
 
-General web request bodies, including multipart bodies, have a **16 MiB encoded
-byte** ceiling and return 413 when exceeded. Package repository forms have a
-64 KiB ceiling. Login and password reauthentication retain their separate
-64 KiB limits and existing 400/422 error responses. Scripts must fit within
-the applicable ceiling after JSON or form encoding; runbooks share one JSON
-ceiling across all steps. These are server limits; proxies may impose lower
-limits.
+Oversized input returns `413 {"error":"Request body too large"}` before any mutation.
+Chunked requests use the same limit.
+Whitespace after the object is allowed and counts toward the ceiling.
+Control actions with no fields accept an empty body or `{}`.
+Additional fields are rejected.
+
+General web request bodies, including multipart bodies, default to a **16 MiB encoded byte** ceiling.
+They return 413 when exceeded.
+Package-repository forms and password changes default to separate 64 KiB ceilings.
+Login and password reauthentication default to 64 KiB limits and retain their existing 400/422 error responses.
+The server operator can configure these byte limits at startup.
+
+Scripts must fit the applicable ceiling after JSON or form encoding.
+Runbooks share one JSON ceiling across all steps.
+Proxies can impose lower limits.
 
 ## Runbooks
 
@@ -873,9 +941,11 @@ Runbook definition and version endpoints return `404` after deletion.
 Use `GET /api/v1/deployments/$DID/logs/page` for bounded history.
 Runbooks support `GET /api/v1/projects/$PID/runbook-executions/$XID/logs/page`.
 Responses contain `items`, `next_before`, `last_id`, `limit`, `before`, `byte_limit`, and `line_byte_limit`.
-Each page contains at most 500 entries, ordered by increasing persisted ID.
-The JSON response also has a 1 MiB byte budget, including its envelope.
-Display text fields have a 16 KiB UTF-8 budget, including truncation markers.
+By default, each page contains at most 500 entries, ordered by increasing persisted ID.
+The default JSON response budget is 1 MiB, including its envelope.
+The default display text budget is 16 KiB per field, including truncation markers.
+Operators can change these budgets at server startup.
+Read `limit`, `byte_limit`, and `line_byte_limit` from each page for the effective budgets.
 Shortened entries include `truncated: true`.
 Byte limits can reduce the number of entries on a page.
 Complete persisted output remains available through full streams and exports.
@@ -887,18 +957,33 @@ Resume structured streams after `last_id`.
 The existing `/logs` endpoints retain their complete JSON arrays.
 Runbooks also support `/logs.txt` for complete text export.
 
-Deployment and runbook pages retain at most 500 displayed entries and 1 MiB of previews.
+Deployment and runbook pages use the captured row and byte budgets for history and live retention.
+Defaults are 500 displayed entries and 1 MiB of previews.
 Use **Older logs** to view earlier output with live updates paused.
 Use **Latest logs** to resume live updates.
 Use **Export all logs** to download complete history.
 Deployment step states remain available when their output leaves the displayed window.
 Older output pages show current step states.
 
-HTTP headers must arrive within 5 seconds, and the complete request body
-within 30 seconds from the start of the request read. Ordinary responses
-have a 60-second write budget. Deployment/runbook SSE and NDJSON streams
-have no total lifetime limit, but each event write/flush must finish within
-60 seconds. Consume streams continuously and reconnect after disconnects.
+Set log budgets with the `DURPDEPLOY_LIMITS_LOGS_` environment prefix or the `limits.logs` YAML section.
+The fields are `page_bytes`, `line_bytes`, `preview_batch`, `pending_bytes`, `export_batch`, and `page_rows`.
+Use the uppercase field name after the environment prefix.
+Environment values override YAML. Restart the server after changes.
+Inspect captured settings with `GET /api/v1/admin/resource-config` as an admin.
+All values must be positive. Preview lines require at least 128 bytes.
+The page budget must cover 18 times the line budget plus 2048 bytes.
+The pending buffer bounds server script output, including each incoming write before newline processing.
+Overflow cancels the attempt and drops ambiguous output before redaction can leak it.
+Agent protocol event and batch limits remain fixed.
+Log settings do not change stored history or complete exports.
+
+Default HTTP limits allow five seconds for headers and 30 seconds for the complete request, including headers.
+Ordinary responses have a default 60-second write budget.
+Deployment and runbook SSE and NDJSON streams have no total lifetime limit.
+Each event write and flush has a default 60-second deadline.
+The server operator can configure these timeouts at startup.
+Consume streams continuously and reconnect after disconnects.
+
 An operator's reverse proxy may impose additional limits.
 
 Deployment logs also support structured SSE at
@@ -945,14 +1030,18 @@ Initial text replay preserves remote sequence order and checkpoints its cursor a
 Subsequent text events use persisted log IDs.
 Resume text SSE with `Last-Event-ID` or `after`.
 An interrupted initial replay repeats history instead of skipping out-of-order rows.
+
 NDJSON retains `line` and `step` fields and closes after terminal replay.
 Live NDJSON keeps its existing empty `step` field.
 All stream formats recover missed broker notifications from persisted logs.
+
 Open streams recheck credentials, current roles, and project membership each second.
 Revocation ends responsive streams within approximately two seconds.
-A blocked consumer can delay closure up to 62 seconds because event writes retain their 60-second deadline.
+With default settings, a stalled consumer can delay closure up to 62 seconds.
+Custom stream-write timeouts change this bound to their event budget plus approximately two seconds for authorization checks.
 Authorization failures and database errors close the stream.
 Runbook streams use the execution's project membership.
+
 Errors before a structured stream starts use the usual JSON `error` envelope,
 including invalid cursors, missing deployments, and startup failures.
 
@@ -965,7 +1054,12 @@ Clear flags take precedence over replacements.
 The server retains credentials for delivery.
 Existing write permissions still apply.
 Email recipients and Gotify server URLs remain readable.
+
 Notification history omits provider error details that can contain credentials.
+If notification settings cannot be loaded, history records a generic failed status instead of `skipped`.
+Notification failures do not change deployment results.
+Inspect server warnings for `load notification settings failed` or `write notification history failed`.
+These diagnostics include safe event and entity identifiers without credentials or driver error details.
 
 Execution actions are `POST .../$XID/cancel`, `/approve` (admin only),
 and `/retry` (after a terminal status). Retry returns `409` while the source
@@ -1078,6 +1172,25 @@ contain merged values are not migrated; recreate them when upgrading.
 | Runbooks | `/api/v1/projects/{id}/runbooks[/{runbookId}]`, `/runbook-executions[/{executionId}]` |
 | Users/tokens | admin under `/api/v1/admin/...`; `/api/v1/users/me`; `POST /api/v1/tokens` (`{"name":"..."}`) mints another token for yourself — 201, plaintext is in the `id` field of the reply |
 
+User updates require `name` and `role` in `PUT /api/v1/admin/users/{id}`.
+Set `role` to `viewer`, `deployer`, `maintainer`, or `admin`.
+An omitted, empty, null, or unknown role returns 422 before the account update starts.
+User profile and optional password updates commit together.
+A password or role change removes browser sessions and pending MFA challenges in the same transaction.
+If any account update fails, the original account and browser-auth state remain unchanged.
+API tokens remain valid and use the current account permissions.
+OIDC role synchronization applies the same browser-auth invalidation policy.
+After a role change, complete a new login before using browser pages.
+
+Local user updates and deletions must leave at least one administrator.
+The API returns 422 if a local mutation would remove the final administrator.
+Create or promote a replacement administrator before demoting the current administrator.
+OIDC role mappings remain provider-authoritative.
+Use `durpdeploy admin create` for host recovery when no administrator remains.
+
+Release creation and refresh capture step fields and agent selectors from one consistent source version.
+Later step edits do not change a stored release until refresh.
+
 ## Getting help
 
 - Swagger: `https://<your-host>/api/swagger/` — full request/response shapes.
@@ -1101,9 +1214,31 @@ Identical changes are accepted, but conflicting changes fail the deployment.
 
 Only regular files and directories transfer.
 Each snapshot permits 512 MiB of file content and 20,000 file and directory entries.
+
+Staging publication checks cancellation before each encrypted 1 MiB chunk.
+Canceled publication closes temporary spools without publishing partial snapshot data.
+
 File modes and ownership are normalized during transfer.
 The server encrypts transfer snapshots at rest and restricts downloads to the assigned agent's live claim.
 Use `GET /api/v1/deployments/{id}/staging` to list active transfer metadata without file contents.
+
+By default, each remote step permits 64 agent outputs, 2 GiB of canonical input archives, and 200,000 merge entry visits.
+Set `DURPDEPLOY_LIMITS_MERGE_AGENT_OUTPUTS`, `DURPDEPLOY_LIMITS_MERGE_ARCHIVE_BYTES`, and `DURPDEPLOY_LIMITS_MERGE_ENTRY_VISITS` before server startup.
+Use `limits.merge.agent_outputs`, `limits.merge.archive_bytes`, and `limits.merge.entry_visits` in YAML.
+Environment values override YAML. Inspect the captured budgets with `GET /api/v1/admin/resource-config` as an admin.
+Archive bytes include the base and duplicate outputs.
+Entry visits count the base once, then base and output entries for each agent.
+Excess input fails the step with `staging merge budget exceeded` before downstream execution.
+Cleanup still runs. The final merged tree must satisfy the captured staging payload, entry, and archive budgets.
+Archive and output-count checks precede input decryption. Entry-visit checks precede output comparison and content copying.
+Restart the server after changing budgets. Create a new deployment to repeat a failed merge.
+These server-only merge settings permit remote work with unchanged shared policies.
+
+By default, the server admits four staging uploads or downloads concurrently, with one active request per authenticated agent.
+Operators can change these budgets with `DURPDEPLOY_LIMITS_TRANSFER_GLOBAL` and `DURPDEPLOY_LIMITS_TRANSFER_PER_AGENT` at server startup.
+Excess agent transfer requests receive HTTP `429` with `Retry-After: 1` before expensive work starts.
+The pinned agent retries these responses automatically.
+Permits cover one server process and release after success, failure, cancellation, or disconnect.
 Invalid deployment IDs return HTTP 400.
 This endpoint returns an empty array after cleanup.
 Use `GET /api/v1/admin/audit?action=publish_staging` to identify staging publishers after cleanup.
@@ -1131,6 +1266,30 @@ the configured runtime namespace. Unconfirmed removal yields
 changes the deployment to `failed`, even if a later cleanup attempt removed
 the remaining resources. This preserves the existing conservative recovery
 contract for local execution.
+
+Server container process and thread budgets use the startup settings `limits.container.pids` and `limits.container.helper_pids`.
+Their defaults are 128 for workloads and 32 for staging helpers.
+The environment variables are `DURPDEPLOY_LIMITS_CONTAINER_PIDS` and `DURPDEPLOY_LIMITS_CONTAINER_HELPER_PIDS`.
+Both values require positive integers and a server restart.
+Custom values require matching stored policies from all target agents before queueing and claims.
+Configure matching shared settings on the server and target agents before restarting them.
+Host-mode scripts do not receive a container PID budget.
+
+Server `/tmp` capacity uses `limits.container.tmpfs_bytes`.
+Approval generation and approved-context execution add the artifact download budget.
+Staging helpers use `limits.container.helper_cpus` and `limits.container.helper_memory_overhead_bytes`.
+Their memory limit includes the staging filesystem capacity.
+Staging snapshots use `limits.staging.payload_bytes` and `limits.staging.entries`.
+Their environment variables are `DURPDEPLOY_LIMITS_STAGING_PAYLOAD_BYTES` and `DURPDEPLOY_LIMITS_STAGING_ENTRIES`.
+Entries include implicit parent directories. Defaults are 536870912 content bytes and 20000 entries.
+Snapshot transfers, merges, and approval contexts enforce the captured budgets.
+Lower budgets can reject saved contexts without changing their encrypted data.
+Staging capacity includes one page per entry. Its inode budget is twice the entry count plus two.
+The runtime rounds filesystem capacity to whole pages. Helper memory adds its configured overhead.
+The logical snapshot budget is smaller than this filesystem allowance.
+Custom staging and archive budgets require matching policies on the server and target agents.
+The environment variables use the `DURPDEPLOY_LIMITS_CONTAINER_` prefix and the uppercase field name.
+All settings require a restart. Custom container values require matching policies on the server and target agents.
 
 The server purges transfer snapshots when the deployment succeeds, fails, or is canceled.
 Agents remove their private staging files before reporting completion or cancellation.
@@ -1284,15 +1443,37 @@ Copy package files into `DURPDEPLOY_STAGE_DIR` to share changed outputs with lat
 For host copies, add owner write permission to copied files before changing them.
 The agent excludes the original package directory from staging uploads.
 This variable is reserved. Interpreters can read package files.
+Duplicate explicit ZIP entries, including directories, are rejected.
+An implicit parent directory can be declared once.
 ZIP paths, links, and
-special files are rejected. Limits are 300 MiB downloaded, 512 MiB extracted,
+special files are rejected. The default download budget is 300 MiB.
+Server startup can override it with `DURPDEPLOY_LIMITS_ARTIFACT_DOWNLOAD_BYTES` or YAML `limits.artifact.download_bytes`.
+Captured startup budgets apply to fetches, ZIP validation, and server extraction.
+Configure `limits.artifact.extracted_bytes`, `files`, `staging_nodes`, and `metadata_bytes` through YAML or their derived environment variables.
+Remote package dispatch requires matching download, ZIP safety, and transport budgets on both peers.
+Safety defaults are 512 MiB extracted,
 10,000 ZIP entries, 19,999 total distinct files/directories (including implicit
-parents), a fixed 16 MiB ZIP metadata-read budget, and a five-minute
+parents), a 16 MiB ZIP metadata-read budget, and a five-minute
 download timeout. The metadata budget includes footer discovery and repeated
 parser reads, not payload contents; unusually metadata-heavy ZIPs are rejected.
 It is not an exact memory limit and does not scale with server RAM. Temporary server files
 and runtime staging volumes are removed on completion, failure, or cancellation.
 Cleanup uncertainty blocks retries until runtime reconciliation succeeds.
+Approval-context capture uses the configured staging-node budget.
+Restored approval contexts must also pass the current node budget before downstream execution.
+Artifact helper capacity includes extracted bytes and one host page for every permitted node.
+
+The staging TAR archive budget defaults to 570425344 bytes.
+Set `DURPDEPLOY_LIMITS_STAGING_ARCHIVE_BYTES` or YAML `limits.staging.archive_bytes` before server startup.
+Snapshot input and canonical output must both fit this budget.
+Headers, padding, and parent directories consume archive bytes.
+Staging uploads return `413` for oversized declared or streaming bodies.
+Invalid archives or oversized canonical snapshots return `422` without publication.
+Lower budgets can reject existing snapshots and approval contexts without rewriting their hashes or encrypted chunks.
+Approval restore checks the saved archive size before decrypting chunks.
+Approval decisions return `409` when their saved context exceeds the current archive budget.
+Raise the startup budget or cancel that deployment before creating a new plan.
+Custom staging budgets require a matching stored agent policy before new remote execution.
 
 The container image uses native `TMPDIR=/data/tmp` on its writable data volume,
 not Compose's 64 MiB `/tmp` mount. Reserve about 1.3 GiB of workspace per
@@ -1315,5 +1496,7 @@ does not accept a `protocol` field.
 
 Invalid packages or changed pinned bytes return `422`.
 Package transfers keep heartbeats active and pause the remote step timeout during authenticated HTTP transfer.
-Transfers stop after five minutes without progress.
+By default, transfers stop after five minutes without progress.
+`DURPDEPLOY_LIMITS_TRANSFER_IDLE_TIMEOUT_SECONDS` changes the server's staging and package-transfer socket inactivity deadline.
+The server setting does not change an agent's client timeout or the upstream package-fetch timeout.
 Managed package files and volumes follow the same cleanup barrier as writable staging.

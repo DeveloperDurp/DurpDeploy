@@ -161,17 +161,6 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 			"error",
 			err,
 		)
-		if err := s.advance(ctx, row, next); err != nil {
-			s.log.Error(
-				"advance failed",
-				"schedule_id",
-				row.ID,
-				"project_id",
-				row.ProjectID,
-				"error",
-				err,
-			)
-		}
 		return
 	}
 	release, err := s.repo.Queries.GetRelease(ctx, row.ReleaseID)
@@ -185,17 +174,6 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 			"error",
 			err,
 		)
-		if err := s.advance(ctx, row, next); err != nil {
-			s.log.Error(
-				"advance failed",
-				"schedule_id",
-				row.ID,
-				"project_id",
-				row.ProjectID,
-				"error",
-				err,
-			)
-		}
 		return
 	}
 	if release.ProjectID != project.ID {
@@ -230,17 +208,6 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 			"error",
 			err,
 		)
-		if err := s.advance(ctx, row, next); err != nil {
-			s.log.Error(
-				"advance failed",
-				"schedule_id",
-				row.ID,
-				"project_id",
-				row.ProjectID,
-				"error",
-				err,
-			)
-		}
 		return
 	}
 	if blocked {
@@ -295,18 +262,17 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 		if errors.Is(err, repository.ErrLegacyServerStep) ||
 			errors.Is(err, artifact.ErrGateConfig) ||
 			errors.Is(err, verification.ErrInvalid) {
-			changed, disableErr := s.repo.Queries.DisableScheduledDeploymentWithReason(
-				ctx,
-				db.DisableScheduledDeploymentWithReasonParams{
-					LastError: err.Error(),
-					ID:        row.ID,
-					NextRunAt: row.NextRunAt,
-				},
-			)
+			updated := row
+			updated.Enabled = 0
+			updated.LastError = err.Error()
+			disableErr := s.repo.UpdateScheduledOccurrence(ctx, row, updated)
+			if errors.Is(disableErr, repository.ErrScheduleOccurrenceChanged) {
+				return
+			}
 			if disableErr != nil {
 				s.log.Error("disable invalid scheduled deployment failed",
 					"schedule_id", row.ID, "error", disableErr)
-			} else if changed == 1 {
+			} else {
 				s.log.Warn("disabled invalid scheduled deployment",
 					"schedule_id", row.ID, "error", err)
 			}
@@ -355,23 +321,14 @@ func (s *Scheduler) park(
 	row db.ScheduledDeployment,
 	reason string,
 ) {
-	parkedAt := s.now().Add(10 * 365 * 24 * time.Hour).Unix()
-	if err := s.repo.Queries.UpdateScheduledDeploymentNextRun(
-		ctx,
-		db.UpdateScheduledDeploymentNextRunParams{
-			NextRunAt: parkedAt,
-			ID:        row.ID,
-		},
-	); err != nil {
-		s.log.Error(
-			"park failed",
-			"schedule_id",
-			row.ID,
-			"project_id",
-			row.ProjectID,
-			"error",
-			err,
-		)
+	updated := row
+	updated.NextRunAt = s.now().Add(10 * 365 * 24 * time.Hour).Unix()
+	if err := s.repo.UpdateScheduledOccurrence(ctx, row, updated); err != nil {
+		if !errors.Is(err, repository.ErrScheduleOccurrenceChanged) {
+			s.log.Error("park failed", "schedule_id", row.ID,
+				"project_id", row.ProjectID, "error", err)
+		}
+		return
 	}
 	s.log.Info(
 		"parked",
@@ -389,11 +346,11 @@ func (s *Scheduler) advance(
 	row db.ScheduledDeployment,
 	next time.Time,
 ) error {
-	return s.repo.Queries.UpdateScheduledDeploymentNextRun(
-		ctx,
-		db.UpdateScheduledDeploymentNextRunParams{
-			NextRunAt: next.Unix(),
-			ID:        row.ID,
-		},
-	)
+	updated := row
+	updated.NextRunAt = next.Unix()
+	err := s.repo.UpdateScheduledOccurrence(ctx, row, updated)
+	if errors.Is(err, repository.ErrScheduleOccurrenceChanged) {
+		return nil
+	}
+	return err
 }

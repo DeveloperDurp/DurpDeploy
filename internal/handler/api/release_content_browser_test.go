@@ -38,8 +38,8 @@ func TestReleaseContentBrowserE2E(t *testing.T) {
 				)
 				checkReleaseDisclosure(t, b, selector, fixture.scripts[index])
 			}
-			for _, name := range fixture.names {
-				checkReleaseVariableName(t, b, len(fixture.names), name)
+			for index, name := range fixture.names {
+				checkReleaseVariableName(t, b, index, len(fixture.names), name)
 			}
 			if string(
 				b.evaluate(
@@ -57,30 +57,37 @@ func TestReleaseContentBrowserE2E(t *testing.T) {
 }
 
 func checkReleaseVariableName(
-	t *testing.T, b *packageBrowser, count int, name string,
+	t *testing.T, b *packageBrowser, index, count int, name string,
 ) {
 	t.Helper()
 	raw := b.evaluate(t, fmt.Sprintf(`(() => {
  const cells = document.querySelectorAll('[data-release-variable-name]');
  const name = %q;
  const cell = [...cells].find(element => element.textContent === name);
- const valid = cells.length === %d && !!cell && cell.tagName === 'TD' &&
-  cell.getClientRects().length > 0 &&
+ const valid = cells.length === %d && cell && cell.tagName === 'TD' &&
+  cell.textContent === %q && cell.getClientRects().length > 0 &&
   cell.scrollWidth <= cell.clientWidth && cell.scrollHeight <= cell.clientHeight &&
   getComputedStyle(cell).whiteSpace !== 'nowrap' &&
   !cell.querySelector('details, summary, button, a') &&
-  [...document.querySelectorAll('td')].filter(e => e.textContent === name).length === 1;
- return {valid, name, width:innerWidth, count:cells.length,
-  text:cell?.textContent, scrollWidth:cell?.scrollWidth, clientWidth:cell?.clientWidth,
-  scrollHeight:cell?.scrollHeight, clientHeight:cell?.clientHeight,
-  rect:cell?.getBoundingClientRect().toJSON(), whiteSpace:cell && getComputedStyle(cell).whiteSpace};
-})()`, name, count))
+  [...document.querySelectorAll('td')].filter(e => e.textContent === %q).length === 1;
+ return {valid: Boolean(valid), width: innerWidth, count: cells.length,
+  ready: document.readyState, fonts: document.fonts.status,
+  cell: cell && {name: cell.textContent, tag: cell.tagName,
+   scrollWidth: cell.scrollWidth, clientWidth: cell.clientWidth,
+   scrollHeight: cell.scrollHeight, clientHeight: cell.clientHeight,
+   rects: cell.getClientRects().length, whiteSpace: getComputedStyle(cell).whiteSpace,
+   overflow: getComputedStyle(cell).overflow, wordBreak: getComputedStyle(cell).wordBreak,
+   controls: cell.querySelectorAll('details, summary, button, a').length,
+   occurrences: [...document.querySelectorAll('td')].filter(e => e.textContent === cell.textContent).length}};
+})()`, name, count, name, name))
 	var result struct{ Valid bool }
 	if err := json.Unmarshal(raw, &result); err != nil {
 		t.Fatal(err)
 	}
 	if !result.Valid {
-		t.Fatalf("saved variable name is repeated, clipped, or hidden: %s", raw)
+		t.Logf("release variable layout: %s", raw)
+		b.screenshot(t, fmt.Sprintf("release-variable-failure-%d", index))
+		t.Fatal("saved variable name is repeated, clipped, or hidden")
 	}
 }
 

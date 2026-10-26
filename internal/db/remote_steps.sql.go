@@ -200,6 +200,41 @@ func (q *Queries) ExpireRemoteStepClaims(ctx context.Context, now int64) (int64,
 	return result.RowsAffected()
 }
 
+const failInvalidRemoteStepDeployment = `-- name: FailInvalidRemoteStepDeployment :exec
+UPDATE deployments SET status = 'failed', finished_at = ?1
+WHERE id = ?2 AND status = 'running'
+  AND assigned_agent_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM remote_step_runs r
+      WHERE r.deployment_id = deployments.id
+        AND r.state IN ('waiting', 'claimed', 'started', 'cancel_requested'))
+`
+
+type FailInvalidRemoteStepDeploymentParams struct {
+	Now          sql.NullInt64 `json:"now"`
+	DeploymentID int64         `json:"deployment_id"`
+}
+
+func (q *Queries) FailInvalidRemoteStepDeployment(ctx context.Context, arg FailInvalidRemoteStepDeploymentParams) error {
+	_, err := q.db.ExecContext(ctx, failInvalidRemoteStepDeployment, arg.Now, arg.DeploymentID)
+	return err
+}
+
+const failInvalidWaitingRemoteSteps = `-- name: FailInvalidWaitingRemoteSteps :exec
+UPDATE remote_step_runs SET state = 'failed',
+    finished_at = ?1, updated_at = ?1
+WHERE deployment_id = ?2 AND state = 'waiting'
+`
+
+type FailInvalidWaitingRemoteStepsParams struct {
+	Now          sql.NullInt64 `json:"now"`
+	DeploymentID int64         `json:"deployment_id"`
+}
+
+func (q *Queries) FailInvalidWaitingRemoteSteps(ctx context.Context, arg FailInvalidWaitingRemoteStepsParams) error {
+	_, err := q.db.ExecContext(ctx, failInvalidWaitingRemoteSteps, arg.Now, arg.DeploymentID)
+	return err
+}
+
 const failUnsupportedWaitingRemoteStepRuns = `-- name: FailUnsupportedWaitingRemoteStepRuns :execrows
 UPDATE remote_step_runs SET state = 'failed',
     finished_at = ?1, updated_at = ?1

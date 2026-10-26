@@ -9,7 +9,11 @@ import (
 // RequestBodyLimit covers every API route, including ignored request bodies.
 func RequestBodyLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, handler.MaxJSONBodyBytes)
+		r.Body = http.MaxBytesReader(
+			w,
+			r.Body,
+			handler.RequestBodyLimits(r).JSONBytes,
+		)
 		if (r.Method == http.MethodGet || r.Method == http.MethodHead) &&
 			!handler.ReadEmptyJSON(w, r) {
 			return

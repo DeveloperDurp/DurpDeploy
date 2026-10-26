@@ -105,7 +105,8 @@ func testRunnerMixedLocalAndAgentSteps(t *testing.T, terminalState string) {
 			"interpreter":      "bash",
 			"execution_target": "agent",
 			"agent_selectors":  []string{"linux"},
-			"sort_order":       2, "timeout_seconds": 10,
+			"sort_order":       2, "timeout_seconds": 86400,
+			"max_retries": 10,
 		},
 	})
 	if err != nil {

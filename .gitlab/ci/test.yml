@@ -55,16 +55,18 @@ pre-commit:
   - make demo-test
   - node --test scripts/ci_cache_cleanup.test.mjs
   - env --default-signal=INT,TERM,HUP make go-test-cleanup-test
+  - python3 -m unittest discover -s scripts -p ci_rootless_cgroup_test.py
   - make backup-restore-script-test
   - bash scripts/check-dev-database-contract.sh
   - shellcheck -S error scripts/release_images_test.sh scripts/ci_publish.sh scripts/publish_release_images.sh scripts/publish_release_chart.sh scripts/release_publish_test.sh
   - bash scripts/release_images_test.sh
   - bash scripts/e2e_build_server_test.sh
   - |-
-    for script in scripts/e2e_test.sh scripts/e2e_lifecycle.sh scripts/e2e_wait.sh scripts/e2e_parallel_test.sh scripts/e2e_db_test.sh scripts/e2e_fixture_reset.sh scripts/e2e_fixture_reset_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh; do
+    for script in scripts/e2e_test.sh scripts/e2e_lifecycle.sh scripts/e2e_wait.sh scripts/e2e_wait_test.sh scripts/e2e_parallel_test.sh scripts/e2e_db_test.sh scripts/e2e_fixture_reset.sh scripts/e2e_fixture_reset_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh; do
       bash -n "$script"
     done
-    shellcheck -S error scripts/e2e_test.sh scripts/e2e_lifecycle.sh scripts/e2e_wait.sh scripts/e2e_parallel_test.sh scripts/e2e_db_test.sh scripts/e2e_fixture_reset.sh scripts/e2e_fixture_reset_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh
+    shellcheck -S error scripts/e2e_test.sh scripts/e2e_lifecycle.sh scripts/e2e_wait.sh scripts/e2e_wait_test.sh scripts/e2e_parallel_test.sh scripts/e2e_db_test.sh scripts/e2e_fixture_reset.sh scripts/e2e_fixture_reset_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh
+    bash scripts/e2e_wait_test.sh
     bash scripts/e2e_fixture_reset_test.sh
     bash scripts/check_e2e_containers_test.sh
     bash -n scripts/mobile-browser-image-cleanup-test.sh
@@ -274,7 +276,7 @@ agent-container-podman:
     bash scripts/go_test.sh -tags=e2e,agentcontainer -race -count=1 -timeout=8m -v -run '^TestAgentContainerAPIE2E$' ./internal/agentserver
     DURPDEPLOY_AGENT_E2E_BINARY="$CI_PROJECT_DIR/artifacts/agent-build/agent" \
       bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 -timeout=20m -v \
-      -run '^(TestDeploymentStaging(Transfer|ImportFailure|TransferPausesStepTimeout|Audit|ArtifactGate|Package|PackageAgentOnly|PackageLegacyAgent)APIE2E|TestExecutionLocationAPIWebE2E|TestLegacyExecutionLocationAPIWebE2E)$' ./internal/agentserver
+      -run '^(TestDeploymentStaging(Admission|MergeBudget|EncryptionCancellation|Transfer|ImportFailure|TransferPausesStepTimeout|Audit|ArtifactGate|Package|PackageAgentOnly|PackageLegacyAgent)APIE2E|TestConfiguredStagingMergeAPIE2E|TestConfiguredLogsRemoteAPIE2E|TestConfiguredSharedPolicyRemoteAPIE2E|TestDeploymentEnvironmentPreflightAPIE2E|TestExecutionLocationAPIWebE2E|TestLegacyExecutionLocationAPIWebE2E)$' ./internal/agentserver
     ROOTLESS
 e2e:
   extends: .mr-built-app

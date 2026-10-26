@@ -46,6 +46,9 @@ UNION ALL
 SELECT 'artifact', '' FROM agent_artifact_capabilities
 WHERE agent_artifact_capabilities.agent_id = sqlc.arg(agent_id)
 UNION ALL
+SELECT 'resource_policy', advertisement FROM agent_resource_policies
+WHERE agent_resource_policies.agent_id = sqlc.arg(agent_id)
+UNION ALL
 SELECT 'protocol', COALESCE(agent_protocol, '') FROM agents
 WHERE agents.id = sqlc.arg(agent_id)
-ORDER BY category, capability;
+ORDER BY category ASC, capability ASC;

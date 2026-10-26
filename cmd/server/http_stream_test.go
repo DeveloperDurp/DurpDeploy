@@ -3,9 +3,11 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -14,6 +16,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/auth"
+	"durpdeploy/internal/config"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/httpstream"
@@ -24,6 +27,10 @@ import (
 	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/require"
 )
+
+func streamTestToken(id string) string {
+	return fmt.Sprintf("ddp_pat_%x", sha256.Sum256([]byte(id)))
+}
 
 type streamFixture struct {
 	repo   *repository.Repository
@@ -43,7 +50,9 @@ func newStreamFixture(t *testing.T) streamFixture {
 	conn, err := migrate.Run(filepath.Join(t.TempDir(), "streams.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	repo := repository.New(conn)
+	settings := config.Defaults()
+	settings.Limits.HTTP.StreamWriteTimeoutSeconds = 1
+	repo := repository.NewConfigured(conn, settings)
 	user, err := repo.Queries.CreateUser(ctx, db.CreateUserParams{
 		Email: "timeouts@example.com", Name: "Timeouts", Role: "admin",
 		PasswordHash: "unused",
@@ -57,7 +66,7 @@ func newStreamFixture(t *testing.T) streamFixture {
 	_, err = repo.Queries.CreateApiToken(ctx, db.CreateApiTokenParams{
 		ID: "timeout-token", UserID: user.ID, Name: "Timeouts",
 		TokenPrefix: "ddp_pat_timeout", Scope: "global",
-		TokenHash: auth.HashApiToken("ddp_pat_timeout"),
+		TokenHash: auth.HashApiToken(streamTestToken("timeout")),
 	})
 	require.NoError(t, err)
 	project, err := repo.Queries.CreateProject(ctx,
@@ -171,7 +180,10 @@ func TestHTTPStreamsSurviveOrdinaryWriteTimeout(t *testing.T) {
 				nil,
 			)
 			require.NoError(t, err)
-			req.Header.Set("Authorization", "Bearer ddp_pat_timeout")
+			req.Header.Set(
+				"Authorization",
+				"Bearer "+streamTestToken("timeout"),
+			)
 			req.AddCookie(
 				&http.Cookie{Name: "session", Value: "timeout-session"},
 			)
@@ -209,6 +221,49 @@ func TestHTTPStreamsSurviveOrdinaryWriteTimeout(t *testing.T) {
 			case <-time.After(time.Second):
 				t.Fatal("stream handler did not exit after client disconnect")
 			}
+		})
+	}
+}
+
+type streamDeadlineProbe struct {
+	*httptest.ResponseRecorder
+	deadline time.Time
+}
+
+func (w *streamDeadlineProbe) SetWriteDeadline(deadline time.Time) error {
+	if !deadline.IsZero() {
+		w.deadline = deadline
+	}
+	return nil
+}
+
+func (w *streamDeadlineProbe) Write([]byte) (int, error) {
+	return 0, io.ErrClosedPipe
+}
+
+func TestConfiguredStreamDeadlineOnEveryRoute(t *testing.T) {
+	f := newStreamFixture(t)
+	for _, route := range f.paths {
+		t.Run(route.path, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, route.path, nil)
+			request.Header.Set(
+				"Authorization",
+				"Bearer "+streamTestToken("timeout"),
+			)
+			request.AddCookie(
+				&http.Cookie{Name: "session", Value: "timeout-session"},
+			)
+			writer := &streamDeadlineProbe{
+				ResponseRecorder: httptest.NewRecorder(),
+			}
+			f.router.ServeHTTP(writer, request)
+			require.False(t, writer.deadline.IsZero())
+			require.WithinDuration(
+				t,
+				time.Now().Add(time.Second),
+				writer.deadline,
+				5*time.Second,
+			)
 		})
 	}
 }
@@ -255,7 +310,10 @@ func TestHTTPStreamsExitOnFlushFailure(t *testing.T) {
 					defer srv.CloseClientConnections()
 					req, err := http.NewRequest("GET", srv.URL+route.path, nil)
 					require.NoError(t, err)
-					req.Header.Set("Authorization", "Bearer ddp_pat_timeout")
+					req.Header.Set(
+						"Authorization",
+						"Bearer "+streamTestToken("timeout"),
+					)
 					req.AddCookie(
 						&http.Cookie{Name: "session", Value: "timeout-session"},
 					)

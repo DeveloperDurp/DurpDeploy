@@ -223,34 +223,28 @@ func (h *UsersHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.repo.Queries.UpdateUser(r.Context(), db.UpdateUserParams{
+	if _, err := auth.UpdateAccount(r.Context(), h.repo, db.UpdateUserParams{
 		Name: name,
 		Role: role,
 		ID:   id,
-	}); err != nil {
+	}, password); err != nil {
+		if errors.Is(err, auth.ErrLastAdministrator) {
+			target.Name, target.Role = name, role
+			h.renderFormError(
+				w,
+				r,
+				&target,
+				auth.ErrLastAdministrator.Error(),
+				false,
+			)
+			return
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-
-	if password != "" {
-		if err := auth.UpdatePassword(r.Context(), h.repo, auth.PasswordChange{
-			UserID:   id,
-			Password: password,
-		}); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
-
-	if role != target.Role && password == "" {
-		if err := auth.InvalidateBrowserAuth(
-			r.Context(),
-			h.repo,
-			id,
-		); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
 	}
 
 	redirect := "/admin/users"
@@ -315,14 +309,11 @@ func (h *UsersHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Delete sessions first so the user's in-flight requests fail
-	// cleanly before the user row goes away. sessions.id FK has
-	// ON DELETE CASCADE so the user delete would clean them up too,
-	// but doing it explicitly makes the intent obvious and the
-	// CASCADE documentation a non-load-bearing detail.
-	_ = h.repo.Queries.DeleteSessionsByUser(r.Context(), id)
-
-	if err := h.repo.Queries.DeleteUser(r.Context(), id); err != nil {
+	if err := auth.DeleteAccount(r.Context(), h.repo, id); err != nil {
+		if errors.Is(err, auth.ErrLastAdministrator) {
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

@@ -55,6 +55,7 @@ func (r *Repository) DeleteAgent(ctx context.Context, agentID string) error {
 				q.DeleteAgentLabels,
 				q.ClearAgentStagingCapability,
 				q.ClearAgentArtifactCapability,
+				q.ClearAgentResourcePolicy,
 			} {
 				if err := remove(ctx, agentID); err != nil {
 					return err

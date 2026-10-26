@@ -80,6 +80,12 @@ material, certificate bodies, or secret values.
 ## Bounds and timing
 
 Deployment staging uses an optional capability within the existing protocols.
+
+Each remote step permits 64 producer outputs and 2 GiB of canonical archives, including the base and duplicate outputs.
+Merge work permits 200,000 entry visits, counting the base once, then base and output entries for each producer.
+The server checks archive metadata before decryption and processes each output separately.
+Excess input fails the deployment before downstream execution. Cleanup and per-snapshot limits remain active.
+
 Agents send `X-DurpDeploy-Staging: staging/1` on each poll.
 Missing poll headers cannot invalidate queued staging work from overlapping requests.
 Before downgrading an agent without staging support, drain it and wait for its jobs to finish.
@@ -104,6 +110,16 @@ An invalid TAR returns `422`, and an oversized body returns `413`.
 Only regular files and directories are accepted.
 The TAR root marker must be an empty directory.
 Each snapshot permits 512 MiB of contents, 20,000 entries, and a 544 MiB TAR body.
+Staging upload and download requests share four active permits per server process.
+Each authenticated agent can hold one permit.
+Excess requests receive `429` with `Retry-After: 1` before spool allocation or decryption.
+Retry the same transfer after the requested delay.
+The server releases admission after success, failure, cancellation, or disconnect.
+The server does not queue rejected requests.
+
+The server checks request cancellation before each encrypted 1 MiB staging chunk.
+Cancellation closes temporary spools without publishing a partial snapshot or chunk rows.
+
 The entry limit includes parent directories omitted from TAR headers.
 Staging transfers have no fixed total network deadline.
 Staging requests pause the assigned run's step timeout while they remain active.

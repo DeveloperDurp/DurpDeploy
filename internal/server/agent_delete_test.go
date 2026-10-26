@@ -29,7 +29,7 @@ func agentDeleteRequest(
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Authorization", "Bearer ddp_pat_delete-admin")
+	req.Header.Set("Authorization", "Bearer "+agentTestToken("delete-admin"))
 	req.AddCookie(&http.Cookie{Name: "session", Value: "delete-admin"})
 	res, err := srv.Client().Do(req)
 	if err != nil {
@@ -92,7 +92,7 @@ func testAgentDeleteSurface(t *testing.T, surface string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Authorization", "Bearer ddp_pat_delete-admin")
+	req.Header.Set("Authorization", "Bearer "+agentTestToken("delete-admin"))
 	req.AddCookie(&http.Cookie{Name: "session", Value: "delete-admin"})
 	req.Header.Set("X-CSRF-Token", "csrf")
 	if surface == "htmx" {
@@ -178,7 +178,7 @@ func testAgentDeleteDeniedCase(t *testing.T, scenario agentDeleteDeniedCase) {
 	req.AddCookie(&http.Cookie{Name: "session", Value: "delete-user"})
 	req.Header.Set("X-CSRF-Token", scenario.csrf)
 	if scenario.api && scenario.role != "" {
-		req.Header.Set("Authorization", "Bearer ddp_pat_delete-user")
+		req.Header.Set("Authorization", "Bearer "+agentTestToken("delete-user"))
 	}
 	res := httptest.NewRecorder()
 

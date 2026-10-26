@@ -8,16 +8,16 @@ import (
 	"testing"
 )
 
-func TestExtractZIPAcceptsRepeatedDirectoryEntries(t *testing.T) {
-	// Given: directories may be repeated, but files cannot be overwritten.
+func TestExtractZIPAcceptsSharedParentsAndExplicitDirectory(t *testing.T) {
+	// Given: an implicit parent can be declared once without losing files.
 	var buffer bytes.Buffer
 	writer := zip.NewWriter(&buffer)
-	for _, name := range []string{"app/", "app/", "app/file.txt"} {
+	for _, name := range []string{"app/file.txt", "app/", "app/other.txt"} {
 		entry, err := writer.Create(name)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if name == "app/file.txt" {
+		if name != "app/" {
 			if _, err := entry.Write([]byte("contents")); err != nil {
 				t.Fatal(err)
 			}
@@ -41,8 +41,10 @@ func TestExtractZIPAcceptsRepeatedDirectoryEntries(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	contents, err := os.ReadFile(filepath.Join(directory, "app/file.txt"))
-	if err != nil || string(contents) != "contents" {
-		t.Fatalf("contents=%q error=%v", contents, err)
+	for _, name := range []string{"app/file.txt", "app/other.txt"} {
+		contents, err := os.ReadFile(filepath.Join(directory, name))
+		if err != nil || string(contents) != "contents" {
+			t.Fatalf("%s contents=%q error=%v", name, contents, err)
+		}
 	}
 }

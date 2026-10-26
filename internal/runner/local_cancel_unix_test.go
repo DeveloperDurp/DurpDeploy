@@ -125,6 +125,44 @@ esac
 	}
 }
 
+func TestShutdownRemovalSurvivesRetryCancellation(t *testing.T) {
+	for _, budget := range []string{"cancelled", "expired"} {
+		t.Run(budget, func(t *testing.T) {
+			r, _, trace := podmanFixture(t, `
+case "$3" in
+rm) printf '%s\n' "$*" >> "$PODMAN_TRACE.removed";;
+esac
+`)
+			ctx, cancel := context.WithCancel(t.Context())
+			if budget == "expired" {
+				cancel()
+				ctx, cancel = context.WithDeadline(t.Context(), time.Unix(0, 0))
+			}
+			cancel()
+			r.trackAttempt(1, "shutdown-first")
+			r.trackAttempt(2, "shutdown-second")
+			cancelled := false
+			r.RegisterCancel(1, func() { cancelled = true })
+
+			r.killAll(ctx)
+
+			if !cancelled {
+				t.Fatal("shutdown did not cancel the registered attempt")
+			}
+			removed, err := os.ReadFile(trace + ".removed")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"shutdown-first", "shutdown-second"} {
+				if !strings.Contains(string(removed),
+					"--force --time=0 --ignore "+name+"\n") {
+					t.Fatalf("missing removal for %s: %q", name, removed)
+				}
+			}
+		})
+	}
+}
+
 func TestLocalTimeoutRemovesRemoteAttempt(t *testing.T) {
 	// Given
 	r, repo, trace := podmanFixture(t, `
@@ -250,7 +288,26 @@ esac
 		t.Context(),
 		created.Deployment.ID,
 	)
-	if err != nil || len(logs) != 4 || logs[0].StepState.String != "failed" ||
+	if err != nil {
+		t.Fatal(err)
+	}
+	stepLogs := make([]db.DeploymentLog, 0, len(logs))
+	var stagingDiagnostic bool
+	for _, log := range logs {
+		if log.StepIndex.Valid {
+			stepLogs = append(stepLogs, log)
+			continue
+		}
+		if log.StepState.Valid ||
+			!strings.HasPrefix(log.Line, "Staging cleanup unconfirmed:") ||
+			!strings.Contains(log.Line, "cleanup failed") {
+			t.Fatalf("unexpected deployment diagnostic: %+v", log)
+		}
+		stagingDiagnostic = true
+	}
+	logs = stepLogs
+	if !stagingDiagnostic || len(logs) != 4 ||
+		logs[0].StepState.String != "failed" ||
 		!strings.Contains(logs[1].Line, "container cleanup unconfirmed") ||
 		!strings.HasPrefix(logs[2].Line, "Execution location:") ||
 		logs[3].StepState.String != "running" {

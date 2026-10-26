@@ -3,6 +3,8 @@ set -euo pipefail
 
 umask 077
 
+readonly CANCELLED_STATUS='cancelled'
+
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 source "$SCRIPT_DIR/e2e_wait.sh"
@@ -251,10 +253,10 @@ CODE=$(curl_silent -X POST -d "csrf_token=$CSRF" "$BASE/deployments/$CANCEL_DEP/
 [[ "$CODE" == "303" ]] || { echo "FAIL: cancel got $CODE"; exit 1; }
 for i in {1..200}; do
   CANCEL_STATUS=$(curl_body "$BASE/deployments/$CANCEL_DEP/status")
-  echo "$CANCEL_STATUS" | grep -q 'cancelled' && break
+  echo "$CANCEL_STATUS" | grep -q "$CANCELLED_STATUS" && break
   sleep 0.1
 done
-echo "$CANCEL_STATUS" | grep -q 'cancelled' || { echo "FAIL: web cancellation did not finish"; exit 1; }
+echo "$CANCEL_STATUS" | grep -q "$CANCELLED_STATUS" || { echo "FAIL: web cancellation did not finish"; exit 1; }
 
 echo "=== F3.2b: Per-Step Timeout ==="
 STEPS_PAGE=$(curl_body "$BASE/projects/$PROJECT_ID/steps-page")
@@ -1628,10 +1630,10 @@ API_CANCEL_STATUS=$(python3 -c \
 }
 for i in {1..200}; do
     API_DEP_STATUS=$(api_get "$BASE/api/v1/deployments/$API_DEP_ID/status" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
-    [[ "$API_DEP_STATUS" == "cancelled" ]] && break
+    [[ "$API_DEP_STATUS" == "$CANCELLED_STATUS" ]] && break
     sleep 0.1
 done
-[[ "$API_DEP_STATUS" == "cancelled" ]] || {
+[[ "$API_DEP_STATUS" == "$CANCELLED_STATUS" ]] || {
     echo "FAIL: deployment did not cancel, status=$API_DEP_STATUS"
     api_get --max-time 10 "$BASE/api/v1/deployments/$API_DEP_ID/logs.txt" |
         tail -c 32768 >&2 || true
@@ -1706,6 +1708,13 @@ VIEWER_UPDATE=$(curl -s -H "Authorization: Bearer $API_TOKEN" \
     "$BASE/api/v1/admin/users/$VIEWER_USER_ID")
 VIEWER_ROLE=$(echo "$VIEWER_UPDATE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('role',''))")
 [[ "$VIEWER_ROLE" == "viewer" ]] || { echo "FAIL: viewer role = $VIEWER_ROLE, want viewer"; exit 1; }
+CODE=$(curl -sS -b "$VIEWER_LOGIN" -o /dev/null -w '%{http_code}' "$BASE/")
+[[ "$CODE" == 303 ]] || { echo "FAIL: viewer role change retained the old session ($CODE)"; exit 1; }
+CODE=$(curl -sS -c "$VIEWER_LOGIN" -o /dev/null -w '%{http_code}' -X POST \
+    --data-urlencode "email=$VIEWER_EMAIL" --data-urlencode "password=$VIEWER_PASS" "$BASE/login")
+[[ "$CODE" == 303 ]] || { echo "FAIL: viewer login after role change got $CODE"; exit 1; }
+VIEWER_CSRF=$(csrf_from_cookies "$VIEWER_LOGIN")
+[[ -n "$VIEWER_CSRF" ]] || { echo "FAIL: no CSRF token after viewer role change"; exit 1; }
 CODE=$(curl -s -H "Authorization: Bearer $VIEWER_TOKEN" -H "Content-Type: application/json" \
     -X POST -d '{"name":"viewer-proj"}' -o /dev/null -w "%{http_code}" "$BASE/api/v1/projects")
 [[ "$CODE" == "403" ]] || { echo "FAIL: viewer create project got $CODE, want 403"; exit 1; }

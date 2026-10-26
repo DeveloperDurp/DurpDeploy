@@ -8,7 +8,6 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
-	"durpdeploy/internal/repository"
 )
 
 type logPollState uint8
@@ -86,8 +85,11 @@ func (options *logStream) poll(
 		}
 		options.after = log.ID
 	}
-	if len(logs) == 256 ||
-		(options.preview && len(logs) == repository.LogPreviewBatchLimit) {
+	batch := options.repo.ResourceLimits().Logs.ExportBatch
+	if options.preview {
+		batch = options.repo.ResourceLimits().Logs.PreviewBatch
+	}
+	if int64(len(logs)) == batch {
 		return logPollPending, nil
 	}
 	return options.completion(r, stream)

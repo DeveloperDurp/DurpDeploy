@@ -231,8 +231,8 @@ address=$(python3 -c 'import json,sys
 with open(sys.argv[1]) as log:
     print(next(json.loads(line)["addr"] for line in log if "\"msg\":\"server starting\"" in line))' "$directory/server.log")
 http_port=${address##*:}
-printf ':8443 {\n tls /demo/cert.pem /demo/key.pem\n reverse_proxy host.containers.internal:%s\n}\n' \
-    "$http_port" >"$directory/tls/Caddyfile"
+bash "$ROOT/scripts/https_proxy_config.sh" :8443 /demo/cert.pem /demo/key.pem \
+    "host.containers.internal:$http_port" >"$directory/tls/Caddyfile"
 "$engine" exec "$proxy" caddy reload --config /demo/Caddyfile --adapter caddyfile \
     >>"$directory/proxy.log" 2>&1
 export DURPDEPLOY_BASE_URL="$DURPDEPLOY_URL"

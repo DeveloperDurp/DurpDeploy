@@ -16,6 +16,8 @@ import (
 	"durpdeploy/views/pages"
 )
 
+const invalidScheduleOffsetMessage = "Invalid offset"
+
 type ScheduledDeploymentHandler struct {
 	repo   *repository.Repository
 	parser cron.Parser
@@ -35,7 +37,7 @@ func (h *ScheduledDeploymentHandler) List(
 ) {
 	_, err := scheduleOffset(r)
 	if err != nil {
-		http.Error(w, "Invalid offset", http.StatusBadRequest)
+		http.Error(w, invalidScheduleOffsetMessage, http.StatusBadRequest)
 		return
 	}
 	projectID, err := parseProjectID(r)
@@ -83,7 +85,7 @@ func (h *ScheduledDeploymentHandler) NewForm(
 ) {
 	offset, err := scheduleOffset(r)
 	if err != nil {
-		http.Error(w, "Invalid offset", http.StatusBadRequest)
+		http.Error(w, invalidScheduleOffsetMessage, http.StatusBadRequest)
 		return
 	}
 	projectID, err := parseProjectID(r)
@@ -139,7 +141,7 @@ func (h *ScheduledDeploymentHandler) Create(
 ) {
 	offset, err := scheduleOffset(r)
 	if err != nil {
-		http.Error(w, "Invalid offset", http.StatusBadRequest)
+		http.Error(w, invalidScheduleOffsetMessage, http.StatusBadRequest)
 		return
 	}
 	projectID, err := parseProjectID(r)
@@ -234,6 +236,9 @@ func (h *ScheduledDeploymentHandler) Create(
 		r.Context(),
 		release.ID,
 	); err != nil {
+		if writeArtifactError(w, err) {
+			return
+		}
 		if errors.Is(err, repository.ErrLegacyServerStep) {
 			http.Error(
 				w,
@@ -295,7 +300,7 @@ func (h *ScheduledDeploymentHandler) EditForm(
 ) {
 	offset, err := scheduleOffset(r)
 	if err != nil {
-		http.Error(w, "Invalid offset", http.StatusBadRequest)
+		http.Error(w, invalidScheduleOffsetMessage, http.StatusBadRequest)
 		return
 	}
 	projectID, err := parseProjectID(r)
@@ -375,7 +380,7 @@ func (h *ScheduledDeploymentHandler) Update(
 ) {
 	offset, err := scheduleOffset(r)
 	if err != nil {
-		http.Error(w, "Invalid offset", http.StatusBadRequest)
+		http.Error(w, invalidScheduleOffsetMessage, http.StatusBadRequest)
 		return
 	}
 	projectID, err := parseProjectID(r)
@@ -477,6 +482,9 @@ func (h *ScheduledDeploymentHandler) Update(
 		r.Context(),
 		release.ID,
 	); err != nil {
+		if writeArtifactError(w, err) {
+			return
+		}
 		if errors.Is(err, repository.ErrLegacyServerStep) {
 			http.Error(
 				w,
@@ -557,7 +565,7 @@ func (h *ScheduledDeploymentHandler) Delete(
 ) {
 	offset, err := scheduleOffset(r)
 	if err != nil {
-		http.Error(w, "Invalid offset", http.StatusBadRequest)
+		http.Error(w, invalidScheduleOffsetMessage, http.StatusBadRequest)
 		return
 	}
 	projectID, err := parseProjectID(r)
@@ -613,7 +621,7 @@ func (h *ScheduledDeploymentHandler) Toggle(
 ) {
 	offset, err := scheduleOffset(r)
 	if err != nil {
-		http.Error(w, "Invalid offset", http.StatusBadRequest)
+		http.Error(w, invalidScheduleOffsetMessage, http.StatusBadRequest)
 		return
 	}
 	projectID, err := parseProjectID(r)
@@ -650,6 +658,9 @@ func (h *ScheduledDeploymentHandler) Toggle(
 			r.Context(),
 			existing.ReleaseID,
 		); err != nil {
+			if writeArtifactError(w, err) {
+				return
+			}
 			if errors.Is(err, repository.ErrLegacyServerStep) {
 				http.Error(
 					w,

@@ -182,8 +182,8 @@ for scenario in success failure timeout INT TERM HUP nested startup-race late-ne
     fi
     if [[ -f $case_dir/child ]] && kill -0 "$(cat "$case_dir/child")" 2>/dev/null; then
         # A killed child may briefly remain as a zombie until init reaps it.
-        state=$(ps -o stat= -p "$(cat "$case_dir/child")")
-        if [[ $state != Z* ]]; then
+        state=$(ps -o stat= -p "$(cat "$case_dir/child")" || true)
+        if [[ $state != Z* ]] && kill -0 "$(cat "$case_dir/child")" 2>/dev/null; then
             child=$(cat "$case_dir/child")
             kill -KILL -- "-$child" 2>/dev/null || true
             kill -KILL "$child" 2>/dev/null || true

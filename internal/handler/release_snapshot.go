@@ -2,13 +2,16 @@ package handler
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strings"
 
+	"durpdeploy/internal/agentexecution"
+	"durpdeploy/internal/config"
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/stepdefinition"
 )
 
 type releaseSnapshotData struct {
@@ -22,7 +25,7 @@ func RefreshReleaseSnapshot(
 	repo *repository.Repository,
 	release db.Release,
 ) (db.Release, error) {
-	if err := repo.ValidateExecutableRelease(ctx, release.ID); err != nil {
+	if err := repo.ValidateRefreshableRelease(ctx, release.ID); err != nil {
 		return db.Release{}, err
 	}
 	snapshot, err := buildReleaseSnapshot(ctx, repo, release.ProjectID)
@@ -81,12 +84,31 @@ func buildReleaseSnapshot(
 	repo *repository.Repository,
 	projectID int64,
 ) (releaseSnapshotData, error) {
-	steps, err := repo.Queries.ListStepsByProject(ctx, projectID)
+	// SQL Server needs range locks, PostgreSQL needs a stable snapshot, and
+	// SQLite keeps one read view for the transaction. Do not hold this
+	// transaction across artifact network requests or release persistence.
+	tx, err := repo.DB.BeginTx(ctx, &sql.TxOptions{
+		Isolation: sql.LevelSerializable,
+	})
 	if err != nil {
 		return releaseSnapshotData{}, err
 	}
-	snapshots, err := releaseStepSnapshots(ctx, repo.Queries, steps)
+	defer func() { repository.LogRollbackError(tx.Rollback()) }()
+	queries := repo.Queries.WithTx(tx)
+	steps, err := queries.ListStepsByProject(ctx, projectID)
 	if err != nil {
+		return releaseSnapshotData{}, err
+	}
+	snapshots, err := releaseStepSnapshots(
+		ctx,
+		queries,
+		steps,
+		repo.ResourceLimits().Execution,
+	)
+	if err != nil {
+		return releaseSnapshotData{}, err
+	}
+	if err := tx.Commit(); err != nil {
 		return releaseSnapshotData{}, err
 	}
 	stepsJSON, err := json.Marshal(snapshots)
@@ -135,46 +157,20 @@ func (snapshot releaseSnapshotData) insertVariables(
 	return nil
 }
 
-type releaseStepSnapshot struct {
-	Name                 string   `json:"name"`
-	ScriptBody           string   `json:"script_body"`
-	Interpreter          string   `json:"interpreter"`
-	SortOrder            int64    `json:"sort_order"`
-	TimeoutSeconds       int64    `json:"timeout_seconds"`
-	MaxRetries           int64    `json:"max_retries"`
-	ExecutionTarget      string   `json:"execution_target"`
-	AgentExecutionMode   string   `json:"agent_execution_mode"`
-	AgentSelectors       []string `json:"agent_selectors,omitempty"`
-	ContainerImage       string   `json:"container_image"`
-	NetworkMode          string   `json:"network_mode"`
-	ApprovalArtifactPath string   `json:"approval_artifact_path"`
-	ApprovalReviewPath   string   `json:"approval_review_path"`
-	ApprovalReviewFormat string   `json:"approval_review_format"`
-	VariableNames        []string `json:"variable_names"`
-}
+type releaseStepSnapshot stepdefinition.Definition
 
-// decodeStepVariableNames parses the JSON array text stored in the
-// steps.variable_names column. The pre-migration legacy value is an
-// empty string, which decodes to the unrestricted default.
-func decodeStepVariableNames(raw string) ([]string, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return []string{}, nil
-	}
-	var names []string
-	if err := json.Unmarshal([]byte(raw), &names); err != nil {
-		return nil, fmt.Errorf("decode variable_names %q: %w", raw, err)
-	}
-	if names == nil {
-		names = []string{}
-	}
-	return names, nil
+func (step releaseStepSnapshot) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		stepdefinition.Definition
+		AgentSelectors []string `json:"agent_selectors,omitempty"`
+	}{stepdefinition.Definition(step), step.AgentSelectors})
 }
 
 func releaseStepSnapshots(
 	ctx context.Context,
 	queries *db.Queries,
 	steps []db.Step,
+	limits config.ExecutionLimits,
 ) ([]releaseStepSnapshot, error) {
 	ids := make([]int64, len(steps))
 	for index, step := range steps {
@@ -186,27 +182,14 @@ func releaseStepSnapshots(
 	}
 	snapshots := make([]releaseStepSnapshot, len(steps))
 	for index, step := range steps {
-		variableNames, err := decodeStepVariableNames(step.VariableNames)
+		if err := agentexecution.ValidateLimitsWithPolicy(step.TimeoutSeconds, step.MaxRetries, limits); err != nil {
+			return nil, fmt.Errorf("step %q: %w", step.Name, err)
+		}
+		definition, err := stepdefinition.FromStep(step, selectors[step.ID])
 		if err != nil {
 			return nil, err
 		}
-		snapshots[index] = releaseStepSnapshot{
-			Name:                 step.Name,
-			ScriptBody:           step.ScriptBody,
-			Interpreter:          step.Interpreter,
-			SortOrder:            step.SortOrder,
-			TimeoutSeconds:       step.TimeoutSeconds,
-			MaxRetries:           step.MaxRetries,
-			ExecutionTarget:      step.ExecutionTarget,
-			AgentExecutionMode:   step.AgentExecutionMode,
-			AgentSelectors:       selectors[step.ID],
-			ContainerImage:       step.ContainerImage,
-			NetworkMode:          step.NetworkMode,
-			ApprovalArtifactPath: step.ApprovalArtifactPath,
-			ApprovalReviewPath:   step.ApprovalReviewPath,
-			ApprovalReviewFormat: step.ApprovalReviewFormat,
-			VariableNames:        variableNames,
-		}
+		snapshots[index] = releaseStepSnapshot(definition)
 	}
 	return snapshots, nil
 }

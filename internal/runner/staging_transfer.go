@@ -65,14 +65,15 @@ func (r *DeploymentRunner) prepareRemoteStaging(
 			if err := command.Start(); err != nil {
 				return err
 			}
-			n, copyErr := io.Copy(file, io.LimitReader(stdout, staging.MaxArchive+1))
+			limit := r.repo.ResourceLimits().Staging.ArchiveBytes
+			n, copyErr := io.Copy(file, io.LimitReader(stdout, limit+1))
 			closeErr := stdout.Close()
 			waitErr := command.Wait()
+			if n > limit {
+				copyErr = errors.Join(copyErr, staging.ErrInvalid)
+			}
 			if err := errors.Join(copyErr, closeErr, waitErr); err != nil {
 				return err
-			}
-			if n > staging.MaxArchive {
-				return staging.ErrInvalid
 			}
 		}
 	}
@@ -86,6 +87,10 @@ func (r *DeploymentRunner) mergeRemoteStaging(
 	ctx context.Context,
 	key db.GetStagingSnapshotParams,
 ) (result *os.File, resultErr error) {
+	runs, err := r.stagingMergeInputs(ctx, key)
+	if err != nil {
+		return nil, err
+	}
 	var files []*os.File
 	defer func() {
 		for _, file := range files {
@@ -96,15 +101,59 @@ func (r *DeploymentRunner) mergeRemoteStaging(
 			result = nil
 		}
 	}()
-	baseFile, err := r.repo.LoadStaging(ctx, key)
+	baseFile, base, err := r.repo.LoadStagingSnapshot(ctx, key)
 	if err != nil {
 		return nil, err
 	}
 	files = append(files, baseFile)
-	base, err := staging.Read(ctx, baseFile)
+	content, err := artifact.OpenGateSpool()
 	if err != nil {
 		return nil, err
 	}
+	files = append(files, content)
+	merger, err := staging.NewMergerWithLimits(
+		ctx,
+		base,
+		content,
+		r.repo.ResourceLimits().Staging,
+		r.repo.ResourceLimits().Merge,
+	)
+	if err != nil {
+		return nil, err
+	}
+	for _, run := range runs {
+		key.Producer = run.AgentID
+		if err := r.mergeStagingOutput(ctx, key, merger); err != nil {
+			return nil, err
+		}
+	}
+	merged, err := merger.Finish(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result, err = artifact.OpenGateSpool()
+	if err != nil {
+		return nil, err
+	}
+	if err := merged.Write(ctx, staging.LimitWriter(
+		result, r.repo.ResourceLimits().Staging.ArchiveBytes,
+	)); err != nil {
+		return result, err
+	}
+	if _, err := result.Seek(0, io.SeekStart); err != nil {
+		return result, err
+	}
+	if err := r.repo.Queries.DeleteStepStaging(ctx, db.DeleteStepStagingParams{DeploymentID: key.DeploymentID, StepIndex: key.StepIndex}); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+// Check canonical sizes before decrypting or spooling any merge input.
+func (r *DeploymentRunner) stagingMergeInputs(
+	ctx context.Context,
+	key db.GetStagingSnapshotParams,
+) ([]db.RemoteStepRun, error) {
 	runs, err := r.repo.Queries.ListRemoteStepRuns(
 		ctx,
 		db.ListRemoteStepRunsParams{
@@ -115,41 +164,48 @@ func (r *DeploymentRunner) mergeRemoteStaging(
 	if err != nil {
 		return nil, err
 	}
-	outputs := make([]staging.Snapshot, 0, len(runs))
+	limits := r.repo.ResourceLimits()
+	if int64(len(runs)) > limits.Merge.AgentOutputs {
+		return nil, staging.ErrMergeBudget
+	}
+	keys := []db.GetStagingSnapshotParams{key}
 	for _, run := range runs {
 		if run.State != "succeeded" {
 			return nil, repository.ErrRemoteLifecycleConflict
 		}
-		key.Producer = run.AgentID
-		file, err := r.repo.LoadStaging(ctx, key)
+		output := key
+		output.Producer = run.AgentID
+		keys = append(keys, output)
+	}
+	var total int64
+	for _, input := range keys {
+		meta, err := r.repo.Queries.GetStagingSnapshot(ctx, input)
 		if err != nil {
 			return nil, err
 		}
-		files = append(files, file)
-		output, err := staging.Read(ctx, file)
-		if err != nil {
-			return nil, err
+		if meta.Size < 1024 ||
+			meta.Size > limits.Staging.ArchiveBytes {
+			return nil, staging.ErrInvalid
 		}
-		outputs = append(outputs, output)
+		if meta.Size > limits.Merge.ArchiveBytes-total {
+			return nil, staging.ErrMergeBudget
+		}
+		total += meta.Size
 	}
-	merged, err := staging.Merge(base, outputs)
+	return runs, nil
+}
+
+func (r *DeploymentRunner) mergeStagingOutput(
+	ctx context.Context,
+	key db.GetStagingSnapshotParams,
+	merger *staging.Merger,
+) (result error) {
+	file, output, err := r.repo.LoadStagingSnapshot(ctx, key)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	result, err = artifact.OpenGateSpool()
-	if err != nil {
-		return nil, err
-	}
-	if err := merged.Write(ctx, result); err != nil {
-		return result, err
-	}
-	if _, err := result.Seek(0, io.SeekStart); err != nil {
-		return result, err
-	}
-	if err := r.repo.Queries.DeleteStepStaging(ctx, db.DeleteStepStagingParams{DeploymentID: key.DeploymentID, StepIndex: key.StepIndex}); err != nil {
-		return result, err
-	}
-	return result, nil
+	defer func() { result = errors.Join(result, file.Close()) }()
+	return merger.Add(ctx, output)
 }
 
 func (r *DeploymentRunner) importRemoteStaging(

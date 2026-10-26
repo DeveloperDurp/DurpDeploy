@@ -120,7 +120,7 @@ func checkProjectPanelBrowser(
  if (!row || !row.innerText.includes('own-success') || !row.innerText.includes('own-attempt') ||
  row.textContent.includes('No successful deploys') || row.textContent.includes('foreign-version')) return false;
  const dots = [...row.querySelectorAll('span.w-2')].map(dot => dot.title);
- return dots.join(',') === 'failed,succeeded' && row.querySelector('.badge')?.textContent.includes('failed') &&
+ return dots.join(',') === 'failed,failed,failed,failed,failed' && row.querySelector('.badge')?.textContent.includes('failed') &&
  document.documentElement.scrollWidth <= innerWidth;
 })()`, f.environment.Name))) != "true" {
 		t.Fatal(

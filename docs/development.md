@@ -214,8 +214,10 @@ For local development, `make dev` reuses the encryption key from `.env` or
 `DURPDEPLOY_SECRET_KEY`. When neither is configured, it creates a private,
 gitignored `.local/dev-secret-key` once and reuses it across restarts. Keep this
 file with the development database; losing it makes encrypted values unreadable.
-An existing `/etc/durpdeploy/key` remains the server's first choice. This change
-cannot recover values encrypted with a previously discarded temporary key.
+
+The server selects the environment key, then YAML `secret_key`, then the legacy `/etc/durpdeploy/key` file.
+Use the key that decrypts the development database.
+This change cannot recover values encrypted with a discarded key.
 
 ## Populated demo
 

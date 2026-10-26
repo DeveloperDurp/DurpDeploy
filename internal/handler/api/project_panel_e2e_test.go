@@ -17,6 +17,7 @@ type projectPanelFixture struct {
 	other            db.Project
 	empty            db.Project
 	success, attempt db.Deployment
+	recent           []db.Deployment
 	lifecycleID      int64
 }
 
@@ -65,6 +66,11 @@ func newProjectPanelFixture(t *testing.T) projectPanelFixture {
 		200,
 	)
 	attempt := deploy("own-attempt", events.DeploymentFailed)
+	recent := []db.Deployment{attempt}
+	for range 5 {
+		recent = append(recent, seedDeployment(t, f.h.repo,
+			attempt.ReleaseID, f.environment.ID, "failed"))
+	}
 	var other struct{ ID int64 }
 	decodeLifecycleTest(t, f.api(t, "POST", "/api/v1/projects",
 		map[string]string{"name": "Foreign panel project"}, 201), &other)
@@ -89,7 +95,7 @@ func newProjectPanelFixture(t *testing.T) projectPanelFixture {
 			t.Fatal(err)
 		}
 	}
-	for _, row := range []db.Deployment{success, attempt} {
+	for _, row := range append([]db.Deployment{success}, recent...) {
 		if _, err := f.h.repo.DB.ExecContext(t.Context(),
 			"UPDATE deployments SET created_at = ? WHERE id = ?", 100, row.ID,
 		); err != nil {
@@ -106,7 +112,8 @@ func newProjectPanelFixture(t *testing.T) projectPanelFixture {
 		map[string]string{"name": "Untouched panel project"}, 201), &empty)
 	return projectPanelFixture{f: f, other: db.Project{ID: other.ID},
 		empty: db.Project{ID: empty.ID}, success: success,
-		attempt: attempt, lifecycleID: lifecycle.ID}
+		attempt: recent[len(recent)-1], recent: recent,
+		lifecycleID: lifecycle.ID}
 }
 
 func TestProjectPanelScopeAPIWebE2E(t *testing.T) {
@@ -224,11 +231,11 @@ func (p projectPanelFixture) checkDeploymentAPI(t *testing.T) {
 			nil, 200),
 		&listed,
 	)
-	if listed.Total != 2 || len(listed.Items) != 2 ||
-		listed.Items[0].ID != p.attempt.ID || listed.Items[1].ID != p.success.ID {
+	if listed.Total != 7 || len(listed.Items) != 7 ||
+		listed.Items[0].ID != p.attempt.ID || listed.Items[6].ID != p.success.ID {
 		t.Fatalf("project API lost or mixed history: %+v", listed)
 	}
-	for offset, want := range []int64{p.attempt.ID, p.success.ID} {
+	for offset, want := range []int64{p.attempt.ID, p.recent[len(p.recent)-2].ID} {
 		decodeLifecycleTest(t, f.api(t, "GET",
 			"/api/v1"+path+"/deployments"+query+
 				fmt.Sprintf(
@@ -236,7 +243,7 @@ func (p projectPanelFixture) checkDeploymentAPI(t *testing.T) {
 					offset,
 				), nil, 200),
 			&listed)
-		if listed.Total != 2 || len(listed.Items) != 1 ||
+		if listed.Total != 7 || len(listed.Items) != 1 ||
 			listed.Items[0].ID != want {
 			t.Fatalf(
 				"project API tie pagination: %+v, want %d",
@@ -279,10 +286,13 @@ func (p projectPanelFixture) checkDetail(t *testing.T) {
 		t.Fatalf("project detail lost or mixed history: %s", text)
 	}
 	dots := dashboardElements(row, "class", "w-2")
-	if len(dots) != 2 ||
-		len(dashboardElements(dots[0], "title", "failed")) != 1 ||
-		len(dashboardElements(dots[1], "title", "succeeded")) != 1 {
+	if len(dots) != 5 {
 		t.Fatal("project streak lost or reordered its attempts")
+	}
+	for _, dot := range dots {
+		if len(dashboardElements(dot, "title", "failed")) != 1 {
+			t.Fatal("older success displaced a recent failed attempt")
+		}
 	}
 }
 

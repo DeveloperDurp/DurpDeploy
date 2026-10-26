@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"durpdeploy/internal/config"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,6 +25,29 @@ func TestHTTPServerTimeoutPolicy(t *testing.T) {
 	require.Equal(t, 30*time.Second, srv.ReadTimeout)
 	require.Equal(t, time.Minute, srv.WriteTimeout)
 	require.Equal(t, time.Minute, srv.IdleTimeout)
+}
+
+func TestConfiguredHTTPServerTimeoutPolicy(t *testing.T) {
+	for _, seconds := range []int64{1, 120} {
+		limits := config.Defaults().Limits.HTTP
+		limits.ReadHeaderTimeoutSeconds = seconds
+		limits.ReadTimeoutSeconds = seconds + 1
+		limits.WriteTimeoutSeconds = seconds + 2
+		limits.IdleTimeoutSeconds = seconds + 3
+		srv := newConfiguredHTTPServer(
+			"127.0.0.1:0",
+			http.NotFoundHandler(),
+			limits,
+		)
+		require.Equal(
+			t,
+			time.Duration(seconds)*time.Second,
+			srv.ReadHeaderTimeout,
+		)
+		require.Equal(t, time.Duration(seconds+1)*time.Second, srv.ReadTimeout)
+		require.Equal(t, time.Duration(seconds+2)*time.Second, srv.WriteTimeout)
+		require.Equal(t, time.Duration(seconds+3)*time.Second, srv.IdleTimeout)
+	}
 }
 
 func TestHTTPServerTerminatesStalledInput(t *testing.T) {

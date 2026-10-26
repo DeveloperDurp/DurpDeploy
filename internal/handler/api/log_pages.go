@@ -7,8 +7,10 @@ import (
 )
 
 // swagger:route GET /deployments/{id}/logs/page logs pageDeploymentLogs
-// Read log previews within 500 rows and 1 MiB, ordered by increasing ID.
-// Text fields over 16 KiB are shortened. Use next_before for older rows.
+// Read log previews within configured row and byte budgets, ordered by increasing ID.
+// Defaults are 500 rows, 1 MiB per page, and 16 KiB per text field.
+// Read limit, byte_limit, and line_byte_limit for effective budgets.
+// Use next_before for older rows. Full exports preserve complete output.
 //
 // Responses:
 // 200: body:LogPage

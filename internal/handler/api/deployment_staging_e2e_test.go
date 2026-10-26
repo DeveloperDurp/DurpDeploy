@@ -6,9 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -73,6 +76,7 @@ func cleanupArtifactRuntime(t *testing.T, h *harness, binary ...string) {
 }
 
 func TestDeploymentStagingCleanupE2E(t *testing.T) {
+	t.Run("terminal_logs", testAwaitStagingTerminalReadsFinalLogs)
 	for _, scenario := range []string{
 		"succeeded", "failed", "cancelled", "cancelled_during_setup",
 	} {
@@ -181,7 +185,7 @@ func awaitStagingTerminal(
 			t.Fatal(err)
 		}
 		if state.Status == terminal {
-			return logs
+			return f.api(t, "GET", path+"/logs", nil, 200)
 		}
 		if state.Status == "cleanup_unconfirmed" || state.Status == "failed" ||
 			time.Now().After(deadline) {
@@ -193,5 +197,39 @@ func awaitStagingTerminal(
 			)
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func testAwaitStagingTerminalReadsFinalLogs(t *testing.T) {
+	const deploymentPath = "/api/v1/deployments/1"
+	const finalLogs = `[{"line":"restore-execution-ok"}]`
+	var terminal atomic.Bool
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body := "[]"
+			switch r.URL.Path {
+			case deploymentPath + "/logs":
+				if terminal.Load() {
+					body = finalLogs
+				}
+			case deploymentPath + "/status":
+				// Completion occurs after the caller's first log read.
+				terminal.Store(true)
+				body = `{"status":"succeeded"}`
+			default:
+				http.NotFound(w, r)
+				return
+			}
+			if _, err := fmt.Fprint(w, body); err != nil {
+				t.Error(err)
+			}
+		}),
+	)
+	t.Cleanup(server.Close)
+	f := &artifactE2E{baseURL: server.URL, client: server.Client()}
+	if logs := awaitStagingTerminal(t, f, deploymentPath, "succeeded"); string(
+		logs,
+	) != finalLogs {
+		t.Fatalf("terminal logs=%s want=%s", logs, finalLogs)
 	}
 }

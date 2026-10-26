@@ -1,21 +1,19 @@
 package api
 
-type runbookStep struct {
-	Name                 string   `json:"name"`
-	ScriptBody           string   `json:"script_body"`
-	Interpreter          string   `json:"interpreter"`
-	SortOrder            int      `json:"sort_order"`
-	TimeoutSeconds       int64    `json:"timeout_seconds"`
-	MaxRetries           int64    `json:"max_retries"`
-	ExecutionTarget      string   `json:"execution_target"`
-	AgentExecutionMode   string   `json:"agent_execution_mode"`
-	AgentSelectors       []string `json:"agent_selectors,omitempty"`
-	ContainerImage       string   `json:"container_image"`
-	NetworkMode          string   `json:"network_mode"`
-	ApprovalArtifactPath string   `json:"approval_artifact_path"`
-	ApprovalReviewPath   string   `json:"approval_review_path"`
-	ApprovalReviewFormat string   `json:"approval_review_format"`
-	VariableNames        []string `json:"variable_names,omitempty"`
+import (
+	"encoding/json"
+
+	"durpdeploy/internal/stepdefinition"
+)
+
+type runbookStep stepdefinition.Definition
+
+func (step runbookStep) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		stepdefinition.Definition
+		AgentSelectors []string `json:"agent_selectors,omitempty"`
+		VariableNames  []string `json:"variable_names,omitempty"`
+	}{stepdefinition.Definition(step), step.AgentSelectors, step.VariableNames})
 }
 
 type runbookSaveRequest struct {

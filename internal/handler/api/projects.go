@@ -345,8 +345,9 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.repo.Queries.UpdateProject(
+	updated, err := handler.UpdateProjectWithLifecycle(
 		r.Context(),
+		h.repo,
 		db.UpdateProjectParams{
 			ID:   id,
 			Name: name,
@@ -355,8 +356,14 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 				Valid:  req.Description != "",
 			},
 		},
+		req.LifecycleID,
 	)
 	if err != nil {
+		if errors.Is(err, handler.ErrLifecycleAssignmentForbidden) ||
+			errors.Is(err, handler.ErrLifecycleRemovalForbidden) {
+			RespondError(w, http.StatusForbidden, err.Error())
+			return
+		}
 		if handler.IsUniqueViolation(err) {
 			RespondError(
 				w,
@@ -365,22 +372,6 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	if err := handler.ApplyLifecycleSelection(
-		r.Context(),
-		h.repo,
-		id,
-		req.LifecycleID,
-	); err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	updated, err := h.repo.Queries.GetProject(r.Context(), id)
-	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

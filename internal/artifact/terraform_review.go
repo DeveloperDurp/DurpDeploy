@@ -48,9 +48,14 @@ func TerraformPreviewReader(
 	reader io.Reader,
 	secrets []string,
 ) (TerraformReviewResponse, error) {
+	return TerraformPreviewReaderWithScrubber(reader, logscrub.New(secrets))
+}
+
+func TerraformPreviewReaderWithScrubber(
+	reader io.Reader, scrubber *logscrub.Scrubber,
+) (TerraformReviewResponse, error) {
 	s := newReviewJSON(reader)
 	s.preview = &terraformPreview{}
-	scrubber := logscrub.New(secrets)
 	_, changes, err := s.terraform(
 		func(change terraformResource) (TerraformResourceChange, error) {
 			return renderTerraformResource(change, scrubber)

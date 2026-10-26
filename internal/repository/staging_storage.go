@@ -32,7 +32,12 @@ func (r *Repository) SaveStaging(
 	if r.secrets == nil {
 		return staging.ErrInvalid
 	}
-	snapshot, err := staging.Read(ctx, request.Source)
+	limits := r.ResourceLimits().Staging
+	snapshot, err := staging.ReadWithLimits(
+		ctx,
+		request.Source,
+		limits,
+	)
 	if err != nil {
 		return err
 	}
@@ -44,11 +49,13 @@ func (r *Repository) SaveStaging(
 		result = artifact.SpoolCleanupError(ctx, result, canonical.Close())
 	}()
 	hash := sha256.New()
-	if err := snapshot.Write(ctx, io.MultiWriter(canonical, hash)); err != nil {
+	if err := snapshot.Write(ctx, staging.LimitWriter(
+		io.MultiWriter(canonical, hash), limits.ArchiveBytes,
+	)); err != nil {
 		return err
 	}
 	size, err := canonical.Seek(0, io.SeekCurrent)
-	if err != nil || size > staging.MaxArchive {
+	if err != nil || size > limits.ArchiveBytes {
 		return staging.ErrInvalid
 	}
 	if _, err := canonical.Seek(0, io.SeekStart); err != nil {
@@ -66,6 +73,9 @@ func (r *Repository) SaveStaging(
 	encoder := json.NewEncoder(encrypted)
 	buffer := make([]byte, gateChunkSize)
 	for index, remaining := int64(0), size; remaining > 0; index++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		n, err := io.ReadFull(
 			canonical,
 			buffer[:min(int64(len(buffer)), remaining)],
@@ -88,57 +98,69 @@ func (r *Repository) SaveStaging(
 		ctx,
 		key.DeploymentID,
 		func(ctx context.Context, q *db.Queries) error {
-			deployment, err := q.GetDeployment(ctx, key.DeploymentID)
-			if err != nil {
-				return err
-			}
-			if deployment.Status != "running" {
-				return ErrRemoteLifecycleConflict
-			}
-			if request.Claim != nil {
-				run, err := liveStagingRun(ctx, q, *request.Claim)
-				if err != nil {
-					return err
-				}
-				if run.State != "started" || run.StepIndex != key.StepIndex ||
-					run.AgentID != key.Producer {
-					return ErrRemoteLifecycleConflict
-				}
-			}
-			prior, err := q.GetStagingSnapshot(ctx, key)
-			if err == nil {
-				if prior.Sha256 == checksum && prior.Size == size {
-					return nil
-				}
-				return ErrRemoteLifecycleConflict
-			}
-			if !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
-			if err := q.CreateStagingSnapshot(ctx, db.CreateStagingSnapshotParams{
-				DeploymentID: key.DeploymentID, StepIndex: key.StepIndex, Producer: key.Producer, Sha256: checksum, Size: size,
-			}); err != nil {
-				return err
-			}
-			if _, err := encrypted.Seek(0, io.SeekStart); err != nil {
-				return err
-			}
-			decoder := json.NewDecoder(encrypted)
-			for index, remaining := int64(0), size; remaining > 0; index++ {
-				var ciphertext string
-				if err := decoder.Decode(&ciphertext); err != nil {
-					return err
-				}
-				if err := q.CreateStagingChunk(ctx, db.CreateStagingChunkParams{
-					DeploymentID: key.DeploymentID, StepIndex: key.StepIndex, Producer: key.Producer, ChunkIndex: index, Ciphertext: ciphertext,
-				}); err != nil {
-					return err
-				}
-				remaining -= min(int64(gateChunkSize), remaining)
-			}
-			return nil
+			return r.publishStaging(ctx, q, request, checksum, size, encrypted)
 		},
 	)
+}
+
+func (r *Repository) publishStaging(
+	ctx context.Context,
+	q *db.Queries,
+	request StagingWrite,
+	checksum string,
+	size int64,
+	encrypted *os.File,
+) error {
+	key := request.Key
+	deployment, err := q.GetDeployment(ctx, key.DeploymentID)
+	if err != nil {
+		return err
+	}
+	if deployment.Status != "running" {
+		return ErrRemoteLifecycleConflict
+	}
+	if request.Claim != nil {
+		run, err := liveStagingRun(ctx, q, *request.Claim)
+		if err != nil {
+			return err
+		}
+		if run.State != "started" || run.StepIndex != key.StepIndex ||
+			run.AgentID != key.Producer {
+			return ErrRemoteLifecycleConflict
+		}
+	}
+	prior, err := q.GetStagingSnapshot(ctx, key)
+	if err == nil {
+		if prior.Sha256 == checksum && prior.Size == size {
+			return nil
+		}
+		return ErrRemoteLifecycleConflict
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if err := q.CreateStagingSnapshot(ctx, db.CreateStagingSnapshotParams{
+		DeploymentID: key.DeploymentID, StepIndex: key.StepIndex, Producer: key.Producer, Sha256: checksum, Size: size,
+	}); err != nil {
+		return err
+	}
+	if _, err := encrypted.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	decoder := json.NewDecoder(encrypted)
+	for index, remaining := int64(0), size; remaining > 0; index++ {
+		var ciphertext string
+		if err := decoder.Decode(&ciphertext); err != nil {
+			return err
+		}
+		if err := q.CreateStagingChunk(ctx, db.CreateStagingChunkParams{
+			DeploymentID: key.DeploymentID, StepIndex: key.StepIndex, Producer: key.Producer, ChunkIndex: index, Ciphertext: ciphertext,
+		}); err != nil {
+			return err
+		}
+		remaining -= min(int64(gateChunkSize), remaining)
+	}
+	return nil
 }
 
 func stagingPrefix(key db.GetStagingSnapshotParams, index int64) string {
@@ -156,24 +178,42 @@ func (r *Repository) LoadStaging(
 	ctx context.Context,
 	key db.GetStagingSnapshotParams,
 ) (*os.File, error) {
+	file, _, err := r.LoadStagingSnapshot(ctx, key)
+	return file, err
+}
+
+// LoadStagingSnapshot validates the current policy and returns the parsed tree.
+// The caller owns the unlinked spool until it finishes using the tree.
+func (r *Repository) LoadStagingSnapshot(
+	ctx context.Context,
+	key db.GetStagingSnapshotParams,
+) (*os.File, staging.Snapshot, error) {
 	if r.secrets == nil {
-		return nil, staging.ErrInvalid
+		return nil, staging.Snapshot{}, staging.ErrInvalid
 	}
 	meta, err := r.Queries.GetStagingSnapshot(ctx, key)
 	if err != nil {
-		return nil, err
+		return nil, staging.Snapshot{}, err
 	}
 	file, err := artifact.OpenGateSpool()
 	if err != nil {
-		return nil, err
+		return nil, staging.Snapshot{}, err
 	}
 	if err := r.writeStaging(ctx, meta, file); err != nil {
-		return nil, errors.Join(err, file.Close())
+		return nil, staging.Snapshot{}, errors.Join(err, file.Close())
+	}
+	snapshot, err := staging.ReadWithLimits(
+		ctx,
+		file,
+		r.ResourceLimits().Staging,
+	)
+	if err != nil {
+		return nil, staging.Snapshot{}, errors.Join(err, file.Close())
 	}
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return nil, errors.Join(err, file.Close())
+		return nil, staging.Snapshot{}, errors.Join(err, file.Close())
 	}
-	return file, nil
+	return file, snapshot, nil
 }
 
 func (r *Repository) writeStaging(
@@ -181,7 +221,7 @@ func (r *Repository) writeStaging(
 	meta db.DeploymentStagingSnapshot,
 	target io.Writer,
 ) error {
-	if meta.Size <= 0 || meta.Size > staging.MaxArchive {
+	if meta.Size < 1024 || meta.Size > r.ResourceLimits().Staging.ArchiveBytes {
 		return staging.ErrInvalid
 	}
 	key := db.GetStagingSnapshotParams{

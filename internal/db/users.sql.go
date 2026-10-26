@@ -10,6 +10,17 @@ import (
 	"database/sql"
 )
 
+const countAdministrators = `-- name: CountAdministrators :one
+SELECT COUNT(*) FROM users WHERE role = 'admin'
+`
+
+func (q *Queries) CountAdministrators(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countAdministrators)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?) RETURNING id, email, password_hash, name, created_at, updated_at, last_login_at, role
 `
@@ -98,6 +109,18 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
 		&i.Role,
 	)
 	return i, err
+}
+
+const lockLocalAdministration = `-- name: LockLocalAdministration :execrows
+UPDATE local_administration_lock SET version = 1 - version WHERE id = 1
+`
+
+func (q *Queries) LockLocalAdministration(ctx context.Context) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockLocalAdministration)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const updateUser = `-- name: UpdateUser :exec

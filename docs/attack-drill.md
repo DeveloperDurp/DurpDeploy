@@ -221,6 +221,12 @@ in [the deployment runbook](deploy.md#forgot-the-admin-password).
 
 Inspect the affected user's audit entries between compromise and recovery.
 
+Local user edits and deletions reject removal of the final administrator with 422.
+Promote a replacement administrator before handing over the role.
+Concurrent local demotions and deletions use the same database transaction guard.
+OIDC group mappings remain provider-authoritative and can still remove the final administrator role.
+Keep a host recovery path available.
+
 ---
 
 ## 5. OIDC coexistence and recovery

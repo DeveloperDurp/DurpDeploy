@@ -134,24 +134,42 @@ func (r *DeploymentRunner) persistCompletion(
 	if err == nil {
 		return finalStatus, true
 	}
+	r.UnregisterCancel(deploymentID)
+	r.mu.Lock()
+	if r.stopping {
+		r.mu.Unlock()
+		slog.Error("terminal status left for startup recovery",
+			"deployment_id", deploymentID, "status", finalStatus, "err", err)
+		return finalStatus, false
+	}
+	if _, exists := r.completionCancels[deploymentID]; exists {
+		r.mu.Unlock()
+		return finalStatus, false
+	}
+	retryCtx, cancelRetry := context.WithTimeout(
+		context.WithoutCancel(ctx), 30*time.Second,
+	)
+	if r.completionCancels == nil {
+		r.completionCancels = make(map[int64]context.CancelFunc)
+	}
+	r.completionCancels[deploymentID] = cancelRetry
+	r.completionWork.Add(1)
+	r.mu.Unlock()
+	go func() {
+		defer r.completionWork.Done()
+		defer func() {
+			r.mu.Lock()
+			delete(r.completionCancels, deploymentID)
+			r.mu.Unlock()
+		}()
+		r.retryCompletion(retryCtx, cancelRetry, cancelCtx,
+			deploymentID, status, cancellationWins, localCleanupConfirmed)
+	}()
 	slog.Error(
 		"persist deployment terminal status",
 		"deployment_id", deploymentID,
 		"status", finalStatus,
 		"err", err,
-	)
-	r.UnregisterCancel(deploymentID)
-	retryCtx, cancelRetry := context.WithTimeout(
-		context.WithoutCancel(ctx), 30*time.Second,
-	)
-	go r.retryCompletion(
-		retryCtx,
-		cancelRetry,
-		cancelCtx,
-		deploymentID,
-		status,
-		cancellationWins,
-		localCleanupConfirmed,
 	)
 	return finalStatus, false
 }

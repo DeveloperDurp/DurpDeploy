@@ -7,14 +7,34 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/staging"
 )
 
 const approvedMount = "/approved"
+
+func (r *DeploymentRunner) stagingRestoreError(
+	ctx context.Context, deploymentID int64, err error,
+) error {
+	if !errors.Is(err, staging.ErrInvalid) {
+		return errors.Join(repository.ErrArtifactGate, err)
+	}
+	_, logErr := r.repo.Queries.CreateDeploymentLog(
+		ctx,
+		db.CreateDeploymentLogParams{
+			DeploymentID: deploymentID,
+			Line:         "Saved approval context does not satisfy the current staging policy",
+		},
+	)
+	return errors.Join(repository.ErrArtifactGate, logErr, fmt.Errorf(
+		"approval context does not satisfy the current staging policy: %w", err,
+	))
+}
 
 func (r *DeploymentRunner) captureArtifactGate(
 	ctx context.Context,
@@ -51,18 +71,34 @@ func (r *DeploymentRunner) captureArtifactGate(
 		return err
 	}
 	hash := sha256.New()
-	checksum, review, copyErr := artifact.CopyGateBundle(
+	checksum, review, copyErr := artifact.CopyGateBundleWithLimits(
 		ctx,
 		stdout,
-		io.MultiWriter(file, hash),
+		staging.LimitWriter(
+			io.MultiWriter(
+				file,
+				hash,
+			),
+			r.repo.ResourceLimits().Staging.ArchiveBytes,
+		),
 		step.ApprovalArtifactPath,
 		step.ApprovalReviewPath,
 		step.ApprovalReviewFormat,
+		r.repo.ResourceLimits().Artifact,
 	)
 	closeErr := stdout.Close()
 	waitErr := command.Wait()
 	if err := errors.Join(copyErr, closeErr, waitErr); err != nil {
 		return errors.Join(repository.ErrArtifactGate, err)
+	}
+	if _, err := staging.ReadWithLimits(ctx, file, r.repo.ResourceLimits().Staging); err != nil {
+		return errors.Join(
+			repository.ErrArtifactGate,
+			fmt.Errorf(
+				"approval context does not satisfy the current staging policy: %w",
+				err,
+			),
+		)
 	}
 	if _, err := file.Seek(0, 0); err != nil {
 		return err
@@ -129,7 +165,26 @@ func (r *DeploymentRunner) restoreArtifactGate(
 		gate,
 		file,
 	); err != nil {
+		return stage, r.stagingRestoreError(ctx, deploymentID, err)
+	}
+	if _, err := file.Seek(0, 0); err != nil {
 		return stage, err
+	}
+	if err := artifact.ValidateGateBundleNodes(ctx, file, r.repo.ResourceLimits().Artifact.StagingNodes); err != nil {
+		if errors.Is(err, artifact.ErrInvalid) {
+			_, logErr := r.repo.Queries.CreateDeploymentLog(
+				ctx,
+				db.CreateDeploymentLogParams{
+					DeploymentID: deploymentID,
+					Line:         "Saved approval context does not satisfy the current staging-node limit",
+				},
+			)
+			err = errors.Join(err, logErr)
+		}
+		return stage, errors.Join(repository.ErrArtifactGate, err)
+	}
+	if _, err := staging.ReadWithLimits(ctx, file, r.repo.ResourceLimits().Staging); err != nil {
+		return stage, r.stagingRestoreError(ctx, deploymentID, err)
 	}
 	if _, err := file.Seek(0, 0); err != nil {
 		return stage, err

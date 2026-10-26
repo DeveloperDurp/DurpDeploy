@@ -9,9 +9,9 @@ import (
 )
 
 // watchLogAccess cancels blocked database reads too. A blocked socket write
-// ends under Writer's existing 60-second deadline. With a one-second check
-// cadence and one-second authorization query budget, revocation is bounded
-// by 62 seconds even when the consumer stops reading.
+// ends under Writer's configured deadline. Revocation closure allows that
+// event budget plus the one-second check cadence and one-second query budget
+// (62 seconds by default), even when the consumer stops reading.
 func watchLogAccess(
 	r *http.Request,
 	options logStream,

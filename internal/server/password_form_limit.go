@@ -8,10 +8,6 @@ import (
 	"durpdeploy/internal/handler"
 )
 
-// ponytail: 64 KiB leaves room for legacy credentials while keeping queued
-// password forms negligible beside the two active 64 MiB Argon2 hashes.
-const maxPasswordFormBodyBytes = handler.MaxPasswordFormBodyBytes
-
 func passwordFormBodyLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -29,8 +25,9 @@ func passwordFormBodyLimit(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		limit := handler.RequestBodyLimits(r).PasswordFormBytes
 		body, err := io.ReadAll(
-			io.LimitReader(r.Body, maxPasswordFormBodyBytes+1),
+			io.LimitReader(r.Body, limit+1),
 		)
 		if err != nil {
 			if parseErrorMessage == "" {
@@ -46,11 +43,15 @@ func passwordFormBodyLimit(next http.Handler) http.Handler {
 			http.Error(w, parseErrorMessage, status)
 			return
 		}
-		if int64(len(body)) > maxPasswordFormBodyBytes {
+		if int64(len(body)) > limit {
 			http.Error(w, "request body too large", status)
 			return
 		}
-		r.Body = io.NopCloser(bytes.NewReader(body))
+		r.Body = http.MaxBytesReader(
+			w,
+			io.NopCloser(bytes.NewReader(body)),
+			limit,
+		)
 		r.ContentLength = int64(len(body))
 		if err := r.ParseForm(); err != nil {
 			if parseErrorMessage == "" {

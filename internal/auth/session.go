@@ -141,6 +141,64 @@ func UpdatePassword(
 	return nil
 }
 
+// UpdateAccount commits profile, optional password, and browser-auth changes
+// together. Callers validate the profile and password before calling it.
+// A blank password keeps the current hash. API tokens remain valid.
+func UpdateAccount(
+	ctx context.Context,
+	repo *repository.Repository,
+	profile db.UpdateUserParams,
+	password string,
+) (db.User, error) {
+	var hash string
+	if password != "" {
+		var err error
+		hash, err = HashPassword(password)
+		if err != nil {
+			return db.User{}, fmt.Errorf("hash password: %w", err)
+		}
+	}
+	var user db.User
+	if err := repo.WithLocalAdministrationTx(ctx, func(queries *db.Queries) error {
+		locked, err := queries.LockMFAUser(ctx, profile.ID)
+		if err != nil {
+			return fmt.Errorf("lock account: %w", err)
+		}
+		if locked == 0 {
+			return sql.ErrNoRows
+		}
+		current, err := queries.GetUserByID(ctx, profile.ID)
+		if err != nil {
+			return err
+		}
+		if profile.Role != "admin" {
+			if err := protectLastAdministrator(ctx, queries, current); err != nil {
+				return err
+			}
+		}
+		if err := queries.UpdateUser(ctx, profile); err != nil {
+			return fmt.Errorf("update profile: %w", err)
+		}
+		if hash != "" {
+			if err := queries.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{
+				ID: profile.ID, PasswordHash: hash,
+			}); err != nil {
+				return fmt.Errorf("update password: %w", err)
+			}
+		}
+		if hash != "" || current.Role != profile.Role {
+			if err := InvalidateBrowserAuthInTx(ctx, queries, profile.ID); err != nil {
+				return err
+			}
+		}
+		user, err = queries.GetUserByID(ctx, profile.ID)
+		return err
+	}); err != nil {
+		return db.User{}, fmt.Errorf("update account: %w", err)
+	}
+	return user, nil
+}
+
 // InvalidateBrowserAuth removes browser sessions and pending MFA challenges.
 // It intentionally does not touch API token rows.
 func InvalidateBrowserAuth(

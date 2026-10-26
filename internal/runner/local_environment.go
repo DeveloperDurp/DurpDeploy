@@ -13,6 +13,13 @@ func (request localStepAttempt) containerEnvironment() ([]string, []string, erro
 	if len(variableNames) == 0 {
 		variableNames = make([]string, 0, len(request.environment))
 		for name := range request.environment {
+			if err := containerenv.ValidateIdentifier(name); err != nil {
+				return nil, nil, fmt.Errorf(
+					"%w: %w",
+					containerenv.ErrEnvironment,
+					err,
+				)
+			}
 			if request.validExecutionVariable(name) {
 				variableNames = append(variableNames, name)
 			}
@@ -23,8 +30,10 @@ func (request localStepAttempt) containerEnvironment() ([]string, []string, erro
 	var envArgs []string
 	for _, name := range variableNames {
 		value, exists := request.environment[name]
-		if !request.validExecutionVariable(name) || !exists ||
-			strings.ContainsRune(value, '\x00') {
+		if err := containerenv.ValidateEntry(name, value); err != nil {
+			return nil, nil, err
+		}
+		if !request.validExecutionVariable(name) || !exists {
 			return nil, nil, fmt.Errorf(
 				"invalid or unavailable selected variable %q", name,
 			)

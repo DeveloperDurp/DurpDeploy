@@ -1,0 +1,103 @@
+# Environment variables override this optional file.
+# Set DURPDEPLOY_CONFIG_FILE to select the file.
+# Resource overrides remain unavailable until enforcement is integrated in MR !66.
+addr: ":8080"
+db: "durpdeploy.db?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+url: ""
+trusted_proxies: ""
+audit_retention_days: "180"
+extra_scrub_patterns: ""
+execution_boundary: "service"
+
+# Set DURPDEPLOY_SECRET_KEY or configure a private key source.
+# secret_key: "REPLACE_WITH_BASE64_32_BYTE_KEY"
+
+# Leave this section absent when OIDC is disabled.
+# oidc:
+#   issuer: "https://idp.example.com/realms/example"
+#   client_id: "durpdeploy"
+#   client_secret: "REPLACE_WITH_CLIENT_SECRET"
+#   admin_group: "durpdeploy-admin"
+#   maintainer_group: "durpdeploy-maintainer"
+#   deployer_group: "durpdeploy-deployer"
+#   viewer_group: "durpdeploy-viewer"
+#   display_name: "SSO"
+#   group_claim: "groups"
+#   require_email_verified: true
+
+smtp:
+  host: ""
+  port: ""
+  from: ""
+  user: ""
+  pass: ""
+
+container:
+  enabled: true
+  runtime: ""
+  url: ""
+  namespace: "durpdeploy"
+
+agent_listener:
+  listen_addr: "0.0.0.0:23187"
+  public_url: "https://localhost:23187"
+  identity_dir: ".agent-identity"
+
+litestream:
+  check_command: ""
+  check_interval: "1h"
+
+limits:
+  execution:
+    max_retries: 10
+    max_timeout_seconds: 86400
+    default_timeout_seconds: 300
+  artifact:
+    download_bytes: 314572800
+    extracted_bytes: 536870912
+    files: 10000
+    staging_nodes: 19999
+    metadata_bytes: 16777216
+    fetch_timeout_seconds: 300
+    dial_timeout_seconds: 30
+    tls_timeout_seconds: 10
+    header_timeout_seconds: 30
+  staging:
+    payload_bytes: 536870912
+    entries: 20000
+    archive_bytes: 570425344
+  merge:
+    archive_bytes: 2147483648
+    entry_visits: 200000
+    agent_outputs: 64
+  transfer:
+    global: 4
+    per_agent: 1
+    idle_timeout_seconds: 300
+  container:
+    pids: 128
+    tmpfs_bytes: 67108864
+    helper_pids: 32
+    helper_cpus: 1
+    helper_memory_overhead_bytes: 134217728
+  http:
+    json_bytes: 4194304
+    form_bytes: 16777216
+    password_form_bytes: 65536
+    repository_form_bytes: 65536
+    read_header_timeout_seconds: 5
+    read_timeout_seconds: 30
+    write_timeout_seconds: 60
+    idle_timeout_seconds: 60
+    stream_write_timeout_seconds: 60
+  logs:
+    page_bytes: 1048576
+    line_bytes: 16384
+    preview_batch: 64
+    pending_bytes: 1048576
+    export_batch: 256
+    page_rows: 500
+  token_telemetry:
+    concurrency: 8
+    interval_seconds: 60
+    write_timeout_seconds: 5

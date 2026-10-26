@@ -19,6 +19,7 @@ import (
 
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/auth"
+	"durpdeploy/internal/config"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/handler"
@@ -63,6 +64,14 @@ func (n artifactNotifier) Notify(
 }
 
 func newArtifactE2E(t *testing.T, binary ...string) *artifactE2E {
+	return newConfiguredArtifactE2E(t, nil, binary...)
+}
+
+func newConfiguredArtifactE2E(
+	t *testing.T,
+	container *config.ContainerLimits,
+	binary ...string,
+) *artifactE2E {
 	t.Helper()
 	if os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME") == "" {
 		kind := "docker"
@@ -72,7 +81,19 @@ func newArtifactE2E(t *testing.T, binary ...string) *artifactE2E {
 		t.Setenv("DURPDEPLOY_CONTAINER_RUNTIME", kind)
 	}
 	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "artifact-e2e-"+uuid.NewString())
-	h := newAPIHarness(t, binary...)
+	var settings *config.Config
+	if container != nil {
+		resolved, err := config.Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		resolved.Limits.Container = *container
+		if err := resolved.Limits.Validate(); err != nil {
+			t.Fatal(err)
+		}
+		settings = &resolved
+	}
+	h := newConfiguredAPIHarness(t, settings, binary...)
 	if !h.runner.ContainerRuntimeReady() {
 		t.Fatal("a working container endpoint is required for artifact E2E")
 	}

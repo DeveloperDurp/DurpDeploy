@@ -75,7 +75,7 @@ func TestSnapshotMergeCombinesChangesAndDeletions(t *testing.T) {
 			"right":      "right",
 		},
 	)
-	merged, err := Merge(base, []Snapshot{left, right})
+	merged, err := mergeFixture(t, base, []Snapshot{left, right})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,8 @@ func TestSnapshotMergeRejectsConflicts(t *testing.T) {
 		{"file versus directory", nil, map[string]string{"dir": "file"}, map[string]string{"dir/file": "right"}},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
-			_, err := Merge(
+			_, err := mergeFixture(
+				t,
 				snapshotFixture(t, scenario.base),
 				[]Snapshot{
 					snapshotFixture(t, scenario.left),

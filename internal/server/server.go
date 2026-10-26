@@ -2,9 +2,9 @@
 package server
 
 import (
+	"durpdeploy/internal/agentexecution"
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
 
 	"durpdeploy/internal/agentserver"
@@ -89,10 +89,14 @@ func newRouter(
 ) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	r.Use(requestmeta.Middleware(os.Getenv("DURPDEPLOY_TRUSTED_PROXIES")))
+	trustedProxies, _ := repo.StartupLookup("DURPDEPLOY_TRUSTED_PROXIES")
+	r.Use(requestmeta.Middleware(trustedProxies))
 	r.Use(requestLogger)
+	r.Use(browserFramingPolicy)
 	r.Use(handler.InternalErrorMiddleware)
 	r.Use(handler.PanicRecoveryMiddleware)
+	r.Use(handler.WithRequestBodyLimits(repo.ResourceLimits().HTTP))
+	r.Use(agentexecution.WithRequestLimits(repo.ResourceLimits().Execution))
 	r.Use(passwordFormBodyLimit)
 
 	// Serve static files from embedded assets (public).
@@ -643,9 +647,8 @@ func newRouter(
 		// Admin-only sub-group.
 		ar.Group(func(aar chi.Router) {
 			aar.Use(auth.RequireRole("admin"))
-			databaseSecurityH := api.NewDatabaseSecurityHandler(
-				os.Getenv("DURPDEPLOY_DB"),
-			)
+			dsn, _ := repo.StartupLookup("DURPDEPLOY_DB")
+			databaseSecurityH := api.NewDatabaseSecurityHandler(dsn)
 			aar.Get("/admin/database-security", databaseSecurityH.Get)
 			agentsH := api.NewAgentHandler(repo, pairing)
 			aar.Get("/admin/agents", agentsH.ListAgents)
@@ -685,6 +688,7 @@ func newRouter(
 			)
 
 			adminH := api.NewAdminHandler(repo)
+			aar.Get("/admin/resource-config", adminH.ResourceConfig)
 			aar.Get("/admin/audit", adminH.AuditLog)
 			aar.Get("/admin/stats", adminH.Stats)
 			aar.Post("/admin/maintenance", api.EmptyBody(adminH.Maintenance))

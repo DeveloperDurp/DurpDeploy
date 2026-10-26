@@ -702,7 +702,9 @@ type swaggerUserRequest struct {
 	Email    string `json:"email"`
 	Name     string `json:"name"`
 	Password string `json:"password"`
-	Role     string `json:"role"`
+	// Required: true
+	// Enum: viewer,deployer,maintainer,admin
+	Role string `json:"role"`
 }
 
 // UserResponse is the JSON shape for a user.

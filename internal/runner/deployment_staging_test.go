@@ -2,6 +2,7 @@ package runner
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -95,7 +96,7 @@ func TestDeploymentStageCleanupFailureBlocksCompletion(t *testing.T) {
 	// Given: a staged deployment whose runtime refuses volume removal.
 	r, repo, _ := podmanFixture(t, `
 case "$3" in
-volume) if [ "$4" = rm ]; then exit 7; fi;;
+volume) if [ "$4" = rm ]; then printf 'volume is in use\n'; exit 7; fi;;
 esac
 `)
 	dep := stagingDeployment(t, repo)
@@ -109,6 +110,47 @@ esac
 			"deployment=%+v: %v",
 			stored,
 			err,
+		)
+	}
+	logs, err := repo.Queries.ListDeploymentLogsByDeployment(
+		t.Context(),
+		dep.ID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, log := range logs {
+		found = found || strings.Contains(log.Line, "remove staging volume") &&
+			strings.Contains(log.Line, "volume is in use")
+	}
+	if !found {
+		t.Fatal("staging cleanup discarded the runtime failure reason")
+	}
+}
+
+func TestCleanupDiagnosticOmitsOutputWithoutRedactionPolicy(t *testing.T) {
+	r, repo, _ := podmanFixture(t, "")
+	dep := stagingDeployment(t, repo)
+	if _, err := repo.DB.ExecContext(t.Context(),
+		"UPDATE deployment_variable_snapshots SET value='invalid' WHERE deployment_id=?",
+		dep.ID); err != nil {
+		t.Fatal(err)
+	}
+	r.recordCleanupFailure(
+		t.Context(),
+		dep.ID,
+		errors.New("private-runtime-marker"),
+	)
+	logs, err := repo.Queries.ListDeploymentLogsByDeployment(
+		t.Context(),
+		dep.ID,
+	)
+	if err != nil || len(logs) != 1 ||
+		!strings.Contains(logs[0].Line, "redaction policy is unavailable") ||
+		strings.Contains(logs[0].Line, "private-runtime-marker") {
+		t.Fatal(
+			"cleanup diagnostic exposed output without its redaction policy",
 		)
 	}
 }

@@ -13,8 +13,6 @@ import (
 	"durpdeploy/internal/repository"
 )
 
-const maxPendingLogBytes = 1024 * 1024
-
 var errPendingLogLimit = errors.New("pending log output exceeded safety limit")
 
 type broadcastWriter struct {
@@ -38,7 +36,11 @@ func (w *broadcastWriter) Write(p []byte) (n int, err error) {
 	if w.outputFailed {
 		return 0, errPendingLogLimit
 	}
-	if len(p) > maxPendingLogBytes-w.buf.Len() {
+	if int64(
+		len(p),
+	) > w.repo.ResourceLimits().Logs.PendingBytes-int64(
+		w.buf.Len(),
+	) {
 		w.outputFailed = true
 		w.buf.Reset()
 		if w.cancelAttempt != nil {

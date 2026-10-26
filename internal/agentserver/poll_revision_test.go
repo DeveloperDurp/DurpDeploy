@@ -13,6 +13,7 @@ import (
 	agentartifact "github.com/DeveloperDurp/durpdeploy-agent/artifact"
 
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
+	"github.com/DeveloperDurp/durpdeploy-agent/resourcepolicy"
 )
 
 func TestWaitingLegacyPollCannotClaimNewV3Capabilities(t *testing.T) {
@@ -102,10 +103,11 @@ type concurrentPollResult struct {
 }
 
 type concurrentPollCall struct {
-	ctx      context.Context
-	body     string
-	staging  bool
-	artifact bool
+	ctx            context.Context
+	body           string
+	staging        bool
+	artifact       bool
+	resourcePolicy string
 }
 
 func startConcurrentPoll(
@@ -120,6 +122,9 @@ func startConcurrentPoll(
 		t.Fatal(err)
 	}
 	request.Header.Set("Content-Type", "application/json")
+	if call.resourcePolicy != "" {
+		request.Header.Set(resourcepolicy.CapabilityHeader, call.resourcePolicy)
+	}
 	if call.staging {
 		request.Header.Set(staging.CapabilityHeader, staging.Capability)
 	}

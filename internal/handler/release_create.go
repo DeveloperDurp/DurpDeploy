@@ -30,7 +30,7 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 		ArtifactRef:   r.FormValue("artifact_ref"),
 		CIRunURL:      r.FormValue("ci_run_url"),
 	}
-	if err := source.Validate(); err != nil {
+	if err := source.ValidateWithScrubber(h.repo.NewScrubber(nil)); err != nil {
 		// Discard rejected metadata so credentials cannot enter rendered errors.
 		h.renderReleaseCreateError(w, r, pages.ReleaseFormState{
 			ProjectID: projectID, Version: version, Error: err.Error(),

@@ -27,6 +27,7 @@ import (
 	"durpdeploy/internal/agentserver"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/buildinfo"
+	startupconfig "durpdeploy/internal/config"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/events"
@@ -45,7 +46,7 @@ import (
 
 // defaultDSN mirrors the historical hardcoded DSN. Production overrides it
 // via DURPDEPLOY_DB (see loadDSN).
-const defaultDSN = "durpdeploy.db?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+const defaultDSN = startupconfig.DefaultDSN
 
 type oidcServicesConfig struct {
 	Config       oidc.Config
@@ -135,7 +136,11 @@ func main() {
 // local-dev default. Both the server and the admin CLI route through here so
 // they always agree on which database is in use.
 func loadDSN() string {
-	if dsn := os.Getenv("DURPDEPLOY_DB"); dsn != "" {
+	return loadDSNWithLookup(os.LookupEnv)
+}
+
+func loadDSNWithLookup(lookup startupconfig.Lookup) string {
+	if dsn, _ := lookup("DURPDEPLOY_DB"); dsn != "" {
 		return dsn
 	}
 	return defaultDSN
@@ -145,10 +150,27 @@ func loadDSN() string {
 // historical :8080 behavior; tests can bind 127.0.0.1:0-style addresses by
 // setting DURPDEPLOY_ADDR.
 func loadAddr() string {
-	if addr := os.Getenv("DURPDEPLOY_ADDR"); addr != "" {
+	return loadAddrWithLookup(os.LookupEnv)
+}
+
+func loadAddrWithLookup(lookup startupconfig.Lookup) string {
+	if addr, _ := lookup("DURPDEPLOY_ADDR"); addr != "" {
 		return addr
 	}
-	return ":8080"
+	return startupconfig.Defaults().Addr
+}
+
+func loadCommandConfig() (startupconfig.Config, bool) {
+	settings, err := startupconfig.Load()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "configuration:", err)
+		return startupconfig.Config{}, false
+	}
+	if err := validateConfiguredDSN(settings.LookupEnv); err != nil {
+		fmt.Fprintln(os.Stderr, "configuration:", err)
+		return startupconfig.Config{}, false
+	}
+	return settings, true
 }
 
 // runServer starts the HTTP server. This is the body of the former main().
@@ -160,7 +182,13 @@ func runServer() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(stop)
-	agentConfig, err := loadAgentListenerConfig()
+	startup, err := loadServerStartup()
+	if err != nil {
+		log.Fatalf("startup configuration: %v", err)
+	}
+	agentConfig, err := loadAgentListenerConfigWithLookup(
+		startup.settings.LookupEnv,
+	)
 	if err != nil {
 		log.Fatalf("agent listener configuration: %v", err)
 	}
@@ -175,38 +203,24 @@ func runServer() {
 	)
 	slog.Info("DurpDeploy build", "build", buildinfo.Current())
 
-	mfaConfig, err := mfa.LoadConfig()
-	if err != nil {
-		log.Fatalf("mfa config: %v", err)
-	}
-	oidcConfig, err := oidc.LoadConfig()
-	if err != nil {
-		log.Fatalf("oidc config: %v", err)
-	}
+	mfaConfig, oidcConfig := startup.mfa, startup.oidc
 	slog.Info(
 		"MFA configuration loaded",
 		"webauthn_enabled", mfaConfig.WebAuthn.Enabled,
 		"cookie_secure", mfaConfig.CookieSecure,
 	)
 
-	key, err := secret.LoadKey()
-	if err != nil {
-		log.Fatalf("secret key: %v", err)
-	}
-	box, err := secret.NewBox(key)
-	if err != nil {
-		log.Fatalf("secret key: %v", err)
-	}
+	box := startup.box
 	mfaService := mfa.NewService(mfaConfig, box)
 
-	dbConn, err := migrate.Run(loadDSN())
+	dbConn, err := migrate.Run(loadDSNWithLookup(startup.settings.LookupEnv))
 	if err != nil {
 		log.Fatalf("migration failed: %v", err)
 	}
 	defer closeOnExit(dbConn)
 	slog.Info("database ready")
 
-	repo := repository.New(dbConn)
+	repo := repository.NewConfigured(dbConn, startup.settings)
 	repo.SetSecretBox(box)
 	if err := prepareArtifactWorkspace(repo); err != nil {
 		log.Fatalf("artifact workspace: %v", err)
@@ -220,7 +234,11 @@ func runServer() {
 	// configured, so /admin/notifications is useful even with nothing set up.
 	bus := events.NewBus(repo)
 	bus.Register(notify.NewSlackNotifier())
-	bus.Register(notify.NewEmailNotifier(notify.LoadSMTPConfigFromEnv()))
+	bus.Register(
+		notify.NewEmailNotifier(
+			notify.LoadSMTPConfig(startup.settings.LookupEnv),
+		),
+	)
 	bus.Register(notify.NewGotifyNotifier())
 	bus.Register(notify.NewDiscordNotifier())
 	rnr.SetEventBus(bus)
@@ -260,7 +278,10 @@ func runServer() {
 			"issuer_host", issuerURL.Hostname(),
 		)
 	}
-	browserListener, err := net.Listen("tcp", loadAddr())
+	browserListener, err := net.Listen(
+		"tcp",
+		loadAddrWithLookup(startup.settings.LookupEnv),
+	)
 	if err != nil {
 		log.Fatalf("browser listener: %v", err)
 	}
@@ -291,7 +312,7 @@ func runServer() {
 		"addr",
 		agentRuntime.listener.Addr().String(),
 	)
-	if err := maintenance.StartLitestreamCheck(ctx, bus); err != nil {
+	if err := maintenance.StartLitestreamCheckWithConfig(ctx, bus, startup.backup); err != nil {
 		log.Fatalf("backup health check: %v", err)
 	}
 	r := server.NewRouterWithAgentManagement(
@@ -318,7 +339,7 @@ func runServer() {
 	defer sched.Stop()
 
 	addr := browserListener.Addr().String()
-	srv := newHTTPServer(addr, r)
+	srv := newConfiguredHTTPServer(addr, r, startup.settings.Limits.HTTP)
 
 	// Graceful shutdown: on SIGINT/SIGTERM, stop accepting new connections
 	// and SIGKILL any in-flight deploy step's process group so a restart
@@ -511,8 +532,12 @@ func runAdmin(args []string) int {
 		)
 	}
 
+	settings, ok := loadCommandConfig()
+	if !ok {
+		return 1
+	}
 	ctx := context.Background()
-	dbConn, err := migrate.Run(loadDSN())
+	dbConn, err := migrate.Run(loadDSNWithLookup(settings.LookupEnv))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: open database: %v\n", err)
 		return 1
@@ -552,7 +577,7 @@ func runAdmin(args []string) int {
 // defaultAuditRetentionDays is the fallback retention period for
 // `audit prune` when neither --days nor DURPDEPLOY_AUDIT_RETENTION_DAYS is
 // set. 180 days keeps roughly half a year of audit history by default.
-const defaultAuditRetentionDays = 180
+const defaultAuditRetentionDays = startupconfig.DefaultAuditRetentionDays
 
 // runAudit implements `durpdeploy audit prune [--days N]`.
 // It opens the same database the server uses and deletes audit_log rows
@@ -590,6 +615,10 @@ func runAudit(args []string) int {
 		return 1
 	}
 
+	settings, ok := loadCommandConfig()
+	if !ok {
+		return 1
+	}
 	days := *daysPtr
 	daysExplicit := false
 	pruneCmd.Visit(func(f *flag.Flag) {
@@ -603,15 +632,12 @@ func runAudit(args []string) int {
 			return 1
 		}
 		// Fall back to env, then to the hard-coded default.
-		if envDays := os.Getenv(
-			"DURPDEPLOY_AUDIT_RETENTION_DAYS",
-		); envDays != "" {
+		if envDays, _ := settings.LookupEnv("DURPDEPLOY_AUDIT_RETENTION_DAYS"); envDays != "" {
 			n, err := fmt.Sscanf(envDays, "%d", &days)
 			if err != nil || n != 1 || days <= 0 {
-				fmt.Fprintf(
+				fmt.Fprintln(
 					os.Stderr,
-					"error: DURPDEPLOY_AUDIT_RETENTION_DAYS=%q is not a positive integer\n",
-					envDays,
+					"error: DURPDEPLOY_AUDIT_RETENTION_DAYS must be a positive integer",
 				)
 				return 1
 			}
@@ -621,7 +647,7 @@ func runAudit(args []string) int {
 	}
 
 	ctx := context.Background()
-	dbConn, err := migrate.Run(loadDSN())
+	dbConn, err := migrate.Run(loadDSNWithLookup(settings.LookupEnv))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: open database: %v\n", err)
 		return 1
@@ -644,20 +670,7 @@ func runAudit(args []string) int {
 	return 0
 }
 
-// runSecretKey implements `durpdeploy secret-key rotate [--plaintext]`. It
-// generates a fresh 32-byte key and re-encrypts all persisted server-key
-// ciphertext, including nested TOTP enrollment seeds, with the new key
-// inside a single transaction, so a crash mid-rotation
-// leaves the DB entirely on the old key, never half-migrated. The new key
-// is printed to stdout; the operator must install it (file or env) and
-// restart the server before the old key can be discarded. See
-// docs/security.md for the full runbook.
-//
-// --plaintext migrates a pre-P1-2 database whose variables/release_variables
-// values were stored unencrypted: it skips the oldBox.Decrypt step and
-// treats the stored value itself as the plaintext to encrypt. No oldKey is
-// required or loaded in that mode. Populated encrypted-only stores reject it.
-func runSecretKey(args []string) int {
+func parseKeyRotationArgs(args []string) (bool, bool) {
 	fs := flag.NewFlagSet("secret-key", flag.ExitOnError)
 	plaintext := fs.Bool(
 		"plaintext",
@@ -672,7 +685,7 @@ func runSecretKey(args []string) int {
 		flagArgs = append(flagArgs, "rotate")
 	}
 	if err := fs.Parse(flagArgs); err != nil {
-		return 1
+		return false, false
 	}
 
 	if fs.NArg() == 0 || fs.Arg(0) != "rotate" {
@@ -680,21 +693,37 @@ func runSecretKey(args []string) int {
 			os.Stderr,
 			"Usage: durpdeploy secret-key rotate [--plaintext]",
 		)
+		return false, false
+	}
+	return *plaintext, true
+}
+
+// runSecretKey implements `durpdeploy secret-key rotate [--plaintext]`. It
+// generates a fresh 32-byte key and re-encrypts all persisted server-key
+// ciphertext, including nested TOTP enrollment seeds, with the new key
+// inside a single transaction, so a crash mid-rotation
+// leaves the DB entirely on the old key, never half-migrated. The new key
+// is printed to stdout; the operator must install it (file or env) and
+// restart the server before the old key can be discarded. See
+// docs/security.md for the full runbook.
+//
+// --plaintext migrates a pre-P1-2 database whose variables/release_variables
+// values were stored unencrypted: it skips the oldBox.Decrypt step and
+// treats the stored value itself as the plaintext to encrypt. No oldKey is
+// required or loaded in that mode. Populated encrypted-only stores reject it.
+func runSecretKey(args []string) int {
+	plaintext, ok := parseKeyRotationArgs(args)
+	if !ok {
 		return 1
 	}
-
-	var oldBox *secret.Box
-	if !*plaintext {
-		oldKey, err := secret.LoadKey()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: load current secret key: %v\n", err)
-			return 1
-		}
-		oldBox, err = secret.NewBox(oldKey)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			return 1
-		}
+	settings, ok := loadCommandConfig()
+	if !ok {
+		return 1
+	}
+	oldBox, err := loadRotationBox(plaintext, settings.LookupEnv)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
 	}
 
 	newKey := make([]byte, 32)
@@ -709,7 +738,7 @@ func runSecretKey(args []string) int {
 	}
 
 	ctx := context.Background()
-	dbConn, err := migrate.Run(loadDSN())
+	dbConn, err := migrate.Run(loadDSNWithLookup(settings.LookupEnv))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: open database: %v\n", err)
 		return 1
@@ -738,7 +767,7 @@ func runSecretKey(args []string) int {
 			continue
 		}
 		plain := v.Value.String
-		if !*plaintext {
+		if !plaintext {
 			var err error
 			plain, err = oldBox.Decrypt(v.Value.String)
 			if err != nil {
@@ -780,7 +809,7 @@ func runSecretKey(args []string) int {
 			continue
 		}
 		plain := v.Value.String
-		if !*plaintext {
+		if !plaintext {
 			var err error
 			plain, err = oldBox.Decrypt(v.Value.String)
 			if err != nil {
@@ -823,7 +852,7 @@ func runSecretKey(args []string) int {
 		secretKeyRotation{
 			oldBox:    oldBox,
 			newBox:    newBox,
-			plaintext: *plaintext,
+			plaintext: plaintext,
 		},
 	); err != nil {
 		fmt.Fprintf(
@@ -855,6 +884,20 @@ func runSecretKey(args []string) int {
 	return 0
 }
 
+func loadRotationBox(
+	plaintext bool,
+	lookup startupconfig.Lookup,
+) (*secret.Box, error) {
+	if plaintext {
+		return nil, nil
+	}
+	key, err := secret.LoadKeyWithLookup(lookup)
+	if err != nil {
+		return nil, fmt.Errorf("load current secret key: %w", err)
+	}
+	return secret.NewBox(key)
+}
+
 // runTokens implements `durpdeploy tokens create/list/revoke`.
 func runTokens(args []string) int {
 	fs := flag.NewFlagSet("tokens", flag.ExitOnError)
@@ -868,8 +911,12 @@ func runTokens(args []string) int {
 		return 1
 	}
 
+	settings, ok := loadCommandConfig()
+	if !ok {
+		return 1
+	}
 	ctx := context.Background()
-	dbConn, err := migrate.Run(loadDSN())
+	dbConn, err := migrate.Run(loadDSNWithLookup(settings.LookupEnv))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: open database: %v\n", err)
 		return 1

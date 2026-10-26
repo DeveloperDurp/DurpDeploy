@@ -10,24 +10,16 @@ import (
 	"durpdeploy/internal/agentexecution"
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/interpreter"
+	"durpdeploy/internal/stepdefinition"
 )
 
-type runbookFormStep struct {
-	Name                 string   `json:"name"`
-	ScriptBody           string   `json:"script_body"`
-	Interpreter          string   `json:"interpreter"`
-	SortOrder            int64    `json:"sort_order"`
-	TimeoutSeconds       int64    `json:"timeout_seconds"`
-	MaxRetries           int64    `json:"max_retries"`
-	ExecutionTarget      string   `json:"execution_target"`
-	AgentExecutionMode   string   `json:"agent_execution_mode"`
-	AgentSelectors       []string `json:"agent_selectors"`
-	ContainerImage       string   `json:"container_image"`
-	NetworkMode          string   `json:"network_mode"`
-	ApprovalArtifactPath string   `json:"approval_artifact_path"`
-	ApprovalReviewPath   string   `json:"approval_review_path"`
-	ApprovalReviewFormat string   `json:"approval_review_format"`
-	VariableNames        []string `json:"variable_names,omitempty"`
+type runbookFormStep stepdefinition.Definition
+
+func (step runbookFormStep) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		stepdefinition.Definition
+		VariableNames []string `json:"variable_names,omitempty"`
+	}{stepdefinition.Definition(step), step.VariableNames})
 }
 
 // ValidContainerImage mirrors the runner's image argument restrictions.
@@ -89,6 +81,9 @@ func (h *RunbookHandler) formSteps(r *http.Request) (string, error) {
 		retries, err := formNumber(r.Form["step_retries"][i])
 		if err != nil || retries < 0 {
 			return "", errors.New("invalid step retries")
+		}
+		if err := agentexecution.ValidateLimitsWithPolicy(timeout, retries, h.repo.ResourceLimits().Execution); err != nil {
+			return "", err
 		}
 		var selectors []string
 		for _, label := range strings.Split(r.Form["step_selectors"][i], ",") {

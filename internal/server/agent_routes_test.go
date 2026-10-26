@@ -64,7 +64,7 @@ func TestServerAgentManagementProtection(t *testing.T) {
 			db.CreateApiTokenParams{
 				ID: role, UserID: user.ID, Name: "fixture", TokenPrefix: "fixture",
 				TokenHash: auth.HashApiToken(
-					"ddp_pat_" + role,
+					agentTestToken(role),
 				), Scope: "global",
 			},
 		)
@@ -116,7 +116,7 @@ func TestServerAgentManagementProtection(t *testing.T) {
 	var count int
 	for _, role := range []string{"admin", "deployer", "viewer"} {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/agents", nil)
-		req.Header.Set("Authorization", "Bearer ddp_pat_"+role)
+		req.Header.Set("Authorization", "Bearer "+agentTestToken(role))
 		res := httptest.NewRecorder()
 		router.ServeHTTP(res, req)
 		want := http.StatusForbidden
@@ -172,7 +172,7 @@ func TestNonAdminAgentAdminForbidden(t *testing.T) {
 			Name:        "fixture",
 			TokenPrefix: "fixture",
 			TokenHash: auth.HashApiToken(
-				"ddp_pat_deployer-agent-admin",
+				agentTestToken("deployer-agent-admin"),
 			),
 			Scope: "global",
 		},
@@ -202,7 +202,7 @@ func TestNonAdminAgentAdminForbidden(t *testing.T) {
 		)
 		req.Header.Set(
 			"Authorization",
-			"Bearer ddp_pat_deployer-agent-admin",
+			"Bearer "+agentTestToken("deployer-agent-admin"),
 		)
 		res := httptest.NewRecorder()
 		router.ServeHTTP(res, req)
@@ -224,7 +224,7 @@ func TestAdminAgentListAPIRedactsCredentials(t *testing.T) {
 	_, err = h.repo.Queries.CreateApiToken(t.Context(), db.CreateApiTokenParams{
 		ID: "agent-admin", UserID: admin.ID, Name: "fixture",
 		TokenPrefix: "fixture", Scope: "global",
-		TokenHash: auth.HashApiToken("ddp_pat_agent-admin"),
+		TokenHash: auth.HashApiToken(agentTestToken("agent-admin")),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -243,7 +243,7 @@ encrypted_identity = 'secret-key' WHERE id = 'agent-1'`)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/agents", nil)
-	req.Header.Set("Authorization", "Bearer ddp_pat_agent-admin")
+	req.Header.Set("Authorization", "Bearer "+agentTestToken("agent-admin"))
 	res := httptest.NewRecorder()
 	NewRouter(h.repo, h.runner, h.parser, h.authHandler).ServeHTTP(res, req)
 	if res.Code != http.StatusOK {

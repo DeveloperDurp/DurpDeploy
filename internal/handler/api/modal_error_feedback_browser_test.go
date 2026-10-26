@@ -32,6 +32,10 @@ func assertSingleModalError(
 func TestUserModalPermissionFeedbackBrowserE2E(t *testing.T) {
 	f := newUsersPhoneFixture(t)
 	userCount := len(f.listedUsers(t))
+	before, err := f.h.repo.Queries.GetUserByID(t.Context(), f.users[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, adminToken := seedAPIToken(t, f.h.repo, f.users[3].ID)
 	b := startPackageBrowser(t)
 	b.setBackTestSession(t, f.server.URL, f.session)
@@ -80,17 +84,10 @@ func TestUserModalPermissionFeedbackBrowserE2E(t *testing.T) {
  form.requestSubmit();
  return true;
 })()`)
-			assertSingleModalError(
-				t,
-				b,
-				"#project-edit-dialog",
-				"Viewers cannot",
-			)
-			if string(b.evaluate(t, `document.querySelector('#user-name').value
- === 'Retained modal draft' && location.pathname === '/admin/users'`)) != "true" {
-				t.Fatal("permission rejection discarded the user draft")
-			}
-			b.screenshot(t, fmt.Sprintf("user-modal-denied-new-%t", isNew))
+			b.waitBackTestURL(t, f.server.URL+"/login?next=%2Fadmin%2Fusers")
+			f.request(t, "GET", "/api/v1/admin/users", "",
+				f.token, "", false, 403)
+			b.screenshot(t, fmt.Sprintf("user-modal-login-new-%t", isNew))
 			f.request(
 				t,
 				"PUT",
@@ -101,11 +98,20 @@ func TestUserModalPermissionFeedbackBrowserE2E(t *testing.T) {
 				false,
 				200,
 			)
+			f.session = memberRoleSession(t, f.h, f.adminID)
+			b.setBackTestSession(t, f.server.URL, f.session)
 			if len(f.listedUsers(t)) != userCount {
 				t.Fatal("rejected modal created a user")
 			}
 			if got := userWithRole(t, f, f.users[0].Email, "viewer"); got.Name != f.users[0].Name {
 				t.Fatal("rejected modal changed the existing user")
+			}
+			actual, err := f.h.repo.Queries.GetUserByID(
+				t.Context(),
+				f.users[0].ID,
+			)
+			if err != nil || actual != before {
+				t.Fatal("revoked session changed the target account")
 			}
 		})
 	}

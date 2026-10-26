@@ -146,7 +146,12 @@ func (h *RunbookHandler) Form(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cannot list package releases", 500)
 		return
 	}
-	if err := pages.RunbookFormPage(project, book, stepsJSON, artifactReleases, selectedArtifactReleaseID, "", r.URL.Path).
+	editorJSON, err := runbookEditorSteps(stepsJSON)
+	if err != nil {
+		http.Error(w, "Cannot read steps", http.StatusInternalServerError)
+		return
+	}
+	if err := pages.RunbookFormPage(project, book, editorJSON, artifactReleases, selectedArtifactReleaseID, "", r.URL.Path).
 		Render(r.Context(), w); err != nil {
 		http.Error(
 			w,

@@ -9,27 +9,29 @@ import (
 	"log/slog"
 	"os"
 	"sync"
-	"time"
 
+	"durpdeploy/internal/agentexecution"
+	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/stepdefinition"
 )
 
-const defaultStepTimeout = 5 * time.Minute
-
 type DeploymentRunner struct {
-	repo      *repository.Repository
-	broker    *LogBroker
-	mu        sync.Mutex
-	cancels   map[int64]context.CancelFunc
-	attempts  map[int64]string
-	engine    containerEndpoint
-	localErr  error
-	staging   map[int64][]artifactStage
-	transfers map[int64]*os.File
-	stopping  bool
-	localWork sync.WaitGroup
+	repo              *repository.Repository
+	broker            *LogBroker
+	mu                sync.Mutex
+	cancels           map[int64]context.CancelFunc
+	attempts          map[int64]string
+	engine            containerEndpoint
+	localErr          error
+	staging           map[int64][]artifactStage
+	transfers         map[int64]*os.File
+	stopping          bool
+	localWork         sync.WaitGroup
+	completionWork    sync.WaitGroup
+	completionCancels map[int64]context.CancelFunc
 	// bus publishes deployment_started/succeeded/failed events for the
 	// Slack/email notifiers (Stage 3). Nil until SetEventBus is called —
 	// existing callers (tests, recovery path) that never call it simply
@@ -37,23 +39,7 @@ type DeploymentRunner struct {
 	bus *events.Bus
 }
 
-type deploymentStep struct {
-	Name                 string   `json:"name"`
-	ScriptBody           string   `json:"script_body"`
-	Interpreter          string   `json:"interpreter"`
-	SortOrder            int64    `json:"sort_order"`
-	TimeoutSeconds       int64    `json:"timeout_seconds"`
-	MaxRetries           int64    `json:"max_retries"`
-	ExecutionTarget      string   `json:"execution_target"`
-	AgentExecutionMode   string   `json:"agent_execution_mode"`
-	AgentSelectors       []string `json:"agent_selectors"`
-	ContainerImage       string   `json:"container_image"`
-	NetworkMode          string   `json:"network_mode"`
-	ApprovalArtifactPath string   `json:"approval_artifact_path"`
-	ApprovalReviewPath   string   `json:"approval_review_path"`
-	ApprovalReviewFormat string   `json:"approval_review_format"`
-	VariableNames        []string `json:"variable_names"`
-}
+type deploymentStep stepdefinition.Definition
 
 func New(repo *repository.Repository, broker *LogBroker) *DeploymentRunner {
 	return newRunner(repo, broker, "")
@@ -161,6 +147,12 @@ func (r *DeploymentRunner) Run(
 		r.failUnlessCancelled(ctx, runCtx, deploymentID)
 		return
 	}
+	for _, step := range steps {
+		if err := agentexecution.ValidateLimitsWithPolicy(step.TimeoutSeconds, step.MaxRetries, r.repo.ResourceLimits().Execution); err != nil {
+			r.failUnlessCancelled(ctx, runCtx, deploymentID)
+			return
+		}
+	}
 
 	vars, err := r.repo.ListDeploymentVariables(ctx, deploymentID)
 	if err != nil {
@@ -170,6 +162,20 @@ func (r *DeploymentRunner) Run(
 
 	resolved, err := ResolveReleaseVariables(vars, environmentID)
 	if err != nil {
+		if errors.Is(err, containerenv.ErrEnvironment) {
+			writer := &broadcastWriter{
+				broker: r.broker, repo: r.repo, deploymentID: deploymentID,
+				ctx: ctx, scrubber: r.repo.NewScrubber(nil),
+			}
+			if _, logErr := writer.Write([]byte(err.Error() + "\n")); logErr != nil {
+				slog.Error(
+					"persist environment validation failure",
+					"error",
+					logErr,
+				)
+			}
+			writer.Flush()
+		}
 		r.failUnlessCancelled(ctx, runCtx, deploymentID)
 		return
 	}
@@ -182,7 +188,7 @@ func (r *DeploymentRunner) Run(
 		}
 	}
 
-	scrubber := NewScrubber(secretValues)
+	scrubber := r.repo.NewScrubber(secretValues)
 	if !r.beginLocalWork() {
 		r.finalizeCancellation(ctx, deploymentID)
 		return
@@ -468,7 +474,7 @@ func (r *DeploymentRunner) Run(
 				return
 			}
 		}
-		maxAttempts := int(step.MaxRetries) + 1
+		maxAttempts := int(step.MaxRetries + 1)
 		if transferred != nil {
 			if err := r.importRemoteStaging(
 				runCtx,
@@ -485,7 +491,8 @@ func (r *DeploymentRunner) Run(
 			}
 			transferred = nil
 		}
-		for attempt := 1; attempt <= maxAttempts; attempt++ {
+		for index := range maxAttempts {
+			attempt := index + 1
 			lastErr = r.runStepAttempt(runCtx, localStepAttempt{
 				deploymentID: deploymentID,
 				step:         step,

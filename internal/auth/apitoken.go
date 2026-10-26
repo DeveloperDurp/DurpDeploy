@@ -1,16 +1,13 @@
 package auth
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
@@ -33,12 +30,25 @@ func MintApiToken() (full, prefix, hash string, err error) {
 }
 
 // HashApiToken returns the SHA-256 hex hash of the random portion of a token.
-// Input must be "ddp_pat_<64hex>".
+// Malformed tokens return an empty string.
 func HashApiToken(plaintext string) string {
-	// Strip the "ddp_pat_" prefix.
-	hexPart := plaintext[8:]
+	hexPart, ok := parseApiToken(plaintext)
+	if !ok {
+		return ""
+	}
 	sum := sha256.Sum256([]byte(hexPart))
 	return hex.EncodeToString(sum[:])
+}
+
+func parseApiToken(token string) (string, bool) {
+	if len(token) != 72 || !strings.HasPrefix(token, "ddp_pat_") {
+		return "", false
+	}
+	suffix := token[8:]
+	if _, err := hex.DecodeString(suffix); err != nil {
+		return "", false
+	}
+	return suffix, true
 }
 
 // RenderJSONError writes a JSON error response with the given status and message.
@@ -114,6 +124,10 @@ func servePasswordChangeWrite(
 func ApiTokenMiddleware(
 	repo *repository.Repository,
 ) func(http.Handler) http.Handler {
+	telemetry := apiTokenTelemetry{
+		pending: make(map[string]struct{}),
+		limits:  repo.ResourceLimits().TokenTelemetry,
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			header := r.Header.Get("Authorization")
@@ -132,8 +146,8 @@ func ApiTokenMiddleware(
 				return
 			}
 
-			token := parts[1]
-			if !strings.HasPrefix(token, "ddp_pat_") || len(token) <= 8 {
+			hash := HashApiToken(parts[1])
+			if hash == "" {
 				RenderJSONError(
 					w,
 					http.StatusUnauthorized,
@@ -141,8 +155,6 @@ func ApiTokenMiddleware(
 				)
 				return
 			}
-
-			hash := HashApiToken(token)
 
 			row, grant, err := loadTokenAccess(r.Context(), repo, hash)
 			if err != nil {
@@ -163,24 +175,7 @@ func ApiTokenMiddleware(
 			r = SetUser(r, user)
 			r = setTokenAccess(r, row.ID, grant)
 
-			// Telemetry survives the request, but cannot wait indefinitely.
-			ctx, cancel := context.WithTimeout(
-				context.Background(),
-				5*time.Second,
-			)
-			go func() {
-				defer cancel()
-				_ = repo.Queries.TouchApiTokenLastUsed(
-					ctx,
-					db.TouchApiTokenLastUsedParams{
-						LastUsedAt: sql.NullInt64{
-							Int64: time.Now().Unix(),
-							Valid: true,
-						},
-						ID: row.ID,
-					},
-				)
-			}()
+			telemetry.touch(repo, row)
 
 			next.ServeHTTP(w, r)
 		})

@@ -20,4 +20,15 @@ func TestDeploymentStagingFailureBrowserE2E(t *testing.T) {
 		`document.querySelector('[data-step-index="0"] .badge').textContent === 'Failed' && Alpine.$data(document.querySelector('[x-data^="deploymentStepLogs"]')).source === null`,
 	)
 	b.captureNavigation(t, "staging-failed")
+	f, deployment = stagingCleanupDiagnosticE2E(t)
+	b.setStepLogSession(t, f.baseURL, f.session)
+	b.openStepLogPage(
+		t,
+		fmt.Sprintf("%s/deployments/%d", f.baseURL, deployment.ID),
+	)
+	b.wait(
+		t,
+		`document.body.textContent.includes('volume is in use [REDACTED]') && !document.body.textContent.includes('cleanup-secret-1484')`,
+	)
+	b.screenshot(t, "staging-cleanup-diagnostic")
 }

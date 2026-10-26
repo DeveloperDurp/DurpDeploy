@@ -5,6 +5,8 @@ import (
 	"net"
 	"net/url"
 	"os"
+
+	"durpdeploy/internal/config"
 )
 
 var ErrInvalidPublicURL = errors.New("invalid DURPDEPLOY_URL")
@@ -21,7 +23,11 @@ type WebAuthnConfig struct {
 }
 
 func LoadConfig() (Config, error) {
-	configuredURL := os.Getenv("DURPDEPLOY_URL")
+	return LoadConfigWithLookup(os.LookupEnv)
+}
+
+func LoadConfigWithLookup(lookup config.Lookup) (Config, error) {
+	configuredURL, _ := lookup("DURPDEPLOY_URL")
 	if configuredURL == "" {
 		return Config{}, nil
 	}

@@ -9,7 +9,7 @@ import (
 	"durpdeploy/internal/db"
 )
 
-func validateRunbookArtifact(
+func (r *Repository) validateRunbookArtifact(
 	ctx context.Context,
 	q *db.Queries,
 	arg RunbookSave,
@@ -37,7 +37,7 @@ func validateRunbookArtifact(
 			}
 			return err
 		}
-		_, err = deploymentStepsFromRelease(arg.StepsJSON)
+		_, err = r.deploymentStepsFromRelease(arg.StepsJSON)
 		return err
 	}
 	if arg.ArtifactReleaseID == 0 {
@@ -63,6 +63,6 @@ func validateRunbookArtifact(
 		}
 		return err
 	}
-	_, err = deploymentStepsFromRelease(arg.StepsJSON)
+	_, err = r.deploymentStepsFromRelease(arg.StepsJSON)
 	return err
 }

@@ -130,7 +130,7 @@ func (r *Repository) copyLibraryTemplate(
 	if err := r.copyTemplateVariables(ctx, queries, projectID, snapshot, copyInput); err != nil {
 		return err
 	}
-	return copyTemplateSteps(ctx, queries, projectID, snapshot, copyInput)
+	return r.copyTemplateSteps(ctx, queries, projectID, snapshot, copyInput)
 }
 
 func prepareLibraryCopy(

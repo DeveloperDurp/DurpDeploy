@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	appconfig "durpdeploy/internal/config"
 	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
@@ -50,18 +51,43 @@ func TestRuntimeAgentShutdownRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer testutil.Close(t, conn)
-	repo := repository.New(conn)
-	dispatcher := dispatch.New(repo)
-	for range 2 {
+	defaults := appconfig.Defaults()
+	custom := defaults.Limits.HTTP
+	custom.ReadHeaderTimeoutSeconds = 1
+	custom.ReadTimeoutSeconds = 2
+	custom.WriteTimeoutSeconds = 3
+	custom.IdleTimeoutSeconds = 4
+	for _, policy := range []appconfig.HTTPLimits{defaults.Limits.HTTP, custom} {
+		settings := defaults
+		settings.Limits.HTTP = policy
+		repo := repository.NewConfigured(conn, settings)
+		dispatcher := dispatch.New(repo)
 		listener, err := startAgentListener(context.Background(), config,
 			agentListenerDependencies{repo: repo, dispatcher: dispatcher})
 		if err != nil {
 			t.Fatal(err)
 		}
-		require.Equal(t, 5*time.Second, listener.server.ReadHeaderTimeout)
-		require.Equal(t, 30*time.Second, listener.server.ReadTimeout)
-		require.Equal(t, time.Minute, listener.server.WriteTimeout)
-		require.Equal(t, time.Minute, listener.server.IdleTimeout)
+		limits := settings.Limits.HTTP
+		require.Equal(
+			t,
+			time.Duration(limits.ReadHeaderTimeoutSeconds)*time.Second,
+			listener.server.ReadHeaderTimeout,
+		)
+		require.Equal(
+			t,
+			time.Duration(limits.ReadTimeoutSeconds)*time.Second,
+			listener.server.ReadTimeout,
+		)
+		require.Equal(
+			t,
+			time.Duration(limits.WriteTimeoutSeconds)*time.Second,
+			listener.server.WriteTimeout,
+		)
+		require.Equal(
+			t,
+			time.Duration(limits.IdleTimeoutSeconds)*time.Second,
+			listener.server.IdleTimeout,
+		)
 		addr := listener.listener.Addr().String()
 		occupied := config
 		occupied.addr = addr

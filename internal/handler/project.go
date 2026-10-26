@@ -79,9 +79,20 @@ func (h *ProjectHandler) renderProjectsList(
 		Total:   total,
 		Path:    projectsPath,
 	}
+	var environments []db.Environment
+	if len(projects) > 0 {
+		environments, err = h.repo.Queries.ListEnvironments(r.Context())
+		if err != nil {
+			return err
+		}
+	}
+	data, err := h.loadProjectPanelData(r, projects, environments)
+	if err != nil {
+		return err
+	}
 	panels := make([]pages.LifecyclePanel, len(projects))
 	for i, p := range projects {
-		panel, perr := h.buildPanelForProject(r, p, true)
+		panel, perr := h.buildPanelForProject(r, p, data, true)
 		if perr != nil {
 			return perr
 		}
@@ -437,7 +448,19 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	if _, err = h.repo.Queries.UpdateProject(r.Context(), params); err != nil {
+	lifecycleID, err := projectLifecycleID(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if _, err = UpdateProjectWithLifecycle(
+		r.Context(), h.repo, params, lifecycleID,
+	); err != nil {
+		if errors.Is(err, ErrLifecycleAssignmentForbidden) ||
+			errors.Is(err, ErrLifecycleRemovalForbidden) {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
 		if IsUniqueViolation(err) {
 			project := db.Project{ID: id, Name: name}
 			project.Description = params.Description
@@ -478,11 +501,6 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.applyLifecycleSelection(r, id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	if retargetFormDialog(w, r, "#project-detail") {
 		h.GetProject(w, r)
 		return
@@ -507,15 +525,19 @@ func (h *ProjectHandler) applyLifecycleSelection(
 	r *http.Request,
 	projectID int64,
 ) error {
-	lifecycleStr := strings.TrimSpace(r.FormValue("lifecycle_id"))
-	if lifecycleStr == "" {
-		return ApplyLifecycleSelection(r.Context(), h.repo, projectID, 0)
-	}
-	id, err := strconv.ParseInt(lifecycleStr, 10, 64)
+	id, err := projectLifecycleID(r)
 	if err != nil {
 		return err
 	}
 	return ApplyLifecycleSelection(r.Context(), h.repo, projectID, id)
+}
+
+func projectLifecycleID(r *http.Request) (int64, error) {
+	lifecycleStr := strings.TrimSpace(r.FormValue("lifecycle_id"))
+	if lifecycleStr == "" {
+		return 0, nil
+	}
+	return strconv.ParseInt(lifecycleStr, 10, 64)
 }
 
 // ApplyLifecycleSelection sets or clears a project's lifecycle. It is exported

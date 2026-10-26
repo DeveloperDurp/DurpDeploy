@@ -41,6 +41,9 @@ func TestMintApiToken_Format(t *testing.T) {
 	if len(hash) != 64 {
 		t.Fatalf("expected hash length 64, got %d", len(hash))
 	}
+	if auth.HashApiToken(full) != hash {
+		t.Fatal("minted token hash changed during parsing")
+	}
 }
 
 func TestMintApiToken_DifferentCallsDiffer(t *testing.T) {

@@ -120,6 +120,11 @@ The Go test runner also removes containers owned by each test session.
 
 The Podman job runs as `pwuser` with subordinate user and group mappings.
 It uses VFS storage and starts `podman system service` without systemd.
+The CI helper delegates CPU, memory, and PID controllers inside the current Kubernetes build-container cgroup.
+It configures that subtree as the explicit rootless Podman parent.
+The helper refuses host roots, pod parents, missing controllers, and reused setup paths.
+The existing Kubernetes CPU and memory limits still apply to all descendants.
+The job pod teardown removes its cgroup subtree.
 The staging capacity test allows ten minutes for transfer and cleanup through VFS.
 Its Go suite allows twenty minutes within the forty-five-minute job limit.
 It verifies rootless execution before it runs the agent tests.

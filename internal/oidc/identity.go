@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 )
@@ -174,8 +175,8 @@ func resolveIdentity(
 			return fmt.Errorf("synchronize OIDC user claims: %w", err)
 		}
 		if roleChanged {
-			if err := queries.DeleteSessionsByUser(ctx, user.ID); err != nil {
-				return fmt.Errorf("invalidate browser sessions: %w", err)
+			if err := auth.InvalidateBrowserAuthInTx(ctx, queries, user.ID); err != nil {
+				return fmt.Errorf("invalidate browser authentication: %w", err)
 			}
 		}
 		return nil

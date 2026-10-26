@@ -12,6 +12,7 @@ import (
 
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/staging"
 )
 
 const gateChunkSize = 1 << 20
@@ -20,6 +21,16 @@ var ErrArtifactGate = errors.New(
 	"artifact approval is unavailable, changed, or expired",
 )
 
+func (r *Repository) validateArtifactGateBundleSize(size int64) error {
+	if r.secrets == nil || size <= 0 {
+		return ErrArtifactGate
+	}
+	if size > r.ResourceLimits().Staging.ArchiveBytes {
+		return errors.Join(ErrArtifactGate, staging.ErrInvalid)
+	}
+	return nil
+}
+
 // SaveArtifactGate stores encrypted chunks in the same durable database as
 // approval identity. A commit precedes deletion of the temporary staging area.
 func (r *Repository) SaveArtifactGate(
@@ -27,8 +38,8 @@ func (r *Repository) SaveArtifactGate(
 	gate db.CreateArtifactGateParams,
 	source io.ReadSeeker,
 ) (result error) {
-	if r.secrets == nil || gate.BundleSize <= 0 {
-		return ErrArtifactGate
+	if err := r.validateArtifactGateBundleSize(gate.BundleSize); err != nil {
+		return err
 	}
 	spool, err := artifact.OpenGateSpool()
 	if err != nil {
@@ -136,8 +147,8 @@ func (r *Repository) WriteArtifactGateBundle(
 	gate db.ArtifactGate,
 	target io.Writer,
 ) error {
-	if r.secrets == nil || gate.BundleSize <= 0 {
-		return ErrArtifactGate
+	if err := r.validateArtifactGateBundleSize(gate.BundleSize); err != nil {
+		return err
 	}
 	remaining := gate.BundleSize
 	hash := sha256.New()

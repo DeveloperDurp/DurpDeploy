@@ -8,7 +8,7 @@ import (
 )
 
 // ForEachDeploymentLogByDeploymentAsc streams deployment log rows
-// oldest-first in bounded batches of 256, and only rows that existed when
+// oldest-first in configured batches, and only rows that existed when
 // iteration started. Rows are closed before fn is called for a batch so a
 // slow export client cannot pin a database connection.
 //
@@ -29,7 +29,7 @@ func (r *Repository) ForEachDeploymentLogByDeploymentAsc(
 	deploymentID int64,
 	fn func(db.DeploymentLog) error,
 ) error {
-	const batchSize = 256
+	batchSize := int(r.ResourceLimits().Logs.ExportBatch)
 	var watermark int64
 	if err := r.DB.QueryRowContext(ctx, `
 SELECT COALESCE(MAX(id), 0)
