@@ -12,9 +12,11 @@ export function createApi(base, projectId, token, fetchRequest = fetch) {
   }
   if (!positiveId(projectId) || !token) throw new Error('A project ID and CI job token are required.');
   const root = `${base.replace(/\/$/, '')}/projects/${projectId}/`;
-  async function request(method, path) {
+  async function request(method, path, body) {
     const response = await fetchRequest(root + path, {
-      method, headers: { 'JOB-TOKEN': token }, redirect: 'error',
+      method, headers: { 'JOB-TOKEN': token, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      redirect: 'error',
       signal: AbortSignal.timeout(30000),
     });
     if (!response.ok) throw new Error(`GitLab ${method} ${path} returned HTTP ${response.status}.`);

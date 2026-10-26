@@ -54,6 +54,7 @@ pre-commit:
   - make dev-secret-key-test
   - make demo-test
   - node --test scripts/ci_cache_cleanup.test.mjs
+  - node --test scripts/ci_release.test.mjs
   - env --default-signal=INT,TERM,HUP make go-test-cleanup-test
   - python3 -m unittest discover -s scripts -p ci_rootless_cgroup_test.py
   - make backup-restore-script-test
