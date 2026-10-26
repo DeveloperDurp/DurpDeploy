@@ -114,7 +114,8 @@ func runMigrations(
 			fmt.Errorf("set Goose dialect: %w", err), db.Close(),
 		)
 	}
-	if err := goose.Up(db, "."); err != nil {
+	// Apply reserved migrations that landed after higher versions shipped.
+	if err := goose.Up(db, ".", goose.WithAllowMissing()); err != nil {
 		return nil, errors.Join(
 			fmt.Errorf("run migrations: %w", err), db.Close(),
 		)
