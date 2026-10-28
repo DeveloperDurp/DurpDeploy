@@ -1,0 +1,5 @@
+{
+  "testssl_version": "3.2.4",
+  "tls12": ["cipher-tls1_2_xc02f", "cipher-tls1_2_xc030", "cipher-tls1_2_xcca8", "cipher-tls1_2_xc02b", "cipher-tls1_2_xc02c", "cipher-tls1_2_xcca9"],
+  "tls13": ["cipher-tls1_3_x1301", "cipher-tls1_3_x1302", "cipher-tls1_3_x1303"]
+}
