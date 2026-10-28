@@ -52,6 +52,8 @@ Only successful lint jobs upload this cache.
 The same one-day bucket lifecycle applies.
 Same-project merge requests reuse separate browser and helper build caches under `ci-cache/mr-<number>`.
 Registry caches export final-image layers with `mode=min`.
+Cache export failures produce warnings and do not stop image builds.
+Image build and push failures stop the pipeline.
 Intermediate build stages are rebuilt when their output is absent from the cache.
 Merge request jobs never write shared protected caches.
 Protected and other pipelines do not import merge request caches.
