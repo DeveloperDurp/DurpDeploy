@@ -8,7 +8,7 @@
 FROM harbor.durp.info/dockerhub/library/node@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS node
 
 # Stage 1: Go 1.26.10 Alpine builder, pinned by digest.
-FROM harbor.durp.info/dockerhub/library/golang@sha256:9ce231b28998b32e116927c61aa5c406183061d4f3f2d61b292c88e7f6bdf7ca AS builder
+FROM harbor.durp.info/dockerhub/library/golang@sha256:2669ec97bbb6e54602952b4171211116e3fe90e5f9c47619920c74554b3d7d09 AS builder
 
 # Install build tooling (Node/npm for Tailwind/esbuild, make for the Makefile, git
 # and ca-certificates for Go module proxy / npm registry HTTPS fetches).
