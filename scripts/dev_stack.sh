@@ -8,6 +8,8 @@ fail() { printf 'dev-stack: %s\n' "$*" >&2; exit 1; }
 [[ $# == 2 || ( $# == 3 && $1 == logs ) ]] ||
     fail 'Usage: dev_stack.sh up|status|logs|down STATE_DIRECTORY [app|caddy]'
 action=$1
+profile=${DEV_STACK_PROFILE:-development}
+case $profile in development|security) ;; *) fail 'Invalid stack profile' ;; esac
 case $action in up|status|logs|down) ;; *) fail 'Unknown operation' ;; esac
 for tool in jq openssl curl timeout flock realpath; do
     command -v "$tool" >/dev/null || fail "Missing prerequisite: $tool"
@@ -149,12 +151,14 @@ cleanup_resources() {
             engine volume rm "$name" >/dev/null || return 1
         fi
     done
-    info=$(inspect_present network "$stack") || return 1
-    if [[ -n $info ]]; then
-        info=$(inspect_owned network "$stack") || return 1
-        id=$(jq -er '.[0] | .Id // .ID // .id' <<<"$info")
-        engine network rm "$id" >/dev/null || return 1
-    fi
+    while read -r name; do
+        info=$(inspect_present network "$name") || return 1
+        if [[ -n $info ]]; then
+            info=$(inspect_owned network "$name") || return 1
+            id=$(jq -er '.[0] | .Id // .ID // .id' <<<"$info")
+            engine network rm "$id" >/dev/null || return 1
+        fi
+    done < <(jq -r '.resources[] | select(.kind=="network") | .name' "$state/connection.json")
     info=$(inspect_present image "$image") || return 1
     if [[ -n $info ]]; then
         inspect_owned image "$image" >/dev/null || return 1
@@ -178,14 +182,16 @@ if [[ $action != up ]]; then
     image=localhost/$stack:dev
     # Resource names also come from our generated ID, never from editable metadata.
     jq -e --arg stack "$stack" --arg image "$image" '
-        .resources == [
+        .resources == ([
             {kind:"container",name:($stack+"-app")},
             {kind:"container",name:($stack+"-caddy")},
             {kind:"volume",name:($stack+"-data")},
             {kind:"volume",name:($stack+"-identity")},
             {kind:"volume",name:($stack+"-caddy-data")},
             {kind:"volume",name:($stack+"-caddy-config")},
-            {kind:"network",name:$stack}, {kind:"image",name:$image}]
+            {kind:"network",name:$stack}, {kind:"image",name:$image}] +
+            if .runtime=="docker" and .profile=="security" then
+                [{kind:"network",name:($stack+"-ingress")}] else [] end)
     ' "$state/connection.json" >/dev/null || fail 'Invalid resource manifest'
     case $action in
         down) cleanup_resources || fail 'Cleanup unconfirmed; state retained'; cat "$state/connection.json" ;;
@@ -225,15 +231,17 @@ labels=(--label "io.durpdeploy.dev-stack=$stack" --label "io.durpdeploy.dev-run=
 if [[ -n ${DEV_STACK_OWNER_WORKTREE:-} ]]; then
     labels+=(--label "io.durpdeploy.dev-worktree=$DEV_STACK_OWNER_WORKTREE")
 fi
-jq -n --arg stack "$stack" --arg run "$run" --arg state "$state" \
+jq -n --arg stack "$stack" --arg run "$run" --arg state "$state" --arg profile "$profile" \
     --arg runtime "$runtime" --arg socket "$socket" --arg image "$image" '
-    {schema:1,stack_id:$stack,run_id:$run,state_dir:$state,runtime:$runtime,socket:$socket,
+    {schema:1,stack_id:$stack,run_id:$run,state_dir:$state,runtime:$runtime,socket:$socket,profile:$profile,
      status:"starting",ids:{},url:null,agent_url:null,ca_file:($state+"/tls/ca.pem"),
      resources:[{kind:"container",name:($stack+"-app")},
         {kind:"container",name:($stack+"-caddy")},
         {kind:"volume",name:($stack+"-data")}, {kind:"volume",name:($stack+"-identity")},
         {kind:"volume",name:($stack+"-caddy-data")}, {kind:"volume",name:($stack+"-caddy-config")},
-        {kind:"network",name:$stack}, {kind:"image",name:$image}]}
+        {kind:"network",name:$stack}, {kind:"image",name:$image}]} |
+    if $runtime=="docker" and $profile=="security" then
+        .resources += [{kind:"network",name:($stack+"-ingress")}] else . end
     ' >"$state/connection.json"
 startup_cleanup() {
     local result=$?
@@ -267,8 +275,16 @@ else
         --force-rm "${labels[@]}" -t "$image" "$source_dir" >"$state/build.log" 2>&1
 fi
 remember image "$image"
-engine network create "${labels[@]}" "$stack" >/dev/null
+network_options=()
+if [[ $profile == security ]]; then network_options=(--internal); fi
+engine network create "${labels[@]}" "${network_options[@]}" "$stack" >/dev/null
 remember network "$stack"
+if [[ $runtime == docker && $profile == security ]]; then
+    # Docker suppresses host publications on internal-only endpoints.
+    # Only fixture services join this ingress network. Scanners never join it.
+    engine network create "${labels[@]}" "$stack-ingress" >/dev/null
+    remember network "$stack-ingress"
+fi
 for name in "$stack-data" "$stack-identity" "$stack-caddy-data" "$stack-caddy-config"; do
     engine volume create "${labels[@]}" "$name" >/dev/null
     remember volume "$name"
@@ -287,44 +303,88 @@ openssl x509 -req -sha256 -days 7 -in "$state/tls/server.csr" \
     -CA "$state/tls/ca.pem" -CAkey "$state/tls/ca-key.pem" -CAcreateserial \
     -extfile "$state/tls/server.ext" -out "$state/tls/cert.pem" >>"$state/tls.log" 2>&1
 printf ':8443 {\n tls /config/cert.pem /config/key.pem\n reverse_proxy %s:8080\n}\n' "$app" >"$state/Caddyfile"
+proxy_options=(--publish 127.0.0.1::8443)
+proxy_command=(caddy run --config /config/Caddyfile --adapter caddyfile)
+if [[ $profile == security ]]; then
+    # Test the shipped routes and trust policy. Only certificate management and
+    # fixture addresses differ. Redirects remain enabled.
+    cp "$source_dir/Caddyfile" "$state/Caddyfile"
+    proxy_options=(--publish 127.0.0.1::80 --publish 127.0.0.1::443
+        --env "DURPDEPLOY_URL=https://$host" --env "BACKEND=$app:8080")
+    proxy_command=(sh -c 'for i in $(seq 1 120); do
+        if test -s /config/security.json; then exec caddy run --config /config/security.json; fi
+        sleep 1
+    done; exit 1')
+fi
 engine create --name "$proxy" "${labels[@]}" --network "$stack" \
-    --publish 127.0.0.1::8443 --read-only --cap-drop=ALL --cap-add=NET_BIND_SERVICE \
+    "${proxy_options[@]}" --read-only --cap-drop=ALL --cap-add=NET_BIND_SERVICE \
     --security-opt=no-new-privileges --memory=256m --cpus=0.5 --pids-limit=128 \
     --tmpfs /tmp:rw,size=32m --volume "$stack-caddy-data:/data" \
     --volume "$stack-caddy-config:/config" \
-    harbor.durp.info/dockerhub/library/caddy:2-alpine \
-    caddy run --config /config/Caddyfile --adapter caddyfile >/dev/null
+    harbor.durp.info/dockerhub/library/caddy:2-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f \
+    "${proxy_command[@]}" >/dev/null
 remember container "$proxy"
+if [[ $runtime == docker && $profile == security ]]; then
+    engine network connect "$stack-ingress" "$proxy"
+fi
 for file in Caddyfile tls/cert.pem tls/key.pem; do
     engine cp --archive=false "$state/$file" "$proxy:/config/${file##*/}"
 done
 engine start "$proxy" >/dev/null
-port=$(engine port "$proxy" 8443/tcp)
+https_port=8443
+if [[ $profile == security ]]; then
+    https_port=443
+    engine exec "$proxy" caddy adapt --config /config/Caddyfile --adapter caddyfile \
+        2>"$state/adapt.log" | jq '
+        .apps.tls.certificates.load_files=[{certificate:"/config/cert.pem",key:"/config/key.pem"}] |
+        .apps.http.servers[].automatic_https.disable_certificates=true
+    ' >"$state/security.json"
+    engine cp --archive=false "$state/security.json" "$proxy:/config/security.json"
+    http_binding=$(engine port "$proxy" 80/tcp)
+    [[ $http_binding =~ ^127\.0\.0\.1:([0-9]+)$ ]] || fail 'Unexpected HTTP binding'
+    # The redirect probe sends no credentials to this loopback-only HTTP port.
+    record --arg url "http://$host:${BASH_REMATCH[1]}" '.http_url=$url | .profile="security"' # NOSONAR: intentional HTTP redirect check.
+fi
+port=$(engine port "$proxy" "$https_port/tcp")
 [[ $port =~ ^127\.0\.0\.1:([0-9]+)$ ]] || fail "Unexpected HTTPS binding: $port"
 port=${BASH_REMATCH[1]}
 url=https://$host:$port
 proxy_ip=$(engine container inspect "$proxy" | jq -er --arg network "$stack" '.[0].NetworkSettings.Networks[$network].IPAddress')
 [[ $proxy_ip =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail 'Missing private proxy address'
+proxy_trust=$proxy_ip/32
+if [[ $runtime == docker && $profile == security ]]; then
+    ingress_ip=$(engine container inspect "$proxy" | jq -er --arg network "$stack-ingress" '.[0].NetworkSettings.Networks[$network].IPAddress')
+    [[ $ingress_ip =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail 'Missing fixture ingress address'
+    proxy_trust+=,$ingress_ip/32
+fi
 openssl rand -base64 32 >"$state/secret-key"
 socket_options=()
 if [[ $runtime == podman ]]; then socket_options=(--security-opt=label=disable); fi
+runtime_options=(--volume "$socket:/var/run/durpdeploy-runtime.sock")
+if [[ $profile == security ]]; then
+    runtime_options=(--env DURPDEPLOY_EMBEDDED_AGENT_ENABLED=false --env DEV_STACK_SECURITY=1)
+fi
 engine create --name "$app" "${labels[@]}" --network "$stack" \
     --publish 127.0.0.1::23187 --read-only --user=0 \
     --cap-drop=ALL --cap-add=SETUID --cap-add=SETGID \
     --security-opt=no-new-privileges "${socket_options[@]}" \
     --memory=512m --cpus=1 --pids-limit=256 --tmpfs /tmp:rw,size=64m,mode=1777 \
     --volume "$stack-data:/data" --volume "$stack-identity:/var/lib/durpdeploy/agent-identity" \
-    --volume "$socket:/var/run/durpdeploy-runtime.sock" \
+    "${runtime_options[@]}" \
     --env DURPDEPLOY_EXECUTION_BOUNDARY=service --env DURPDEPLOY_ADDR=0.0.0.0:8080 \
     --env DURPDEPLOY_DB=/data/durpdeploy.db --env TMPDIR=/data/tmp \
     --env DURPDEPLOY_ENV_FILE=/nonexistent \
-    --env "DURPDEPLOY_URL=$url" --env "DURPDEPLOY_TRUSTED_PROXIES=$proxy_ip/32" \
+    --env "DURPDEPLOY_URL=$url" --env "DURPDEPLOY_TRUSTED_PROXIES=$proxy_trust" \
     --env "DURPDEPLOY_CONTAINER_NAMESPACE=$stack" --env "DURPDEPLOY_CONTAINER_RUNTIME=$runtime" \
     --env DURPDEPLOY_CONTAINER_URL=unix:///var/run/durpdeploy-runtime.sock \
     --env DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:23187 \
     --env DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity \
     --entrypoint /bin/sh "$image" -c '
-        runtime_gid=$(stat -c %g /var/run/durpdeploy-runtime.sock)
+        if test "${DEV_STACK_SECURITY:-0}" = 1; then
+            runtime_gid=10001
+        else
+            runtime_gid=$(stat -c %g /var/run/durpdeploy-runtime.sock)
+        fi
         exec su-exec "10001:$runtime_gid" /bin/sh -c '\''
         for i in $(seq 1 60); do
             if test -s /var/lib/durpdeploy/agent-identity/public-url; then
@@ -337,6 +397,9 @@ engine create --name "$app" "${labels[@]}" --network "$stack" \
         done
         exit 1'\''' >/dev/null
 remember container "$app"
+if [[ $runtime == docker && $profile == security ]]; then
+    engine network connect "$stack-ingress" "$app"
+fi
 engine start "$app" >/dev/null
 # Write as the volume owner. No stopped-container copy or privileged chown is needed.
 engine exec --interactive --user=10001 "$app" sh -c \
