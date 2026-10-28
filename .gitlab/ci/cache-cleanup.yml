@@ -1,7 +1,7 @@
 cache-cleanup:
   stage: prepare
   # Node.js 24.22.1 on Debian Bookworm.
-  image: harbor.durp.info/dockerhub/library/node@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205
+  image: harbor.durp.info/dockerhub/library/node:24.22.1-bookworm@sha256:d862bb5d082c5ae0210ac07e8c0344cb8cf7bef6d78e9b8c50c179da923108ea
   needs: []
   interruptible: false
   resource_group: mr-cache-cleanup
