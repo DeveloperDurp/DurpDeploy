@@ -393,6 +393,19 @@ security-scan: templ-generate swagger-ui-copy
 security-scan-test:
 	bash scripts/security_scan_test.sh
 
+.PHONY: transport-security transport-security-quick transport-security-contract
+transport-security: templ-generate swagger-ui-copy
+	bash scripts/https_security_test.sh full
+	bash scripts/transport_cleanup_test.sh
+
+transport-security-quick: templ-generate swagger-ui-copy
+	bash scripts/https_security_test.sh quick
+
+transport-security-contract:
+	bash -n scripts/https_security_test.sh scripts/transport_tls_policy.sh scripts/transport_testssl_report.sh scripts/transport_cleanup_test.sh scripts/transport_forwarding.sh scripts/transport_browser.sh
+	bash scripts/go_test.sh ./scripts/transportcheck
+	bash scripts/transport_tls_policy_test.sh
+
 # API, web, and browser E2E checks against the running server. Start `make dev`
 # first; this target never starts another app server. Browser tests use Podman.
 e2e-test: templ-generate swagger-ui-copy
