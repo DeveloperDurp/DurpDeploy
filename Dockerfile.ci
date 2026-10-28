@@ -1,7 +1,7 @@
 # syntax=harbor.durp.info/dockerhub/docker/dockerfile:1
 # Build the existing browser image first. This image is CI tooling only.
 ARG BROWSER_IMAGE=durpdeploy-ci-browser
-FROM harbor.durp.info/dockerhub/library/docker:29.9.0-dind@sha256:0b6d18a4a222e71c88be6034926b4f6cde2fc33c2218643d03ccfddc65995470 AS docker
+FROM harbor.durp.info/dockerhub/library/docker:29.9.2-dind@sha256:9e79b879b177fbd72c34376a3dd3d91747da5db49e1f560f76aea59561471977 AS docker
 FROM harbor.durp.info/dockerhub/hadolint/hadolint:v2.14.0-alpine@sha256:7aba693c1442eb31c0b015c129697cb3b6cb7da589d85c7562f9deb435a6657c AS hadolint
 FROM harbor.durp.info/dockerhub/alpine/helm:4.2.2@sha256:ee6fe3e96d9f8ea8dd1af9ecd7bbb3e233616a25f145392376f020fd2a51eb33 AS helm
 FROM harbor.durp.info/dockerhub/alpine/helm:3.16.2@sha256:a19a2968fd672336d39771f6c899781424d725229148656dbc2a1e305003cdec AS helm3
