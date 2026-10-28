@@ -1,5 +1,8 @@
 # Security scanning
 
+Read [transport verification](transport-security.md) for disposable HTTPS, cookie, forwarding, and listener checks.
+Use its security-only selector for manual pipelines without publication jobs.
+
 The GitLab pipeline runs security checks for merge requests, main, tags, manual runs, and configured schedules.
 It preserves the existing test and SonarCloud quality gates.
 Security jobs do not need production credentials.
