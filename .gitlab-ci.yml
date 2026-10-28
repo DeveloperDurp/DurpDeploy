@@ -115,9 +115,9 @@ default:
 ci-runtime:
   rules: *security_pipeline_rules
   stage: prepare
-  image: harbor.durp.info/dockerhub/library/docker:29.9.0-cli@sha256:1a4c7cb63513f349bdad01fcc6e0f3f2f67d37b9da86f14dc0d4a0942eecda00
+  image: harbor.durp.info/dockerhub/library/docker:29.9.2-cli@sha256:5e6baf67325a79f64ed3bed6863954d5e05d0f3d4e57cbdb14809346814bbfdb
   services:
-    - name: harbor.durp.info/dockerhub/library/docker:29.9.0-dind@sha256:0b6d18a4a222e71c88be6034926b4f6cde2fc33c2218643d03ccfddc65995470
+    - name: harbor.durp.info/dockerhub/library/docker:29.9.2-dind@sha256:9e79b879b177fbd72c34376a3dd3d91747da5db49e1f560f76aea59561471977
       entrypoint: [dockerd-entrypoint.sh]
       command: [dockerd, "--host=unix:///var/run/docker.sock", "--host=tcp://127.0.0.1:2375", "--tls=false"]
       variables:

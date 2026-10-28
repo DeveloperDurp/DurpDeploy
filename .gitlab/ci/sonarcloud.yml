@@ -30,7 +30,7 @@ coverage:
 sonarcloud:
   stage: verify
   image:
-    name: harbor.durp.info/dockerhub/sonarsource/sonar-scanner-cli@sha256:a3f4215076706c95a17a68c19322ee916e40a3acd081a8c1a1e839e0194afa57
+    name: harbor.durp.info/dockerhub/sonarsource/sonar-scanner-cli@sha256:47956b669bf486bdad919e1cbd0533223515aa0b6d1d31763e5a3754942df6d7
     entrypoint: [""]
   needs: [coverage]
   artifacts:
