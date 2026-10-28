@@ -4,7 +4,7 @@
 FROM harbor.durp.info/dockerhub/library/golang@sha256:ee3901c61e423732605a51f1b8157c849ec01194ea0a274213b5202b2c11e7bf AS go
 
 # Node.js 24.22.1 uses the official glibc distribution.
-FROM harbor.durp.info/dockerhub/library/node@sha256:b5f0e27e7423ea242b37af44c8c856e28f7e37d4fac23cb430cb618874ff8517 AS node
+FROM harbor.durp.info/dockerhub/library/node:24.22.1-bookworm@sha256:d862bb5d082c5ae0210ac07e8c0344cb8cf7bef6d78e9b8c50c179da923108ea AS node
 
 FROM harbor.durp.info/microsoft/playwright:v1.61.1-noble
 
