@@ -17,8 +17,8 @@ go.work
 # Generated templ files
 *_templ.go
 
-# Node modules
-node_modules/
+# Node modules, including the CI dependency-tree symlink
+node_modules
 
 # Tailwind output
 static/css/output.css

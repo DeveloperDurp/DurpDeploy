@@ -1,4 +1,8 @@
 container-security:
+  rules:
+    - if: '$HTTPS_SECURITY_ONLY == "true"'
+      when: never
+    - when: on_success
   stage: scan
   needs: [ci-runtime]
   timeout: 30 minutes
@@ -19,6 +23,10 @@ container-security:
     paths: [artifacts/container/]
 
 security-scan:
+  rules:
+    - if: '$HTTPS_SECURITY_ONLY == "true"'
+      when: never
+    - when: on_success
   stage: scan
   needs: [ci-runtime]
   timeout: 30 minutes
@@ -45,3 +53,28 @@ security-scan:
     when: always
     expire_in: 7 days
     paths: [artifacts/security/]
+
+transport-security:
+  stage: scan
+  needs: [ci-runtime]
+  timeout: 30 minutes
+  variables:
+    DEV_STACK_RUNTIME: docker
+    DEV_STACK_SOCKET: /var/run/docker.sock
+    DURPDEPLOY_CONTAINER_RUNTIME: docker
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      variables:
+        TRANSPORT_MODE: quick
+    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "schedule"'
+      variables:
+        TRANSPORT_MODE: full
+  script:
+    - make templ-generate swagger-ui-copy
+    - make transport-security-contract
+    - bash scripts/https_security_test.sh "$TRANSPORT_MODE"
+    - if [[ $TRANSPORT_MODE == full ]]; then bash scripts/transport_cleanup_test.sh; fi
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths: [artifacts/transport/]

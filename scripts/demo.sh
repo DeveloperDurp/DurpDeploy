@@ -187,7 +187,7 @@ fi
     --security-opt=no-new-privileges:true \
     --tmpfs /data:size=64m --tmpfs /config:size=64m --tmpfs /tmp:size=64m \
     --publish "$https_publish" --volume "$directory/tls:/demo:ro,Z" \
-    harbor.durp.info/dockerhub/library/caddy:2-alpine \
+    harbor.durp.info/dockerhub/library/caddy:2-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f \
     caddy run --config /demo/Caddyfile --adapter caddyfile \
     >"$directory/proxy.log" 2>&1
 https_address=$("$engine" port "$proxy" 8443/tcp | head -1)

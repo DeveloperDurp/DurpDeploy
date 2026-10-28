@@ -486,6 +486,10 @@ Read the shipped agent skill for query fields and response details.
 
 ## Reverse proxy trust
 
+The shipped HTTPS proxy sets HSTS for one day, without subdomain coverage or preload registration.
+The app sets `X-Content-Type-Options: nosniff` for browser and API responses.
+Read [transport verification](transport-security.md) for TLS policy, intentional listeners, and isolated installation checks.
+
 DurpDeploy applies login rate limits itself. It trusts forwarding headers from
 loopback proxies by default. If Caddy or another trusted proxy is on a different
 host, set `DURPDEPLOY_TRUSTED_PROXIES` to its IP address or CIDR. Multiple

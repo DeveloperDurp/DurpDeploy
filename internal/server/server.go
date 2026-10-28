@@ -89,6 +89,7 @@ func newRouter(
 ) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
+	r.Use(contentTypePolicy)
 	trustedProxies, _ := repo.StartupLookup("DURPDEPLOY_TRUSTED_PROXIES")
 	r.Use(requestmeta.Middleware(trustedProxies))
 	r.Use(requestLogger)

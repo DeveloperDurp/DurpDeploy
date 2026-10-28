@@ -4,7 +4,7 @@ set -euo pipefail
 container=${DURPDEPLOY_HTTPS_PROXY_CONTAINER:-durpdeploy-dev-https}
 port=${DURPDEPLOY_HTTPS_PROXY_PORT:-8443}
 backend=${DURPDEPLOY_HTTPS_PROXY_BACKEND:-host.docker.internal:8080}
-image=${DURPDEPLOY_HTTPS_PROXY_IMAGE:-harbor.durp.info/dockerhub/library/caddy:2-alpine}
+image=${DURPDEPLOY_HTTPS_PROXY_IMAGE:-harbor.durp.info/dockerhub/library/caddy:2-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f}
 health_url="https://localhost:${port}/healthz"
 container_engine=""
 config=""

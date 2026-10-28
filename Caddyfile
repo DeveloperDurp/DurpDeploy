@@ -24,6 +24,10 @@
 }
 
 {$DURPDEPLOY_URL:http://localhost} {
+	# Pin HTTPS for one day. Local HTTP development does not receive HSTS.
+	@https protocol https
+	header @https Strict-Transport-Security "max-age=86400"
+
 	# Proxy to the Go server. The Go process listens on port 8080
 	# (HTTP, no TLS — Caddy terminates TLS here). The default backend is
 	# `localhost:8080`, for a host installation (Go binary on

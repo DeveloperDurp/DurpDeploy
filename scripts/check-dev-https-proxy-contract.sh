@@ -264,7 +264,7 @@ bash -n "$root/scripts/dev_https_proxy.sh" "$root/scripts/e2e_db_test.sh" \
 make -C "$root" -n dev dev-postgres dev-mssql >/dev/null
 
 grep -Fq \
-	'image=${DURPDEPLOY_HTTPS_PROXY_IMAGE:-harbor.durp.info/dockerhub/library/caddy:2-alpine}' \
+	'image=${DURPDEPLOY_HTTPS_PROXY_IMAGE:-harbor.durp.info/dockerhub/library/caddy:2-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f}' \
 	"$root/scripts/dev_https_proxy.sh"
 grep -Fq -- '--add-host host.docker.internal:host-gateway' "$root/scripts/dev_https_proxy.sh"
 grep -Fq 'trap cleanup EXIT' "$root/scripts/dev_https_proxy.sh"

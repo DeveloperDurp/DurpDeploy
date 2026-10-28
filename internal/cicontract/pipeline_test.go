@@ -13,7 +13,8 @@ import (
 )
 
 type rule struct {
-	If string `yaml:"if"`
+	If   string `yaml:"if"`
+	When string `yaml:"when"`
 }
 
 type need struct {
@@ -164,11 +165,14 @@ func TestPublishersRequireSameCommitSecurityAndScannedImages(t *testing.T) {
 			current.ResourceGroup != "release-publication" {
 			t.Errorf("%s violates the protected publication boundary", name)
 		}
-		if len(current.Rules) != 1 ||
-			!strings.Contains(current.Rules[0].If,
+		if len(current.Rules) != 2 ||
+			current.Rules[0] != (rule{
+				If: `$HTTPS_SECURITY_ONLY == "true"`, When: "never",
+			}) ||
+			!strings.Contains(current.Rules[1].If,
 				`CI_COMMIT_REF_PROTECTED == "true"`) ||
-			strings.Contains(current.Rules[0].If, "merge_request_event") ||
-			strings.Contains(current.Rules[0].If, "schedule") {
+			strings.Contains(current.Rules[1].If, "merge_request_event") ||
+			strings.Contains(current.Rules[1].If, "schedule") {
 			t.Errorf("%s can publish from an untrusted event", name)
 		}
 	}
@@ -182,8 +186,7 @@ func TestImageRetentionUsesPublicationRules(t *testing.T) {
 	jobs := pipeline(t)
 	retention := jobs["retain-image"].Rules
 	publication := jobs["publish-images"].Rules
-	if len(retention) != 1 || len(publication) != 1 ||
-		retention[0].If != publication[0].If {
+	if !slices.Equal(retention, publication) {
 		t.Fatal("image retention must run exactly when images can be published")
 	}
 }
@@ -362,9 +365,16 @@ func TestEvidenceRetentionAndAMD64Coverage(t *testing.T) {
 		"container-security": "7 days",
 	} {
 		current := jobs[name]
+		rulesValid := len(current.Rules) == 0
+		if name != "images" {
+			rulesValid = slices.Equal(current.Rules, []rule{
+				{If: `$HTTPS_SECURITY_ONLY == "true"`, When: "never"},
+				{When: "on_success"},
+			})
+		}
 		if current.allowsFailure() || current.Artifacts.When != "always" ||
-			current.Artifacts.ExpireIn != expiry || len(current.Rules) != 0 {
-			t.Errorf("%s must block and retain evidence on every event", name)
+			current.Artifacts.ExpireIn != expiry || !rulesValid {
+			t.Errorf("%s must block and retain evidence when enabled", name)
 		}
 	}
 	retained := jobs["retain-image"].Artifacts

@@ -1590,7 +1590,7 @@ through `DURPDEPLOY_E2E_CA_FILE`. Requirements: Linux with `setsid`, Go, Node/np
 make, OpenSSL,
 Python 3, SQLite CLI, curl, and working local Podman or Docker. The existing development agent
 image is pulled by `make dev-agent`; Caddy uses the existing development
-proxy image `harbor.durp.info/dockerhub/library/caddy:2-alpine`.
+proxy image `harbor.durp.info/dockerhub/library/caddy:2-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f`.
 
 ### Loopback-only demo
 

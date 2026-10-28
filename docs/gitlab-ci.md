@@ -303,6 +303,10 @@ Runner storage and persistent distributed cache configuration require separate G
 
 ## CI variables
 
+For transport-only manual or scheduled pipelines, set `HTTPS_SECURITY_ONLY=true`.
+This selector excludes production publication jobs and selects disposable verification targets.
+Read [transport verification](transport-security.md) before running these checks.
+
 Configure variables in **Settings > CI/CD > Variables**.
 Keep credential values out of repository files and command output.
 
