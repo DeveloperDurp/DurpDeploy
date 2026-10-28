@@ -1,6 +1,6 @@
 {
   "devDependencies": {
-    "daisyui": "5.7.47",
+    "daisyui": "5.7.50",
     "esbuild": "^0.28.1",
     "playwright": "^1.61.1",
     "swagger-ui-dist": "^5.20.0",
