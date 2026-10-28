@@ -5,7 +5,7 @@
 # Docker and Podman clients used by the embedded agent.
 
 # Node.js 24.22.1 on Alpine 3.24 retains its bundled license notices.
-FROM harbor.durp.info/dockerhub/library/node@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS node
+FROM harbor.durp.info/dockerhub/library/node@sha256:b5f0e27e7423ea242b37af44c8c856e28f7e37d4fac23cb430cb618874ff8517 AS node
 
 # Stage 1: Go 1.26.10 Alpine builder, pinned by digest.
 FROM harbor.durp.info/dockerhub/library/golang@sha256:9ce231b28998b32e116927c61aa5c406183061d4f3f2d61b292c88e7f6bdf7ca AS builder
