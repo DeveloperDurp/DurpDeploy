@@ -31,6 +31,9 @@ case $1 in
     case $metadata in
       */browser.json) digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb ;;
     esac
+    case $metadata in
+      */"${FIXTURE_FAIL_IMAGE:-none}".json) exit 1 ;;
+    esac
     printf '{"containerimage.digest":"%s"}\n' "$digest" > "$metadata"
     ;;
   *) exit 1 ;;
@@ -73,6 +76,24 @@ func TestRuntimeImageReportPinsThePushedDigest(t *testing.T) {
 			want := "CI_RUNTIME_IMAGE=registry.example/project/ci@" + digest + "\n"
 			if err != nil || string(data) != want {
 				t.Fatalf("runtime dotenv: %s, %v", data, err)
+			}
+		})
+	}
+}
+
+func TestRuntimeImageBuildFailuresStopReports(t *testing.T) {
+	for _, image := range []string{"browser", "runtime"} {
+		t.Run(image, func(t *testing.T) {
+			directory, err := runtimeImageFixture(
+				t,
+				"FIXTURE_FAIL_IMAGE="+image,
+			)
+			if err == nil {
+				t.Fatal("image build failure was ignored")
+			}
+			if _, err := os.Stat(filepath.Join(directory,
+				"artifacts/runtime.env")); !os.IsNotExist(err) {
+				t.Fatal("failed build produced a runtime report")
 			}
 		})
 	}
@@ -125,9 +146,9 @@ func checkRuntimeCacheCalls(t *testing.T, directory, iid string, cached bool) {
 			t.Fatalf("cache escaped MR scope: %s", calls)
 		}
 	}
-	if cached && (!strings.Contains(calls, "mode=min") ||
+	if cached && (!strings.Contains(calls, "mode=min,ignore-error=true") ||
 		strings.Contains(calls, "mode=max")) {
-		t.Fatalf("cache exports unused intermediate stages: %s", calls)
+		t.Fatalf("unexpected cache export policy: %s", calls)
 	}
 	want := "BROWSER_IMAGE=registry.example/project/ci-browser@sha256:" +
 		strings.Repeat("b", 64)
