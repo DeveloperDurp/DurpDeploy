@@ -121,6 +121,15 @@ Check **API target** before you authorize a token.
 
 ## Base URL
 
+Use the configured HTTPS origin for remote connections.
+The supported Caddy proxy requires TLS 1.2 or TLS 1.3.
+It sends `Strict-Transport-Security: max-age=86400` only over HTTPS.
+API and web responses send `X-Content-Type-Options: nosniff`.
+Browser session cookies use Secure, HttpOnly, and SameSite=Lax on configured HTTPS origins.
+Intentional loopback HTTP development omits Secure and HSTS.
+Forwarded headers do not select the public origin or change cookie security.
+Do not trust certificates by disabling verification globally.
+
 Open browser pages as top-level documents or within same-origin frames.
 The server sends `Content-Security-Policy: frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN` on HTTP responses.
 Cross-origin frames are blocked, including parents on another port of the same site.
