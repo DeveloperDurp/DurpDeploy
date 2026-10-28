@@ -1,0 +1,28 @@
+# Use the repository's existing browser runtime and its system OpenSSL.
+FROM harbor.durp.info/microsoft/playwright@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# BusyBox supplies hexdump and nslookup under GPL-2.0. Keep package notices.
+# testssl.sh v3.2.4, GPL-2.0. Keep the complete source and license notices.
+# Run with system OpenSSL, without the bundled third-party executable files.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends --no-upgrade \
+      busybox-static=1:1.36.1-6ubuntu3.1 && \
+    ln -s /bin/busybox /usr/local/bin/hexdump && \
+    ln -s /bin/busybox /usr/local/bin/nslookup && \
+    rm -rf /var/lib/apt/lists/* && \
+    curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+      https://codeload.github.com/testssl/testssl.sh/tar.gz/97763a411c525720a5f9bd9d2cded416b10f210a \
+      --output /tmp/testssl.tar.gz && \
+    printf '%s  %s\n' \
+      '6c33f1386f8d8a1cf2f6332a18e183fda8209974775d574e41dab01682cf04eb' \
+      /tmp/testssl.tar.gz | sha256sum --check - && \
+    mkdir /opt/testssl && \
+    tar -xzf /tmp/testssl.tar.gz --strip-components=1 -C /opt/testssl && \
+    rm -rf /tmp/testssl.tar.gz /opt/testssl/bin
+ENV OPENSSL=/usr/bin/openssl
+COPY scripts/transport_testssl_report.sh /opt/testssl-report.sh
+COPY scripts/transport_browser.sh /opt/transport-browser.sh
+USER pwuser
+WORKDIR /tmp
+ENTRYPOINT ["/bin/bash", "/opt/testssl-report.sh"]
