@@ -434,6 +434,7 @@ func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 // swagger:route POST /lifecycles/{id}/stages/reorder lifecycles reorderLifecycleStages
 //
 // Reorder lifecycle stages. Global admin only.
+// Only order changes. Stage environments and approval requirements are preserved.
 //
 //	Consumes:
 //	- application/json
@@ -451,6 +452,7 @@ func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 //	  403: body:ForbiddenError
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
+//	  404: body:NotFoundError
 //	  500: body:ServerError
 func (h *LifecycleHandler) ReorderStages(
 	w http.ResponseWriter,
@@ -467,94 +469,18 @@ func (h *LifecycleHandler) ReorderStages(
 		return
 	}
 
-	stages, err := h.repo.Queries.ListLifecycleStages(r.Context(), id)
+	stages, err := h.repo.ReorderLifecycleStages(r.Context(), id, req.StageIDs)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	existing := make(map[int64]db.LifecycleStage, len(stages))
-	for _, s := range stages {
-		existing[s.ID] = s
-	}
-	if len(req.StageIDs) != len(existing) {
-		RespondError(
-			w,
-			http.StatusBadRequest,
-			"stage_ids must include every stage exactly once",
-		)
-		return
-	}
-	seen := make(map[int64]bool, len(req.StageIDs))
-	for _, sid := range req.StageIDs {
-		if _, ok := existing[sid]; !ok {
-			RespondError(
-				w,
-				http.StatusBadRequest,
-				"stage_ids contains an unknown stage",
-			)
-			return
-		}
-		if seen[sid] {
-			RespondError(
-				w,
-				http.StatusBadRequest,
-				"stage_ids contains duplicates",
-			)
-			return
-		}
-		seen[sid] = true
-	}
-
-	tx, err := h.repo.DB.BeginTx(r.Context(), nil)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	defer func() {
-		repository.LogRollbackError(tx.Rollback())
-	}()
-	qtx := h.repo.Queries.WithTx(tx)
-
-	for i, sid := range req.StageIDs {
-		s := existing[sid]
-		if _, err := qtx.UpdateLifecycleStage(
-			r.Context(),
-			db.UpdateLifecycleStageParams{
-				ID:               s.ID,
-				EnvironmentID:    s.EnvironmentID,
-				SortOrder:        -int64(i + 1),
-				RequiresApproval: s.RequiresApproval,
-			},
-		); err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			RespondError(w, http.StatusNotFound, lifecycleNotFoundMessage)
+		case errors.Is(err, repository.ErrLifecycleStageIDsIncomplete),
+			errors.Is(err, repository.ErrLifecycleStageUnknown),
+			errors.Is(err, repository.ErrLifecycleStageDuplicate):
+			RespondError(w, http.StatusBadRequest, err.Error())
+		default:
 			RespondError(w, http.StatusInternalServerError, err.Error())
-			return
 		}
-	}
-	for i, sid := range req.StageIDs {
-		s := existing[sid]
-		if _, err := qtx.UpdateLifecycleStage(
-			r.Context(),
-			db.UpdateLifecycleStageParams{
-				ID:               s.ID,
-				EnvironmentID:    s.EnvironmentID,
-				SortOrder:        int64(i + 1),
-				RequiresApproval: s.RequiresApproval,
-			},
-		); err != nil {
-			RespondError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	stages, err = h.repo.Queries.ListLifecycleStages(r.Context(), id)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, stages)
