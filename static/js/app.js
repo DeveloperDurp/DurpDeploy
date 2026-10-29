@@ -1121,191 +1121,71 @@ document.addEventListener('click', (event) => {
 	void authenticatePasskey(event, button);
 });
 
-const mfaResetOpeners = new WeakMap();
-const passkeyDeleteOpeners = new WeakMap();
-const securityDisableOpeners = new WeakMap();
+const securityConfirmationOpeners = new WeakMap();
 
-function mfaResetDialog(form) {
-	const dialog = document.getElementById(form.dataset.mfaResetDialog);
-	return dialog instanceof HTMLDialogElement && typeof dialog.showModal === 'function'
-		? dialog
-		: null;
+function registerSecurityConfirmation(prefix) {
+	const dialogAttribute = `data-${prefix}-dialog`;
+	const dialogSelector = `[data-${prefix}-confirmation-dialog]`;
+	const isDialog = (element) => typeof HTMLDialogElement !== 'undefined' &&
+		element instanceof HTMLDialogElement && element.matches(dialogSelector);
+
+	document.addEventListener('submit', (event) => {
+		const form = event.target;
+		if (!(form instanceof HTMLFormElement)) return;
+		if (form.matches(`[${dialogAttribute}]`)) {
+			const dialog = document.getElementById(form.getAttribute(dialogAttribute));
+			if (!isDialog(dialog) || typeof dialog.showModal !== 'function') return;
+			event.preventDefault();
+			if (dialog.open) return;
+			const opener = form.querySelector(`[data-${prefix}-opener]`);
+			if (opener instanceof HTMLElement) securityConfirmationOpeners.set(dialog, opener);
+			dialog.showModal();
+			return;
+		}
+		if (!form.matches(`[data-${prefix}-confirmation]`)) return;
+		if (form.dataset.submitting === 'true') {
+			event.preventDefault();
+			return;
+		}
+		form.dataset.submitting = 'true';
+		const submit = document.querySelector(`[form="${form.id}"]`);
+		if (submit instanceof HTMLButtonElement) submit.disabled = true;
+	});
+
+	document.addEventListener('close', (event) => {
+		const dialog = event.target;
+		if (!isDialog(dialog)) return;
+		const opener = securityConfirmationOpeners.get(dialog);
+		securityConfirmationOpeners.delete(dialog);
+		if (opener?.isConnected) opener.focus();
+	}, true);
+
+	document.addEventListener('cancel', (event) => {
+		const dialog = event.target;
+		if (!isDialog(dialog)) return;
+		event.preventDefault();
+		if (dialog.open) dialog.close();
+	}, true);
+
+	document.addEventListener('click', (event) => {
+		const target = event.target;
+		if (!(target instanceof Element)) return;
+		if (isDialog(target)) {
+			target.close();
+			return;
+		}
+		const button = target.closest(`[data-${prefix}-confirm]`);
+		if (!(button instanceof HTMLButtonElement)) return;
+		if (button.dataset.submitting === 'true') {
+			event.preventDefault();
+			return;
+		}
+		button.dataset.submitting = 'true';
+	});
 }
 
-function passkeyDeleteDialog(form) {
-	const dialog = document.getElementById(form.dataset.passkeyDeleteDialog);
-	return dialog instanceof HTMLDialogElement && typeof dialog.showModal === 'function'
-		? dialog
-		: null;
-}
-
-function securityDisableDialog(form) {
-	const dialog = document.getElementById(form.dataset.securityDisableDialog);
-	return dialog instanceof HTMLDialogElement && typeof dialog.showModal === 'function'
-		? dialog
-		: null;
-}
-
-document.addEventListener('submit', (event) => {
-	const form = event.target;
-	if (!(form instanceof HTMLFormElement)) return;
-	if (form.matches('[data-mfa-reset-dialog]')) {
-		const dialog = mfaResetDialog(form);
-		if (!dialog) return;
-		event.preventDefault();
-		if (dialog.open) return;
-		const opener = form.querySelector('[data-mfa-reset-opener]');
-		if (opener instanceof HTMLElement) mfaResetOpeners.set(dialog, opener);
-		dialog.showModal();
-		return;
-	}
-	if (!form.matches('[data-mfa-reset-confirmation]')) return;
-	if (form.dataset.submitting === 'true') {
-		event.preventDefault();
-		return;
-	}
-	form.dataset.submitting = 'true';
-	const submit = document.querySelector(`[form="${form.id}"]`);
-	if (submit instanceof HTMLButtonElement) submit.disabled = true;
-});
-
-document.addEventListener('submit', (event) => {
-	const form = event.target;
-	if (!(form instanceof HTMLFormElement)) return;
-	if (form.matches('[data-security-disable-dialog]')) {
-		const dialog = securityDisableDialog(form);
-		if (!dialog) return;
-		event.preventDefault();
-		if (dialog.open) return;
-		const opener = form.querySelector('[data-security-disable-opener]');
-		if (opener instanceof HTMLElement) securityDisableOpeners.set(dialog, opener);
-		dialog.showModal();
-		return;
-	}
-	if (!form.matches('[data-security-disable-confirmation]')) return;
-	if (form.dataset.submitting === 'true') {
-		event.preventDefault();
-		return;
-	}
-	form.dataset.submitting = 'true';
-	const submit = document.querySelector(`[form="${form.id}"]`);
-	if (submit instanceof HTMLButtonElement) submit.disabled = true;
-});
-
-document.addEventListener('submit', (event) => {
-	const form = event.target;
-	if (!(form instanceof HTMLFormElement)) return;
-	if (form.matches('[data-passkey-delete-dialog]')) {
-		const dialog = passkeyDeleteDialog(form);
-		if (!dialog) return;
-		event.preventDefault();
-		if (dialog.open) return;
-		const opener = form.querySelector('[data-passkey-delete-opener]');
-		if (opener instanceof HTMLElement) passkeyDeleteOpeners.set(dialog, opener);
-		dialog.showModal();
-		return;
-	}
-	if (!form.matches('[data-passkey-delete-confirmation]')) return;
-	if (form.dataset.submitting === 'true') {
-		event.preventDefault();
-		return;
-	}
-	form.dataset.submitting = 'true';
-	const submit = document.querySelector(`[form="${form.id}"]`);
-	if (submit instanceof HTMLButtonElement) submit.disabled = true;
-});
-
-document.addEventListener('close', (event) => {
-	const dialog = event.target;
-	if (!(dialog instanceof HTMLDialogElement) ||
-		!dialog.matches('[data-mfa-reset-confirmation-dialog]')) return;
-	const opener = mfaResetOpeners.get(dialog);
-	mfaResetOpeners.delete(dialog);
-	if (opener?.isConnected) opener.focus();
-}, true);
-
-document.addEventListener('close', (event) => {
-	const dialog = event.target;
-	if (!(dialog instanceof HTMLDialogElement) ||
-		!dialog.matches('[data-security-disable-confirmation-dialog]')) return;
-	const opener = securityDisableOpeners.get(dialog);
-	securityDisableOpeners.delete(dialog);
-	if (opener?.isConnected) opener.focus();
-}, true);
-
-document.addEventListener('close', (event) => {
-	const dialog = event.target;
-	if (!(dialog instanceof HTMLDialogElement) ||
-		!dialog.matches('[data-passkey-delete-confirmation-dialog]')) return;
-	const opener = passkeyDeleteOpeners.get(dialog);
-	passkeyDeleteOpeners.delete(dialog);
-	if (opener?.isConnected) opener.focus();
-}, true);
-
-document.addEventListener('cancel', (event) => {
-	const target = event.target;
-	if (!(target instanceof Element)) return;
-	const dialog = target.closest('[data-mfa-reset-confirmation-dialog], [data-passkey-delete-confirmation-dialog], [data-security-disable-confirmation-dialog]');
-	if (!(dialog instanceof HTMLDialogElement)) return;
-	event.preventDefault();
-	if (dialog.open) dialog.close();
-}, true);
-
-document.addEventListener('click', (event) => {
-	const dialog = event.target;
-	if (!(dialog instanceof HTMLDialogElement) ||
-		!dialog.matches('[data-mfa-reset-confirmation-dialog]')) return;
-	dialog.close();
-});
-
-document.addEventListener('click', (event) => {
-	const dialog = event.target;
-	if (!(dialog instanceof HTMLDialogElement) ||
-		!dialog.matches('[data-security-disable-confirmation-dialog]')) return;
-	dialog.close();
-});
-
-document.addEventListener('click', (event) => {
-	const dialog = event.target;
-	if (!(dialog instanceof HTMLDialogElement) ||
-		!dialog.matches('[data-passkey-delete-confirmation-dialog]')) return;
-	dialog.close();
-});
-
-document.addEventListener('click', (event) => {
-	const target = event.target;
-	if (!(target instanceof Element)) return;
-	const button = target.closest('[data-security-disable-confirm]');
-	if (!(button instanceof HTMLButtonElement)) return;
-	if (button.dataset.submitting === 'true') {
-		event.preventDefault();
-		return;
-	}
-	button.dataset.submitting = 'true';
-});
-
-document.addEventListener('click', (event) => {
-	const target = event.target;
-	if (!(target instanceof Element)) return;
-	const button = target.closest('[data-mfa-reset-confirm]');
-	if (!(button instanceof HTMLButtonElement)) return;
-	if (button.dataset.submitting === 'true') {
-		event.preventDefault();
-		return;
-	}
-	button.dataset.submitting = 'true';
-});
-
-document.addEventListener('click', (event) => {
-	const target = event.target;
-	if (!(target instanceof Element)) return;
-	const button = target.closest('[data-passkey-delete-confirm]');
-	if (!(button instanceof HTMLButtonElement)) return;
-	if (button.dataset.submitting === 'true') {
-		event.preventDefault();
-		return;
-	}
-	button.dataset.submitting = 'true';
-});
+registerSecurityConfirmation('mfa-reset');
+registerSecurityConfirmation('passkey-delete');
+registerSecurityConfirmation('security-disable');
 
 Alpine.start()
