@@ -13,7 +13,6 @@ import (
 
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/config"
-	"durpdeploy/internal/db"
 )
 
 const artifactMount = "/artifacts"
@@ -57,16 +56,7 @@ func (r *DeploymentRunner) stageArtifact(
 		return result, r.localErr
 	}
 	if local {
-		recorded, err := r.repo.Queries.RecordContainerNamespace(
-			ctx,
-			db.RecordContainerNamespaceParams{
-				DeploymentID: deploymentID,
-				Namespace: sql.NullString{
-					String: r.engine.scope(),
-					Valid:  true,
-				},
-			},
-		)
+		recorded, err := r.recordContainerNamespace(ctx, deploymentID)
 		if err != nil {
 			return result, err
 		}
