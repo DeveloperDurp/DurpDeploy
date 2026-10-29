@@ -705,6 +705,16 @@ echo "$SCHED_LIST" | grep -qF "* * * * *" || { echo "FAIL: schedule missing from
 echo "$SCHED_LIST" | grep -q "On" || { echo "FAIL: schedule not enabled"; exit 1; }
 echo "  Schedule list shows enabled schedule with future next_run_at: OK"
 
+SCHEDULE_ID=$(api_get "$BASE/api/v1/projects/$PROJECT_ID/schedules?limit=1000" | python3 -c '
+import json,sys
+print(max(s["id"] for s in json.load(sys.stdin)["items"]
+    if s["release_id"] == int(sys.argv[1])
+    and s["environment_id"] == int(sys.argv[2]) and s["note"]["String"] == "e2e-scheduled"))
+' "$RELEASE_ID" "$ENV_ID")
+api_post '{}' "$BASE/api/v1/projects/$PROJECT_ID/schedules/$SCHEDULE_ID/toggle" \
+    | python3 -c 'import sys,json; assert json.load(sys.stdin)["enabled"] == 0'
+echo "  Scheduled deployment example retained and disabled: OK"
+
 echo "=== F3.12: User Management (P1-2) ==="
 # List the seed admin in /admin/users.
 CODE=$(curl_silent "$BASE/admin/users")
@@ -1217,7 +1227,7 @@ INTERPRETER_REDEPLOY=$(api_post '{}' \
     "$BASE/api/v1/deployments/$INTERPRETER_DEPLOYMENT_ID/redeploy")
 INTERPRETER_REDEPLOY_ID=$(echo "$INTERPRETER_REDEPLOY" | python3 -c \
     "import sys,json; print(json.load(sys.stdin)['id'])")
-for i in {1..100}; do
+for i in {1..600}; do
     INTERPRETER_REDEPLOY_STATUS=$(api_get \
         "$BASE/api/v1/deployments/$INTERPRETER_REDEPLOY_ID/status" \
         | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")

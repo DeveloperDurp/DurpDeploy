@@ -223,11 +223,7 @@ func (r *DeploymentRunner) verifyBash(
 		&step.VariableNames); err != nil {
 		return fmt.Errorf("load verification variables: %w", err)
 	}
-	recorded, err := r.repo.Queries.RecordContainerNamespace(ctx,
-		db.RecordContainerNamespaceParams{
-			DeploymentID: deploymentID,
-			Namespace:    sql.NullString{String: r.engine.scope(), Valid: true},
-		})
+	recorded, err := r.recordContainerNamespace(ctx, deploymentID)
 	if err != nil {
 		return fmt.Errorf("record verification container namespace: %w", err)
 	}

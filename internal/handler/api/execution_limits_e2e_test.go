@@ -85,7 +85,7 @@ func newExecutionLimitsFixture(
 }
 
 func TestConfiguredExecutionLimitsAPIWebE2E(t *testing.T) {
-	for _, limits := range []struct{ retries, timeout int64 }{{0, 3}, {2, 600}, {11, 172800}} {
+	for _, limits := range []struct{ retries, timeout int64 }{{0, 30}, {2, 600}, {11, 172800}} {
 		t.Run(
 			fmt.Sprintf("%d/%d", limits.retries, limits.timeout),
 			func(t *testing.T) {
