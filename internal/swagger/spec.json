@@ -1149,6 +1149,7 @@
         ]
       },
       "put": {
+        "description": "An omitted or empty Gotify token is retained only for an unchanged Gotify URL.\nChanging or removing the URL clears the token unless a replacement is supplied.\nExplicit credential clear flags take precedence over replacements.",
         "consumes": [
           "application/json"
         ],
@@ -1158,6 +1159,7 @@
         "tags": [
           "admin"
         ],
+        "summary": "Update global notification settings.",
         "operationId": "updateNotificationSettings",
         "responses": {
           "200": {
@@ -4216,6 +4218,7 @@
     },
     "/lifecycles/{id}/stages/reorder": {
       "post": {
+        "description": "Only order changes. Stage environments and approval requirements are preserved.",
         "consumes": [
           "application/json"
         ],
@@ -4270,6 +4273,12 @@
             "description": "Forbidden error response.",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
             }
           },
           "413": {
@@ -6228,6 +6237,7 @@
         ]
       },
       "put": {
+        "description": "An omitted or empty Gotify token is retained only for an unchanged Gotify URL.\nChanging or removing the URL clears the token unless a replacement is supplied.\nExplicit credential clear flags take precedence over replacements.",
         "consumes": [
           "application/json"
         ],
@@ -12215,6 +12225,7 @@
           "x-go-name": "DiscordWebhookURL"
         },
         "gotify_token": {
+          "description": "Empty tokens are retained only when gotify_url is unchanged.\nChanging or removing the URL clears the saved token unless a replacement is supplied.",
           "type": "string",
           "x-go-name": "GotifyToken"
         },
@@ -13399,6 +13410,7 @@
           "x-go-name": "DiscordWebhookURL"
         },
         "gotify_token": {
+          "description": "Empty tokens are retained only when gotify_url is unchanged.\nChanging or removing the URL clears the saved token unless a replacement is supplied.",
           "type": "string",
           "x-go-name": "GotifyToken"
         },
