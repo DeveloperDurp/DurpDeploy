@@ -40,6 +40,10 @@ func TestSecurity_TOTPEnrollmentRendersRecoveryCodesAfterOneSubmission(
 	if len(manualKey) != 2 {
 		t.Fatal("TOTP enrollment did not display a one-time manual key")
 	}
+	const qrPrefix = `src="data:image/png;base64,`
+	if !strings.Contains(begin.Body.String(), qrPrefix) {
+		t.Fatal("TOTP enrollment did not render an inline PNG QR code")
+	}
 	if countSecurityRows(
 		t,
 		h,

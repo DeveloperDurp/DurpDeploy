@@ -105,7 +105,7 @@ templ TOTPEnrollmentPage(currentPath, csrf, token, challengeCSRF, manualKey, qrB
 					<div class="card-body space-y-4">
 						<h1 class="card-title text-2xl font-bold">Set up authenticator</h1>
 						<p class="text-sm opacity-70">Scan this code or enter the key in your authenticator app. It is shown only once.</p>
-						<img src={ "data:image/png;base64," + qrBase64 } alt="Authenticator setup QR code" width="200" height="200" class="mx-auto"/>
+						<img src={ templ.SafeURL("data:image/png;base64," + qrBase64) } alt="Authenticator setup QR code" width="200" height="200" class="mx-auto"/>
 						<code id="totp-manual-key" class="block bg-base-300 p-2 rounded break-all select-all">{ manualKey }</code>
 						if errorMsg != "" {
 							<div class="alert alert-error" role="alert"><span>{ errorMsg }</span></div>

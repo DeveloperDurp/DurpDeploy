@@ -171,6 +171,14 @@ async function enrollTOTP(page, url) {
 	await reauthenticate(page, url);
 	await page.getByRole("button", { name: "Set up authenticator" }).click();
 	await page.getByRole("heading", { name: "Set up authenticator" }).waitFor();
+	check(await page.getByAltText("Authenticator setup QR code").evaluate(async (image) => {
+		try {
+			await image.decode();
+			return image.naturalWidth > 0 && image.naturalHeight > 0;
+		} catch {
+			return false;
+		}
+	}), "TOTP enrollment QR code did not load");
 	const seed = (await page.locator("#totp-manual-key").textContent())?.trim();
 	check(seed, "TOTP enrollment did not show a manual key");
 	await page.locator("#totp-confirm-code").fill(totpCode(seed));
