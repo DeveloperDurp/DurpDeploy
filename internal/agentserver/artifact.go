@@ -55,16 +55,19 @@ func (s *Server) Artifact(w http.ResponseWriter, r *http.Request) {
 			ClaimTokenHash: claim.ClaimTokenHash,
 		},
 	)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
+		w.WriteHeader(http.StatusConflict)
+		return
+	}
+	if err != nil {
 		w.WriteHeader(500)
 		return
 	}
-	if err == nil {
-		finish := s.repository.BeginStagingTransfer(db.GetStagingSnapshotParams{
-			DeploymentID: id, StepIndex: run.StepIndex, Producer: run.AgentID,
-		})
-		defer finish()
+	finish, ok := s.admitStagingTransfer(w, r, run)
+	if !ok {
+		return
 	}
+	defer finish()
 	stream, err := newStagingIO(w, r, time.Duration(
 		s.repository.ResourceLimits().Transfer.IdleTimeoutSeconds,
 	)*time.Second)
