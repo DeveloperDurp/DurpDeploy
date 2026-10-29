@@ -238,7 +238,7 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 
 // UpdateProjectNotifications saves the project's Slack webhook URL,
 // comma-separated notify_emails list, Gotify server URL/token, and/or
-// Discord webhook URL. Blank credentials preserve their stored values.
+// Discord webhook URL. Blank Gotify tokens require an unchanged destination.
 // Explicit clear flags remove credentials. URLs are validated so deploy events
 // cannot make server-side POSTs to local or private-network services.
 func (h *ProjectHandler) UpdateProjectNotifications(
@@ -266,7 +266,7 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 		return
 	}
 
-	err = h.repo.Queries.UpdateProjectNotifications(
+	err = h.repo.UpdateProjectNotifications(
 		r.Context(),
 		db.UpdateProjectNotificationsParams{
 			ClearSlackWebhookUrl: notificationClearFlag(
@@ -301,6 +301,10 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 			ID: id,
 		},
 	)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.NotFound(w, r)
+		return
+	}
 	if err != nil {
 		http.Error(
 			w,
