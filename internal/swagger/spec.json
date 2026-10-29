@@ -4216,6 +4216,7 @@
     },
     "/lifecycles/{id}/stages/reorder": {
       "post": {
+        "description": "Only order changes. Stage environments and approval requirements are preserved.",
         "consumes": [
           "application/json"
         ],
@@ -4270,6 +4271,12 @@
             "description": "Forbidden error response.",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
             }
           },
           "413": {

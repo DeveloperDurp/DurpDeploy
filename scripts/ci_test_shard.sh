@@ -14,6 +14,10 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestProxyBodyAPIWebE2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestConfigured(RequestBody(APIWeb|Isolation)|PasswordCompatibility|ArtifactTimeoutsAPIWeb|ArtifactDownload(APIWeb|RemoteAPI)|ArtifactSafety(APIWeb|RemoteAPI))E2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^Test(UserUpdateAtomic|RoleChangeRevocation|ReleaseCaptureConsistent|LifecycleStageOrder)APIWebE2E$' ./internal/handler
+    bash scripts/run_named_go_tests.sh --race --tags e2e --timeout 5m \
+      --packages ./internal/handler/api \
+      --tests 'TestLifecycleReorderApprovalAPIWebE2E|TestLifecycleReorderAccessAPIWebE2E' \
+      --require 'TestLifecycleReorderApprovalAPIWebE2E|TestLifecycleReorderAccessAPIWebE2E'
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestLocalAdministrationAPIWebE2E$' ./internal/handler
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=3m -run '^Test(PermissionGuidance(Deployment)?|UsersPhone|UsersDefaultRole|UsersFormAccessibility)APIWebE2E$' ./internal/handler/api
     (

@@ -869,6 +869,8 @@ Enforced identically on web and API (source: `internal/gate/gate.go`):
   A conflicting stage update also returns `409` and identifies `environment_id` or `sort_order`.
   Use `POST /api/v1/lifecycles/{id}/stages/reorder` with every stage ID in `stage_ids`.
   Reordering assigns consecutive positions from one in the requested sequence.
+  Reordering preserves each stage's environment and approval requirement.
+  A missing lifecycle returns `404`. Invalid stage permutations return `400` without a stage change.
 - **Cross-project release**: deploying a release id under the wrong
   project → `400`.
 

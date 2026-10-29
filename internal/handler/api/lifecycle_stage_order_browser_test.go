@@ -17,7 +17,9 @@ func TestLifecycleStageOrderBrowserE2E(t *testing.T) {
 		map[string]string{"name": "Stage order browser"}, 201), &lifecycle)
 	api := fmt.Sprintf("/api/v1/lifecycles/%d", lifecycle.ID)
 	f.api(t, "POST", api+"/stages", map[string]any{
-		"environment_id": f.environment.ID, "sort_order": 10, "requires_approval": true,
+		"environment_id":    f.environment.ID,
+		"sort_order":        10,
+		"requires_approval": true,
 	}, 201)
 	var next, stale struct{ ID int64 }
 	for name, target := range map[string]*struct{ ID int64 }{
@@ -80,5 +82,31 @@ func TestLifecycleStageOrderBrowserE2E(t *testing.T) {
 		t.Fatal("web conflict discarded the lifecycle workspace")
 	}
 	b.navigateBackTest(t, f.baseURL+path)
+	before = stages()
+	for _, direction := range []string{"down", "up"} {
+		b.evaluate(t, fmt.Sprintf(`(() => {
+const form = [...document.querySelectorAll('form[action$="/stages/reorder"]')]
+ .find(f => f.querySelector('[name=stage_id]').value === %q &&
+ f.querySelector('[name=direction]').value === %q);
+form.querySelector('button').click(); return true;
+})()`, fmt.Sprint(before[0].ID), direction))
+		firstID := before[1].ID
+		if direction == "up" {
+			firstID = before[0].ID
+		}
+		b.wait(t, fmt.Sprintf(
+			`document.querySelector('form[action$="/stages/reorder"] [name=stage_id]').value === %q && !document.querySelector('.htmx-request,.htmx-settling')`,
+			fmt.Sprint(firstID),
+		))
+		want := slices.Clone(before)
+		if direction == "down" {
+			want[0], want[1] = want[1], want[0]
+			want[0].SortOrder, want[1].SortOrder = before[0].SortOrder, before[1].SortOrder
+		}
+		if !slices.Equal(want, stages()) {
+			t.Fatal("rendered move control changed stage metadata")
+		}
+		b.captureNavigation(t, "lifecycle-stage-order-"+direction)
+	}
 	b.captureNavigation(t, "lifecycle-stage-order-recovery")
 }

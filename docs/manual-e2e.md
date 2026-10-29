@@ -2227,16 +2227,50 @@ Reload the page to see the committed stage.
 
 Call `POST /api/v1/lifecycles/{id}/stages/reorder` with every stage ID in `stage_ids`.
 Expect consecutive positions from one in the requested sequence.
+Expect each stage to keep its environment and approval requirement.
+Expect `404` when the lifecycle does not exist.
+
+Enable approval for one stage and disable approval for its neighbor.
+Record their IDs, environments, positions, and approval requirements through `GET /api/v1/lifecycles/{id}`.
+Use the browser move controls in both directions.
+Expect only the two positions to swap, including gaps.
+Repeat the API reorder and compare every field except `sort_order`.
+Submit incomplete, duplicate, and foreign stage IDs.
+Expect `400` without a stage change.
+
+Move the protected stage first to make it eligible for execution.
+As a Deployer, launch a release through `POST /api/v1/projects/{id}/deployments`.
+Expect `pending_approval`.
+As a Maintainer, launch a runbook through `POST /api/v1/projects/{id}/runbooks/{runbookId}/executions`.
+Expect `pending_approval` in the execution details.
+As an administrator, approve each execution and confirm success.
+Repeat these execution checks after the API reorder.
 Keep all schedules disabled during these checks.
 
 Run the isolated backend and browser checks:
 
 ```bash
 bash scripts/go_test.sh -tags=e2e -race -count=1 -run '^TestLifecycleStageOrderAPIWebE2E$' ./internal/handler
+bash scripts/go_test.sh -race -count=1 -run '^TestLifecycleReorder' ./internal/repository
+bash scripts/go_test.sh -tags=e2e -race -count=1 -run '^TestLifecycleReorder(Approval|Access)APIWebE2E$' ./internal/handler/api
 bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestLifecycleStageOrderBrowserE2E$' ./internal/handler/api
 ```
 
-The backend checks run concurrent API and web appends on SQLite, PostgreSQL, and SQL Server.
+The backend checks cover reorder and append concurrency on SQLite, PostgreSQL, and SQL Server.
+The rollback checks inject failures after temporary positions are written.
+
+Retained #167 examples use [this lifecycle](https://durpdeploy-dev-828746a5d4d124bc2fbbc446.localhost:44567/lifecycles/2).
+Inspect the [browser reorder project](https://durpdeploy-dev-828746a5d4d124bc2fbbc446.localhost:44567/projects/1) and [API reorder project](https://durpdeploy-dev-828746a5d4d124bc2fbbc446.localhost:44567/projects/2).
+Both projects retain successful deployments and runbook executions after administrator approval.
+Use `admin@durp.info` with password `password` on this isolated fixture.
+Read `/home/user/.local/state/durpdeploy/security-167-retained/connection.json` for connection details.
+Read its `qa/actions.json` and screenshots for the request and browser evidence.
+
+Stop the retained fixture when manual checks are complete:
+
+```bash
+make dev-stack ACTION=down STATE=/home/user/.local/state/durpdeploy/security-167-retained
+```
 
 ## Configured container process and thread limits
 

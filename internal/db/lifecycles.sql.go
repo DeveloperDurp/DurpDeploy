@@ -370,3 +370,21 @@ func (q *Queries) UpdateLifecycleStage(ctx context.Context, arg UpdateLifecycleS
 	)
 	return i, err
 }
+
+const updateLifecycleStageOrder = `-- name: UpdateLifecycleStageOrder :execrows
+UPDATE lifecycle_stages SET sort_order = ? WHERE id = ? AND lifecycle_id = ?
+`
+
+type UpdateLifecycleStageOrderParams struct {
+	SortOrder   int64 `json:"sort_order"`
+	ID          int64 `json:"id"`
+	LifecycleID int64 `json:"lifecycle_id"`
+}
+
+func (q *Queries) UpdateLifecycleStageOrder(ctx context.Context, arg UpdateLifecycleStageOrderParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateLifecycleStageOrder, arg.SortOrder, arg.ID, arg.LifecycleID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}

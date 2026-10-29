@@ -42,6 +42,9 @@ INSERT INTO lifecycle_stages (lifecycle_id, environment_id, sort_order, requires
 -- name: UpdateLifecycleStage :one
 UPDATE lifecycle_stages SET environment_id = ?, sort_order = ?, requires_approval = ? WHERE id = ? RETURNING *;
 
+-- name: UpdateLifecycleStageOrder :execrows
+UPDATE lifecycle_stages SET sort_order = ? WHERE id = ? AND lifecycle_id = ?;
+
 -- name: DeleteLifecycleStage :exec
 DELETE FROM lifecycle_stages WHERE id = ?;
 
