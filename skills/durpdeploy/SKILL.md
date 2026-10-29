@@ -110,8 +110,8 @@ DurpDeploy is a single-binary deployment tool that runs ordered script steps
 against environments. It exposes three surfaces an agent may use:
 
 - **JSON API** at `/api/v1/*` — bearer-token auth, no CSRF. **Prefer this.**
-- **Web UI routes** (`/login`, `/projects`, …) — session cookie + CSRF token,
-  HTML form semantics, redirect status codes.
+- **Web UI routes** (`/login`, `/projects`, …) — browser forms, session cookies,
+  authenticated-write CSRF tokens, and redirect status codes.
 - **CLI subcommands** on the `durpdeploy` binary (user/token admin).
 
 The endpoint reference is the Swagger UI at `/api/swagger/`
@@ -367,6 +367,16 @@ External and invalid destinations fall back to `/`.
 Failed password login returns `422`, retains the email, and leaves the password empty.
 Direct `/login` requests start without a saved destination.
 
+Submit browser password forms from the same origin.
+When the origin check rejects a request, login returns `403` before authentication or session creation.
+Body validation can return `400` before the origin check.
+Password login uses Fetch Metadata first, then compares the parsed `Origin` host with the request `Host`.
+The fallback includes ports but does not compare schemes or enforce strict Origin syntax.
+Clients without either header remain supported, including the curl example below.
+Browsers that omit both headers remain outside this protection.
+Preserve the public `Host`, `Origin`, and `Sec-Fetch-Site` through custom proxies.
+Public password login does not require a session CSRF token.
+
 ```bash
 curl -c /tmp/dd-cookies -X POST \
     -d "email=you@example.com&password=SECRET" "$BASE/login"    # 303 on success
@@ -380,7 +390,7 @@ Token placement rules:
 - DELETE: pass the header `X-CSRF-Token: $CSRF` — Go does not parse form
   bodies on DELETE, so a body-only token 403s.
 - Status contract: `303` = success (id or path in `Location`), `422` = validation
-  failure, `403` = invalid CSRF. Viewer application writes return `200` with an
+  failure, `403` = invalid CSRF or cross-origin password login. Viewer application writes return `200` with an
   `HX-Trigger` toast for HTMX, or a styled `403` for native requests.
 
 ## Agent fleet (admin only)
@@ -869,6 +879,8 @@ Enforced identically on web and API (source: `internal/gate/gate.go`):
   A conflicting stage update also returns `409` and identifies `environment_id` or `sort_order`.
   Use `POST /api/v1/lifecycles/{id}/stages/reorder` with every stage ID in `stage_ids`.
   Reordering assigns consecutive positions from one in the requested sequence.
+  Reordering preserves each stage's environment and approval requirement.
+  A missing lifecycle returns `404`. Invalid stage permutations return `400` without a stage change.
 - **Cross-project release**: deploying a release id under the wrong
   project → `400`.
 
@@ -1058,6 +1070,11 @@ Project and global notification credentials are write-only, including for admini
 GET and PUT responses return empty `slack_webhook_url`, `gotify_token`, and `discord_webhook_url` fields.
 The corresponding `*_configured` fields report whether stored credentials exist.
 Blank or omitted credential fields preserve stored values in PUT requests.
+Gotify tokens require an unchanged `gotify_url` after trimming surrounding URL whitespace.
+Changing or removing the URL clears the saved token unless you supply a replacement.
+An omitted, empty, or whitespace-only URL disables the destination.
+Case, port, path, escaping, query, and trailing-slash changes count as destination changes.
+Delivery skips Gotify when its URL or token is absent.
 Set `clear_slack_webhook_url`, `clear_gotify_token`, or `clear_discord_webhook_url` to `true` to clear a credential.
 Clear flags take precedence over replacements.
 The server retains credentials for delivery.
@@ -1243,7 +1260,8 @@ Archive and output-count checks precede input decryption. Entry-visit checks pre
 Restart the server after changing budgets. Create a new deployment to repeat a failed merge.
 These server-only merge settings permit remote work with unchanged shared policies.
 
-By default, the server admits four staging uploads or downloads concurrently, with one active request per authenticated agent.
+Staging uploads, staging downloads, and agent package downloads share one admission budget per server process.
+By default, the server admits four concurrent transfers, with one active request per authenticated agent.
 Operators can change these budgets with `DURPDEPLOY_LIMITS_TRANSFER_GLOBAL` and `DURPDEPLOY_LIMITS_TRANSFER_PER_AGENT` at server startup.
 Excess agent transfer requests receive HTTP `429` with `Retry-After: 1` before expensive work starts.
 The pinned agent retries these responses automatically.
@@ -1504,6 +1522,9 @@ never sends repository credentials. Its request body is limited to 4 KiB and
 does not accept a `protocol` field.
 
 Invalid packages or changed pinned bytes return `422`.
+Package downloads share the staging transfer budgets and return `429` with `Retry-After: 1` when capacity is unavailable.
+Rejected requests do not fetch packages or pause execution timing.
+An admitted request holds capacity through upstream retrieval, response completion, and temporary ZIP cleanup.
 Package transfers keep heartbeats active and pause the remote step timeout during authenticated HTTP transfer.
 By default, transfers stop after five minutes without progress.
 `DURPDEPLOY_LIMITS_TRANSFER_IDLE_TIMEOUT_SECONDS` changes the server's staging and package-transfer socket inactivity deadline.

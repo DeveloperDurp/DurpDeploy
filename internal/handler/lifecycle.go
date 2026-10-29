@@ -365,87 +365,14 @@ func (h *LifecycleHandler) ReorderStage(
 		return
 	}
 
-	stages, err := h.repo.Queries.ListLifecycleStages(r.Context(), id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	var targetIdx = -1
-	for i, s := range stages {
-		if s.ID == stageID {
-			targetIdx = i
-			break
+	if err := h.repo.MoveLifecycleStage(
+		r.Context(), id, stageID, direction == "up",
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "Stage not found", http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-	}
-	if targetIdx < 0 {
-		http.Error(w, "Stage not found", http.StatusNotFound)
-		return
-	}
-
-	swapIdx := targetIdx - 1
-	if direction == "down" {
-		swapIdx = targetIdx + 1
-	}
-	if swapIdx < 0 || swapIdx >= len(stages) {
-		http.Redirect(
-			w,
-			r,
-			"/lifecycles/"+strconv.FormatInt(id, 10),
-			http.StatusSeeOther,
-		)
-		return
-	}
-
-	tx, err := h.repo.DB.BeginTx(r.Context(), nil)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer func() {
-		repository.LogRollbackError(tx.Rollback())
-	}()
-	qtx := h.repo.Queries.WithTx(tx)
-
-	a := stages[targetIdx]
-	b := stages[swapIdx]
-	// 3-step swap via a temporary negative sort_order so the UNIQUE
-	// constraint on (lifecycle_id, sort_order) is never violated.
-	if _, err := qtx.UpdateLifecycleStage(
-		r.Context(),
-		db.UpdateLifecycleStageParams{
-			ID:            a.ID,
-			EnvironmentID: a.EnvironmentID,
-			SortOrder:     -1,
-		},
-	); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if _, err := qtx.UpdateLifecycleStage(
-		r.Context(),
-		db.UpdateLifecycleStageParams{
-			ID:            b.ID,
-			EnvironmentID: b.EnvironmentID,
-			SortOrder:     a.SortOrder,
-		},
-	); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if _, err := qtx.UpdateLifecycleStage(
-		r.Context(),
-		db.UpdateLifecycleStageParams{
-			ID:            a.ID,
-			EnvironmentID: a.EnvironmentID,
-			SortOrder:     b.SortOrder,
-		},
-	); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := tx.Commit(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
