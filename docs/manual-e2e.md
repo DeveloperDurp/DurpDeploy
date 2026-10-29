@@ -1595,6 +1595,19 @@ Delete the last entry on the last page.
 Confirm that the list shows the preceding page.
 Compare the list with `GET /api/v1/projects/{id}/schedules?limit=50&offset=50`.
 
+Create a disabled schedule with a note through **New Schedule**.
+At desktop width, select **Edit**.
+Change the cron.
+Select **Save**.
+At phone width, repeat the edit through the schedule card.
+Confirm that both edits preserve the note and keep the schedule disabled.
+
+Read `GET /api/v1/projects/{id}/schedules/{schedId}` after each edit.
+Confirm that `cron`, `note`, and `enabled` match the saved values.
+Submit an invalid cron through **New Schedule**.
+Confirm that the form preserves the release, environment, cron, note, and enabled state.
+Keep the schedule disabled after these checks.
+
 Run the schedule page browser regression:
 
 ```bash
