@@ -182,6 +182,87 @@ async function enrollTOTP(page, url) {
 	return seed;
 }
 
+async function confirmationReplacementContract(form, opener, dialog) {
+	for (let replacement = 0; replacement < 3; replacement += 1) {
+		await form.evaluate((element) => element.replaceWith(element.cloneNode(true)));
+		await dialog.evaluate((element) => element.replaceWith(element.cloneNode(true)));
+	}
+	for (const support of ["missing-constructor", "missing-showModal", "missing-dialog"]) {
+		check(await form.evaluate((element, support) => {
+			const attribute = element.getAttributeNames().find((name) => /^data-.*-dialog$/.test(name));
+			const dialog = document.getElementById(element.getAttribute(attribute));
+			const constructor = window.HTMLDialogElement;
+			const showModal = dialog.showModal;
+			if (support === "missing-constructor") window.HTMLDialogElement = undefined;
+			if (support === "missing-showModal") dialog.showModal = undefined;
+			if (support === "missing-dialog") dialog.remove();
+			try {
+				const event = new SubmitEvent("submit", { bubbles: true, cancelable: true });
+				element.dispatchEvent(event);
+				return !event.defaultPrevented;
+			} finally {
+				window.HTMLDialogElement = constructor;
+				dialog.showModal = showModal;
+				if (support === "missing-dialog") element.after(dialog);
+			}
+		}, support), `${support} blocked ordinary confirmation form submission`);
+	}
+	await opener.click();
+	await dialog.waitFor({ state: "visible" });
+	await dialog.locator("h2").click();
+	check(await dialog.evaluate((element) => element.open), "dialog content click dismissed confirmation");
+	const openerHTML = await opener.evaluate((element) => {
+		const html = element.outerHTML;
+		element.focus = () => { throw new Error("disconnected opener received focus"); };
+		element.remove();
+		return html;
+	});
+	await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+	await dialog.waitFor({ state: "hidden" });
+	await form.evaluate((element, html) => element.insertAdjacentHTML("beforeend", html), openerHTML);
+}
+
+async function noJSConfirmationContract(page, prefix, dialogID) {
+	const context = await page.context().browser().newContext({ javaScriptEnabled: false });
+	try {
+		await context.addCookies(await page.context().cookies());
+		const fallbackPage = await context.newPage();
+		await fallbackPage.goto(page.url());
+		const form = fallbackPage.locator(`form[data-${prefix}-dialog="${dialogID}"]`);
+		const expected = await form.evaluate((element) => ({
+			action: element.action,
+			fields: new URLSearchParams(new FormData(element)).toString(),
+		}));
+		check(new URLSearchParams(expected.fields).get("csrf_token"), "no-JS confirmation lacks CSRF protection");
+		let posts = 0;
+		// Capture the browser contract without consuming the factors needed by the real confirmation below.
+		await fallbackPage.route(expected.action, async (route) => {
+			check(route.request().method() === "POST", "no-JS confirmation did not POST");
+			check(route.request().postData() === expected.fields, "no-JS confirmation changed form fields");
+			posts += 1;
+			await route.fulfill({ status: 204 });
+		});
+		await Promise.all([
+			fallbackPage.waitForResponse(expected.action),
+			form.locator('button[type="submit"]').evaluate((button) => button.click()),
+		]);
+		check(posts === 1, "no-JS confirmation did not submit exactly once");
+	} finally {
+		await context.close();
+	}
+}
+
+async function repeatConfirmation(button) {
+	await button.evaluate((element) => {
+		const form = element.form;
+		for (let click = 0; click < 3; click += 1) {
+			element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+		}
+		form.requestSubmit();
+		form.requestSubmit();
+	});
+}
+
 async function passkeyDeleteConfirmationContract(page, url, token, artifactDir) {
 	await reauthenticate(page, url);
 	await page.goto(`${url}/settings/security`);
@@ -201,6 +282,8 @@ async function passkeyDeleteConfirmationContract(page, url, token, artifactDir) 
 	};
 	page.on("request", countDeletePost);
 	try {
+		await noJSConfirmationContract(page, "passkey-delete", dialogID);
+		await confirmationReplacementContract(form, opener, dialog);
 		for (const [width, dismiss] of [
 			[375, async () => dialog.getByRole("button", { name: "Cancel", exact: true }).press("Escape")],
 			[768, async () => dialog.getByRole("button", { name: "Cancel", exact: true }).click()],
@@ -212,6 +295,7 @@ async function passkeyDeleteConfirmationContract(page, url, token, artifactDir) 
 			});
 			await opener.click();
 			await dialog.waitFor({ state: "visible" });
+			await dialog.evaluate((element) => Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished)));
 			await page.screenshot({ path: join(artifactDir, `passkey-delete-dialog-${width}.png`) });
 			await dialog.getByRole("button", { name: "Cancel", exact: true }).focus();
 			await dismiss();
@@ -231,9 +315,10 @@ async function passkeyDeleteConfirmationContract(page, url, token, artifactDir) 
 				new URL(response.url()).pathname === "/settings/security/passkeys/delete",
 			),
 			page.waitForURL(`${url}/settings/security`),
-			dialog.getByRole("button", { name: "Confirm delete" }).click(),
+			repeatConfirmation(dialog.getByRole("button", { name: "Confirm delete" })),
 		]);
 		check(posts === 1, "passkey delete confirm did not submit exactly once");
+		check(await form.count() === 0, "confirmed passkey deletion retained the credential");
 		await page.goto(`${url}/`);
 		check(new URL(page.url()).pathname === "/", "passkey deletion ended the current browser session");
 		const tokenResponse = await fetch(`${url}/api/v1/users/me`, {
@@ -263,6 +348,8 @@ async function securityDisableConfirmationContract(page, url, token, artifactDir
 	};
 	page.on("request", countDisablePost);
 	try {
+		await noJSConfirmationContract(page, "security-disable", dialogID);
+		await confirmationReplacementContract(form, opener, dialog);
 		for (const [width, dismiss] of [
 			[375, async () => dialog.getByRole("button", { name: "Cancel", exact: true }).press("Escape")],
 			[768, async () => dialog.getByRole("button", { name: "Cancel", exact: true }).click()],
@@ -271,6 +358,7 @@ async function securityDisableConfirmationContract(page, url, token, artifactDir
 			await page.setViewportSize({ height: 900, width });
 			await opener.click();
 			await dialog.waitFor({ state: "visible" });
+			await dialog.evaluate((element) => Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished)));
 			await page.screenshot({ path: join(artifactDir, `security-disable-dialog-${width}.png`) });
 			await dialog.getByRole("button", { name: "Cancel", exact: true }).focus();
 			await dismiss();
@@ -290,7 +378,7 @@ async function securityDisableConfirmationContract(page, url, token, artifactDir
 				new URL(response.url()).pathname === "/settings/security/disable",
 			),
 			page.waitForURL(`${url}/login`),
-			dialog.getByRole("button", { name: "Confirm disable" }).click(),
+			repeatConfirmation(dialog.getByRole("button", { name: "Confirm disable" })),
 		]);
 		check(posts === 1, "security disable confirm did not submit exactly once");
 		const tokenResponse = await fetch(`${url}/api/v1/users/me`, {
@@ -645,7 +733,7 @@ async function run() {
 		await adminPage.getByRole("button", { name: "Continue" }).click();
 		await adminPage.goto(`${app.url}/admin/users`);
 		const deployerResetForm = adminPage.locator(
-			`form[action="/admin/users/${deployer.id}/mfa-reset"]`,
+			`form[data-mfa-reset-dialog][action="/admin/users/${deployer.id}/mfa-reset"]`,
 		);
 		const deployerResetOpener = deployerResetForm.getByRole("button", {
 			name: "Reset MFA",
@@ -696,20 +784,25 @@ async function run() {
 			"viewer MFA reset Escape did not restore opener focus",
 		);
 		check(viewerResetPosts === 0, "viewer MFA reset Escape submitted a request");
-		for (const dismiss of [
-			async () =>
+		await noJSConfirmationContract(adminPage, "mfa-reset", `mfa-reset-dialog-${deployer.id}`);
+		await confirmationReplacementContract(deployerResetForm, deployerResetOpener, deployerResetDialog);
+		for (const [width, dismiss] of [
+			[375, async () =>
 				deployerResetDialog
 					.getByRole("button", { name: "Cancel", exact: true })
-					.press("Escape"),
-			async () =>
+					.press("Escape")],
+			[768, async () =>
 				deployerResetDialog
 					.getByRole("button", { name: "Cancel", exact: true })
-					.click(),
-			async () =>
-				deployerResetDialog.click({ position: { x: 1, y: 1 } }),
+					.click()],
+			[1280, async () =>
+				deployerResetDialog.click({ position: { x: 1, y: 1 } })],
 		]) {
+			await adminPage.setViewportSize({ height: 900, width });
 			await deployerResetOpener.click();
 			await deployerResetDialog.waitFor({ state: "visible" });
+			await deployerResetDialog.evaluate((element) => Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished)));
+			await adminPage.screenshot({ path: join(artifactDir, `mfa-reset-dialog-${width}.png`) });
 				await deployerResetDialog
 					.getByRole("button", { name: "Cancel", exact: true })
 					.focus();
@@ -735,9 +828,7 @@ async function run() {
 					new URL(response.url()).pathname ===
 						`/admin/users/${deployer.id}/mfa-reset`,
 			),
-			deployerResetDialog
-				.getByRole("button", { name: "Confirm reset" })
-				.click(),
+			repeatConfirmation(deployerResetDialog.getByRole("button", { name: "Confirm reset" })),
 		]);
 		check(deployerResetPosts === 1, "MFA reset confirm did not submit exactly once");
 		await deployerPage.goto(`${app.url}/`);
@@ -788,6 +879,7 @@ async function run() {
 				"three dynamic registration replacements with one ceremony",
 				"three dynamic assertion replacements with a nested click target and one ceremony",
 				"dynamic confirmation dialog replacement and cancellation",
+				"all security confirmations: replaced forms/dialogs, disconnected openers, unsupported dialog fallback, no-JS form fields, repeated confirmation",
 				"passkey lifecycle",
 				"role navigation",
 				"admin reset bearer survival",

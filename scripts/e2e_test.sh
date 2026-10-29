@@ -147,7 +147,7 @@ echo "  CSRF gate: OK"
 echo "=== F3.1: Happy Path ==="
 CODE=$(curl_silent -X POST -d "name=TestProject&csrf_token=$CSRF" "$BASE/projects")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create project got $CODE"; exit 1; }
-PROJECT_ID=$(curl_body "$BASE/projects" | grep -oP 'href="/projects/\K[0-9]+' | sed -n '1p')
+PROJECT_ID=$(api_item_id_by_name "$BASE/api/v1/projects" "TestProject")
 echo "Project ID: $PROJECT_ID"
 
 CODE=$(curl_silent -X POST -d "name=TestEnv&csrf_token=$CSRF" "$BASE/environments")
