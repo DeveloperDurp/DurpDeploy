@@ -84,8 +84,14 @@ func newStageOrderFixture(t *testing.T, backend string) *stageOrderFixture {
 	token := seedAPIToken(t, &authHarness{repo: repo}, h.sess.user.ID)
 	f := &stageOrderFixture{h: h, token: token}
 	var lifecycle struct{ ID int64 }
-	if err := json.Unmarshal(f.send(f.request("POST", "/api/v1/lifecycles",
-		map[string]any{"name": "Stage ordering"}, false), 201), &lifecycle); err != nil {
+	if err := json.Unmarshal(f.send(f.request(
+		"POST",
+		"/api/v1/lifecycles",
+		map[string]any{
+			"name": "Stage ordering",
+		},
+		false,
+	), 201), &lifecycle); err != nil {
 		t.Fatal(err)
 	}
 	f.id = lifecycle.ID
@@ -143,7 +149,10 @@ func (f *stageOrderFixture) stages() []db.LifecycleStage {
 	t := f.h.t
 	t.Helper()
 	var saved struct{ Stages []db.LifecycleStage }
-	if err := json.Unmarshal(f.send(f.request("GET", f.api, nil, false), 200), &saved); err != nil {
+	if err := json.Unmarshal(
+		f.send(f.request("GET", f.api, nil, false), 200),
+		&saved,
+	); err != nil {
 		t.Fatal(err)
 	}
 	return saved.Stages
@@ -164,7 +173,10 @@ func (f *stageOrderFixture) add(
 		data["sort_order"] = *position
 	}
 	var stage db.LifecycleStage
-	if err := json.Unmarshal(f.send(f.request("POST", f.api+"/stages", data, false), 201), &stage); err != nil {
+	if err := json.Unmarshal(
+		f.send(f.request("POST", f.api+"/stages", data, false), 201),
+		&stage,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if stage.RequiresApproval != 1 {
@@ -187,7 +199,10 @@ func (f *stageOrderFixture) checkPositions() {
 		{"zero", orderPosition(0), 11},
 		{"negative", orderPosition(-3), 12},
 	} {
-		if stage := f.add(input.name, input.position); stage.SortOrder != input.want {
+		if stage := f.add(
+			input.name,
+			input.position,
+		); stage.SortOrder != input.want {
 			t.Fatalf(
 				"%s: position=%d, want %d",
 				input.name,
@@ -230,7 +245,10 @@ func (f *stageOrderFixture) checkConflicts(environmentID int64) {
 		{map[string]any{"environment_id": environmentID, "sort_order": 5}, "sort_order"},
 		{map[string]any{"environment_id": before[0].EnvironmentID, "sort_order": 20}, "environment_id"},
 	} {
-		if body := f.send(f.request("POST", f.api+"/stages", conflict.data, false), 409); !strings.Contains(
+		if body := f.send(
+			f.request("POST", f.api+"/stages", conflict.data, false),
+			409,
+		); !strings.Contains(
 			string(body),
 			conflict.field,
 		) {
@@ -338,6 +356,26 @@ func (f *stageOrderFixture) checkReorder() {
 	t := f.h.t
 	t.Helper()
 	before := f.stages()
+	// Move a protected stage across an unprotected stage in both directions.
+	for i := 0; i+1 < len(before); i++ {
+		f.send(f.request("POST", f.path+"/stages/reorder", map[string]any{
+			"stage_id": before[i].ID, "direction": "down",
+		}, true), 303)
+		want := slices.Clone(before)
+		want[i], want[i+1] = want[i+1], want[i]
+		want[i].SortOrder, want[i+1].SortOrder =
+			before[i].SortOrder, before[i+1].SortOrder
+		if !slices.Equal(want, f.stages()) {
+			t.Fatal("browser move changed fields other than stage order")
+		}
+		f.send(f.request("POST", f.path+"/stages/reorder", map[string]any{
+			"stage_id": before[i].ID, "direction": "up",
+		}, true), 303)
+		if !slices.Equal(before, f.stages()) {
+			t.Fatal("browser reverse move did not restore the original stages")
+		}
+	}
+	f.checkReorderValidation(before)
 	ids := make([]int64, len(before))
 	for i := range before {
 		ids[i] = before[len(before)-1-i].ID
@@ -345,11 +383,100 @@ func (f *stageOrderFixture) checkReorder() {
 	f.send(f.request("POST", f.api+"/stages/reorder",
 		map[string]any{"stage_ids": ids}, false), 200)
 	for i, stage := range f.stages() {
-		if stage.ID != ids[i] || stage.SortOrder != int64(i+1) {
+		want := before[len(before)-1-i]
+		want.SortOrder = int64(i + 1)
+		if stage != want {
 			t.Fatal(
-				"API reorder did not assign consecutive requested positions",
+				"API reorder changed metadata or requested positions",
 			)
 		}
+	}
+}
+
+func (f *stageOrderFixture) checkReorderValidation(before []db.LifecycleStage) {
+	t := f.h.t
+	t.Helper()
+	for _, move := range []struct {
+		id        int64
+		direction string
+		status    int
+	}{
+		{before[0].ID, "up", 303},
+		{before[len(before)-1].ID, "down", 303},
+		{math.MaxInt64, "up", 404},
+		{before[0].ID, "sideways", 400},
+	} {
+		f.send(f.request("POST", f.path+"/stages/reorder", map[string]any{
+			"stage_id": move.id, "direction": move.direction,
+		}, true), move.status)
+	}
+	var foreign struct{ ID int64 }
+	if err := json.Unmarshal(f.send(f.request(
+		"POST",
+		"/api/v1/lifecycles",
+		map[string]any{
+			"name": "Foreign reorder",
+		},
+		false,
+	), 201), &foreign); err != nil {
+		t.Fatal(err)
+	}
+	foreignAPI := fmt.Sprintf("/api/v1/lifecycles/%d/stages", foreign.ID)
+	var empty []db.LifecycleStage
+	body := f.send(f.request(
+		"POST",
+		foreignAPI+"/reorder",
+		map[string]any{
+			"stage_ids": []int64{},
+		},
+		false,
+	), 200)
+	if err := json.Unmarshal(body, &empty); err != nil || len(empty) != 0 {
+		t.Fatalf("empty lifecycle reorder: %s, %v", body, err)
+	}
+	var foreignStage db.LifecycleStage
+	if err := json.Unmarshal(f.send(f.request(
+		"POST",
+		foreignAPI,
+		map[string]any{
+			"environment_id": before[0].EnvironmentID,
+		},
+		false,
+	), 201), &foreignStage); err != nil {
+		t.Fatal(err)
+	}
+	f.send(f.request("POST", f.path+"/stages/reorder", map[string]any{
+		"stage_id": foreignStage.ID, "direction": "up",
+	}, true), 404)
+	ids := make([]int64, len(before))
+	for i, stage := range before {
+		ids[i] = stage.ID
+	}
+	for _, invalid := range []struct {
+		ids     []int64
+		message string
+	}{
+		{ids[:len(ids)-1], "stage_ids must include every stage exactly once"},
+		{append(slices.Clone(ids[:len(ids)-1]), ids[0]), "stage_ids contains duplicates"},
+		{append(slices.Clone(ids[:len(ids)-1]), foreignStage.ID), "stage_ids contains an unknown stage"},
+	} {
+		body := f.send(f.request("POST", f.api+"/stages/reorder",
+			map[string]any{"stage_ids": invalid.ids}, false), 400)
+		if !strings.Contains(string(body), invalid.message) {
+			t.Fatalf("invalid permutation response: %s", body)
+		}
+	}
+	missing := fmt.Sprintf(
+		"/lifecycles/%d/stages/reorder",
+		int64(math.MaxInt64),
+	)
+	f.send(f.request("POST", "/api/v1"+missing,
+		map[string]any{"stage_ids": []int64{}}, false), 404)
+	f.send(f.request("POST", missing, map[string]any{
+		"stage_id": before[0].ID, "direction": "up",
+	}, true), 404)
+	if !slices.Equal(before, f.stages()) {
+		t.Fatal("invalid reorder or boundary move changed stages")
 	}
 }
 

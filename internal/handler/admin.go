@@ -107,7 +107,7 @@ func (h *AdminHandler) GetNotificationSettings(
 
 // UpdateNotificationSettings saves the global Slack webhook URL,
 // comma-separated notify_emails list, Gotify server URL/token, and/or
-// Discord webhook URL. Blank credentials preserve their stored values.
+// Discord webhook URL. Blank Gotify tokens require an unchanged destination.
 // Explicit clear flags remove credentials.
 func (h *AdminHandler) UpdateNotificationSettings(
 	w http.ResponseWriter,
@@ -128,7 +128,7 @@ func (h *AdminHandler) UpdateNotificationSettings(
 		return
 	}
 
-	_, err := h.repo.Queries.UpdateGlobalNotifications(
+	_, err := h.repo.UpdateGlobalNotifications(
 		r.Context(),
 		db.UpdateGlobalNotificationsParams{
 			ClearSlackWebhookUrl: notificationClearFlag(

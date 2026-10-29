@@ -309,7 +309,7 @@ UPDATE projects SET
     slack_webhook_url = CASE WHEN CAST(?1 AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(?2 AS TEXT), ''), slack_webhook_url) END,
     notify_emails = ?3,
     gotify_url = ?4,
-    gotify_token = CASE WHEN CAST(?5 AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(?6 AS TEXT), ''), gotify_token) END,
+    gotify_token = CASE WHEN CAST(?5 AS INTEGER) = 1 THEN NULL ELSE COALESCE(CAST(?6 AS TEXT), gotify_token) END,
     discord_webhook_url = CASE WHEN CAST(?7 AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(?8 AS TEXT), ''), discord_webhook_url) END
 WHERE id = ?9
 `
