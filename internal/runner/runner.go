@@ -416,11 +416,7 @@ func (r *DeploymentRunner) Run(
 		}
 
 		var lastErr error
-		namespace := sql.NullString{String: r.engine.scope(), Valid: true}
-		recorded, err := r.repo.Queries.RecordContainerNamespace(ctx,
-			db.RecordContainerNamespaceParams{
-				DeploymentID: deploymentID, Namespace: namespace,
-			})
+		recorded, err := r.recordContainerNamespace(ctx, deploymentID)
 		if err != nil {
 			r.failStep(ctx, runCtx, events.Event{
 				Type:          events.DeploymentFailed,
