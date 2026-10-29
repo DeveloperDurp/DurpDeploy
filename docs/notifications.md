@@ -20,12 +20,19 @@ Project and global settings show whether each credential is configured.
 The server retains each credential for notification delivery.
 
 Leave a credential field blank to keep its stored value.
+For Gotify, this requires an unchanged server URL.
+If you change or remove the URL, enter a replacement token or the server clears the saved token.
 Enter a new value to replace it.
 Select **Clear credential** to remove it.
 Email recipients and Gotify server URLs remain readable.
 
 API responses return empty credential fields and corresponding `*_configured` Boolean fields.
 Blank or omitted credential fields preserve stored values in `PUT` requests.
+Gotify tokens require an unchanged `gotify_url`.
+An omitted, empty, or whitespace-only `gotify_url` disables the destination and clears its token unless you supply a replacement.
+URL comparisons use exact strings after trimming surrounding whitespace.
+Case, port, path, escaping, query, and trailing-slash changes require a replacement token.
+Delivery skips Gotify when its URL or token is absent.
 Set `clear_slack_webhook_url`, `clear_gotify_token`, or `clear_discord_webhook_url` to `true` to clear that credential.
 A clear flag takes precedence over a replacement value.
 Delivery history shows failure status without credential-bearing provider errors, including retained historical errors.

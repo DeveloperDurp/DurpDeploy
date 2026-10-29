@@ -2001,6 +2001,37 @@ Open the project page as a viewer and confirm that it shows no inputs or Save bu
 Confirm that a viewer receives HTTP 403 for global settings and notification writes.
 Retain the test project and settings. Keep schedules disabled after testing.
 
+# Gotify destination binding
+
+Run the API and web delivery regression:
+
+```bash
+bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=8m -run '^TestGotifyDestinationBindingAPIWebE2E$' ./internal/handler/api
+```
+
+The fixture uses public test names with an injected local HTTP client.
+It checks project and global settings through API updates and authenticated web forms.
+It also checks scoped Maintainer tokens and denied Viewer, Deployer, and foreign-project writes.
+Each destination change must prevent the previous token from reaching the new endpoint.
+
+Use disposable Gotify endpoints and tokens for manual checks.
+Open `/projects/{id}/notifications` or `/admin/notifications/settings`.
+Save the first URL and its token.
+Save the same URL with a blank token.
+Confirm that delivery still uses the first endpoint.
+Change only the URL and save.
+Check `gotify_token_configured=false` through the corresponding notification settings API.
+Confirm that the new endpoint receives no notification.
+Enter the new endpoint's token and save.
+Confirm that delivery resumes at the new endpoint.
+Remove the URL and save.
+Restore the URL without a token and save.
+Confirm that the saved token remains absent.
+Select **Clear credential** with a replacement token and save.
+Confirm that the clear flag takes precedence.
+Retain the project, release, deployment history, and disabled settings for manual review.
+Keep schedules disabled after testing.
+
 # JSON notification delivery
 
 Run the isolated JSON delivery checks:

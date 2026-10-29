@@ -291,7 +291,7 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 	project, err := h.repo.Queries.GetProject(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "Project not found")
+			RespondError(w, http.StatusNotFound, projectNotFoundMessage)
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -445,7 +445,7 @@ func (h *ProjectHandler) GetProjectNotifications(
 	project, err := h.repo.Queries.GetProject(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "Project not found")
+			RespondError(w, http.StatusNotFound, projectNotFoundMessage)
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -458,6 +458,9 @@ func (h *ProjectHandler) GetProjectNotifications(
 // swagger:route PUT /projects/{id}/notifications projects updateProjectNotifications
 //
 // Update project notification settings.
+// An omitted or empty Gotify token is retained only for an unchanged Gotify URL.
+// Changing or removing the URL clears the token unless a replacement is supplied.
+// Explicit credential clear flags take precedence over replacements.
 //
 //	Consumes:
 //	- application/json
@@ -509,7 +512,7 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 		return
 	}
 
-	err = h.repo.Queries.UpdateProjectNotifications(
+	err = h.repo.UpdateProjectNotifications(
 		r.Context(),
 		db.UpdateProjectNotificationsParams{
 			ClearSlackWebhookUrl:   boolInt(req.ClearSlackWebhookURL),
@@ -538,6 +541,10 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 			ID: id,
 		},
 	)
+	if errors.Is(err, sql.ErrNoRows) {
+		RespondError(w, http.StatusNotFound, projectNotFoundMessage)
+		return
+	}
 	if err != nil {
 		RespondError(
 			w,

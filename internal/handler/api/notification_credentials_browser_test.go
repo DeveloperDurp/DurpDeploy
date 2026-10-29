@@ -35,6 +35,7 @@ func checkNotificationCredentialForm(
 		apiPath,
 		map[string]string{
 			"slack_webhook_url":   "https://example.com/first-secret",
+			"gotify_url":          "https://gotify.example.test/first",
 			"gotify_token":        "first-secret",
 			"discord_webhook_url": "https://example.com/first-secret",
 		},
@@ -82,6 +83,31 @@ func checkNotificationCredentialForm(
 			)
 		}
 	}
+	// Changing only the destination must clear the masked Gotify token.
+	b.evaluate(
+		t,
+		`document.querySelector('[name=gotify_url]').value='https://gotify.example.test/second'; true`,
+	)
+	clickNotificationSave(t, b)
+	b.wait(
+		t,
+		`document.querySelector('[name=gotify_url]')?.getAttribute('value') === 'https://gotify.example.test/second'`,
+	)
+	if err := json.Unmarshal(f.api(t, "GET", apiPath, nil, 200), &settings); err != nil {
+		t.Fatal(err)
+	}
+	if settings["gotify_token_configured"] != false ||
+		settings["gotify_token"] != "" ||
+		settings["slack_webhook_url_configured"] != true ||
+		settings["discord_webhook_url_configured"] != true {
+		t.Fatal(
+			"URL-only form change retained Gotify token or changed other credentials",
+		)
+	}
+	b.screenshot(
+		t,
+		"gotify-destination-cleared-"+strings.ReplaceAll(apiPath, "/", "_"),
+	)
 	// A replacement and an explicit clear stay available through normal form submission.
 	b.evaluate(
 		t,

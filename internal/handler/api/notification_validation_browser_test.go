@@ -130,10 +130,19 @@ func TestNotificationValidationPreservesFormBrowserE2E(t *testing.T) {
 
 func clickNotificationSave(t *testing.T, b *packageBrowser) {
 	t.Helper()
+	b.evaluate(
+		t,
+		`document.querySelector('[name=notify_emails]').form.querySelector('button[type=submit]').scrollIntoView({block: 'center', behavior: 'instant'}); true`,
+	)
+	b.wait(t, `(() => {
+		const button = document.querySelector('[name=notify_emails]').form.querySelector('button[type=submit]');
+		const rect = button.getBoundingClientRect();
+		return !button.disabled && !document.querySelector('.htmx-request,.htmx-settling') &&
+			button.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
+	})()`)
 	var point struct{ X, Y float64 }
 	if err := json.Unmarshal(b.evaluate(t, `(() => {
 		const button = document.querySelector('[name=notify_emails]').form.querySelector('button[type=submit]');
-		button.scrollIntoView();
 		const rect = button.getBoundingClientRect();
 		return {X: rect.x + rect.width / 2, Y: rect.y + rect.height / 2};
 	})()`), &point); err != nil {

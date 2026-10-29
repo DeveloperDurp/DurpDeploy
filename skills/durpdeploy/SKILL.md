@@ -1070,6 +1070,11 @@ Project and global notification credentials are write-only, including for admini
 GET and PUT responses return empty `slack_webhook_url`, `gotify_token`, and `discord_webhook_url` fields.
 The corresponding `*_configured` fields report whether stored credentials exist.
 Blank or omitted credential fields preserve stored values in PUT requests.
+Gotify tokens require an unchanged `gotify_url` after trimming surrounding URL whitespace.
+Changing or removing the URL clears the saved token unless you supply a replacement.
+An omitted, empty, or whitespace-only URL disables the destination.
+Case, port, path, escaping, query, and trailing-slash changes count as destination changes.
+Delivery skips Gotify when its URL or token is absent.
 Set `clear_slack_webhook_url`, `clear_gotify_token`, or `clear_discord_webhook_url` to `true` to clear a credential.
 Clear flags take precedence over replacements.
 The server retains credentials for delivery.

@@ -29,13 +29,26 @@ func (q *Queries) GetGlobalNotifications(ctx context.Context) (GlobalNotificatio
 	return i, err
 }
 
+const lockGlobalNotifications = `-- name: LockGlobalNotifications :execrows
+UPDATE global_notifications SET id = id WHERE id = 1
+`
+
+func (q *Queries) LockGlobalNotifications(ctx context.Context) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockGlobalNotifications)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const updateGlobalNotifications = `-- name: UpdateGlobalNotifications :one
+
 UPDATE global_notifications
 SET
     slack_webhook_url = CASE WHEN CAST(?1 AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(?2 AS TEXT), ''), slack_webhook_url) END,
     notify_emails = ?3,
     gotify_url = ?4,
-    gotify_token = CASE WHEN CAST(?5 AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(?6 AS TEXT), ''), gotify_token) END,
+    gotify_token = CASE WHEN CAST(?5 AS INTEGER) = 1 THEN NULL ELSE COALESCE(CAST(?6 AS TEXT), gotify_token) END,
     discord_webhook_url = CASE WHEN CAST(?7 AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(?8 AS TEXT), ''), discord_webhook_url) END,
     updated_at = unixepoch()
 WHERE id = 1
@@ -53,6 +66,7 @@ type UpdateGlobalNotificationsParams struct {
 	DiscordWebhookUrl      sql.NullString `json:"discord_webhook_url"`
 }
 
+// NOSONAR: intentional write lock
 func (q *Queries) UpdateGlobalNotifications(ctx context.Context, arg UpdateGlobalNotificationsParams) (GlobalNotification, error) {
 	row := q.db.QueryRowContext(ctx, updateGlobalNotifications,
 		arg.ClearSlackWebhookUrl,

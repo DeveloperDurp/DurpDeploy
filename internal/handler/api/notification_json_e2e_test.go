@@ -38,7 +38,7 @@ func TestJSONNotificationDeliveryAPIWebE2E(t *testing.T) {
 
 func setupJSONNotificationDelivery(t *testing.T, f *artifactE2E) {
 	t.Helper()
-	peer := httptest.NewServer(
+	client := notificationFixtureClient(t,
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if _, err := io.Copy(io.Discard, r.Body); err != nil {
 				t.Error(err)
@@ -68,6 +68,20 @@ func setupJSONNotificationDelivery(t *testing.T, f *artifactE2E) {
 			}
 		}),
 	)
+	bus := events.NewBus(f.h.repo)
+	bus.Register(notify.NewSlackNotifierWithClient(client))
+	bus.Register(notify.NewGotifyNotifierWithClient(client))
+	bus.Register(notify.NewDiscordNotifierWithClient(client))
+	bus.Register(artifactNotifier{f.done})
+	f.h.runner.SetEventBus(bus)
+}
+
+func notificationFixtureClient(
+	t *testing.T,
+	handler http.Handler,
+) *http.Client {
+	t.Helper()
+	peer := httptest.NewServer(handler)
 	t.Cleanup(peer.Close)
 	client := peer.Client()
 	// Only the injected fixture client maps public test names to its local peer.
@@ -83,12 +97,7 @@ func setupJSONNotificationDelivery(t *testing.T, f *artifactE2E) {
 	client.Transport = transport
 	client.Timeout = time.Second
 	t.Cleanup(transport.CloseIdleConnections)
-	bus := events.NewBus(f.h.repo)
-	bus.Register(notify.NewSlackNotifierWithClient(client))
-	bus.Register(notify.NewGotifyNotifierWithClient(client))
-	bus.Register(notify.NewDiscordNotifierWithClient(client))
-	bus.Register(artifactNotifier{f.done})
-	f.h.runner.SetEventBus(bus)
+	return client
 }
 
 func checkJSONNotificationDelivery(

@@ -462,8 +462,10 @@ type swaggerProjectNotificationRequest struct {
 	SlackWebhookURL        string `json:"slack_webhook_url"`
 	NotifyEmails           string `json:"notify_emails"`
 	GotifyURL              string `json:"gotify_url"`
-	GotifyToken            string `json:"gotify_token"`
-	DiscordWebhookURL      string `json:"discord_webhook_url"`
+	// Empty tokens are retained only when gotify_url is unchanged.
+	// Changing or removing the URL clears the saved token unless a replacement is supplied.
+	GotifyToken       string `json:"gotify_token"`
+	DiscordWebhookURL string `json:"discord_webhook_url"`
 }
 
 // ProjectRequest is the body for create/update project.
@@ -739,8 +741,10 @@ type swaggerGlobalNotificationRequest struct {
 	SlackWebhookURL        string `json:"slack_webhook_url"`
 	NotifyEmails           string `json:"notify_emails"`
 	GotifyURL              string `json:"gotify_url"`
-	GotifyToken            string `json:"gotify_token"`
-	DiscordWebhookURL      string `json:"discord_webhook_url"`
+	// Empty tokens are retained only when gotify_url is unchanged.
+	// Changing or removing the URL clears the saved token unless a replacement is supplied.
+	GotifyToken       string `json:"gotify_token"`
+	DiscordWebhookURL string `json:"discord_webhook_url"`
 }
 
 // EmptyResponse is returned for no-content endpoints.

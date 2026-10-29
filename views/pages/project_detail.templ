@@ -146,6 +146,7 @@ templ GotifyNotificationCard(serverURL string, tokenConfigured bool) {
 					<span class="label-text">App token</span>
 				</label>
 				@NotificationCredentialInput("gotify_token", "Gotify app token", tokenConfigured)
+				<p class="text-xs mt-2">Changing or removing the server URL clears a blank token. Enter a replacement token for a new URL.</p>
 			</div>
 		} else {
 			<p class="text-sm text-gray-400">
