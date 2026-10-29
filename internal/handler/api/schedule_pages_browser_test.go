@@ -14,10 +14,11 @@ func TestSchedulePagesBrowserE2E(t *testing.T) {
 	var release db.Release
 	decodeStepLogTest(t, f.api(t, "POST", f.base()+"/releases",
 		map[string]string{"version": "pagination"}, 201), &release)
+	const note = "retain this schedule note"
 	for range 51 {
 		f.api(t, "POST", f.base()+"/schedules", map[string]any{
 			"release_id": release.ID, "environment_id": f.environment.ID,
-			"cron": "0 0 1 1 *", "enabled": false,
+			"cron": "0 0 1 1 *", "enabled": false, "note": note,
 		}, 201)
 	}
 	var page struct {
@@ -89,10 +90,11 @@ func TestSchedulePagesBrowserE2E(t *testing.T) {
  form.querySelector('[name="release_id"]').value = %q;
  form.querySelector('[name="environment_id"]').value = %q;
  form.querySelector('[name="cron"]').value = '0 0 1 1 *';
+ form.querySelector('[name="note"]').value = %q;
  form.querySelector('[name="enabled"]').checked = false;
  form.requestSubmit();
  return true;
-})()`, fmt.Sprint(release.ID), fmt.Sprint(f.environment.ID)))
+})()`, fmt.Sprint(release.ID), fmt.Sprint(f.environment.ID), note))
 	b.wait(
 		t,
 		`location.search === '?offset=50' && document.querySelectorAll('[data-mobile-schedule]').length === 2`,
@@ -105,8 +107,18 @@ func TestSchedulePagesBrowserE2E(t *testing.T) {
 		f.api(t, "GET", f.base()+"/schedules?limit=1", nil, 200),
 		&newest,
 	)
-	if len(newest.Items) != 1 || newest.Items[0].Enabled != 0 {
-		t.Fatal("new schedule did not remain disabled")
+	if len(newest.Items) != 1 {
+		t.Fatal("new schedule is missing from the public API")
+	}
+	created := newest.Items[0]
+	if created.Cron != "0 0 1 1 *" || created.Enabled != 0 ||
+		created.Note.String != note || !created.Note.Valid ||
+		created.ReleaseID != release.ID ||
+		created.EnvironmentID != f.environment.ID {
+		t.Fatalf(
+			"created schedule is inconsistent with the web form: %+v",
+			created,
+		)
 	}
 	f.api(
 		t,
@@ -129,30 +141,60 @@ func TestSchedulePagesBrowserE2E(t *testing.T) {
 		t,
 		`document.querySelector('#schedules-content').dataset.scheduleOffset === '50' && document.querySelector('tr [data-schedule-action="toggle"]').textContent.trim() === 'Disable' && !document.querySelector('.htmx-settling')`,
 	)
-	b.evaluate(
-		t,
-		`document.querySelector('tr [data-schedule-action="edit"]').click(); true`,
-	)
-	b.wait(
-		t,
-		`document.querySelector('[data-desktop-schedule-edit]').getClientRects().length > 0 && !document.querySelector('.htmx-settling')`,
-	)
-	b.evaluate(t, `(() => {
- const form = document.querySelector('[data-desktop-schedule-edit] form');
- form.querySelector('[name="cron"]').value = '0 1 1 1 *';
+	for i, width := range []int{1280, 375} {
+		b.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
+			"width": width, "height": 900, "deviceScaleFactor": 1, "mobile": false,
+		}, &struct{}{})
+		row, editor := "tbody tr", "[data-desktop-schedule-edit]"
+		if width == 375 {
+			row, editor = "[data-mobile-schedule]", "[data-mobile-schedule-edit]"
+		}
+		b.evaluate(t, fmt.Sprintf(
+			`document.querySelector('%s [data-schedule-action="edit"]').click(); true`,
+			row,
+		))
+		b.wait(t, fmt.Sprintf(
+			`document.querySelector('%s').getClientRects().length > 0 && !document.querySelector('.htmx-settling')`,
+			editor,
+		))
+		b.screenshot(t, fmt.Sprintf("schedule-quick-edit-%d", width))
+		cron := fmt.Sprintf("0 %d 1 1 *", i+1)
+		b.evaluate(t, fmt.Sprintf(`(() => {
+ const form = document.querySelector('%s form');
+ form.querySelector('[name="cron"]').value = %q;
  form.querySelector('[name="enabled"]').checked = false;
  form.requestSubmit();
  return true;
-})()`)
-	b.wait(
-		t,
-		`document.querySelector('#schedules-content').dataset.scheduleOffset === '50' && document.querySelector('tr [data-schedule-action="toggle"]').textContent.trim() === 'Enable' && document.querySelector('tbody').textContent.includes('0 1 1 1 *') && !document.querySelector('.htmx-settling')`,
-	)
-	var updated db.ScheduledDeployment
-	decodeStepLogTest(t, f.api(t, "GET",
-		fmt.Sprintf("%s/schedules/%d", f.base(), lastID), nil, 200), &updated)
-	if updated.Cron != "0 1 1 1 *" || updated.Enabled != 0 {
-		t.Fatal("web update is inconsistent with the public API")
+})()`, editor, cron))
+		b.wait(t, fmt.Sprintf(
+			`document.querySelector('#schedules-content').dataset.scheduleOffset === '50' && document.querySelector('%s [data-schedule-action="toggle"]').textContent.trim() === 'Enable' && document.querySelector('%s').textContent.includes(%q) && !document.querySelector('.htmx-settling')`,
+			row,
+			row,
+			cron,
+		))
+		var updated db.ScheduledDeployment
+		decodeStepLogTest(t, f.api(
+			t,
+			"GET",
+			fmt.Sprintf(
+				"%s/schedules/%d",
+				f.base(),
+				lastID,
+			),
+			nil,
+			200,
+		), &updated)
+		if updated.Cron != cron || updated.Enabled != 0 ||
+			updated.Note.String != note || !updated.Note.Valid ||
+			updated.ReleaseID != release.ID ||
+			updated.EnvironmentID != f.environment.ID {
+			t.Fatalf(
+				"web update at width %d is inconsistent with the public API: %+v",
+				width,
+				updated,
+			)
+		}
+		b.screenshot(t, fmt.Sprintf("schedule-quick-edit-saved-%d", width))
 	}
 	b.evaluate(
 		t,
