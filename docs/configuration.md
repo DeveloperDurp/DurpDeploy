@@ -339,8 +339,8 @@ Every resource setting uses this rule without exceptions.
 | `limits.merge.archive_bytes` | `2147483648` | Base and agent-output archive bytes per step |
 | `limits.merge.entry_visits` | `200000` | Aggregate merge entry visits |
 | `limits.merge.agent_outputs` | `64` | Agent outputs per merge |
-| `limits.transfer.global` | `4` | Concurrent staging transfers per server process |
-| `limits.transfer.per_agent` | `1` | Concurrent staging transfers per agent |
+| `limits.transfer.global` | `4` | Concurrent staging and package transfers per server process |
+| `limits.transfer.per_agent` | `1` | Concurrent staging and package transfers per authenticated agent per server process |
 | `limits.transfer.idle_timeout_seconds` | `300` | Transfer inactivity deadline |
 | `limits.container.pids` | `128` | Workload container PID limit |
 | `limits.container.tmpfs_bytes` | `67108864` | Workload temporary filesystem bytes |

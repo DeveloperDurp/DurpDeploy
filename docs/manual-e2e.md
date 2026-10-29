@@ -1156,7 +1156,8 @@ Run the staging admission API checks with the current server and agent builds:
 AGENT_TEST_SOCKET=unix:///run/user/1000/podman/podman.sock DURPDEPLOY_AGENT_E2E_BINARY=/absolute/path/to/durpdeploy-agent bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 -timeout=3m -v -run '^TestDeploymentStagingAdmissionAPIE2E$' ./internal/agentserver
 ```
 
-By default, the server permits four concurrent staging uploads or downloads and one active transfer per authenticated agent.
+Staging uploads, staging downloads, and agent package downloads share one admission budget per server process.
+By default, the server permits four concurrent transfers and one active transfer per authenticated agent.
 The checks occupy capacity before a real agent transfer.
 Verify that the agent receives `429` with `Retry-After: 1`.
 Verify that the deployment succeeds after capacity returns.
@@ -1242,6 +1243,48 @@ Run the package transfer API checks against the current agent binary:
 ```bash
 AGENT_TEST_SOCKET=unix:///run/user/1000/podman/podman.sock DURPDEPLOY_AGENT_E2E_BINARY=/absolute/path/to/durpdeploy-agent bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 -timeout=5m -v -run '^TestDeploymentStagingPackageAPIE2E$' ./internal/agentserver
 ```
+
+Run the package admission API checks:
+
+```bash
+AGENT_TEST_SOCKET=unix:///run/user/1000/podman/podman.sock DURPDEPLOY_AGENT_E2E_BINARY=/absolute/path/to/durpdeploy-agent bash scripts/go_test.sh -tags 'e2e agentstaging' -race -count=1 -timeout=5m -v -run '^TestDeploymentPackageAdmissionAPIE2E$' ./internal/agentserver
+```
+
+The checks occupy the global budget and the authenticated agent budget before a real package request.
+Expect `429` with `Retry-After: 1` before another upstream fetch or temporary ZIP creation.
+After capacity becomes available, confirm automatic retry, successful execution, and complete cleanup.
+
+For a bounded manual check, hold one package response at its first write in an owned HTTPS fixture.
+Send another package request with the same live claim.
+Expect `429` before package work starts.
+Release the held response and repeat the request.
+Expect verified ZIP bytes and removal of temporary files after response completion.
+Keep the synthetic project, environment assignment, release, and deployment history for manual review.
+
+The retained #172 fixture uses this separate stack:
+
+- Project: `https://durpdeploy-dev-8f06f137d6e5f3cb2a33c1d8.localhost:43249/projects/1`.
+- Successful package deployment: `https://durpdeploy-dev-8f06f137d6e5f3cb2a33c1d8.localhost:43249/deployments/3`.
+- Stack state: `/home/user/.local/state/durpdeploy/security-172-retained`.
+- CA certificate: `/home/user/.local/state/durpdeploy/security-172-retained/tls/ca.pem`.
+- HTTPS source container: `security172-package-source`.
+
+Use release `v2` with environment `security-172` for repeat deployments.
+Expect the log marker `security-172-package-ok`, a pinned SHA-256, and an empty staging list after cleanup.
+The source serves synthetic ZIPs inside the retained stack network.
+This fixture has no schedules.
+Its state remains outside the thread cleanup registration.
+
+The complete running-server suite also has a retained snapshot:
+
+- Origin: `https://durpdeploy-dev-1a013c4444852274fbd5e91f.localhost:33153`.
+- State: `/home/user/.local/state/durpdeploy/security-172-e2e-retained`.
+- CA certificate: `/home/user/.local/state/durpdeploy/security-172-e2e-retained/tls/ca.pem`.
+
+Use this origin with the paths printed by the suite.
+The snapshot retains 46 projects and 48 original deployment and runbook execution records.
+It also retains releases, templates, test accounts, and disabled schedules.
+Deployment `/deployments/52` verifies a new execution from the retained release snapshot.
 
 1. Attach a package repository to a disposable project. Use a missing version
    or an unreachable repository such as `https://asdf/{version}`.

@@ -277,7 +277,7 @@ agent-container-podman:
     bash scripts/go_test.sh -tags=e2e,agentcontainer -race -count=1 -timeout=8m -v -run '^TestAgentContainerAPIE2E$' ./internal/agentserver
     DURPDEPLOY_AGENT_E2E_BINARY="$CI_PROJECT_DIR/artifacts/agent-build/agent" \
       bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 -timeout=20m -v \
-      -run '^(TestDeploymentStaging(Admission|MergeBudget|EncryptionCancellation|Transfer|ImportFailure|TransferPausesStepTimeout|Audit|ArtifactGate|Package|PackageAgentOnly|PackageLegacyAgent)APIE2E|TestConfiguredStagingMergeAPIE2E|TestConfiguredLogsRemoteAPIE2E|TestConfiguredSharedPolicyRemoteAPIE2E|TestDeploymentEnvironmentPreflightAPIE2E|TestExecutionLocationAPIWebE2E|TestLegacyExecutionLocationAPIWebE2E)$' ./internal/agentserver
+      -run '^(TestDeploymentPackageAdmissionAPIE2E|TestDeploymentStaging(Admission|MergeBudget|EncryptionCancellation|Transfer|ImportFailure|TransferPausesStepTimeout|Audit|ArtifactGate|Package|PackageAgentOnly|PackageLegacyAgent)APIE2E|TestConfiguredStagingMergeAPIE2E|TestConfiguredLogsRemoteAPIE2E|TestConfiguredSharedPolicyRemoteAPIE2E|TestDeploymentEnvironmentPreflightAPIE2E|TestExecutionLocationAPIWebE2E|TestLegacyExecutionLocationAPIWebE2E)$' ./internal/agentserver
     ROOTLESS
 e2e:
   extends: .mr-built-app

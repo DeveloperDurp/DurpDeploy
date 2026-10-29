@@ -1245,7 +1245,8 @@ Archive and output-count checks precede input decryption. Entry-visit checks pre
 Restart the server after changing budgets. Create a new deployment to repeat a failed merge.
 These server-only merge settings permit remote work with unchanged shared policies.
 
-By default, the server admits four staging uploads or downloads concurrently, with one active request per authenticated agent.
+Staging uploads, staging downloads, and agent package downloads share one admission budget per server process.
+By default, the server admits four concurrent transfers, with one active request per authenticated agent.
 Operators can change these budgets with `DURPDEPLOY_LIMITS_TRANSFER_GLOBAL` and `DURPDEPLOY_LIMITS_TRANSFER_PER_AGENT` at server startup.
 Excess agent transfer requests receive HTTP `429` with `Retry-After: 1` before expensive work starts.
 The pinned agent retries these responses automatically.
@@ -1506,6 +1507,9 @@ never sends repository credentials. Its request body is limited to 4 KiB and
 does not accept a `protocol` field.
 
 Invalid packages or changed pinned bytes return `422`.
+Package downloads share the staging transfer budgets and return `429` with `Retry-After: 1` when capacity is unavailable.
+Rejected requests do not fetch packages or pause execution timing.
+An admitted request holds capacity through upstream retrieval, response completion, and temporary ZIP cleanup.
 Package transfers keep heartbeats active and pause the remote step timeout during authenticated HTTP transfer.
 By default, transfers stop after five minutes without progress.
 `DURPDEPLOY_LIMITS_TRANSFER_IDLE_TIMEOUT_SECONDS` changes the server's staging and package-transfer socket inactivity deadline.

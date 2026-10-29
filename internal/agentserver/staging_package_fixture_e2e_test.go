@@ -16,7 +16,10 @@ import (
 	"durpdeploy/internal/artifact"
 )
 
-type packageSourceConfig struct{ base, scenario string }
+type packageSourceConfig struct {
+	base, scenario string
+	onFetch        func()
+}
 
 func (s *stagingE2E) packageSource(
 	t *testing.T,
@@ -45,6 +48,9 @@ func (s *stagingE2E) packageSource(
 				return
 			}
 			count := requests.Add(1)
+			if config.onFetch != nil {
+				config.onFetch()
+			}
 			if count > 1 && config.scenario == "slow-package" {
 				time.Sleep(4 * time.Second)
 			}
