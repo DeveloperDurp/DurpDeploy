@@ -5,9 +5,89 @@ package api_test
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
+	"time"
+
+	"durpdeploy/internal/db"
 )
+
+func TestLifecycleReorderAccessAPIWebE2E(t *testing.T) {
+	f := newArtifactE2E(t)
+	var lifecycle struct{ ID int64 }
+	decodeLifecycleTest(t, f.api(t, "POST", "/api/v1/lifecycles",
+		map[string]string{"name": "Reorder permissions"}, 201), &lifecycle)
+	api := fmt.Sprintf("/api/v1/lifecycles/%d/stages", lifecycle.ID)
+	var stage struct{ ID int64 }
+	decodeLifecycleTest(t, f.api(t, "POST", api, map[string]any{
+		"environment_id": f.environment.ID, "requires_approval": true,
+	}, 201), &stage)
+	before, err := f.h.repo.Queries.ListLifecycleStages(
+		t.Context(),
+		lifecycle.ID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := f.token
+	owner, err := f.h.repo.Queries.GetSession(t.Context(), db.GetSessionParams{
+		ID: f.session, ExpiresAt: time.Now().Unix(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range []string{"maintainer", "deployer", "viewer"} {
+		user := seedAPIUser(t, f.h.repo, role+"-reorder@example.test", role)
+		_, f.token = seedAPIToken(t, f.h.repo, user.ID)
+		f.api(t, "POST", api+"/reorder", map[string]any{
+			"stage_ids": []int64{stage.ID},
+		}, 403)
+		// Reuse the browser session while changing its current user's role.
+		if _, err := f.h.repo.DB.ExecContext(
+			t.Context(),
+			"UPDATE users SET role = ? WHERE id = ?",
+			role,
+			owner.UserID,
+		); err != nil {
+			t.Fatal(err)
+		}
+		f.web(
+			t,
+			"POST",
+			fmt.Sprintf("/lifecycles/%d/stages/reorder", lifecycle.ID),
+			url.Values{
+				"stage_id":  {fmt.Sprint(stage.ID)},
+				"direction": {"up"},
+			},
+			403,
+		)
+		if _, err := f.h.repo.DB.ExecContext(
+			t.Context(),
+			"UPDATE users SET role = 'admin' WHERE id = ?",
+			owner.UserID,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.token = admin
+	scoped := mintProjectToken(t, f, "admin", f.project.ID)
+	f.token = scoped.ID
+	f.api(
+		t,
+		"POST",
+		api+"/reorder",
+		map[string]any{"stage_ids": []int64{stage.ID}},
+		403,
+	)
+	after, err := f.h.repo.Queries.ListLifecycleStages(
+		t.Context(),
+		lifecycle.ID,
+	)
+	if err != nil || !slices.Equal(before, after) {
+		t.Fatal("denied reorder changed stages", err)
+	}
+}
 
 func assertLifecycleStageAccess(
 	t *testing.T,
