@@ -96,7 +96,8 @@ func artifactHTTPSFixture(
 				select {
 				case <-time.After(1500 * time.Millisecond):
 				case <-r.Context().Done():
-					return
+					// Do not finish a cancelled download as an empty HTTP 200.
+					panic(http.ErrAbortHandler)
 				}
 			}
 			if text == "invalid" {
