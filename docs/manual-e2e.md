@@ -1520,10 +1520,21 @@ Select **Cancel**.
 Confirm that the second page remains selected.
 Edit one schedule and select **Save**.
 Confirm that the second page remains selected.
+Repeat the quick edit at desktop and phone widths.
+Compare cron, note, enabled state, release, and environment with `GET /api/v1/projects/{id}/schedules/{schedId}`.
+Confirm that the quick edit preserves the note, release, and environment.
 Toggle the schedule twice to leave it disabled.
 Delete the last entry on the last page.
 Confirm that the list shows the preceding page.
 Compare the list with `GET /api/v1/projects/{id}/schedules?limit=50&offset=50`.
+
+Run the schedule page browser regression:
+
+```bash
+DURPDEPLOY_CONTAINER_RUNTIME=podman bash scripts/ci_browser_shard.sh -- \
+  bash scripts/go_test.sh -tags=e2e,packagebrowser -count=1 -timeout=10m \
+  -run '^TestSchedulePagesBrowserE2E$' ./internal/handler/api
+```
 
 Concurrent schedule edits preserve the saved target, cron, enabled state, and next execution time.
 The scheduler discards stale skip, park, and disable writes.
