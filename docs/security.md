@@ -237,6 +237,23 @@ Keep API claim credentials out of URLs, logs, and tickets.
 - CSRF rejections are **not** written to `audit_log` (intentional — failed
   attempts must not be enumerable).
 
+Public password login uses Go's `http.CrossOriginProtection` before authentication.
+Rejected requests return a generic 403 without creating sessions, MFA challenges, or successful-login audit records.
+Existing body validation can return 400 before the origin check.
+
+`Sec-Fetch-Site: same-origin` and `none` allow login.
+Other nonempty values reject login, including `same-site`.
+Fetch Metadata takes precedence over `Origin`.
+Without Fetch Metadata, the parsed `Origin` host must match the request `Host`, including its port.
+This fallback does not compare schemes or enforce strict Origin syntax.
+Parseable values with matching hosts can include other URL components.
+
+Requests without either header remain supported for nonbrowser clients.
+Browsers that omit both headers remain outside this protection.
+Use a supported browser and HTTPS.
+Preserve the public `Host` and both protection headers through custom proxies.
+MFA, OIDC, and authenticated writes retain their separate transaction and CSRF checks.
+
 ---
 
 ## Authorization

@@ -29,7 +29,6 @@ func TestLoginPage_PreservesPasswordForm_whenOIDCDisabled(t *testing.T) {
 	}
 	for _, required := range []string{
 		`<form method="post" action="/login" class="space-y-4">`,
-		`name="csrf_token" value=""`,
 		`id="login-email" type="email" name="email" class="input input-bordered" autocomplete="username" required`,
 		`id="login-password" type="password" name="password" class="input input-bordered" autocomplete="current-password" required`,
 		`type="submit" class="btn btn-primary w-full">Login</button>`,
@@ -41,6 +40,11 @@ func TestLoginPage_PreservesPasswordForm_whenOIDCDisabled(t *testing.T) {
 	if strings.Contains(markup, `href="/login/oidc"`) ||
 		strings.Contains(markup, "Sign in with") {
 		t.Fatal("disabled login page rendered an OIDC affordance")
+	}
+	_, loginForm, found := strings.Cut(markup, `action="/login"`)
+	loginForm, _, _ = strings.Cut(loginForm, "</form>")
+	if !found || strings.Contains(loginForm, `name="csrf_token"`) {
+		t.Fatal("password login rendered an unused CSRF token")
 	}
 }
 

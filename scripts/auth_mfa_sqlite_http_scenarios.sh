@@ -232,11 +232,17 @@ PY
 }
 
 matrix_login_password_session_transition() {
-    local jar unknown_body invalid_body csrf
+    local jar unknown_body invalid_body csrf form
 
     matrix_scenario_init login-password-session-transition
     jar=$(auth_mfa_cookie_jar password)
     MATRIX_USER_ID=$(matrix_db_query "SELECT id FROM users WHERE email = '$DURPDEPLOY_AUTH_MFA_ADMIN_EMAIL'")
+    form="email=$(auth_mfa_urlencode "$DURPDEPLOY_AUTH_MFA_ADMIN_EMAIL")&password=$(auth_mfa_urlencode "$DURPDEPLOY_AUTH_MFA_ADMIN_PASSWORD")"
+    auth_mfa_form_request "$jar" POST /login "$form" \
+        'Sec-Fetch-Site: cross-site' 'Origin: https://attacker.invalid'
+    auth_mfa_assert_status 403
+    matrix_assert_no_final_session
+    auth_mfa_assert_audit_count login 0 "$MATRIX_USER_ID"
     auth_mfa_login "$jar" "$DURPDEPLOY_AUTH_MFA_ADMIN_EMAIL" wrong-password-1234
     auth_mfa_assert_status 422
     invalid_body=$(matrix_password_failure_body "$DURPDEPLOY_AUTH_MFA_ADMIN_EMAIL") \
@@ -253,6 +259,13 @@ matrix_login_password_session_transition() {
     auth_mfa_assert_cookie "$jar" session
     auth_mfa_assert_db_count "one final browser session" 1 \
         "SELECT COUNT(*) FROM sessions WHERE user_id = $MATRIX_USER_ID"
+    auth_mfa_form_request "$jar" POST /login "$form" \
+        'Sec-Fetch-Site: cross-site' 'Origin: https://attacker.invalid'
+    auth_mfa_assert_status 403
+    auth_mfa_assert_db_count "cross-site login preserves the existing session" 1 \
+        "SELECT COUNT(*) FROM sessions WHERE user_id = $MATRIX_USER_ID"
+    auth_mfa_http_request "$jar" GET /settings/security
+    auth_mfa_assert_status 200
     csrf=$(auth_mfa_csrf_from_cookies "$jar")
     auth_mfa_form_request "$jar" POST /logout "csrf_token=$(auth_mfa_urlencode "$csrf")"
     auth_mfa_assert_status 303

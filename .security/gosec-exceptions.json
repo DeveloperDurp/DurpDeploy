@@ -290,8 +290,8 @@
   {
     "rule": "G124",
     "file": "internal/handler/auth.go",
-    "line": "257",
-    "source_sha256": "5f88869e9609887bcbbb3ac9429042e3a412a37fc7c681420f85c62f8305dba4",
+    "line": "262",
+    "source_sha256": "7da2108b97a7f9e7f318efb6a6f1a7e357181ca12676247e0a42e27cd1a5adbe",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
@@ -596,8 +596,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/auth.go",
-    "line": "216",
-    "source_sha256": "5f88869e9609887bcbbb3ac9429042e3a412a37fc7c681420f85c62f8305dba4",
+    "line": "221",
+    "source_sha256": "7da2108b97a7f9e7f318efb6a6f1a7e357181ca12676247e0a42e27cd1a5adbe",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Password login redirects only after session issuance through takeLoginDestination. This helper bounds and decodes the cookie, then SafeLoginDestination rejects external authorities, schemes, backslashes, controls, auth loops, and excessive lengths. Only local paths and queries survive. Evidence: internal/auth/login_destination_test.go; internal/handler/login_destination_test.go; API/browser login destination E2E tests."

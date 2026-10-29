@@ -1555,6 +1555,30 @@ Run the public login and browser regressions:
 bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -run '^TestLoginDestination(APIWeb|HTMXAPIWeb|Browser)E2E$' ./internal/handler/api
 ```
 
+Use disposable accounts to check password login origin protection.
+Serve an ordinary login form from a separate site, such as `localhost` when the application uses `127.0.0.1`.
+Set the form action to the application's HTTPS `/login` endpoint.
+Use valid credentials for a password-only test account.
+Submit the form in a signed-out browser context.
+Expect a generic 403 and no browser session.
+Sign in as a different account and repeat the cross-site submission.
+Expect a generic 403 and the original account identity.
+Inspect the request headers and confirm `Sec-Fetch-Site: cross-site`.
+Confirm that rejection creates no session, MFA challenge, or successful-login audit record.
+Submit the real login form and confirm successful password login.
+Repeat with MFA and confirm successful completion.
+Repeat through Caddy and direct TLS.
+Keep the disposable accounts available for manual review.
+Keep schedules disabled.
+
+Run the origin and HTTPS regressions:
+
+```sh
+bash scripts/go_test.sh -race -count=1 -run '^TestLoginCrossOrigin' ./internal/handler
+bash scripts/go_test.sh -tags=e2e -race -count=1 -run '^TestLoginCrossOriginAPIWebE2E$' ./internal/handler/api
+DURPDEPLOY_CONTAINER_RUNTIME=podman bash scripts/ci_browser_shard.sh -- bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=15m -run '^TestLoginCrossOriginBrowserE2E$' ./internal/handler/api
+```
+
 Schedules show 50 entries per page.
 Create 51 disabled schedules in a disposable project.
 Open the second page with **Next**.

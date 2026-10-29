@@ -59,6 +59,7 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
       '^TestStaleFormBackBrowserE2E$'
       '^TestSwaggerTokensBrowserE2E$'
       '^TestLoginDestination(APIWeb|HTMXAPIWeb|Browser)E2E$'
+      '^TestLoginCrossOrigin(APIWeb|Browser)E2E$'
       '^TestDeploymentNotes(APIWeb|Browser)E2E$'
       '^TestDeploymentFilterEmptyAPIWebE2E$'
       '^TestBrowserContextIsolationE2E$'

@@ -486,6 +486,12 @@ Read the shipped agent skill for query fields and response details.
 
 ## Reverse proxy trust
 
+Preserve the browser-facing `Host`, including any explicit public port, when forwarding password login requests.
+Preserve the `Origin` and `Sec-Fetch-Site` headers.
+The shipped Caddy configuration preserves these values during TLS termination.
+Password login does not use forwarding headers to authorize an origin.
+Do not use `Forwarded`, `X-Forwarded-Host`, or `X-Forwarded-Proto` as substitutes for the public `Host`.
+
 The shipped HTTPS proxy sets HSTS for one day, without subdomain coverage or preload registration.
 The app sets `X-Content-Type-Options: nosniff` for browser and API responses.
 Read [transport verification](transport-security.md) for TLS policy, intentional listeners, and isolated installation checks.

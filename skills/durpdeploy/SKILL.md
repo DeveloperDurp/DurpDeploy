@@ -110,8 +110,8 @@ DurpDeploy is a single-binary deployment tool that runs ordered script steps
 against environments. It exposes three surfaces an agent may use:
 
 - **JSON API** at `/api/v1/*` — bearer-token auth, no CSRF. **Prefer this.**
-- **Web UI routes** (`/login`, `/projects`, …) — session cookie + CSRF token,
-  HTML form semantics, redirect status codes.
+- **Web UI routes** (`/login`, `/projects`, …) — browser forms, session cookies,
+  authenticated-write CSRF tokens, and redirect status codes.
 - **CLI subcommands** on the `durpdeploy` binary (user/token admin).
 
 The endpoint reference is the Swagger UI at `/api/swagger/`
@@ -367,6 +367,16 @@ External and invalid destinations fall back to `/`.
 Failed password login returns `422`, retains the email, and leaves the password empty.
 Direct `/login` requests start without a saved destination.
 
+Submit browser password forms from the same origin.
+When the origin check rejects a request, login returns `403` before authentication or session creation.
+Body validation can return `400` before the origin check.
+Password login uses Fetch Metadata first, then compares the parsed `Origin` host with the request `Host`.
+The fallback includes ports but does not compare schemes or enforce strict Origin syntax.
+Clients without either header remain supported, including the curl example below.
+Browsers that omit both headers remain outside this protection.
+Preserve the public `Host`, `Origin`, and `Sec-Fetch-Site` through custom proxies.
+Public password login does not require a session CSRF token.
+
 ```bash
 curl -c /tmp/dd-cookies -X POST \
     -d "email=you@example.com&password=SECRET" "$BASE/login"    # 303 on success
@@ -380,7 +390,7 @@ Token placement rules:
 - DELETE: pass the header `X-CSRF-Token: $CSRF` — Go does not parse form
   bodies on DELETE, so a body-only token 403s.
 - Status contract: `303` = success (id or path in `Location`), `422` = validation
-  failure, `403` = invalid CSRF. Viewer application writes return `200` with an
+  failure, `403` = invalid CSRF or cross-origin password login. Viewer application writes return `200` with an
   `HX-Trigger` toast for HTMX, or a styled `403` for native requests.
 
 ## Agent fleet (admin only)
