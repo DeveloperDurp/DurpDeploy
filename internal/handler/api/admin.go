@@ -194,6 +194,11 @@ func newNotificationSettingsResponse(
 // UpdateNotificationSettings updates global notification settings.
 // swagger:route PUT /admin/notifications/settings admin updateNotificationSettings
 //
+// Update global notification settings.
+// An omitted or empty Gotify token is retained only for an unchanged Gotify URL.
+// Changing or removing the URL clears the token unless a replacement is supplied.
+// Explicit credential clear flags take precedence over replacements.
+//
 //	Consumes:
 //	- application/json
 //
@@ -247,7 +252,7 @@ func (h *AdminHandler) UpdateNotificationSettings(
 		return
 	}
 
-	settings, err := h.repo.Queries.UpdateGlobalNotifications(
+	settings, err := h.repo.UpdateGlobalNotifications(
 		r.Context(),
 		db.UpdateGlobalNotificationsParams{
 			ClearSlackWebhookUrl:   boolInt(req.ClearSlackWebhookURL),

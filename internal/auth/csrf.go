@@ -16,7 +16,7 @@ const viewerWriteBlockMessage = "Viewers cannot perform write operations"
 // role users from application writes; authenticated logout and security
 // settings remain CSRF-protected viewer actions.
 //
-// Exempt path: /login (no session yet).
+// Public /login uses AuthHandler's cross-origin protection before authentication.
 //
 // ponytail: viewer role gate lives here so it fires on every write
 // regardless of route. P1 replaces this with per-project authorization.

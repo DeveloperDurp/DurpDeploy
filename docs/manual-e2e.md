@@ -1156,7 +1156,8 @@ Run the staging admission API checks with the current server and agent builds:
 AGENT_TEST_SOCKET=unix:///run/user/1000/podman/podman.sock DURPDEPLOY_AGENT_E2E_BINARY=/absolute/path/to/durpdeploy-agent bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 -timeout=3m -v -run '^TestDeploymentStagingAdmissionAPIE2E$' ./internal/agentserver
 ```
 
-By default, the server permits four concurrent staging uploads or downloads and one active transfer per authenticated agent.
+Staging uploads, staging downloads, and agent package downloads share one admission budget per server process.
+By default, the server permits four concurrent transfers and one active transfer per authenticated agent.
 The checks occupy capacity before a real agent transfer.
 Verify that the agent receives `429` with `Retry-After: 1`.
 Verify that the deployment succeeds after capacity returns.
@@ -1242,6 +1243,48 @@ Run the package transfer API checks against the current agent binary:
 ```bash
 AGENT_TEST_SOCKET=unix:///run/user/1000/podman/podman.sock DURPDEPLOY_AGENT_E2E_BINARY=/absolute/path/to/durpdeploy-agent bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 -timeout=5m -v -run '^TestDeploymentStagingPackageAPIE2E$' ./internal/agentserver
 ```
+
+Run the package admission API checks:
+
+```bash
+AGENT_TEST_SOCKET=unix:///run/user/1000/podman/podman.sock DURPDEPLOY_AGENT_E2E_BINARY=/absolute/path/to/durpdeploy-agent bash scripts/go_test.sh -tags 'e2e agentstaging' -race -count=1 -timeout=5m -v -run '^TestDeploymentPackageAdmissionAPIE2E$' ./internal/agentserver
+```
+
+The checks occupy the global budget and the authenticated agent budget before a real package request.
+Expect `429` with `Retry-After: 1` before another upstream fetch or temporary ZIP creation.
+After capacity becomes available, confirm automatic retry, successful execution, and complete cleanup.
+
+For a bounded manual check, hold one package response at its first write in an owned HTTPS fixture.
+Send another package request with the same live claim.
+Expect `429` before package work starts.
+Release the held response and repeat the request.
+Expect verified ZIP bytes and removal of temporary files after response completion.
+Keep the synthetic project, environment assignment, release, and deployment history for manual review.
+
+The retained #172 fixture uses this separate stack:
+
+- Project: `https://durpdeploy-dev-8f06f137d6e5f3cb2a33c1d8.localhost:43249/projects/1`.
+- Successful package deployment: `https://durpdeploy-dev-8f06f137d6e5f3cb2a33c1d8.localhost:43249/deployments/3`.
+- Stack state: `/home/user/.local/state/durpdeploy/security-172-retained`.
+- CA certificate: `/home/user/.local/state/durpdeploy/security-172-retained/tls/ca.pem`.
+- HTTPS source container: `security172-package-source`.
+
+Use release `v2` with environment `security-172` for repeat deployments.
+Expect the log marker `security-172-package-ok`, a pinned SHA-256, and an empty staging list after cleanup.
+The source serves synthetic ZIPs inside the retained stack network.
+This fixture has no schedules.
+Its state remains outside the thread cleanup registration.
+
+The complete running-server suite also has a retained snapshot:
+
+- Origin: `https://durpdeploy-dev-1a013c4444852274fbd5e91f.localhost:33153`.
+- State: `/home/user/.local/state/durpdeploy/security-172-e2e-retained`.
+- CA certificate: `/home/user/.local/state/durpdeploy/security-172-e2e-retained/tls/ca.pem`.
+
+Use this origin with the paths printed by the suite.
+The snapshot retains 46 projects and 48 original deployment and runbook execution records.
+It also retains releases, templates, test accounts, and disabled schedules.
+Deployment `/deployments/52` verifies a new execution from the retained release snapshot.
 
 1. Attach a package repository to a disposable project. Use a missing version
    or an unreachable repository such as `https://asdf/{version}`.
@@ -1510,6 +1553,30 @@ Run the public login and browser regressions:
 
 ```bash
 bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=4m -run '^TestLoginDestination(APIWeb|HTMXAPIWeb|Browser)E2E$' ./internal/handler/api
+```
+
+Use disposable accounts to check password login origin protection.
+Serve an ordinary login form from a separate site, such as `localhost` when the application uses `127.0.0.1`.
+Set the form action to the application's HTTPS `/login` endpoint.
+Use valid credentials for a password-only test account.
+Submit the form in a signed-out browser context.
+Expect a generic 403 and no browser session.
+Sign in as a different account and repeat the cross-site submission.
+Expect a generic 403 and the original account identity.
+Inspect the request headers and confirm `Sec-Fetch-Site: cross-site`.
+Confirm that rejection creates no session, MFA challenge, or successful-login audit record.
+Submit the real login form and confirm successful password login.
+Repeat with MFA and confirm successful completion.
+Repeat through Caddy and direct TLS.
+Keep the disposable accounts available for manual review.
+Keep schedules disabled.
+
+Run the origin and HTTPS regressions:
+
+```sh
+bash scripts/go_test.sh -race -count=1 -run '^TestLoginCrossOrigin' ./internal/handler
+bash scripts/go_test.sh -tags=e2e -race -count=1 -run '^TestLoginCrossOriginAPIWebE2E$' ./internal/handler/api
+DURPDEPLOY_CONTAINER_RUNTIME=podman bash scripts/ci_browser_shard.sh -- bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=15m -run '^TestLoginCrossOriginBrowserE2E$' ./internal/handler/api
 ```
 
 Schedules show 50 entries per page.
@@ -1934,6 +2001,37 @@ Open the project page as a viewer and confirm that it shows no inputs or Save bu
 Confirm that a viewer receives HTTP 403 for global settings and notification writes.
 Retain the test project and settings. Keep schedules disabled after testing.
 
+# Gotify destination binding
+
+Run the API and web delivery regression:
+
+```bash
+bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=8m -run '^TestGotifyDestinationBindingAPIWebE2E$' ./internal/handler/api
+```
+
+The fixture uses public test names with an injected local HTTP client.
+It checks project and global settings through API updates and authenticated web forms.
+It also checks scoped Maintainer tokens and denied Viewer, Deployer, and foreign-project writes.
+Each destination change must prevent the previous token from reaching the new endpoint.
+
+Use disposable Gotify endpoints and tokens for manual checks.
+Open `/projects/{id}/notifications` or `/admin/notifications/settings`.
+Save the first URL and its token.
+Save the same URL with a blank token.
+Confirm that delivery still uses the first endpoint.
+Change only the URL and save.
+Check `gotify_token_configured=false` through the corresponding notification settings API.
+Confirm that the new endpoint receives no notification.
+Enter the new endpoint's token and save.
+Confirm that delivery resumes at the new endpoint.
+Remove the URL and save.
+Restore the URL without a token and save.
+Confirm that the saved token remains absent.
+Select **Clear credential** with a replacement token and save.
+Confirm that the clear flag takes precedence.
+Retain the project, release, deployment history, and disabled settings for manual review.
+Keep schedules disabled after testing.
+
 # JSON notification delivery
 
 Run the isolated JSON delivery checks:
@@ -2227,16 +2325,50 @@ Reload the page to see the committed stage.
 
 Call `POST /api/v1/lifecycles/{id}/stages/reorder` with every stage ID in `stage_ids`.
 Expect consecutive positions from one in the requested sequence.
+Expect each stage to keep its environment and approval requirement.
+Expect `404` when the lifecycle does not exist.
+
+Enable approval for one stage and disable approval for its neighbor.
+Record their IDs, environments, positions, and approval requirements through `GET /api/v1/lifecycles/{id}`.
+Use the browser move controls in both directions.
+Expect only the two positions to swap, including gaps.
+Repeat the API reorder and compare every field except `sort_order`.
+Submit incomplete, duplicate, and foreign stage IDs.
+Expect `400` without a stage change.
+
+Move the protected stage first to make it eligible for execution.
+As a Deployer, launch a release through `POST /api/v1/projects/{id}/deployments`.
+Expect `pending_approval`.
+As a Maintainer, launch a runbook through `POST /api/v1/projects/{id}/runbooks/{runbookId}/executions`.
+Expect `pending_approval` in the execution details.
+As an administrator, approve each execution and confirm success.
+Repeat these execution checks after the API reorder.
 Keep all schedules disabled during these checks.
 
 Run the isolated backend and browser checks:
 
 ```bash
 bash scripts/go_test.sh -tags=e2e -race -count=1 -run '^TestLifecycleStageOrderAPIWebE2E$' ./internal/handler
+bash scripts/go_test.sh -race -count=1 -run '^TestLifecycleReorder' ./internal/repository
+bash scripts/go_test.sh -tags=e2e -race -count=1 -run '^TestLifecycleReorder(Approval|Access)APIWebE2E$' ./internal/handler/api
 bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestLifecycleStageOrderBrowserE2E$' ./internal/handler/api
 ```
 
-The backend checks run concurrent API and web appends on SQLite, PostgreSQL, and SQL Server.
+The backend checks cover reorder and append concurrency on SQLite, PostgreSQL, and SQL Server.
+The rollback checks inject failures after temporary positions are written.
+
+Retained #167 examples use [this lifecycle](https://durpdeploy-dev-828746a5d4d124bc2fbbc446.localhost:44567/lifecycles/2).
+Inspect the [browser reorder project](https://durpdeploy-dev-828746a5d4d124bc2fbbc446.localhost:44567/projects/1) and [API reorder project](https://durpdeploy-dev-828746a5d4d124bc2fbbc446.localhost:44567/projects/2).
+Both projects retain successful deployments and runbook executions after administrator approval.
+Use `admin@durp.info` with password `password` on this isolated fixture.
+Read `/home/user/.local/state/durpdeploy/security-167-retained/connection.json` for connection details.
+Read its `qa/actions.json` and screenshots for the request and browser evidence.
+
+Stop the retained fixture when manual checks are complete:
+
+```bash
+make dev-stack ACTION=down STATE=/home/user/.local/state/durpdeploy/security-167-retained
+```
 
 ## Configured container process and thread limits
 

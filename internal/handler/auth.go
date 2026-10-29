@@ -27,6 +27,7 @@ type AuthHandler struct {
 	oidcTransactions      *oidc.TransactionStore
 	loginLimiter          *loginLimiter
 	passwordVerifications chan struct{}
+	loginOriginProtection http.CrossOriginProtection
 }
 
 // Two concurrent 64 MiB Argon2 hashes leave headroom in the 512 MiB image.
@@ -147,6 +148,10 @@ func (h *AuthHandler) renderOIDCLoginUnavailable(
 
 func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	setNoStore(w)
+	if err := h.loginOriginProtection.Check(r); err != nil {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

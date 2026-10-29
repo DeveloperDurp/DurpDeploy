@@ -101,8 +101,8 @@
   {
     "rule": "G703",
     "file": "internal/agentserver/artifact.go",
-    "line": "86",
-    "source_sha256": "c4366d25a4be001190be188026198bc0b599e96b0e816e9b8cf393353edd1e48",
+    "line": "89",
+    "source_sha256": "b0f7bc813c4a32887688b3448d46bc04dd62e3f392b3e9723a0d445f6c2f7542",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Removed path is returned by os.CreateTemp inside the private artifact workspace, not a request path. Evidence: repository/artifact_snapshot.go, artifact/fetch.go, agentserver/artifact_test.go."
@@ -290,8 +290,8 @@
   {
     "rule": "G124",
     "file": "internal/handler/auth.go",
-    "line": "257",
-    "source_sha256": "5f88869e9609887bcbbb3ac9429042e3a412a37fc7c681420f85c62f8305dba4",
+    "line": "262",
+    "source_sha256": "7da2108b97a7f9e7f318efb6a6f1a7e357181ca12676247e0a42e27cd1a5adbe",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
@@ -479,8 +479,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/project.go",
-    "line": "519",
-    "source_sha256": "b52fe2433014f19ff6dee4ed6e350171fdfc615012eeb1755e69781fff4ff6da",
+    "line": "523",
+    "source_sha256": "9436398505e2a63492404c7734b7d4ef7fe613c30f769353d91cfe9d7d0c859e",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "The redirect uses a fixed /projects/ path prefix and an ID parsed as int64 by parseProjectID. The destination remains on the same origin. Evidence: ProjectHandler.UpdateProject and parseProjectID."
@@ -488,8 +488,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/project.go",
-    "line": "313",
-    "source_sha256": "b52fe2433014f19ff6dee4ed6e350171fdfc615012eeb1755e69781fff4ff6da",
+    "line": "317",
+    "source_sha256": "9436398505e2a63492404c7734b7d4ef7fe613c30f769353d91cfe9d7d0c859e",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "The redirect uses a fixed /projects/ path prefix and an ID parsed as int64 by parseProjectID. The destination remains on the same origin. Evidence: ProjectHandler.UpdateProjectNotifications and parseProjectID."
@@ -596,8 +596,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/auth.go",
-    "line": "216",
-    "source_sha256": "5f88869e9609887bcbbb3ac9429042e3a412a37fc7c681420f85c62f8305dba4",
+    "line": "221",
+    "source_sha256": "7da2108b97a7f9e7f318efb6a6f1a7e357181ca12676247e0a42e27cd1a5adbe",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Password login redirects only after session issuance through takeLoginDestination. This helper bounds and decodes the cookie, then SafeLoginDestination rejects external authorities, schemes, backslashes, controls, auth loops, and excessive lengths. Only local paths and queries survive. Evidence: internal/auth/login_destination_test.go; internal/handler/login_destination_test.go; API/browser login destination E2E tests."
