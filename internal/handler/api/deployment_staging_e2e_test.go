@@ -30,6 +30,11 @@ func stagingRuntime(t *testing.T, args ...string) string {
 
 func stagingRuntimeBinary(t *testing.T, binary string, args ...string) string {
 	t.Helper()
+	timeout := time.Minute
+	if len(args) > 0 && args[0] == "pull" {
+		// Image pulls prepare fixtures outside the step execution budget.
+		timeout = 3 * time.Minute
+	}
 	kind := os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME")
 	if endpoint := os.Getenv("DURPDEPLOY_CONTAINER_URL"); endpoint != "" {
 		prefix := []string{"--host=" + endpoint}
@@ -40,7 +45,7 @@ func stagingRuntimeBinary(t *testing.T, binary string, args ...string) string {
 	}
 	ctx, cancel := context.WithTimeout(
 		context.WithoutCancel(t.Context()),
-		time.Minute,
+		timeout,
 	)
 	defer cancel()
 	output, err := exec.CommandContext(ctx, binary, args...).
