@@ -156,9 +156,15 @@ func TestLogin_WebAuthnAndDialogBindingsAreDelegated(t *testing.T) {
 	for _, delegatedBinding := range []string{
 		`target.closest('[data-webauthn-register]')`,
 		`target.closest('[data-webauthn-authenticate]')`,
-		`target.closest('[data-mfa-reset-confirmation-dialog], ` +
-			`[data-passkey-delete-confirmation-dialog], ` +
-			`[data-security-disable-confirmation-dialog]')`,
+		`function registerSecurityConfirmation(prefix)`,
+		"form.getAttribute(dialogAttribute)",
+		"target.closest(`[data-${prefix}-confirm]`)",
+		`document.addEventListener('submit', (event) => {`,
+		`document.addEventListener('close', (event) => {`,
+		`document.addEventListener('cancel', (event) => {`,
+		`registerSecurityConfirmation('mfa-reset');`,
+		`registerSecurityConfirmation('passkey-delete');`,
+		`registerSecurityConfirmation('security-disable');`,
 	} {
 		if !strings.Contains(content, delegatedBinding) {
 			t.Errorf(
