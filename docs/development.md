@@ -38,9 +38,8 @@ themes live in `static/css/input.css`; there is no JavaScript Tailwind config.
 notices in `static/css/tailwind.licenses.txt`. The UI requires Safari 16.4+,
 Chrome 111+, or Firefox 128+.
 
-Tailwind and its CLI are pinned to 4.3.0 because CLI 4.3.3 pins an older
-Parcel watcher that pulls in vulnerable `braces`. Check `npm audit` and the
-resolved watcher dependencies before upgrading the CLI.
+The lockfile pins Tailwind CSS and its CLI.
+Run `npm audit` before dependency upgrades.
 
 `make dev`, `make dev-postgres`, and `make dev-mssql` keep the app on
 `http://localhost:8080` and expose it through `https://localhost:8443`. The
