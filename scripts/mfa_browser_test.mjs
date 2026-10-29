@@ -322,7 +322,7 @@ async function passkeyDeleteConfirmationContract(page, url, token, artifactDir) 
 				response.status() === 303 &&
 				new URL(response.url()).pathname === "/settings/security/passkeys/delete",
 			),
-			page.waitForURL(`${url}/settings/security`),
+			page.waitForNavigation({ url: `${url}/settings/security` }),
 			repeatConfirmation(dialog.getByRole("button", { name: "Confirm delete" })),
 		]);
 		check(posts === 1, "passkey delete confirm did not submit exactly once");
