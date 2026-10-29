@@ -290,6 +290,7 @@ type swaggerGlobalNotification struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerVariable struct {
+	IsCredential  int64   `json:"is_credential"`
 	ID            int64   `json:"id"`
 	ProjectID     int64   `json:"project_id"`
 	Name          string  `json:"name"`
@@ -607,6 +608,7 @@ type swaggerVariableRequest struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerVariableResponse struct {
+	IsCredential  int64  `json:"is_credential"`
 	ID            int64  `json:"id"`
 	ProjectID     int64  `json:"project_id"`
 	Name          string `json:"name"`

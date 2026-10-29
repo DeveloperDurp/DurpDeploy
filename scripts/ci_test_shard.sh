@@ -71,6 +71,7 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
     ;;
   browser-resources)
     tests=(
+      '^TestCredential.*E2E$'
       '^TestTemplateLibrary.*E2E$'
       '^TestStepVariables(APIWeb|Browser)E2E$'
       '^TestReleaseProvenance.*E2E$'

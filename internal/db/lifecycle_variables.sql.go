@@ -11,8 +11,8 @@ import (
 )
 
 const createLifecycleVariable = `-- name: CreateLifecycleVariable :one
-INSERT INTO lifecycle_variables (lifecycle_id, name, value, environment_id, secret)
-VALUES (?, ?, ?, ?, ?) RETURNING id, lifecycle_id, name, value, environment_id, secret, created_at
+INSERT INTO lifecycle_variables (lifecycle_id, name, value, environment_id, secret, is_credential, expires_at, rotation_due_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, lifecycle_id, name, value, environment_id, secret, created_at, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential
 `
 
 type CreateLifecycleVariableParams struct {
@@ -21,6 +21,9 @@ type CreateLifecycleVariableParams struct {
 	Value         sql.NullString `json:"value"`
 	EnvironmentID sql.NullInt64  `json:"environment_id"`
 	Secret        int64          `json:"secret"`
+	IsCredential  int64          `json:"is_credential"`
+	ExpiresAt     int64          `json:"expires_at"`
+	RotationDueAt int64          `json:"rotation_due_at"`
 }
 
 func (q *Queries) CreateLifecycleVariable(ctx context.Context, arg CreateLifecycleVariableParams) (LifecycleVariable, error) {
@@ -30,6 +33,9 @@ func (q *Queries) CreateLifecycleVariable(ctx context.Context, arg CreateLifecyc
 		arg.Value,
 		arg.EnvironmentID,
 		arg.Secret,
+		arg.IsCredential,
+		arg.ExpiresAt,
+		arg.RotationDueAt,
 	)
 	var i LifecycleVariable
 	err := row.Scan(
@@ -40,12 +46,17 @@ func (q *Queries) CreateLifecycleVariable(ctx context.Context, arg CreateLifecyc
 		&i.EnvironmentID,
 		&i.Secret,
 		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.RotationDueAt,
+		&i.RotatedAt,
+		&i.RotationRevision,
+		&i.IsCredential,
 	)
 	return i, err
 }
 
 const deleteLifecycleVariable = `-- name: DeleteLifecycleVariable :execrows
-DELETE FROM lifecycle_variables WHERE id = ? AND lifecycle_id = ?
+DELETE FROM lifecycle_variables WHERE id = ? AND lifecycle_id = ? AND is_credential = 0
 `
 
 type DeleteLifecycleVariableParams struct {
@@ -62,7 +73,7 @@ func (q *Queries) DeleteLifecycleVariable(ctx context.Context, arg DeleteLifecyc
 }
 
 const getLifecycleVariable = `-- name: GetLifecycleVariable :one
-SELECT id, lifecycle_id, name, value, environment_id, secret, created_at FROM lifecycle_variables WHERE id = ? AND lifecycle_id = ?
+SELECT id, lifecycle_id, name, value, environment_id, secret, created_at, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential FROM lifecycle_variables WHERE id = ? AND lifecycle_id = ?
 `
 
 type GetLifecycleVariableParams struct {
@@ -81,6 +92,11 @@ func (q *Queries) GetLifecycleVariable(ctx context.Context, arg GetLifecycleVari
 		&i.EnvironmentID,
 		&i.Secret,
 		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.RotationDueAt,
+		&i.RotatedAt,
+		&i.RotationRevision,
+		&i.IsCredential,
 	)
 	return i, err
 }
@@ -102,7 +118,7 @@ func (q *Queries) LifecycleVariableScopeAllowed(ctx context.Context, arg Lifecyc
 }
 
 const listAllLifecycleVariables = `-- name: ListAllLifecycleVariables :many
-SELECT id, lifecycle_id, name, value, environment_id, secret, created_at FROM lifecycle_variables ORDER BY id
+SELECT id, lifecycle_id, name, value, environment_id, secret, created_at, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential FROM lifecycle_variables ORDER BY id
 `
 
 func (q *Queries) ListAllLifecycleVariables(ctx context.Context) ([]LifecycleVariable, error) {
@@ -122,6 +138,11 @@ func (q *Queries) ListAllLifecycleVariables(ctx context.Context) ([]LifecycleVar
 			&i.EnvironmentID,
 			&i.Secret,
 			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.RotationDueAt,
+			&i.RotatedAt,
+			&i.RotationRevision,
+			&i.IsCredential,
 		); err != nil {
 			return nil, err
 		}
@@ -137,7 +158,7 @@ func (q *Queries) ListAllLifecycleVariables(ctx context.Context) ([]LifecycleVar
 }
 
 const listLifecycleVariables = `-- name: ListLifecycleVariables :many
-SELECT id, lifecycle_id, name, value, environment_id, secret, created_at FROM lifecycle_variables WHERE lifecycle_id = ? ORDER BY name, id
+SELECT id, lifecycle_id, name, value, environment_id, secret, created_at, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential FROM lifecycle_variables WHERE lifecycle_id = ? ORDER BY name, id
 `
 
 func (q *Queries) ListLifecycleVariables(ctx context.Context, lifecycleID int64) ([]LifecycleVariable, error) {
@@ -157,6 +178,11 @@ func (q *Queries) ListLifecycleVariables(ctx context.Context, lifecycleID int64)
 			&i.EnvironmentID,
 			&i.Secret,
 			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.RotationDueAt,
+			&i.RotatedAt,
+			&i.RotationRevision,
+			&i.IsCredential,
 		); err != nil {
 			return nil, err
 		}
@@ -204,8 +230,8 @@ func (q *Queries) ListProjectsByLifecycle(ctx context.Context, lifecycleID sql.N
 }
 
 const updateLifecycleVariable = `-- name: UpdateLifecycleVariable :one
-UPDATE lifecycle_variables SET name = ?, value = ?, environment_id = ?, secret = ?
-WHERE id = ? AND lifecycle_id = ? RETURNING id, lifecycle_id, name, value, environment_id, secret, created_at
+UPDATE lifecycle_variables SET name = ?, value = ?, environment_id = ?, secret = ?, rotation_revision = rotation_revision + 1
+WHERE id = ? AND lifecycle_id = ? AND is_credential = 0 RETURNING id, lifecycle_id, name, value, environment_id, secret, created_at, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential
 `
 
 type UpdateLifecycleVariableParams struct {
@@ -235,13 +261,18 @@ func (q *Queries) UpdateLifecycleVariable(ctx context.Context, arg UpdateLifecyc
 		&i.EnvironmentID,
 		&i.Secret,
 		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.RotationDueAt,
+		&i.RotatedAt,
+		&i.RotationRevision,
+		&i.IsCredential,
 	)
 	return i, err
 }
 
 const updateLifecycleVariableKeepValue = `-- name: UpdateLifecycleVariableKeepValue :one
-UPDATE lifecycle_variables SET name = ?, environment_id = ?, secret = ?
-WHERE id = ? AND lifecycle_id = ? RETURNING id, lifecycle_id, name, value, environment_id, secret, created_at
+UPDATE lifecycle_variables SET name = ?, environment_id = ?, secret = ?, rotation_revision = rotation_revision + 1
+WHERE id = ? AND lifecycle_id = ? AND is_credential = 0 RETURNING id, lifecycle_id, name, value, environment_id, secret, created_at, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential
 `
 
 type UpdateLifecycleVariableKeepValueParams struct {
@@ -269,6 +300,11 @@ func (q *Queries) UpdateLifecycleVariableKeepValue(ctx context.Context, arg Upda
 		&i.EnvironmentID,
 		&i.Secret,
 		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.RotationDueAt,
+		&i.RotatedAt,
+		&i.RotationRevision,
+		&i.IsCredential,
 	)
 	return i, err
 }

@@ -19,20 +19,20 @@ WHERE project_id = sqlc.arg(project_id)
 SELECT * FROM variables WHERE id = ?;
 
 -- name: CreateVariable :one
-INSERT INTO variables (project_id, name, value, environment_id, secret) VALUES (?, ?, ?, ?, ?) RETURNING *;
+INSERT INTO variables (project_id, name, value, environment_id, secret, is_credential, expires_at, rotation_due_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *;
 
 -- name: UpdateVariable :one
-UPDATE variables SET name = ?, value = ?, environment_id = ?, secret = ? WHERE id = ? RETURNING *;
+UPDATE variables SET name = ?, value = ?, environment_id = ?, secret = ?, rotation_revision = rotation_revision + 1 WHERE id = ? AND is_credential = 0 RETURNING *;
 
 -- name: UpdateVariableKeepValue :one
-UPDATE variables SET name = ?, environment_id = ?, secret = ? WHERE id = ? RETURNING *;
+UPDATE variables SET name = ?, environment_id = ?, secret = ?, rotation_revision = rotation_revision + 1 WHERE id = ? AND is_credential = 0 RETURNING *;
 
 -- name: DeleteVariable :exec
-DELETE FROM variables WHERE id = ?;
+DELETE FROM variables WHERE id = ? AND is_credential = 0;
 
 -- name: DeleteVariableOverrides :exec
 DELETE FROM variables
-WHERE project_id = sqlc.arg(project_id) AND name = sqlc.arg(name)
+WHERE project_id = sqlc.arg(project_id) AND name = sqlc.arg(name) AND is_credential = 0
   AND (environment_id = sqlc.narg(environment_id)
        OR (environment_id IS NULL AND sqlc.narg(environment_id) IS NULL));
 

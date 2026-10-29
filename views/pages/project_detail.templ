@@ -29,6 +29,7 @@ templ ProjectMenuDialog(project db.Project) {
 					<li class="menu-title">Configuration</li>
 					<li><a href={ fmt.Sprintf("/projects/%d/steps-page", project.ID) }>Steps</a></li>
 					<li><a href={ fmt.Sprintf("/projects/%d/variables", project.ID) }>Variables</a></li>
+					<li><a href={ fmt.Sprintf("/projects/%d/credentials", project.ID) }>Credentials</a></li>
 					<li><a href={ fmt.Sprintf("/projects/%d/package-repository", project.ID) }>Packages</a></li>
 				</ul>
 				<ul class="menu w-full">

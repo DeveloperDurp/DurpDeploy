@@ -149,7 +149,8 @@ func scopedTokenPathAllowed(method, path string) bool {
 	// Shared definitions and credentials have no project write boundary.
 	if strings.Contains(path, "/templates") ||
 		strings.HasPrefix(path, "/lifecycles/") &&
-			strings.Contains(path, "/variables") {
+			(strings.Contains(path, "/variables") ||
+				strings.Contains(path, "/credentials")) {
 		allowed = false
 	}
 	return allowed

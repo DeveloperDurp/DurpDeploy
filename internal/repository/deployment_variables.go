@@ -26,13 +26,24 @@ func (r *Repository) deploymentVariables(
 	row, err := q.GetDeploymentVariableSnapshot(ctx, deploymentID)
 	if errors.Is(err, sql.ErrNoRows) {
 		// Legacy executions retain their original release snapshot.
-		deployment, err := q.GetDeployment(ctx, deploymentID)
-		if err != nil {
-			return nil, err
+		deployment, loadErr := q.GetDeployment(ctx, deploymentID)
+		if loadErr != nil {
+			return nil, loadErr
 		}
 		txRepo := *r
 		txRepo.Queries = q
-		return txRepo.ListReleaseVariablesByRelease(ctx, deployment.ReleaseID)
+		legacy, loadErr := txRepo.ListReleaseVariablesByRelease(
+			ctx, deployment.ReleaseID,
+		)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		// Rotation can commit a legacy capture between the initial lookup
+		// and fallback read. Prefer that capture before returning values.
+		row, err = q.GetDeploymentVariableSnapshot(ctx, deploymentID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return legacy, nil
+		}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get deployment variables: %w", err)

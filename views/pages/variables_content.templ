@@ -33,6 +33,7 @@ templ VariablesContent(project db.Project, variables []db.Variable, environments
 			<div class="flex gap-2">
 				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 				@SecretExportButton("project", project.ID)
+				<a href={ fmt.Sprintf("/projects/%d/credentials", project.ID) } class="btn btn-outline btn-sm">Credentials</a>
 			</div>
 		</div>
 		@VariablesFragment(project, variables, environments, errorMsg)

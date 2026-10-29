@@ -4041,6 +4041,488 @@
         }
       }
     },
+    "/lifecycles/{id}/credentials": {
+      "get": {
+        "description": "Requires an unrestricted global administrator. Project overrides keep their values.\nSaving confirms storage only. Provider rotation and provider validation are manual.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "credentials"
+        ],
+        "summary": "List credential metadata without secret values. Status uses the earliest configured date and a 30-day warning window.",
+        "operationId": "listLifecycleCredentials",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credential metadata",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Credential"
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Credential or owner not found"
+          },
+          "500": {
+            "description": "Credential operation failed"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "description": "Require an unrestricted global administrator.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "credentials"
+        ],
+        "summary": "Create an explicitly classified secret variable. Existing secrets require individual enrollment.",
+        "operationId": "createLifecycleCredential",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/CredentialCreateRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Credential operation succeeded",
+            "schema": {
+              "$ref": "#/definitions/Credential"
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Owner or credential not found"
+          },
+          "409": {
+            "description": "Stale revision"
+          },
+          "422": {
+            "description": "Invalid credential fields"
+          },
+          "500": {
+            "description": "Credential operation failed"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/lifecycles/{id}/credentials/candidates": {
+      "get": {
+        "description": "Require an unrestricted global administrator.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "credentials"
+        ],
+        "summary": "List ordinary secrets available for individual enrollment. Values are excluded.",
+        "operationId": "listLifecycleCredentialCandidates",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credential operation succeeded",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Credential"
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Owner or credential not found"
+          },
+          "409": {
+            "description": "Stale revision"
+          },
+          "422": {
+            "description": "Invalid credential fields"
+          },
+          "500": {
+            "description": "Credential operation failed"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/lifecycles/{id}/credentials/enroll": {
+      "post": {
+        "description": "Require an unrestricted global administrator.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "credentials"
+        ],
+        "summary": "Enroll one existing secret. Preserve its value and dates. Require the current candidate revision.",
+        "operationId": "enrollLifecycleCredential",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/CredentialEnrollmentRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credential operation succeeded",
+            "schema": {
+              "$ref": "#/definitions/Credential"
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Owner or credential not found"
+          },
+          "409": {
+            "description": "Stale revision"
+          },
+          "422": {
+            "description": "Invalid credential fields"
+          },
+          "500": {
+            "description": "Credential operation failed"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/lifecycles/{id}/credentials/{kind}/{credentialId}": {
+      "put": {
+        "description": "A nonempty value replaces the shared credential for new executions. Existing execution captures remain unchanged.\nRequires an unrestricted global administrator. Project overrides keep their values.\nSaving confirms storage only. Provider rotation and provider validation are manual.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "credentials"
+        ],
+        "summary": "Save expiry and rotation dates with an optional replacement. Empty value preserves the secret and last rotation time. Zero clears dates.",
+        "operationId": "updateLifecycleCredentialMetadata",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "enum": [
+              "lifecycle"
+            ],
+            "type": "string",
+            "name": "kind",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "credentialId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/CredentialRotationRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credential metadata",
+            "schema": {
+              "$ref": "#/definitions/CredentialRotationResult"
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Credential or owner not found"
+          },
+          "409": {
+            "description": "Stale revision. Reload before retrying."
+          },
+          "422": {
+            "description": "Invalid dates or replacement"
+          },
+          "500": {
+            "description": "Credential operation failed"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "description": "Require an unrestricted global administrator.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "credentials"
+        ],
+        "summary": "Delete a credential variable source. Preserve release snapshots and execution history.",
+        "operationId": "deleteLifecycleCredential",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "enum": [
+              "lifecycle"
+            ],
+            "type": "string",
+            "name": "kind",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "credentialId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "revision"
+              ],
+              "properties": {
+                "revision": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Credential operation succeeded"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Owner or credential not found"
+          },
+          "409": {
+            "description": "Stale revision"
+          },
+          "422": {
+            "description": "Invalid credential fields"
+          },
+          "500": {
+            "description": "Credential operation failed"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/lifecycles/{id}/credentials/{kind}/{credentialId}/rotate": {
+      "post": {
+        "description": "Requires an unrestricted global administrator. Project overrides keep their values.\nSaving confirms storage only. Provider rotation and provider validation are manual.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "credentials"
+        ],
+        "summary": "Store a nonempty replacement and dates atomically. Project secrets update all matching release and runbook secrets. Existing execution captures remain unchanged.",
+        "operationId": "rotateLifecycleCredential",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "enum": [
+              "lifecycle"
+            ],
+            "type": "string",
+            "name": "kind",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "credentialId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/CredentialRotationRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credential metadata",
+            "schema": {
+              "$ref": "#/definitions/CredentialRotationResult"
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Credential or owner not found"
+          },
+          "409": {
+            "description": "Stale revision. Reload before retrying."
+          },
+          "422": {
+            "description": "Invalid dates or replacement"
+          },
+          "500": {
+            "description": "Credential operation failed"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/lifecycles/{id}/save": {
       "post": {
         "consumes": [
@@ -5551,6 +6033,546 @@
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/projects/{id}/credentials": {
+      "get": {
+        "description": "Project writes require effective Maintainer permission. Retained package sources can rotate without becoming active.\nSaving confirms storage only. Provider rotation and provider validation are manual.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "credentials"
+        ],
+        "summary": "List credential metadata without secret values. Status uses the earliest configured date and a 30-day warning window.",
+        "operationId": "listProjectCredentials",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credential metadata",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Credential"
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Credential or owner not found"
+          },
+          "500": {
+            "description": "Credential operation failed"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "description": "Writes require effective Maintainer access.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "credentials"
+        ],
+        "summary": "Create an explicitly classified secret variable. Existing secrets require individual enrollment.",
+        "operationId": "createProjectCredential",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/CredentialCreateRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Credential operation succeeded",
+            "schema": {
+              "$ref": "#/definitions/Credential"
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Owner or credential not found"
+          },
+          "409": {
+            "description": "Stale revision"
+          },
+          "422": {
+            "description": "Invalid credential fields"
+          },
+          "500": {
+            "description": "Credential operation failed"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/projects/{id}/credentials/candidates": {
+      "get": {
+        "description": "Writes require effective Maintainer access.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "credentials"
+        ],
+        "summary": "List ordinary secrets available for individual enrollment. Values are excluded.",
+        "operationId": "listProjectCredentialCandidates",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credential operation succeeded",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Credential"
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Owner or credential not found"
+          },
+          "409": {
+            "description": "Stale revision"
+          },
+          "422": {
+            "description": "Invalid credential fields"
+          },
+          "500": {
+            "description": "Credential operation failed"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/projects/{id}/credentials/enroll": {
+      "post": {
+        "description": "Writes require effective Maintainer access.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "credentials"
+        ],
+        "summary": "Enroll one existing secret. Preserve its value and dates. Require the current candidate revision.",
+        "operationId": "enrollProjectCredential",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/CredentialEnrollmentRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credential operation succeeded",
+            "schema": {
+              "$ref": "#/definitions/Credential"
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Owner or credential not found"
+          },
+          "409": {
+            "description": "Stale revision"
+          },
+          "422": {
+            "description": "Invalid credential fields"
+          },
+          "500": {
+            "description": "Credential operation failed"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/projects/{id}/credentials/status": {
+      "get": {
+        "description": "Writes require effective Maintainer access.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "credentials"
+        ],
+        "summary": "Read expiry banner counts. Include applicable shared credentials and authenticated package sources.",
+        "operationId": "getProjectCredentialStatus",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credential operation succeeded",
+            "schema": {
+              "$ref": "#/definitions/CredentialStatusSummary"
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Owner or credential not found"
+          },
+          "409": {
+            "description": "Stale revision"
+          },
+          "422": {
+            "description": "Invalid credential fields"
+          },
+          "500": {
+            "description": "Credential operation failed"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/projects/{id}/credentials/{kind}/{credentialId}": {
+      "put": {
+        "description": "A nonempty value rotates the credential and updates matching release and runbook secrets. Existing execution captures remain unchanged.\nProject writes require effective Maintainer permission. Retained package sources can rotate without becoming active.\nSaving confirms storage only. Provider rotation and provider validation are manual.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "credentials"
+        ],
+        "summary": "Save expiry and rotation dates with an optional replacement. Empty value preserves the secret and last rotation time. Zero clears dates.",
+        "operationId": "updateProjectCredentialMetadata",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "enum": [
+              "variable",
+              "package"
+            ],
+            "type": "string",
+            "name": "kind",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "credentialId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/CredentialRotationRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credential metadata",
+            "schema": {
+              "$ref": "#/definitions/CredentialRotationResult"
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Credential or owner not found"
+          },
+          "409": {
+            "description": "Stale revision. Reload before retrying."
+          },
+          "422": {
+            "description": "Invalid dates or replacement"
+          },
+          "500": {
+            "description": "Credential operation failed"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "description": "Writes require effective Maintainer access.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "credentials"
+        ],
+        "summary": "Delete a credential variable source. Preserve release snapshots and execution history.",
+        "operationId": "deleteProjectCredential",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "enum": [
+              "variable"
+            ],
+            "type": "string",
+            "name": "kind",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "credentialId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "revision"
+              ],
+              "properties": {
+                "revision": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Credential operation succeeded"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Owner or credential not found"
+          },
+          "409": {
+            "description": "Stale revision"
+          },
+          "422": {
+            "description": "Invalid credential fields"
+          },
+          "500": {
+            "description": "Credential operation failed"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/projects/{id}/credentials/{kind}/{credentialId}/rotate": {
+      "post": {
+        "description": "Project writes require effective Maintainer permission. Retained package sources can rotate without becoming active.\nSaving confirms storage only. Provider rotation and provider validation are manual.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "credentials"
+        ],
+        "summary": "Store a nonempty replacement and dates atomically. Project secrets update all matching release and runbook secrets. Existing execution captures remain unchanged.",
+        "operationId": "rotateProjectCredential",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "enum": [
+              "variable",
+              "package"
+            ],
+            "type": "string",
+            "name": "kind",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "credentialId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/CredentialRotationRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credential metadata",
+            "schema": {
+              "$ref": "#/definitions/CredentialRotationResult"
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Permission denied"
+          },
+          "404": {
+            "description": "Credential or owner not found"
+          },
+          "409": {
+            "description": "Stale revision. Reload before retrying."
+          },
+          "422": {
+            "description": "Invalid dates or replacement"
+          },
+          "500": {
+            "description": "Credential operation failed"
           }
         },
         "security": [
@@ -11628,6 +12650,178 @@
       "x-go-name": "swaggerCreateTokenResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "Credential": {
+      "type": "object",
+      "title": "Credential contains public metadata only. Values never leave the repository.",
+      "properties": {
+        "active": {
+          "type": "boolean",
+          "x-go-name": "Active"
+        },
+        "environment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "EnvironmentID"
+        },
+        "expires_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ExpiresAt"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "inherited": {
+          "type": "boolean",
+          "x-go-name": "Inherited"
+        },
+        "kind": {
+          "type": "string",
+          "x-go-name": "Kind"
+        },
+        "lifecycle_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "LifecycleID"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Revision"
+        },
+        "rotated_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "RotatedAt"
+        },
+        "rotation_due_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "RotationDueAt"
+        },
+        "status": {
+          "type": "string",
+          "x-go-name": "Status"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
+    },
+    "CredentialCreateRequest": {
+      "type": "object",
+      "title": "CredentialCreateInput creates an explicitly classified secret variable.",
+      "properties": {
+        "environment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "EnvironmentID"
+        },
+        "expires_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ExpiresAt"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "rotation_due_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "RotationDueAt"
+        },
+        "value": {
+          "type": "string",
+          "x-go-name": "Value"
+        }
+      },
+      "x-go-name": "CredentialCreateInput",
+      "x-go-package": "durpdeploy/internal/repository"
+    },
+    "CredentialEnrollmentRequest": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Revision"
+        },
+        "variable_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "VariableID"
+        }
+      },
+      "x-go-name": "CredentialEnrollmentInput",
+      "x-go-package": "durpdeploy/internal/repository"
+    },
+    "CredentialRotationRequest": {
+      "type": "object",
+      "properties": {
+        "expires_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ExpiresAt"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Revision"
+        },
+        "rotation_due_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "RotationDueAt"
+        },
+        "value": {
+          "type": "string",
+          "x-go-name": "Value"
+        }
+      },
+      "x-go-name": "CredentialRotationInput",
+      "x-go-package": "durpdeploy/internal/repository"
+    },
+    "CredentialRotationResult": {
+      "type": "object",
+      "properties": {
+        "credential": {
+          "$ref": "#/definitions/Credential"
+        },
+        "release_variables_updated": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ReleaseVariablesUpdated"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
+    },
+    "CredentialStatusSummary": {
+      "type": "object",
+      "title": "CredentialStatusSummary is the project overview banner contract.",
+      "properties": {
+        "due": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Due"
+        },
+        "due_soon": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DueSoon"
+        },
+        "expired": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Expired"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
+    },
     "DatabaseSecurityResponse": {
       "type": "object",
       "properties": {
@@ -12314,6 +13508,11 @@
           "format": "int64",
           "x-go-name": "ID"
         },
+        "is_credential": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "IsCredential"
+        },
         "lifecycle_id": {
           "type": "integer",
           "format": "int64",
@@ -12620,6 +13819,11 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "ID"
+        },
+        "is_credential": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "IsCredential"
         },
         "lifecycle_id": {
           "type": "integer",
@@ -13788,6 +14992,10 @@
         "environment_name": {
           "type": "string",
           "x-go-name": "EnvironmentName"
+        },
+        "is_credential": {
+          "type": "boolean",
+          "x-go-name": "IsCredential"
         },
         "key": {
           "type": "string",
@@ -15696,6 +16904,11 @@
           "format": "int64",
           "x-go-name": "ID"
         },
+        "is_credential": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "IsCredential"
+        },
         "name": {
           "type": "string",
           "x-go-name": "Name"
@@ -15887,6 +17100,11 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "ID"
+        },
+        "is_credential": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "IsCredential"
         },
         "name": {
           "type": "string",

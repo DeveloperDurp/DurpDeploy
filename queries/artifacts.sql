@@ -14,7 +14,7 @@ ORDER BY id DESC;
 SELECT * FROM package_repositories WHERE project_id = ? ORDER BY name, id;
 
 -- name: UpdatePackageRepository :one
-UPDATE package_repositories SET name = ?, url_template = ?, auth_type = ?, username = ?, credential = ?
+UPDATE package_repositories SET name = ?, url_template = ?, auth_type = ?, username = ?, credential = ?, rotation_revision = rotation_revision + 1
 WHERE id = ? AND project_id = ? RETURNING *;
 
 -- name: PackageRepositoryHasPins :one
@@ -97,7 +97,7 @@ UPDATE package_repositories SET credential = ? WHERE id = ?;
 UPDATE package_repositories SET name = name WHERE id = ?; -- NOSONAR: intentional write lock
 
 -- name: UpdatePackageRepositoryKeepCredential :one
-UPDATE package_repositories SET name = ?, url_template = ?, auth_type = ?, username = ?
+UPDATE package_repositories SET name = ?, url_template = ?, auth_type = ?, username = ?, rotation_revision = rotation_revision + 1
 WHERE id = ? AND project_id = ? RETURNING *;
 
 -- name: ListArtifactReleases :many

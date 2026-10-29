@@ -3288,3 +3288,69 @@ Confirm both agent staging directories are empty and the runtime retains no owne
 Create the instance's `stop` file to stop only that fixture and its two agents.
 Keep its database, identity files, logs, requests, and deployment history.
 The automated checks also cover raised ceilings, cumulative visits, cancellation, invalid startup ranges, and preflight rejection before decryption.
+
+## Credential expiry and rotation
+
+Use synthetic credentials for these checks.
+Retain the projects, releases, runbook versions, and deployment history after testing.
+Keep schedules disabled.
+
+1. Create `ROTATING_TOKEN` with `POST /api/v1/projects/{id}/credentials` and a nonempty `value`.
+2. Create two releases and one runbook version with that secret.
+3. Create an environment override and an unrelated project secret with the same name.
+4. Open **Credentials** from the project menu.
+5. Select **Edit credential** and set an expiry date within 30 days.
+6. Select **Save** with the replacement field empty.
+7. Confirm `due_soon` status and an unchanged secret.
+8. Set a past expiry date and confirm `expired` status.
+9. Select **Save** without a replacement and confirm that the secret and last rotation time stay unchanged.
+10. Enter a replacement and a future expiry date.
+11. Select **Save** and confirm success and an updated last rotation time.
+12. Deploy both earlier releases and execute the earlier runbook version.
+13. Confirm that each execution receives the replacement.
+14. Confirm that the environment override and unrelated project keep their values.
+15. Confirm that queued deployments and pending approvals keep their captured variables.
+16. Re-run a deployment and confirm that it captures the replacement.
+17. Submit an earlier `revision` through the API and confirm `409` without changes.
+18. Confirm that API responses, forms, logs, and audit details contain no credential values.
+
+For shared lifecycle secrets, repeat rotation through the lifecycle **Credentials** page.
+Confirm that new executions of earlier releases use the replacement.
+Confirm that project overrides keep their independent values.
+
+For package credentials, remove an authenticated source after creating a pinned release.
+Rotate its retained credential without activating the source.
+Deploy the earlier release and confirm authenticated package download.
+Confirm that its version and checksum remain pinned.
+
+As a Viewer or Deployer, confirm that rotation controls are absent and writes receive permission denial.
+As a scoped Maintainer, confirm project rotation and denial of shared lifecycle administration.
+Check the forms at 375-pixel and 1280-pixel viewport widths.
+
+Create an ordinary secret through the Variables page.
+Confirm that the Credentials page does not list it.
+Open **New credential or enroll secret** and enroll that secret individually.
+Confirm that its value stays masked and its Variables row disappears.
+Repeat these steps for a shared lifecycle secret.
+Confirm that existing secrets with dates also require enrollment.
+
+Open the project overview after setting a past credential expiry date.
+Confirm that the banner reports the expired credential and links to Credentials.
+Set a date within 30 days and confirm the warning count.
+Confirm that applicable inherited credentials appear and overridden shared credentials do not appear.
+Use an account without lifecycle administration access and confirm that shared management controls are absent.
+
+Create a disposable credential through the dedicated page.
+Select **Delete credential** and confirm deletion on its dedicated page.
+Confirm that release snapshots and execution history remain available.
+Recreate the disposable example for manual checks.
+
+Run the automated checks:
+
+```bash
+bash scripts/go_test.sh -run '^TestCredential' ./internal/repository
+bash scripts/go_test.sh -tags=e2e -run '^TestCredential' ./internal/handler/api
+DURPDEPLOY_CONTAINER_RUNTIME=podman bash scripts/ci_browser_shard.sh -- \
+  bash scripts/go_test.sh -tags=e2e,packagebrowser \
+  -run '^TestCredential' ./internal/handler/api
+```

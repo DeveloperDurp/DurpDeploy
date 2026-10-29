@@ -92,8 +92,8 @@
   {
     "rule": "G101",
     "file": "internal/audit/routes.go",
-    "line": "6-212",
-    "source_sha256": "1c02087de46a656b4c9e2c319a68572f51b197384bbb40c36c3664da66aaada5",
+    "line": "6-230",
+    "source_sha256": "053b854d6dafbec57cb2b53f9d18e9ab23f410d123812cd1bdc540c55ec9e215",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie name or audit action/route metadata, not a credential value. Evidence: passkey binding readers/setters or internal/audit/audit.go consumers."
@@ -362,8 +362,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/variable.go",
-    "line": "381",
-    "source_sha256": "6aa193eada071d804c299ef62f696aaae395339bdfc9f1fde94212c620fead60",
+    "line": "385",
+    "source_sha256": "5e5368b6b455f209ff1117a2c04857077b91cfabb57ae95515b16aa86b626f4c",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "The redirect uses a fixed /projects/ path prefix and an ID parsed as int64 by parseProjectID. The destination remains on the same origin. Evidence: VariableHandler.UpdateVariable and parseProjectID."
@@ -371,8 +371,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/variable.go",
-    "line": "180",
-    "source_sha256": "6aa193eada071d804c299ef62f696aaae395339bdfc9f1fde94212c620fead60",
+    "line": "184",
+    "source_sha256": "5e5368b6b455f209ff1117a2c04857077b91cfabb57ae95515b16aa86b626f4c",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "The redirect uses a fixed /projects/ path prefix and an ID parsed as int64 by parseProjectID. The destination remains on the same origin. Evidence: VariableHandler.CreateVariable and parseProjectID."
@@ -610,5 +610,23 @@
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "MFA redirects only after atomic factor and session completion through takeLoginDestination. This helper bounds and decodes the cookie, then SafeLoginDestination accepts only validated local paths and queries. Evidence: internal/auth/login_destination_test.go; internal/handler/login_destination_test.go; TOTP, recovery, and WebAuthn completion tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/credentials.go",
+    "line": "485",
+    "source_sha256": "a3ac55ebf11d6dbacb4914e2fe78bba8fe10c4c524c0223e0dcf50e00fdd30e0",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "The redirect uses a fixed project or lifecycle path with positive int64 identifiers. SaveCredentialRotation rejects kinds outside variable, lifecycle, and package before redirecting. Evidence: CredentialHandler.Save, SaveCredentialRotation, and credential API/browser E2E checks."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/lifecycle_variables.go",
+    "line": "162",
+    "source_sha256": "08659758fbf40cb8d6325ae274d3c176b74cffd69a00bee6f3d90d2322647428",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "The redirect uses a fixed lifecycle credential path with int64 identifiers from validated parameters and the loaded lifecycle. The destination remains on the same origin. Evidence: LifecycleVariableHandler.Edit, lifecycleVariableFormID, and workspace."
   }
 ]

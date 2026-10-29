@@ -1530,3 +1530,84 @@ By default, transfers stop after five minutes without progress.
 `DURPDEPLOY_LIMITS_TRANSFER_IDLE_TIMEOUT_SECONDS` changes the server's staging and package-transfer socket inactivity deadline.
 The server setting does not change an agent's client timeout or the upstream package-fetch timeout.
 Managed package files and volumes follow the same cleanup barrier as writable staging.
+
+## External credential expiry and rotation
+
+Use the dedicated rotation endpoints to update existing release secrets.
+Only explicitly enrolled variables are credentials.
+Existing secrets require individual enrollment, including secrets with expiry dates.
+Ordinary secrets remain variables and keep their existing snapshot behavior.
+Authenticated package sources remain credentials, including retained sources.
+
+Create credential variables with `POST /api/v1/projects/{id}/credentials`.
+Send `name`, a nonempty `value`, optional `environment_id`, and optional dates.
+Use the same endpoint under `/api/v1/lifecycles/{id}` for shared credentials.
+Creation returns `201` with secret-free metadata.
+Credential names and environment scopes stay fixed after creation.
+
+List enrollment candidates with `GET /api/v1/projects/{id}/credentials/candidates`.
+Enroll one existing secret with `POST /api/v1/projects/{id}/credentials/enroll`.
+Send its `variable_id` and the candidate `revision`.
+Use the same suffixes under `/api/v1/lifecycles/{id}` for shared secrets.
+Enrollment preserves the secret value and dates.
+Enrollment does not replace historical release values until rotation.
+
+Read project banner counts with `GET /api/v1/projects/{id}/credentials/status`.
+Counts include applicable inherited credentials and active or retained authenticated package sources.
+Exact project overrides suppress matching shared credentials.
+Project credential lists identify inherited entries with `inherited` and `lifecycle_id`.
+Manage inherited credentials through their lifecycle endpoints.
+
+Delete a variable credential with `DELETE /api/v1/projects/{id}/credentials/variable/{credentialId}`.
+Send the latest `revision` in the JSON body.
+For shared credentials, use `DELETE /api/v1/lifecycles/{id}/credentials/lifecycle/{credentialId}`.
+Deletion returns `204` and preserves release snapshots and execution history.
+Ordinary variable write endpoints cannot change enrolled credentials.
+
+- List project credential metadata with `GET /api/v1/projects/{id}/credentials`.
+- List shared lifecycle credential metadata with `GET /api/v1/lifecycles/{id}/credentials`.
+- Save dates and an optional replacement with `PUT /api/v1/projects/{id}/credentials/{kind}/{credentialId}`.
+- Rotate with `POST /api/v1/projects/{id}/credentials/{kind}/{credentialId}/rotate`.
+- For shared secrets, use the same write suffix under `/api/v1/lifecycles/{id}/credentials`.
+
+Project `kind` values are `variable` and `package`.
+Shared lifecycle writes require `kind=lifecycle`.
+Project writes require effective Maintainer permission.
+Shared lifecycle operations require a global administrator with unrestricted global access.
+
+Send `revision` from the latest metadata response with every write.
+Send `expires_at` and `rotation_due_at` as Unix seconds.
+Zero or an omitted date clears that date.
+For replacement through either write endpoint, include a nonempty `value`.
+For date-only saves through `PUT`, omit `value` or send an empty string.
+An empty replacement preserves the secret and its last rotation time.
+The explicit `POST .../rotate` endpoint requires a nonempty replacement.
+Responses contain metadata and `release_variables_updated`, never the credential value.
+
+Project rotation updates every matching secret in all releases and runbook versions.
+Matching uses project, exact variable name, and environment scope.
+Rotation does not insert missing variables or follow historical renames.
+Shared replacements affect new executions of every existing release while preserving project overrides.
+Queued deployments, pending approvals, and other existing executions keep their captured variables.
+Legacy executions receive encrypted captures before release variables change.
+Re-runs capture current release and lifecycle values.
+
+Package rotation updates active or retained source credentials without changing the active source selection.
+The next download uses the replacement while preserving package pins.
+An active transfer can retain the previous credential.
+
+Statuses are `unknown`, `current`, `due_soon`, `due`, and `expired`.
+The earliest configured date controls status, with expiry taking precedence after expiration.
+The warning window is 30 days.
+Metadata does not block execution or validate provider access.
+Create and validate replacement tokens with their provider separately.
+Coordinate revocation with executions that still hold captured credentials.
+Automatic provider rotation and scheduled reminders are unavailable.
+
+Successful metadata, enrollment, and rotation writes return `200`.
+Stale revisions return `409`.
+Invalid dates and whitespace-only replacements return `422`.
+An empty replacement on `POST .../rotate` also returns `422`.
+Unknown credentials return `404`.
+Permission denials return `403`.
+Audit events identify the operation and credential without secret values.

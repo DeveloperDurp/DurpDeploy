@@ -64,6 +64,7 @@ type variableResponse struct {
 	EnvironmentID *int64 `json:"environment_id"`
 	CreatedAt     int64  `json:"created_at"`
 	Secret        int64  `json:"secret"`
+	IsCredential  int64  `json:"is_credential"`
 }
 
 // maskedSecretValue replaces plaintext for secret-marked variables in
@@ -83,6 +84,7 @@ func toVariableResponse(v db.Variable) variableResponse {
 		value = maskedSecretValue
 	}
 	return variableResponse{
+		IsCredential:  v.IsCredential,
 		ID:            v.ID,
 		ProjectID:     v.ProjectID,
 		Name:          v.Name,
@@ -385,7 +387,7 @@ func (h *VariableHandler) UpdateVariable(
 	if !ok {
 		return
 	}
-	if existing.ProjectID != projectID {
+	if existing.ProjectID != projectID || existing.IsCredential != 0 {
 		RespondError(w, http.StatusNotFound, "Variable not found")
 		return
 	}

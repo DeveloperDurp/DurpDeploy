@@ -27,7 +27,11 @@ func (h *VariableHandler) getProjectVariable(
 	r *http.Request,
 	projectID, variableID int64,
 ) (db.Variable, error) {
-	return h.repo.GetProjectVariable(r.Context(), projectID, variableID)
+	row, err := h.repo.GetProjectVariable(r.Context(), projectID, variableID)
+	if err == nil && row.IsCredential != 0 {
+		return db.Variable{}, sql.ErrNoRows
+	}
+	return row, err
 }
 
 func NewVariableHandler(repo *repository.Repository) *VariableHandler {

@@ -38,24 +38,46 @@ func CreateReleaseWithProvenance(
 	}
 	var release db.Release
 	err = repo.WithCreationTx(ctx, func(queries *db.Queries) error {
+		if _, err := queries.LockProject(ctx, projectID); err != nil {
+			return err
+		}
 		if err := request.Claim(ctx, queries); err != nil {
 			return err
 		}
 		var err error
 		release, err = queries.CreateReleaseWithProvenance(ctx,
 			db.CreateReleaseWithProvenanceParams{
-				ProjectID: projectID, Version: version,
+				ProjectID:     projectID,
+				Version:       version,
 				StepsJson:     snapshot.stepsJSON,
-				RepositoryUrl: source.RepositoryURL, CommitSha: source.CommitSHA,
-				ArtifactRef: source.ArtifactRef, CiRunUrl: source.CIRunURL,
+				RepositoryUrl: source.RepositoryURL,
+				CommitSha:     source.CommitSHA,
+				ArtifactRef:   source.ArtifactRef,
+				CiRunUrl:      source.CIRunURL,
 			})
 		if err != nil {
 			return err
 		}
-		if err := snapshot.insertVariables(ctx, queries, release.ID); err != nil {
+		if err := snapshot.insertVariables(
+			ctx,
+			queries,
+			release.ID,
+		); err != nil {
 			return err
 		}
-		if err := snapshot.artifact.Insert(ctx, queries, release.ID); err != nil {
+		if err := repo.SyncRotatedReleaseCredentials(
+			ctx,
+			queries,
+			projectID,
+			release.ID,
+		); err != nil {
+			return err
+		}
+		if err := snapshot.artifact.Insert(
+			ctx,
+			queries,
+			release.ID,
+		); err != nil {
 			return err
 		}
 		return request.Complete(ctx, queries, release)

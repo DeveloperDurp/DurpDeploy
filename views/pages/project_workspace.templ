@@ -7,6 +7,7 @@ import (
 )
 
 type LifecyclePanel struct {
+	CredentialStatus repository.CredentialStatusSummary
 	Lifecycle       db.Lifecycle
 	Stages          []LifecyclePanelStage
 	Inheritance     repository.VariableInheritance
@@ -52,6 +53,7 @@ templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable
 				}
 			</p>
 			@ProjectPermissionSummary()
+			@ProjectCredentialBanner(project.ID, panel.CredentialStatus)
 			@LifecyclePanelSection(project, panel)
 			@VariablesPreviewSection(project, vars, envs) {
 				@InheritedVariablesSection(project.ID, panel.Inheritance, envs, false)
@@ -65,3 +67,10 @@ templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable
 }
 
 // Keep the drawer inside the detail fragment so navigation removes it too.
+templ ProjectCredentialBanner(projectID int64, status repository.CredentialStatusSummary) {
+	if status.Expired + status.Due + status.DueSoon > 0 {
+		<div class={ "alert mb-6", templ.KV("alert-error", status.Expired + status.Due > 0), templ.KV("alert-warning", status.Expired + status.Due == 0) } role="status" data-credential-banner>
+			<div><p class="font-bold">Credentials need attention</p><p>{ fmt.Sprintf("%d expired, %d due for rotation, %d due within 30 days.", status.Expired, status.Due, status.DueSoon) }</p><a class="link" href={ fmt.Sprintf("/projects/%d/credentials", projectID) }>View credentials</a></div>
+		</div>
+	}
+}

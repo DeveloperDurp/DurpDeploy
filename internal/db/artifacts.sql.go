@@ -96,7 +96,7 @@ func (q *Queries) CopyRunbookArtifact(ctx context.Context, arg CopyRunbookArtifa
 
 const createPackageRepository = `-- name: CreatePackageRepository :one
 INSERT INTO package_repositories (project_id, name, url_template, auth_type, username, credential)
-VALUES (?, ?, ?, ?, ?, ?) RETURNING id, project_id, name, url_template, auth_type, username, credential
+VALUES (?, ?, ?, ?, ?, ?) RETURNING id, project_id, name, url_template, auth_type, username, credential, expires_at, rotation_due_at, rotated_at, rotation_revision
 `
 
 type CreatePackageRepositoryParams struct {
@@ -126,6 +126,10 @@ func (q *Queries) CreatePackageRepository(ctx context.Context, arg CreatePackage
 		&i.AuthType,
 		&i.Username,
 		&i.Credential,
+		&i.ExpiresAt,
+		&i.RotationDueAt,
+		&i.RotatedAt,
+		&i.RotationRevision,
 	)
 	return i, err
 }
@@ -248,7 +252,7 @@ func (q *Queries) GetDeploymentArtifact(ctx context.Context, deploymentID int64)
 }
 
 const getPackageRepository = `-- name: GetPackageRepository :one
-SELECT id, project_id, name, url_template, auth_type, username, credential FROM package_repositories WHERE id = ?
+SELECT id, project_id, name, url_template, auth_type, username, credential, expires_at, rotation_due_at, rotated_at, rotation_revision FROM package_repositories WHERE id = ?
 `
 
 func (q *Queries) GetPackageRepository(ctx context.Context, id int64) (PackageRepository, error) {
@@ -262,12 +266,16 @@ func (q *Queries) GetPackageRepository(ctx context.Context, id int64) (PackageRe
 		&i.AuthType,
 		&i.Username,
 		&i.Credential,
+		&i.ExpiresAt,
+		&i.RotationDueAt,
+		&i.RotatedAt,
+		&i.RotationRevision,
 	)
 	return i, err
 }
 
 const getProjectArtifactRepository = `-- name: GetProjectArtifactRepository :one
-SELECT p.id, p.project_id, p.name, p.url_template, p.auth_type, p.username, p.credential FROM package_repositories p
+SELECT p.id, p.project_id, p.name, p.url_template, p.auth_type, p.username, p.credential, p.expires_at, p.rotation_due_at, p.rotated_at, p.rotation_revision FROM package_repositories p
 JOIN project_artifact_repositories s ON s.repository_id = p.id WHERE s.project_id = ?
 `
 
@@ -282,6 +290,10 @@ func (q *Queries) GetProjectArtifactRepository(ctx context.Context, projectID in
 		&i.AuthType,
 		&i.Username,
 		&i.Credential,
+		&i.ExpiresAt,
+		&i.RotationDueAt,
+		&i.RotatedAt,
+		&i.RotationRevision,
 	)
 	return i, err
 }
@@ -383,7 +395,7 @@ func (q *Queries) ListArtifactReleases(ctx context.Context, projectID int64) ([]
 }
 
 const listPackageRepositories = `-- name: ListPackageRepositories :many
-SELECT id, project_id, name, url_template, auth_type, username, credential FROM package_repositories WHERE project_id = ? ORDER BY name, id
+SELECT id, project_id, name, url_template, auth_type, username, credential, expires_at, rotation_due_at, rotated_at, rotation_revision FROM package_repositories WHERE project_id = ? ORDER BY name, id
 `
 
 func (q *Queries) ListPackageRepositories(ctx context.Context, projectID int64) ([]PackageRepository, error) {
@@ -403,6 +415,10 @@ func (q *Queries) ListPackageRepositories(ctx context.Context, projectID int64) 
 			&i.AuthType,
 			&i.Username,
 			&i.Credential,
+			&i.ExpiresAt,
+			&i.RotationDueAt,
+			&i.RotatedAt,
+			&i.RotationRevision,
 		); err != nil {
 			return nil, err
 		}
@@ -418,7 +434,7 @@ func (q *Queries) ListPackageRepositories(ctx context.Context, projectID int64) 
 }
 
 const listPackageRepositoriesBySource = `-- name: ListPackageRepositoriesBySource :many
-SELECT id, project_id, name, url_template, auth_type, username, credential FROM package_repositories
+SELECT id, project_id, name, url_template, auth_type, username, credential, expires_at, rotation_due_at, rotated_at, rotation_revision FROM package_repositories
 WHERE project_id = ? AND url_template = ? AND auth_type = ? AND username = ?
 ORDER BY id DESC
 `
@@ -452,6 +468,10 @@ func (q *Queries) ListPackageRepositoriesBySource(ctx context.Context, arg ListP
 			&i.AuthType,
 			&i.Username,
 			&i.Credential,
+			&i.ExpiresAt,
+			&i.RotationDueAt,
+			&i.RotatedAt,
+			&i.RotationRevision,
 		); err != nil {
 			return nil, err
 		}
@@ -572,8 +592,8 @@ func (q *Queries) SelectProjectArtifactRepository(ctx context.Context, arg Selec
 }
 
 const updatePackageRepository = `-- name: UpdatePackageRepository :one
-UPDATE package_repositories SET name = ?, url_template = ?, auth_type = ?, username = ?, credential = ?
-WHERE id = ? AND project_id = ? RETURNING id, project_id, name, url_template, auth_type, username, credential
+UPDATE package_repositories SET name = ?, url_template = ?, auth_type = ?, username = ?, credential = ?, rotation_revision = rotation_revision + 1
+WHERE id = ? AND project_id = ? RETURNING id, project_id, name, url_template, auth_type, username, credential, expires_at, rotation_due_at, rotated_at, rotation_revision
 `
 
 type UpdatePackageRepositoryParams struct {
@@ -605,6 +625,10 @@ func (q *Queries) UpdatePackageRepository(ctx context.Context, arg UpdatePackage
 		&i.AuthType,
 		&i.Username,
 		&i.Credential,
+		&i.ExpiresAt,
+		&i.RotationDueAt,
+		&i.RotatedAt,
+		&i.RotationRevision,
 	)
 	return i, err
 }
@@ -625,8 +649,8 @@ func (q *Queries) UpdatePackageRepositoryCredential(ctx context.Context, arg Upd
 
 const updatePackageRepositoryKeepCredential = `-- name: UpdatePackageRepositoryKeepCredential :one
 
-UPDATE package_repositories SET name = ?, url_template = ?, auth_type = ?, username = ?
-WHERE id = ? AND project_id = ? RETURNING id, project_id, name, url_template, auth_type, username, credential
+UPDATE package_repositories SET name = ?, url_template = ?, auth_type = ?, username = ?, rotation_revision = rotation_revision + 1
+WHERE id = ? AND project_id = ? RETURNING id, project_id, name, url_template, auth_type, username, credential, expires_at, rotation_due_at, rotated_at, rotation_revision
 `
 
 type UpdatePackageRepositoryKeepCredentialParams struct {
@@ -657,6 +681,10 @@ func (q *Queries) UpdatePackageRepositoryKeepCredential(ctx context.Context, arg
 		&i.AuthType,
 		&i.Username,
 		&i.Credential,
+		&i.ExpiresAt,
+		&i.RotationDueAt,
+		&i.RotatedAt,
+		&i.RotationRevision,
 	)
 	return i, err
 }

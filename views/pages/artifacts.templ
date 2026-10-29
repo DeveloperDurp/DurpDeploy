@@ -26,6 +26,7 @@ templ ArtifactRepositoryPage(project db.Project, source db.PackageRepository, re
 						</a>
 					}
 					<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
+					<a href={ fmt.Sprintf("/projects/%d/credentials", project.ID) } class="btn btn-outline btn-sm">Credentials</a>
 				</div>
 			</div>
 			<div class="card bg-base-200 shadow"><div class="card-body space-y-4">
