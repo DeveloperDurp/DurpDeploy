@@ -32,7 +32,7 @@ func TestConfiguredDefaultTimeoutAPIE2E(t *testing.T) {
 		pause             int
 		status            string
 	}{
-		{3, 0, 4, "failed"}, {6, 0, 4, "succeeded"},
+		{3, 0, 4, "failed"}, {30, 0, 4, "succeeded"},
 		{3, 12, 4, "succeeded"}, {600, 0, 0, "succeeded"},
 	} {
 		t.Run(

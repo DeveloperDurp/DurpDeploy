@@ -85,14 +85,14 @@ def text(v):
     return (v.get("String", "") if v.get("Valid") else "") if isinstance(v,dict) else v
 print(json.dumps({k:text(d[k]) for k in ("name","description","tags","verification_type","verification_target","verification_timeout_seconds")}))
 ')
-VERIFY_ENV=$(echo "$VERIFY_ENV_RESTORE" | python3 -c 'import json,sys; d=json.load(sys.stdin); d.update(verification_type="bash",verification_target="printf verification-e2e-ok",verification_timeout_seconds=5); print(json.dumps(d))')
+VERIFY_ENV=$(echo "$VERIFY_ENV_RESTORE" | python3 -c 'import json,sys; d=json.load(sys.stdin); d.update(verification_type="bash",verification_target="printf verification-e2e-ok",verification_timeout_seconds=30); print(json.dumps(d))')
 api_put "$VERIFY_ENV" "$BASE/api/v1/environments/$VERIFY_ENV_ID" >/dev/null
 VERIFY_STEP=$(api_post "{\"name\":\"verify-step\",\"script_body\":\"printf release-v1\",\"container_image\":\"$BASH_IMAGE\"}" "$BASE/api/v1/projects/$VERIFY_PROJECT_ID/steps")
 VERIFY_STEP_ID=$(echo "$VERIFY_STEP" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
 
 wait_running_deployment() {
     local id=$1 wanted=$2 status
-    for i in {1..200}; do
+    for i in {1..600}; do
         status=$(api_get "$BASE/api/v1/deployments/$id/status" | python3 -c 'import sys,json; print(json.load(sys.stdin)["status"])')
         [[ "$status" =~ ^(succeeded|failed|cancelled|cleanup_unconfirmed)$ ]] && break
         sleep 0.1

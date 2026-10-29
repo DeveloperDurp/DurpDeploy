@@ -16,6 +16,17 @@ import (
 
 const deploymentStageMount = "/stage"
 
+func (r *DeploymentRunner) recordContainerNamespace(
+	ctx context.Context,
+	deploymentID int64,
+) (int64, error) {
+	return r.repo.Queries.RecordContainerNamespace(ctx,
+		db.RecordContainerNamespaceParams{
+			DeploymentID: deploymentID,
+			Namespace:    sql.NullString{String: r.engine.scope(), Valid: true},
+		})
+}
+
 func (r *DeploymentRunner) stageDeployment(
 	ctx context.Context,
 	deploymentID int64,
@@ -30,11 +41,7 @@ func (r *DeploymentRunner) stageDeployment(
 	if r.localErr != nil {
 		return artifactStage{}, r.localErr
 	}
-	recorded, err := r.repo.Queries.RecordContainerNamespace(ctx,
-		db.RecordContainerNamespaceParams{
-			DeploymentID: deploymentID,
-			Namespace:    sql.NullString{String: r.engine.scope(), Valid: true},
-		})
+	recorded, err := r.recordContainerNamespace(ctx, deploymentID)
 	if err != nil {
 		return artifactStage{}, fmt.Errorf("record staging namespace: %w", err)
 	}
