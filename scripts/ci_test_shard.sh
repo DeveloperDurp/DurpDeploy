@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
 # Run one isolated test shard without changing its original checks.
 set -euo pipefail
+started=$SECONDS
 tests=()
 case ${1:?usage: ci_test_shard.sh SUITE} in
   rollout-contracts)
+    bash "$0" rollout-contracts-1
+    bash "$0" rollout-contracts-2
+    ;;
+  rollout-contracts-1)
     make agent-rollout-gate
     bash scripts/run_named_go_tests.sh --race --tags e2e --timeout 3m \
       --packages ./internal/handler/api \
       --tests TestConcurrentLogDisconnectAPIWebE2E \
       --require TestConcurrentLogDisconnectAPIWebE2E
     bash scripts/go_test.sh -race -count=1 ./internal/artifact
+    ;;
+  rollout-contracts-2)
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^Test(Project(UpdateAtomic|PanelScope|PanelFailure|PanelBatch)|StepExecutionLimits|ConfiguredExecutionLimits|StepFields|RouteAuditAuthorization|TerminalRetryShutdown|FramingPolicy|TokenFormat|JSONNotificationDelivery|UserRoleValidation|TextLogExport)APIWebE2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestProxyBodyAPIWebE2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestConfigured(RequestBody(APIWeb|Isolation)|PasswordCompatibility|ArtifactTimeoutsAPIWeb|ArtifactDownload(APIWeb|RemoteAPI)|ArtifactSafety(APIWeb|RemoteAPI))E2E$' ./internal/handler/api
@@ -34,8 +41,8 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
   rollout-artifacts-1|rollout-artifacts-2)
     (
     export DURPDEPLOY_CONTAINER_RUNTIME=docker
-    tests=$(bash scripts/ci_artifact_tests.sh "${1##*-}")
-    required=${tests//$'\n'/|}
+    selected=$(bash scripts/ci_artifact_tests.sh "${1##*-}")
+    required=${selected//$'\n'/|}
     bash scripts/run_named_go_tests.sh --race --tags e2e --timeout 20m \
       --packages ./internal/handler/api --tests "$required" --require "$required"
     )
@@ -126,3 +133,4 @@ if ((${#tests[@]})); then
   bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 \
     -timeout=20m -v -run "$selected" ./internal/handler/api
 fi
+printf 'CI_TIMING shard=%s seconds=%d\n' "$1" "$((SECONDS - started))"

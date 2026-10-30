@@ -80,6 +80,7 @@ default:
       - artifacts/agent-build/**/*
       - artifacts/runtime.env
       - artifacts/runtime-timing.json
+      - artifacts/runtime-cache.json
       - artifacts/build.env
       - artifacts/image.env
 
@@ -127,13 +128,13 @@ ci-runtime:
     DOCKER_TLS_CERTDIR: ""
   before_script:
     - unset SONAR_TOKEN GHCR_TOKEN GHCR_USER
-    - apk add --no-cache bash jq=1.8.2-r0 oniguruma=6.9.10-r0
+    - apk add --no-cache bash curl=8.23.0-r0 jq=1.8.2-r0 oniguruma=6.9.10-r0
   cache: []
   timeout: 30 minutes
   script:
     - bash scripts/ci_build_runtime.sh
   artifacts:
-    expire_in: 4 hours
-    paths: [artifacts/runtime.env, artifacts/runtime-timing.json]
+    expire_in: 8 days
+    paths: [artifacts/runtime.env, artifacts/runtime-timing.json, artifacts/runtime-cache.json]
     reports:
       dotenv: artifacts/runtime.env

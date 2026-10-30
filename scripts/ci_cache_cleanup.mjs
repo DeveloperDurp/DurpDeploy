@@ -2,6 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
 const graceMs = 24 * 60 * 60 * 1000;
+const runtimeCacheMs = 8 * graceMs;
 const terminalPipelines = new Set(['success', 'failed', 'canceled', 'skipped']);
 const positiveId = value => Number.isSafeInteger(value) && value > 0;
 
@@ -69,13 +70,15 @@ async function deletionDecision(api, path, reasonFor, dryRun) {
   return { action: 'DELETE_REQUESTED', reason: null };
 }
 
-async function pipelineKeepReason(api, id, projectId, now) {
+async function pipelineKeepReason(api, id, projectId, defaultBranch, now) {
   const pipeline = await api.request('GET', `pipelines/${id}`);
   if (pipeline.id !== id || pipeline.project_id !== projectId) throw new Error('Pipeline identity does not match this project.');
   if (!terminalPipelines.has(pipeline.status)) return 'pipeline is active';
   const finished = Date.parse(pipeline.finished_at);
   if (!Number.isFinite(finished)) throw new Error(`Pipeline ${id} has no valid finish timestamp.`);
   if (now - finished < graceMs) return '24-hour grace period';
+  if (pipeline.ref === defaultBranch && pipeline.status === 'success'
+    && now - finished < runtimeCacheMs) return 'default-branch runtime cache';
   const mrRef = /^refs\/merge-requests\/([1-9][0-9]*)\/head$/.exec(pipeline.ref);
   if (!mrRef) return null;
   const iid = Number(mrRef[1]);
@@ -86,7 +89,7 @@ async function pipelineKeepReason(api, id, projectId, now) {
   return null;
 }
 
-async function pipelineTags(api, repository, { projectId, dryRun, now }, record) {
+async function pipelineTags(api, repository, { projectId, defaultBranch, dryRun, now }, record) {
   if (!positiveId(repository.id) || repository.project_id !== projectId) throw new Error('Invalid CI image repository identity.');
   const tags = await api.list(`registry/repositories/${repository.id}/tags`);
   for (const tag of tags) {
@@ -96,19 +99,19 @@ async function pipelineTags(api, repository, { projectId, dryRun, now }, record)
     if (!positiveId(id)) throw new Error('Invalid pipeline tag identifier.');
     const decision = await deletionDecision(api,
       `registry/repositories/${repository.id}/tags/${tag.name}`,
-      () => pipelineKeepReason(api, id, projectId, now), dryRun);
+      () => pipelineKeepReason(api, id, projectId, defaultBranch, now), dryRun);
     record({ repository: repository.path, id: repository.id, tag: tag.name, pipeline: id, ...decision });
   }
 }
 
-export async function cleanup(api, { projectId, projectPath, dryRun = true, now = Date.now(), log = console.log }) {
-  if (!positiveId(projectId) || !projectPath || !Number.isFinite(now)) throw new Error('Invalid cleanup identity.');
+export async function cleanup(api, { projectId, projectPath, defaultBranch, dryRun = true, now = Date.now(), log = console.log }) {
+  if (!positiveId(projectId) || !projectPath || !defaultBranch || !Number.isFinite(now)) throw new Error('Invalid cleanup identity.');
   const repositories = await api.list('registry/repositories');
   const report = [];
   const record = decision => { report.push(decision); log(JSON.stringify(decision)); };
   for (const repository of repositories) {
     if ([`${projectPath}/ci`, `${projectPath}/ci-browser`].includes(repository.path)) {
-      await pipelineTags(api, repository, { projectId, dryRun, now }, record);
+      await pipelineTags(api, repository, { projectId, defaultBranch, dryRun, now }, record);
       continue;
     }
     const iid = cacheIid(repository, projectId, projectPath);
@@ -130,7 +133,8 @@ export function configuration(env) {
     && env.CI_COMMIT_BRANCH && env.CI_COMMIT_BRANCH === env.CI_DEFAULT_BRANCH)) {
     throw new Error('Deletion requires a cleanup schedule on the protected default branch.');
   }
-  return { projectId: Number(env.CI_PROJECT_ID), projectPath: env.CI_PROJECT_PATH, dryRun: mode === 'true' };
+  if (!env.CI_DEFAULT_BRANCH) throw new Error('The default branch is required for runtime cache retention.');
+  return { projectId: Number(env.CI_PROJECT_ID), projectPath: env.CI_PROJECT_PATH, defaultBranch: env.CI_DEFAULT_BRANCH, dryRun: mode === 'true' };
 }
 
 async function main() {

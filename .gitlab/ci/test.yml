@@ -144,7 +144,7 @@ agent-rollout:
   timeout: 45 minutes
   parallel:
     matrix:
-      - ROLLOUT_SHARD: [contracts, artifacts-1, artifacts-2, verification]
+      - ROLLOUT_SHARD: [contracts-1, contracts-2, artifacts-1, artifacts-2, verification]
   variables:
     CI_JOB_TEMP: /tmp/durpdeploy-ci
     DURPDEPLOY_CONTAINER_RUNTIME: docker
