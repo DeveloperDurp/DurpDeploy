@@ -5754,6 +5754,7 @@
         ]
       },
       "post": {
+        "description": "An optional group_id selects a visible group. Omit it or send null for Ungrouped.",
         "consumes": [
           "application/json"
         ],
@@ -5772,7 +5773,7 @@
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/ProjectRequest"
+              "$ref": "#/definitions/CreateProjectRequest"
             }
           }
         ],
@@ -5801,6 +5802,12 @@
               "$ref": "#/definitions/ForbiddenError"
             }
           },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
           "409": {
             "description": "Conflict error response.",
             "schema": {
@@ -5811,6 +5818,12 @@
             "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
             "schema": {
               "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
@@ -12575,6 +12588,35 @@
       },
       "x-go-package": "durpdeploy/internal/config"
     },
+    "CreateProjectRequest": {
+      "type": "object",
+      "title": "CreateProjectRequest is the body for project creation.",
+      "properties": {
+        "description": {
+          "type": "string",
+          "x-go-name": "Description"
+        },
+        "group_id": {
+          "description": "Select a visible group. Omit this field or send null for Ungrouped.",
+          "type": "integer",
+          "format": "int64",
+          "minimum": 1,
+          "x-go-name": "GroupID",
+          "x-nullable": true
+        },
+        "lifecycle_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "LifecycleID"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        }
+      },
+      "x-go-name": "swaggerCreateProjectRequest",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
     "CreateTokenRequest": {
       "type": "object",
       "title": "CreateTokenRequest is the body for CreateToken.",
@@ -14694,7 +14736,7 @@
     },
     "ProjectRequest": {
       "type": "object",
-      "title": "ProjectRequest is the body for create/update project.",
+      "title": "ProjectRequest is the body for project updates.",
       "properties": {
         "description": {
           "type": "string",

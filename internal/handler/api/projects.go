@@ -26,6 +26,11 @@ type projectRequest struct {
 	LifecycleID int64  `json:"lifecycle_id"`
 }
 
+type createProjectRequest struct {
+	projectRequest
+	GroupID *int64 `json:"group_id"`
+}
+
 type projectNotificationsRequest struct {
 	ClearSlackWebhookURL   bool   `json:"clear_slack_webhook_url"`
 	ClearGotifyToken       bool   `json:"clear_gotify_token"`
@@ -168,6 +173,7 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 // swagger:route POST /projects projects createProject
 //
 // Create a new project. Lifecycle assignment requires a global admin.
+// An optional group_id selects a visible group. Omit it or send null for Ungrouped.
 //
 //	Consumes:
 //	- application/json
@@ -185,10 +191,12 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  403: body:ForbiddenError
+//	  404: body:NotFoundError
 //	  409: body:ConflictError
+//	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
-	var req projectRequest
+	var req createProjectRequest
 	if !readJSONBool(w, r, &req) {
 		return
 	}
@@ -201,6 +209,10 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	if !h.authorizeLifecycle(w, r, 0, req.LifecycleID) {
 		return
 	}
+	if req.GroupID != nil && *req.GroupID <= 0 {
+		RespondError(w, 422, "group_id must be a positive integer or null")
+		return
+	}
 
 	params := db.CreateProjectParams{
 		Name: name,
@@ -210,26 +222,14 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	var created db.Project
-	err := h.repo.WithTx(r.Context(), func(q *db.Queries) error {
-		var txErr error
-		created, txErr = q.CreateProject(r.Context(), params)
-		if txErr != nil {
-			return txErr
-		}
-		if user := auth.UserFromContext(r.Context()); user != nil {
-			txErr = q.AddProjectMember(
-				r.Context(),
-				db.AddProjectMemberParams{
-					ProjectID: created.ID,
-					UserID:    user.ID,
-					Role:      "admin",
-				},
-			)
-		}
-		return txErr
-	})
+	created, err := h.repo.CreateProject(
+		r.Context(), params, handler.ProjectCatalogAccess(r), req.GroupID,
+	)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			RespondError(w, 404, "group not found")
+			return
+		}
 		if handler.IsUniqueViolation(err) {
 			RespondError(
 				w,

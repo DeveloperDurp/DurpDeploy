@@ -182,7 +182,16 @@ type agentIDPathParam struct {
 
 // Body parameter structs.
 
-// swagger:parameters createProject updateProject
+// swagger:parameters createProject
+//
+//nolint:unused // Used by Swagger specification generation.
+type createProjectBodyParam struct {
+	// in: body
+	// required: true
+	Body swaggerCreateProjectRequest `json:"body"`
+}
+
+// swagger:parameters updateProject
 //
 //nolint:unused // Used by Swagger specification generation.
 type projectBodyParam struct {

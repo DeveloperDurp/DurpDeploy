@@ -19,7 +19,60 @@ func TestProjectGroupsAcrossDatabases(t *testing.T) {
 		projects := seedProjectGroupCatalog(t, repo)
 		assertProjectGroupCatalog(t, repo, group, projects)
 		assertProjectGroupBoundaries(t, repo)
+		assertProjectGroupCreation(t, repo)
 	})
+}
+
+func assertProjectGroupCreation(t *testing.T, repo *Repository) {
+	t.Helper()
+	ctx := t.Context()
+	group, err := repo.SaveProjectGroup(ctx, 0, "Creation group")
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := repo.Queries.CreateUser(ctx, db.CreateUserParams{
+		Email: "group-creator@test.local", Name: "Creator",
+		PasswordHash: "unused", Role: "admin",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	access := ProjectCatalogAccess{IsAdmin: 1, UserID: user.ID}
+	created, err := repo.CreateProject(ctx,
+		db.CreateProjectParams{Name: "Grouped creation"}, access, &group.ID)
+	if err != nil || !created.GroupID.Valid ||
+		created.GroupID.Int64 != group.ID {
+		t.Fatalf("grouped creation: %+v %v", created, err)
+	}
+	membership, err := repo.Queries.GetProjectMember(ctx,
+		db.GetProjectMemberParams{ProjectID: created.ID, UserID: user.ID})
+	if err != nil || membership.Role != "admin" {
+		t.Fatalf("creator membership: %+v %v", membership, err)
+	}
+	before, err := repo.Queries.CountProjects(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	access.UserID = 999999
+	if _, err := repo.CreateProject(
+		ctx,
+		db.CreateProjectParams{
+			Name: "Rejected creation",
+		},
+		access,
+		&group.ID,
+	); err == nil {
+		t.Fatal("missing creator accepted")
+	}
+	after, err := repo.Queries.CountProjects(ctx)
+	if err != nil || after != before {
+		t.Fatalf(
+			"failed membership left a project: count=%d want=%d %v",
+			after,
+			before,
+			err,
+		)
+	}
 }
 
 func assertProjectGroupNames(t *testing.T, repo *Repository) db.ProjectGroup {
@@ -73,7 +126,12 @@ func assertProjectGroupCatalog(
 	ctx := t.Context()
 	access := ProjectCatalogAccess{IsAdmin: 1}
 	for _, p := range projects[:2] {
-		if _, err := repo.MoveProjectGroup(ctx, access, p.ID, &group.ID); err != nil {
+		if _, err := repo.MoveProjectGroup(
+			ctx,
+			access,
+			p.ID,
+			&group.ID,
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -110,7 +168,11 @@ func assertProjectGroupBoundaries(t *testing.T, repo *Repository) {
 	unicodeProject, err := repo.Queries.CreateProject(
 		ctx,
 		db.CreateProjectParams{
-			Name: "Örion", Description: sql.NullString{String: "Äccent description", Valid: true},
+			Name: "Örion",
+			Description: sql.NullString{
+				String: "Äccent description",
+				Valid:  true,
+			},
 		},
 	)
 	if err != nil {

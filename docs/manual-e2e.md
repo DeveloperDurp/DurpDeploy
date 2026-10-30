@@ -2288,6 +2288,20 @@ As a Maintainer, open Manage Groups to move authorized projects between visible 
 Expect project permissions and deployment links to remain unchanged.
 
 Use `GET /api/v1/project-groups` to inspect authorized groups and counts.
+Open New Project and select an existing Group.
+Save the project and confirm its group through `GET /api/v1/projects/{id}`.
+Repeat with Ungrouped and confirm `group_id` is `null`.
+Submit a duplicate project name and confirm the selected group and other fields remain.
+Cancel the dialog and confirm no project was created.
+Repeat these checks at desktop and phone widths.
+Open `/projects/new` and confirm the same Group selector appears.
+
+Use `POST /api/v1/projects` with `{"name":"grouped-example","group_id":12}` to create a grouped project.
+Replace `12` with a visible group ID.
+Omit `group_id` or send `null` to create an ungrouped project.
+Expect invalid field types to return `400` and nonpositive IDs to return `422`.
+Expect missing or inaccessible groups to return `404` without creating a project.
+
 Use `PUT /api/v1/projects/{id}/group` with `{"group_id":null}` to clear an assignment.
 Use `GET /api/v1/projects?group_id=0` to inspect Ungrouped projects.
 Use the public Swagger UI for group CRUD and project search, sorting, filtering, and pagination.

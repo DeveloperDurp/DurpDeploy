@@ -180,6 +180,14 @@ Project groups organize projects without changing access permissions.
 Each project response includes a nullable `group_id`.
 Existing projects remain in Ungrouped until assigned.
 
+Create a grouped project with `POST /api/v1/projects` and `{"name":"my-app","group_id":12}`.
+Omit `group_id` or send `null` to create an ungrouped project.
+Use a positive integer to select a visible group.
+Invalid field types return `400`.
+Nonpositive IDs return `422`.
+Missing or inaccessible groups return `404` without creating a project.
+Project creation saves the project, creator membership, and group assignment in one transaction.
+
 Call `GET /api/v1/project-groups` to list visible groups and their accessible `project_count` values.
 The response contains `items`, `total`, `limit`, and `offset`.
 Only global administrators using global access can see empty groups.

@@ -20,6 +20,8 @@ import (
 
 const projectsPath = "/projects"
 const hxRedirectHeader = "HX-Redirect"
+const projectNameRequired = "Name is required"
+const projectNameConflict = "A project with this name already exists"
 
 type ProjectHandler struct {
 	repo *repository.Repository
@@ -107,13 +109,38 @@ func (h *ProjectHandler) renderProjectsList(
 }
 
 func (h *ProjectHandler) NewProject(w http.ResponseWriter, r *http.Request) {
+	h.renderNewProjectForm(w, r, db.Project{}, "")
+}
+
+func (h *ProjectHandler) renderNewProjectForm(
+	w http.ResponseWriter,
+	r *http.Request,
+	project db.Project,
+	errorMsg string,
+) {
 	lifecycles, err := h.repo.Queries.ListLifecycles(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := pages.ProjectFormPage(db.Project{}, false, "", lifecycles, nil, nil, false, r.URL.Path).
-		Render(r.Context(), w); err != nil {
+	groups, err := h.repo.Queries.ListAccessibleProjectGroups(
+		r.Context(), ProjectCatalogAccess(r),
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	page := pages.ProjectFormPage(project, false, errorMsg, lifecycles,
+		groups, nil, nil, false, r.URL.Path)
+	if errorMsg != "" {
+		WriteFormError(w, r,
+			pages.ProjectForm(project, false, errorMsg, lifecycles,
+				groups, nil, nil, false),
+			page,
+		)
+		return
+	}
+	if err := page.Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -135,28 +162,19 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	if !h.authorizeLifecycleForm(w, r, 0) {
 		return
 	}
+	var groupID *int64
+	if raw := r.FormValue("group_id"); raw != "" {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || id <= 0 {
+			h.renderNewProjectForm(w, r, submitted, invalidProjectGroupID)
+			return
+		}
+		groupID = &id
+		submitted.GroupID = sql.NullInt64{Int64: id, Valid: true}
+	}
 
 	if name == "" {
-		lifecycles, _ := h.repo.Queries.ListLifecycles(r.Context())
-		WriteFormError(
-			w,
-			r,
-			pages.ProjectForm(
-				submitted,
-				false,
-				"Name is required",
-				lifecycles,
-				nil, nil, false,
-			),
-			pages.ProjectFormPage(
-				submitted,
-				false,
-				"Name is required",
-				lifecycles,
-				nil, nil, false,
-				r.URL.Path,
-			),
-		)
+		h.renderNewProjectForm(w, r, submitted, projectNameRequired)
 		return
 	}
 
@@ -168,51 +186,17 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	// Create the project and add the creator as a per-project admin in a
-	// single transaction, so a failed membership insert can't leave an
-	// orphaned project the creator can't access (RequireProjectAccess
-	// would 403 a creator without a membership row).
-	var created db.Project
-	err := h.repo.WithTx(r.Context(), func(q *db.Queries) error {
-		var txErr error
-		created, txErr = q.CreateProject(r.Context(), params)
-		if txErr != nil {
-			return txErr
-		}
-		if user := auth.UserFromContext(r.Context()); user != nil {
-			txErr = q.AddProjectMember(
-				r.Context(),
-				db.AddProjectMemberParams{
-					ProjectID: created.ID,
-					UserID:    user.ID,
-					Role:      "admin",
-				},
-			)
-		}
-		return txErr
-	})
+	created, err := h.repo.CreateProject(
+		r.Context(), params, ProjectCatalogAccess(r), groupID,
+	)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			h.renderNewProjectForm(w, r, submitted, "Select an available group")
+			return
+		}
 		if IsUniqueViolation(err) {
-			lifecycles, _ := h.repo.Queries.ListLifecycles(r.Context())
-			WriteFormError(
-				w,
-				r,
-				pages.ProjectForm(
-					submitted,
-					false,
-					"A project with this name already exists",
-					lifecycles,
-					nil, nil, false,
-				),
-				pages.ProjectFormPage(
-					submitted,
-					false,
-					"A project with this name already exists",
-					lifecycles,
-					nil, nil, false,
-					r.URL.Path,
-				),
-			)
+			h.renderNewProjectForm(w, r, submitted,
+				projectNameConflict)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -383,7 +367,7 @@ func (h *ProjectHandler) EditProject(w http.ResponseWriter, r *http.Request) {
 
 	members, available, canManage := h.loadMembersContext(r, id)
 
-	if err := pages.ProjectFormPage(project, true, "", lifecycles, members, available, canManage, r.URL.Path).
+	if err := pages.ProjectFormPage(project, true, "", lifecycles, nil, members, available, canManage, r.URL.Path).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -425,8 +409,9 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 			pages.ProjectForm(
 				project,
 				true,
-				"Name is required",
+				projectNameRequired,
 				lifecycles,
+				nil,
 				members,
 				available,
 				canManage,
@@ -434,8 +419,9 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 			pages.ProjectFormPage(
 				project,
 				true,
-				"Name is required",
+				projectNameRequired,
 				lifecycles,
+				nil,
 				members, available, canManage,
 				r.URL.Path,
 			),
@@ -486,15 +472,17 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 				pages.ProjectForm(
 					project,
 					true,
-					"A project with this name already exists",
+					projectNameConflict,
 					lifecycles,
+					nil,
 					members, available, canManage,
 				),
 				pages.ProjectFormPage(
 					project,
 					true,
-					"A project with this name already exists",
+					projectNameConflict,
 					lifecycles,
+					nil,
 					members, available, canManage,
 					r.URL.Path,
 				),

@@ -7,10 +7,11 @@ check_project_groups() {
     local json_id='import json,sys; print(json.load(sys.stdin)["id"])'
     group=$(api_post "{\"name\":\"Group team $E2E_RUN_ID\"}" "$BASE/api/v1/project-groups" | python3 -c "$json_id")
     temporary=$(api_post "{\"name\":\"Group disposable $E2E_RUN_ID\"}" "$BASE/api/v1/project-groups" | python3 -c "$json_id")
-    first=$(api_post "{\"name\":\"Group Alpha $E2E_RUN_ID\"}" "$BASE/api/v1/projects" | python3 -c "$json_id")
+    first=$(api_post "{\"name\":\"Group Alpha $E2E_RUN_ID\",\"group_id\":$group}" "$BASE/api/v1/projects" | python3 -c "$json_id")
     second=$(api_post "{\"name\":\"Group Beta $E2E_RUN_ID\"}" "$BASE/api/v1/projects" | python3 -c "$json_id")
     private=$(api_post "{\"name\":\"Group Private $E2E_RUN_ID\"}" "$BASE/api/v1/projects" | python3 -c "$json_id")
-    api_put "{\"group_id\":$group}" "$BASE/api/v1/projects/$first/group" >/dev/null
+    api_get "$BASE/api/v1/projects/$first" \
+        | python3 -c 'import json,sys; assert json.load(sys.stdin)["group_id"]==int(sys.argv[1])' "$group"
     api_put "{\"group_id\":$group}" "$BASE/api/v1/projects/$private/group" >/dev/null
     api_post "{\"user_id\":$VIEWER_USER_ID,\"role\":\"viewer\"}" "$BASE/api/v1/projects/$first/members" >/dev/null
     api_post "{\"user_id\":$VIEWER_USER_ID,\"role\":\"viewer\"}" "$BASE/api/v1/projects/$second/members" >/dev/null

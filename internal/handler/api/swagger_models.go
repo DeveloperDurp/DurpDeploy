@@ -469,7 +469,21 @@ type swaggerProjectNotificationRequest struct {
 	DiscordWebhookURL string `json:"discord_webhook_url"`
 }
 
-// ProjectRequest is the body for create/update project.
+// CreateProjectRequest is the body for project creation.
+// swagger:model CreateProjectRequest
+//
+//nolint:unused // Used by Swagger specification generation.
+type swaggerCreateProjectRequest struct {
+	swaggerProjectRequest
+	// Select a visible group. Omit this field or send null for Ungrouped.
+	// minimum: 1
+	// Extensions:
+	// ---
+	// x-nullable: true
+	GroupID *int64 `json:"group_id"`
+}
+
+// ProjectRequest is the body for project updates.
 // swagger:model ProjectRequest
 //
 //nolint:unused // Used by Swagger specification generation.
