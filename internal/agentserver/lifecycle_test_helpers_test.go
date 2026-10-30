@@ -35,10 +35,10 @@ func seedAgentLifecycle(t *testing.T, repo *repository.Repository) {
 		{`INSERT INTO releases (id,project_id,version,steps_json)
 			VALUES (1,1,'agent-boundary','[]')`, nil},
 		{`INSERT INTO deployments
-			(id,release_id,environment_id,status,assigned_agent_id)
-			VALUES (1,1,1,'pending','test-agent'),
-			       (2,1,2,'running','test-agent'),
-			       (3,1,3,'pending','test-agent')`, nil},
+			(id,release_id,environment_id,status,assigned_agent_id,environment_name_snapshot)
+			VALUES (1,1,1,'pending','test-agent','agent-boundary'),
+			       (2,1,2,'running','test-agent','agent-cancellation'),
+			       (3,1,3,'pending','test-agent','agent-waiting')`, nil},
 		{`INSERT INTO environment_deployment_slots
 			(environment_id,project_id,deployment_id)
 			VALUES (1,1,1),(2,1,2),(3,1,3)`, nil},

@@ -27,9 +27,9 @@ func prepareRemoteClaim(
 		(!snapshot.Staging || len(snapshot.Steps) != 1) {
 		return repository.RemotePreparedClaim{}, agentproto.ErrUnsupportedProtocol
 	}
-	resolved, err := runner.ResolveReleaseVariables(
+	resolved, err := runner.ResolveDeploymentVariables(
 		snapshot.Variables,
-		snapshot.Environment.ID,
+		snapshot.Deployment,
 	)
 	if err != nil {
 		return repository.RemotePreparedClaim{}, err
@@ -81,8 +81,8 @@ func prepareRemoteClaim(
 			Steps:     steps,
 		},
 		Environment: EnvironmentSnapshot{
-			ID:   snapshot.Environment.ID,
-			Name: snapshot.Environment.Name,
+			ID:   snapshot.Deployment.EnvironmentID,
+			Name: snapshot.Deployment.EnvironmentNameSnapshot.String,
 		},
 		Variables: VariableSnapshots(resolved),
 	}
@@ -125,6 +125,14 @@ func remoteClaimVariableNames(
 				"decode step variables: %w",
 				err,
 			)
+		}
+	}
+	if len(names) != 0 {
+		for _, variable := range resolved {
+			if containerenv.IsEnvironmentIdentity(variable.Name) &&
+				!slices.Contains(names, variable.Name) {
+				names = append(names, variable.Name)
+			}
 		}
 	}
 	if protocol != agentproto.AgentV3 && len(names) != 0 {
@@ -173,7 +181,8 @@ func selectRemoteVariables(
 	}
 	result := make([]runner.ResolvedVariable, 0, len(selected))
 	for _, variable := range variables {
-		if _, ok := selected[variable.Name]; ok {
+		if _, ok := selected[variable.Name]; ok ||
+			containerenv.IsEnvironmentIdentity(variable.Name) {
 			result = append(result, variable)
 			delete(selected, variable.Name)
 		}

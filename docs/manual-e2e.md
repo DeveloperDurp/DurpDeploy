@@ -2169,6 +2169,28 @@ Use its project, lifecycle, environment, and saved step for these checks.
 9. Copy the name and reference into a scratch editor.
 10. Confirm the clipboard contains a name or reference without the secret value.
 
+Search for `DURPDEPLOY_ENVIRONMENT_NAME` and `DURPDEPLOY_ENVIRONMENT_ID`.
+Confirm both predefined variables show available status, interpreter references, and the `variable_names` bypass explanation.
+Confirm neither variable shows a secret flag or an authoring value.
+Select another environment and repeat these checks.
+
+The running suite also prints a retained environment identity project and two deployment links.
+Open each deployment and inspect its logs.
+Confirm both attempts print the destination environment name and numeric ID.
+Confirm both deployments use the same release.
+
+Re-run a deployment after renaming its environment.
+Confirm the new deployment prints the new name.
+Confirm the original deployment logs keep the accepted name.
+These examples have no schedules.
+
+Run `TestDeploymentEnvironmentIdentityAPIE2E` with the `e2e,agentstaging` tags for the isolated execution matrix.
+Set `DURPDEPLOY_AGENT_E2E_BINARY` to the pinned agent binary before that test.
+Set `AGENT_TEST_SOCKET` to the selected runtime socket before that test.
+Provide Bash, Python, and PowerShell on the test host.
+The matrix covers all three interpreters on server containers, agent hosts, and agent containers.
+It also covers promotion, automatic retries, renaming, legacy conflicts, and literal shell metacharacters.
+
 Repeat these editor checks in **Add Step**, **Edit**, and fullscreen script mode:
 
 1. Change the name, script, interpreter, timeout, retries, and variable selection without saving.

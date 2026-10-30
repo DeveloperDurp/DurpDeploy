@@ -10683,7 +10683,7 @@
         "tags": [
           "variables"
         ],
-        "summary": "Inspect current configured and conditional runtime variables for step authoring.",
+        "summary": "Inspect current configured and predefined runtime variables for step authoring.",
         "operationId": "availableVariables",
         "parameters": [
           {

@@ -23,6 +23,18 @@ import (
 )
 
 func TestRemoteLogsRedactSplitSecretBeforeStorageAndBroadcast(t *testing.T) {
+	for _, name := range []string{"TOKEN", "DURPDEPLOY_ENVIRONMENT_NAME", "DURPDEPLOY_ENVIRONMENT_ID"} {
+		t.Run(name, func(t *testing.T) {
+			remoteLogsRedactSplitSecretBeforeStorageAndBroadcast(t, name)
+		})
+	}
+}
+
+func remoteLogsRedactSplitSecretBeforeStorageAndBroadcast(
+	t *testing.T,
+	name string,
+) {
+	t.Helper()
 	fixture := newAgentFixture(t)
 	seedAgentLifecycle(t, fixture.repo)
 	box, err := secret.NewBox(bytes.Repeat([]byte{3}, 32))
@@ -32,7 +44,7 @@ func TestRemoteLogsRedactSplitSecretBeforeStorageAndBroadcast(t *testing.T) {
 	fixture.repo.SetSecretBox(box)
 	snapshot, err := json.Marshal([]db.ReleaseVariable{
 		{
-			Name:   "TOKEN",
+			Name:   name,
 			Value:  sql.NullString{String: "top-secret", Valid: true},
 			Secret: 1,
 		},

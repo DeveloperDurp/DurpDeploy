@@ -6,11 +6,39 @@ import (
 	"strings"
 	"testing"
 
+	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
+
+func TestRemoteIdentityBypassesAllowlistsForEveryProtocol(t *testing.T) {
+	variables := []runner.ResolvedVariable{
+		{
+			Name:  "KEPT",
+			Value: "yes",
+		}, {Name: "SECRET", Value: "private", Secret: true},
+		{Name: containerenv.EnvironmentNameVariable, Value: "dev"},
+		{Name: containerenv.EnvironmentIDVariable, Value: "42"},
+	}
+	step := db.DeploymentStep{VariableNames: `["KEPT"]`}
+	selected, err := selectRemoteVariables([]db.DeploymentStep{step}, variables)
+	if err != nil || len(selected) != 3 || selected[0].Name != "KEPT" {
+		t.Fatalf("selected=%+v: %v", selected, err)
+	}
+	for _, protocol := range []agentproto.ProtocolVersion{agentproto.AgentV1, agentproto.AgentV2, agentproto.AgentV3} {
+		names, err := remoteClaimVariableNames(step, selected, protocol)
+		if err != nil {
+			t.Fatalf("%s: %v", protocol, err)
+		}
+		if protocol == agentproto.AgentV3 && len(names) != 3 ||
+			protocol != agentproto.AgentV3 && len(names) != 0 {
+			t.Fatalf("%s names=%v", protocol, names)
+		}
+	}
+}
 
 func TestSelectRemoteVariablesUsesStepAllowlists(t *testing.T) {
 	variables := []runner.ResolvedVariable{

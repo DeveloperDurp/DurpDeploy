@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 
+	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 )
 
@@ -153,6 +154,10 @@ func (result *AvailableVariables) resolveConfigured() {
 		v.Reference = variableReference(v.Name, result.Context.Interpreter)
 		winner := result.configuredWinner(*v, scopes)
 		switch {
+		case containerenv.IsEnvironmentIdentity(v.Name):
+			v.Status = "overridden"
+			v.Reason = "Reserved runtime identity replaces this legacy definition during execution."
+			v.OverriddenBy = "runtime:" + v.Name
 		case winner != i:
 			v.Status, v.Reason = "overridden", "Another definition takes precedence."
 			v.OverriddenBy = result.Configured[winner].Key
@@ -201,6 +206,9 @@ func (result *AvailableVariables) configuredWinner(
 
 func (result *AvailableVariables) warnMissingSelections() {
 	for _, name := range result.Context.VariableNames {
+		if containerenv.IsEnvironmentIdentity(name) {
+			continue
+		}
 		found := false
 		for _, variable := range result.Configured {
 			if variable.Name == name && (variable.Effective ||

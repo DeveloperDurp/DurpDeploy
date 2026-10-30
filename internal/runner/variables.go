@@ -2,7 +2,9 @@ package runner
 
 import (
 	"fmt"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"durpdeploy/internal/containerenv"
@@ -13,6 +15,41 @@ type ResolvedVariable struct {
 	Name   string
 	Value  string
 	Secret bool
+}
+
+// ResolveDeploymentVariables uses identity captured at deployment acceptance.
+// Legacy user definitions cannot override or mark runtime identity as secret.
+func ResolveDeploymentVariables(
+	variables []db.ReleaseVariable,
+	deployment db.Deployment,
+) ([]ResolvedVariable, error) {
+	if !deployment.EnvironmentNameSnapshot.Valid {
+		return nil, fmt.Errorf(
+			"%w: missing accepted environment identity",
+			containerenv.ErrEnvironment,
+		)
+	}
+	resolved, err := ResolveReleaseVariables(
+		variables,
+		deployment.EnvironmentID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	resolved = slices.DeleteFunc(resolved, func(v ResolvedVariable) bool {
+		return containerenv.IsEnvironmentIdentity(v.Name)
+	})
+	return append(
+		resolved,
+		ResolvedVariable{
+			Name:  containerenv.EnvironmentNameVariable,
+			Value: deployment.EnvironmentNameSnapshot.String,
+		},
+		ResolvedVariable{
+			Name:  containerenv.EnvironmentIDVariable,
+			Value: strconv.FormatInt(deployment.EnvironmentID, 10),
+		},
+	), nil
 }
 
 func ResolveReleaseVariables(

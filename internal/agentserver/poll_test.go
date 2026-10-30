@@ -54,10 +54,15 @@ func TestPollPayloadRoundTrip(t *testing.T) {
 		payload.Release.Steps[0].SortOrder != 1 ||
 		payload.Release.Steps[1].Name != "second" ||
 		payload.Release.Steps[1].SortOrder != 2 ||
-		len(payload.Variables) != 2 ||
+		len(payload.Variables) != 4 ||
 		payload.Variables[0].Value != "override" ||
 		payload.Variables[1].Value != "top-secret" ||
-		!payload.Variables[1].Secret {
+		!payload.Variables[1].Secret ||
+		payload.Variables[2].Name != "DURPDEPLOY_ENVIRONMENT_NAME" ||
+		payload.Variables[2].Value != payload.Environment.Name ||
+		payload.Variables[2].Secret ||
+		payload.Variables[3].Name != "DURPDEPLOY_ENVIRONMENT_ID" ||
+		payload.Variables[3].Secret {
 		t.Fatalf("payload=%+v", payload)
 	}
 	claim, err := fixture.repo.Queries.GetRemoteDeploymentClaim(

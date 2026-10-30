@@ -110,19 +110,19 @@ func (r *DeploymentRunner) Run(
 	r.cancels[deploymentID] = cancel
 	r.mu.Unlock()
 
+	deployment, err := r.repo.Queries.GetDeployment(ctx, deploymentID)
+	if err != nil || deployment.ReleaseID != releaseID ||
+		deployment.EnvironmentID != environmentID {
+		r.failUnlessCancelled(ctx, runCtx, deploymentID)
+		return
+	}
 	release, err := r.repo.Queries.GetRelease(ctx, releaseID)
 	if err != nil {
 		r.failUnlessCancelled(ctx, runCtx, deploymentID)
 		return
 	}
 
-	envName := "unknown environment"
-	if env, err := r.repo.Queries.GetEnvironment(
-		ctx,
-		environmentID,
-	); err == nil {
-		envName = env.Name
-	}
+	envName := deployment.EnvironmentNameSnapshot.String
 	if !gated || gateRun.NextStep == 0 {
 		r.publish(ctx, events.Event{
 			Type:          events.DeploymentStarted,
@@ -160,7 +160,7 @@ func (r *DeploymentRunner) Run(
 		return
 	}
 
-	resolved, err := ResolveReleaseVariables(vars, environmentID)
+	resolved, err := ResolveDeploymentVariables(vars, deployment)
 	if err != nil {
 		if errors.Is(err, containerenv.ErrEnvironment) {
 			writer := &broadcastWriter{

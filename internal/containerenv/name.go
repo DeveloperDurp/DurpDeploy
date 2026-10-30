@@ -19,6 +19,20 @@ var ErrReserved = errors.New(
 
 const StageVariable = "DURPDEPLOY_STAGE_DIR"
 const ApprovedVariable = "DURPDEPLOY_APPROVED_DIR"
+const EnvironmentNameVariable = "DURPDEPLOY_ENVIRONMENT_NAME"
+const EnvironmentIDVariable = "DURPDEPLOY_ENVIRONMENT_ID"
+
+func IsEnvironmentIdentity(name string) bool {
+	return name == EnvironmentNameVariable || name == EnvironmentIDVariable
+}
+
+// ValidateSelection permits runtime identity names without allowing definitions.
+func ValidateSelection(name string, local bool) error {
+	if IsEnvironmentIdentity(name) {
+		return nil
+	}
+	return ValidateName(name, local)
+}
 
 // ValidateName keeps agent variable names compatible while preventing local
 // selections from changing the container and SSH clients' own environment.
@@ -27,7 +41,7 @@ func ValidateName(name string, local bool) error {
 		return err
 	}
 	if name == "ARTIFACT_PATH" || name == StageVariable ||
-		name == ApprovedVariable {
+		name == ApprovedVariable || IsEnvironmentIdentity(name) {
 		return ErrReserved
 	}
 	if local && (name == "PATH" || name == "HOME" || name == "TERM" ||

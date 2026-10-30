@@ -87,7 +87,7 @@ func validateStepContainerConfig(
 	}
 	seen := make(map[string]struct{}, len(variableNames))
 	for _, name := range variableNames {
-		switch containerenv.ValidateName(name, target == "local") {
+		switch containerenv.ValidateSelection(name, target == "local") {
 		case containerenv.ErrIdentifier:
 			return "Variable names must be identifiers: letters, digits, underscores, and cannot start with a digit"
 		case containerenv.ErrReserved:

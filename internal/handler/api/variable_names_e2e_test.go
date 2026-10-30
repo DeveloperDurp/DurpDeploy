@@ -99,8 +99,23 @@ func TestVariableNamesAPIWebE2E(t *testing.T) {
 		map[string]any{"name": "Renamed_2", "secret": true, "value": ""},
 		200,
 	)
-	for _, name := range []string{"ARTIFACT_PATH", "DURPDEPLOY_STAGE_DIR", "DURPDEPLOY_APPROVED_DIR"} {
+	for _, name := range []string{"ARTIFACT_PATH", "DURPDEPLOY_STAGE_DIR", "DURPDEPLOY_APPROVED_DIR", "DURPDEPLOY_ENVIRONMENT_NAME", "DURPDEPLOY_ENVIRONMENT_ID"} {
 		f.api(t, "POST", base, map[string]string{"name": name}, 422)
+		f.api(t, "PUT", plainPath, map[string]string{"name": name}, 422)
+		f.api(
+			t,
+			"PUT",
+			secretPath,
+			map[string]any{"name": name, "secret": true, "value": ""},
+			422,
+		)
+		f.web(
+			t,
+			"POST",
+			strings.TrimPrefix(base, "/api/v1"),
+			url.Values{"name": {name}},
+			422,
+		)
 	}
 	verificationRelease(t, f, "valid-names")
 }

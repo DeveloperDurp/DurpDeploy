@@ -275,9 +275,17 @@ agent-container-podman:
     bash scripts/ci_agent_image.sh load
     make -C "$AGENT_SOURCE" container-executor-contract
     bash scripts/go_test.sh -tags=e2e,agentcontainer -race -count=1 -timeout=8m -v -run '^TestAgentContainerAPIE2E$' ./internal/agentserver
+    # Reuse the matrix's PowerShell image as the host interpreter fixture.
+    identity_pwsh=$(mktemp -d)
+    identity_fixture="durpdeploy-identity-pwsh-$CI_JOB_ID"
+    trap 'podman rm "$identity_fixture" >/dev/null; rm -rf -- "$identity_pwsh"' EXIT
+    podman create --name "$identity_fixture" harbor.durp.info/microsoft/powershell:latest >/dev/null
+    podman cp "$identity_fixture:/opt/microsoft/powershell/7" "$identity_pwsh/"
+    export PATH="$identity_pwsh/7:$PATH"
+    pwsh -NoLogo -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion'
     DURPDEPLOY_AGENT_E2E_BINARY="$CI_PROJECT_DIR/artifacts/agent-build/agent" \
       bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 -timeout=20m -v \
-      -run '^(TestDeploymentPackageAdmissionAPIE2E|TestDeploymentStaging(Admission|MergeBudget|EncryptionCancellation|Transfer|ImportFailure|TransferPausesStepTimeout|Audit|ArtifactGate|Package|PackageAgentOnly|PackageLegacyAgent)APIE2E|TestConfiguredStagingMergeAPIE2E|TestConfiguredLogsRemoteAPIE2E|TestConfiguredSharedPolicyRemoteAPIE2E|TestDeploymentEnvironmentPreflightAPIE2E|TestExecutionLocationAPIWebE2E|TestLegacyExecutionLocationAPIWebE2E)$' ./internal/agentserver
+      -run '^(TestDeploymentPackageAdmissionAPIE2E|TestDeploymentStaging(Admission|MergeBudget|EncryptionCancellation|Transfer|ImportFailure|TransferPausesStepTimeout|Audit|ArtifactGate|Package|PackageAgentOnly|PackageLegacyAgent)APIE2E|TestConfiguredStagingMergeAPIE2E|TestConfiguredLogsRemoteAPIE2E|TestConfiguredSharedPolicyRemoteAPIE2E|TestDeploymentEnvironment(Preflight|Identity)APIE2E|TestExecutionLocationAPIWebE2E|TestLegacyExecutionLocationAPIWebE2E)$' ./internal/agentserver
     ROOTLESS
 e2e:
   extends: .mr-built-app

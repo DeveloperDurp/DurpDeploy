@@ -2,6 +2,7 @@ package runner
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -9,22 +10,9 @@ import (
 )
 
 func (request localStepAttempt) containerEnvironment() ([]string, []string, error) {
-	variableNames := request.step.VariableNames
-	if len(variableNames) == 0 {
-		variableNames = make([]string, 0, len(request.environment))
-		for name := range request.environment {
-			if err := containerenv.ValidateIdentifier(name); err != nil {
-				return nil, nil, fmt.Errorf(
-					"%w: %w",
-					containerenv.ErrEnvironment,
-					err,
-				)
-			}
-			if request.validExecutionVariable(name) {
-				variableNames = append(variableNames, name)
-			}
-		}
-		sort.Strings(variableNames)
+	variableNames, err := request.executionVariableNames()
+	if err != nil {
+		return nil, nil, err
 	}
 	var selectedEnv []string
 	var envArgs []string
@@ -61,6 +49,34 @@ func (request localStepAttempt) containerEnvironment() ([]string, []string, erro
 	return selectedEnv, envArgs, nil
 }
 
+func (request localStepAttempt) executionVariableNames() ([]string, error) {
+	variableNames := request.step.VariableNames
+	if len(variableNames) == 0 {
+		variableNames = make([]string, 0, len(request.environment))
+		for name := range request.environment {
+			if err := containerenv.ValidateIdentifier(name); err != nil {
+				return nil, fmt.Errorf(
+					"%w: %w",
+					containerenv.ErrEnvironment,
+					err,
+				)
+			}
+			if request.validExecutionVariable(name) {
+				variableNames = append(variableNames, name)
+			}
+		}
+		sort.Strings(variableNames)
+	} else {
+		variableNames = slices.Clone(variableNames)
+		for _, name := range []string{containerenv.EnvironmentNameVariable, containerenv.EnvironmentIDVariable} {
+			if _, exists := request.environment[name]; exists && !slices.Contains(variableNames, name) {
+				variableNames = append(variableNames, name)
+			}
+		}
+	}
+	return variableNames, nil
+}
+
 // Existing immutable snapshots may contain this name from before packages.
 // New-write validation stays reserved; a mounted package owns the variable.
 func (request localStepAttempt) validExecutionVariable(name string) bool {
@@ -77,5 +93,5 @@ func (request localStepAttempt) validExecutionVariable(name string) bool {
 	if name == "ARTIFACT_PATH" && request.artifact.volume == "" {
 		return true
 	}
-	return containerenv.ValidateName(name, true) == nil
+	return containerenv.ValidateSelection(name, true) == nil
 }

@@ -454,6 +454,30 @@ an actionable `last_error`. Agent steps retain host execution on their agent.
 
 ## Inspect step variables
 
+Every deployment step receives `DURPDEPLOY_ENVIRONMENT_NAME` and `DURPDEPLOY_ENVIRONMENT_ID`.
+The ID is a numeric string.
+Both variables are non-secret and bypass `variable_names` restrictions.
+They work with Bash, PowerShell, and Python on server containers and remote agents.
+
+DurpDeploy captures the environment name when it accepts the deployment, before queueing or approval.
+Renaming the environment does not change an accepted deployment or its automatic retries.
+A new deployment, re-run, or promotion captures its destination environment at acceptance.
+Runbook executions use the same rules.
+
+These names are reserved against project, lifecycle, and credential definitions.
+Runtime identity replaces conflicting legacy definitions without changing stored variables or snapshots.
+Existing deployments capture the current environment name during the database upgrade.
+The upgrade cannot recover earlier environment names.
+Historical secret values remain redacted in logs and artifact reviews.
+Matching text can remain redacted even when a runtime variable supplies it.
+
+Values enter the process as environment data without shell interpolation.
+Quote variable references in scripts as required by the interpreter.
+
+The available-variable API and viewer list both names with `status: "available"` and a null value.
+The values become fixed when DurpDeploy accepts a deployment.
+Legacy conflicts appear as overridden by the corresponding runtime definition.
+
 Open a project's **Steps** page.
 Select **View Variables** to open the read-only viewer.
 The same button is available in new, edit, and fullscreen script editors.

@@ -86,4 +86,19 @@ func (result *AvailableVariables) addPredefined() {
 		}
 		result.Predefined = append(result.Predefined, v)
 	}
+	for _, definition := range []struct{ name, description string }{
+		{containerenv.EnvironmentNameVariable, "Target environment name captured when the deployment is accepted."},
+		{containerenv.EnvironmentIDVariable, "Target environment numeric ID, represented as a string."},
+	} {
+		result.Predefined = append(result.Predefined, VariableDefinition{
+			Key: "runtime:" + definition.name, Name: definition.name,
+			Source: "runtime", SourceName: "DurpDeploy", Scope: "Execution",
+			Description: definition.description, Status: "available",
+			Reason: "Available in every deployment step. Runtime identity values bypass variable_names and replace conflicting legacy definitions. Retries retain accepted identity.",
+			Reference: variableReference(
+				definition.name,
+				result.Context.Interpreter,
+			),
+		})
+	}
 }

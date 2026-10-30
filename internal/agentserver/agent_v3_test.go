@@ -232,15 +232,17 @@ func TestAgentV3EncryptedPayloadKeepsStepRestriction(t *testing.T) {
 	if err := json.Unmarshal(plaintext, &payload); err != nil {
 		t.Fatal(err)
 	}
-	if len(payload.Release.Steps) != 2 || len(payload.Variables) != 2 {
+	if len(payload.Release.Steps) != 2 || len(payload.Variables) != 4 {
 		t.Fatalf("payload=%+v", payload)
 	}
 	for i, name := range []string{"MODE", "TOKEN"} {
 		step := payload.Release.Steps[i]
 		if step.ExecutionMode != agentproto.ExecutionContainer ||
 			step.ContainerImage != "harbor.durp.info/dockerhub/library/alpine:3.20" ||
-			len(step.VariableNames) != 1 ||
-			step.VariableNames[0] != name {
+			len(step.VariableNames) != 3 ||
+			step.VariableNames[0] != name ||
+			step.VariableNames[1] != "DURPDEPLOY_ENVIRONMENT_NAME" ||
+			step.VariableNames[2] != "DURPDEPLOY_ENVIRONMENT_ID" {
 			t.Fatalf("step=%+v", step)
 		}
 	}

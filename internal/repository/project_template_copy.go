@@ -303,7 +303,7 @@ func (r *Repository) validateTemplateStep(s ProjectTemplateStep) error {
 	}
 	seen := map[string]bool{}
 	for _, name := range s.VariableNames {
-		if err := containerenv.ValidateName(name, local); err != nil {
+		if err := containerenv.ValidateSelection(name, local); err != nil {
 			return templateInvalid(err.Error())
 		}
 		if seen[name] {

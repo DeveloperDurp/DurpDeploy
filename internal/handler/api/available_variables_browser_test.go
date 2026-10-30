@@ -41,6 +41,10 @@ func TestStepVariablesBrowserE2E(t *testing.T) {
 					`document.querySelector('[data-show-step-variables]').click(); true`,
 				)
 				waitVariableViewer(t, b)
+				b.wait(t, `(() => {
+ const text = document.querySelector('[data-variable-dialog]').textContent;
+ return text.includes('DURPDEPLOY_ENVIRONMENT_NAME') && text.includes('DURPDEPLOY_ENVIRONMENT_ID') && text.includes('bypass variable_names');
+})()`)
 				b.wait(
 					t,
 					`document.querySelector('[data-variable-dialog]').textContent.includes('Select an environment')`,

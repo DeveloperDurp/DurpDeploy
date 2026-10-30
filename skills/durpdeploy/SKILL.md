@@ -611,6 +611,24 @@ Agent-container steps apply the same reserved-name restrictions as local contain
 Steps, template versions, releases, and runbook versions preserve these fields.
 An empty `variable_names` list passes all resolved variables; a non-empty
 list restricts that step, including remote host steps.
+
+`DURPDEPLOY_ENVIRONMENT_NAME` and `DURPDEPLOY_ENVIRONMENT_ID` bypass this restriction.
+Every deployment and runbook step receives these non-secret variables.
+The ID is a numeric string.
+
+DurpDeploy captures the destination environment name when it accepts the deployment.
+Automatic retries keep that name after an environment rename.
+A new deployment, re-run, or promotion captures its destination environment at acceptance.
+
+The names are reserved against project, lifecycle, and credential definitions.
+Runtime identity replaces conflicting legacy definitions without changing stored variables or snapshots.
+Existing deployments capture the current environment name during the database upgrade.
+Historical secret values remain redacted in logs and artifact reviews.
+Matching text can remain redacted even when a runtime variable supplies it.
+
+Values enter the process as environment data without shell interpolation.
+Quote references according to the script interpreter.
+
 The server validates effective entries after environment overrides and variable selection.
 Names require 1–255 ASCII letters, digits, or underscores, starting with a letter or underscore.
 Values must not contain NUL. Empty and multiline values remain valid.
@@ -1151,6 +1169,11 @@ Predefined paths remain conditional because authoring has no deployment package 
 `DURPDEPLOY_APPROVED_DIR` requires an approved artifact volume and is unsupported on the current remote agent.
 Managed paths bypass configured-variable restrictions when injected.
 Their values are assigned at execution.
+
+`DURPDEPLOY_ENVIRONMENT_NAME` and `DURPDEPLOY_ENVIRONMENT_ID` have `status: "available"` and null values in authoring metadata.
+Both variables bypass `variable_names` and become fixed when DurpDeploy accepts a deployment.
+Legacy conflicts have `status: "overridden"` and an `overridden_by` runtime key.
+
 Host process environments and server configuration are excluded.
 This endpoint does not change snapshots, precedence, injection, or permissions.
 

@@ -3,15 +3,71 @@
 package api_test
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
 
 	"durpdeploy/internal/artifact"
+	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
 	"durpdeploy/views/pages"
 )
+
+func TestArtifactGateHistoricalIdentitySecretRedactionE2E(t *testing.T) {
+	for _, name := range []string{"DURPDEPLOY_ENVIRONMENT_NAME", "DURPDEPLOY_ENVIRONMENT_ID"} {
+		t.Run(name, func(t *testing.T) {
+			f, deployment, gate := newGateDeployment(t)
+			path := gateAPIPath(deployment.ID) + "/0"
+			f.api(t, "POST", path+"/approve", map[string]any{
+				"revision": gate.Revision, "sha256": gate.SHA256,
+			}, 200)
+			f.completion(t, deployment.ID, events.DeploymentSucceeded)
+			// Simulate a pre-upgrade execution whose stored review contains
+			// a configured secret without a Terraform sensitivity marking.
+			const value = "visible resource value"
+			variables, err := json.Marshal([]db.ReleaseVariable{{
+				Name: name, Value: sql.NullString{String: value, Valid: true}, Secret: 1,
+			}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			encrypted, err := f.h.repo.EncryptValue(
+				sql.NullString{String: string(variables), Valid: true},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := f.h.repo.Queries.UpdateDeploymentVariableSnapshotValue(t.Context(), db.UpdateDeploymentVariableSnapshotValueParams{
+				DeploymentID: deployment.ID, Value: encrypted.String,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			api := string(f.api(t, "GET", path+"/review", nil, 200))
+			web := f.web(
+				t,
+				"GET",
+				fmt.Sprintf(
+					"/deployments/%d/artifact-gates/0/review",
+					deployment.ID,
+				),
+				nil,
+				200,
+			)
+			for surface, output := range map[string]string{"API": api, "web": web} {
+				if strings.Contains(output, value) ||
+					!strings.Contains(output, "[REDACTED]") {
+					t.Fatalf(
+						"%s lost historical secret redaction: %s",
+						surface,
+						output,
+					)
+				}
+			}
+		})
+	}
+}
 
 const oversizedPreviewScript = `set -eu
 printf exact-plan > "$DURPDEPLOY_STAGE_DIR/tfplan"
