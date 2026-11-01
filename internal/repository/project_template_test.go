@@ -101,7 +101,7 @@ func seedProjectTemplateBackend(t *testing.T, r *Repository) {
 	t.Helper()
 	for _, v := range []db.CreateVariableParams{
 		{ProjectID: 1, Name: "DEFAULT_VALUE", Value: sql.NullString{String: "copied-default", Valid: true}},
-		{ProjectID: 1, Name: "SECRET_VALUE", Value: sql.NullString{String: "never-copy-this-secret", Valid: true}, Secret: 1, EnvironmentID: sql.NullInt64{Int64: 1, Valid: true}},
+		{ProjectID: 1, Name: "SECRET_VALUE", Value: sql.NullString{String: "never-copy-this-secret", Valid: true}, Secret: 1, IsCredential: 1, EnvironmentID: sql.NullInt64{Int64: 1, Valid: true}},
 	} {
 		if _, err := r.CreateVariable(t.Context(), v); err != nil {
 			t.Fatal(err)
@@ -245,6 +245,9 @@ func (f projectTemplateBackendFixture) checkCreatedProject(
 		t.Fatal(err)
 	}
 	for _, v := range values {
+		if v.Name == "SECRET_VALUE" && v.IsCredential != 1 {
+			t.Fatal("credential classification was not copied")
+		}
 		if v.Secret != 0 && v.Value.String != "fresh-secret-value" {
 			t.Fatal("secret was not replaced")
 		}

@@ -63,7 +63,7 @@ try {
   await editor.getByRole("button", { name: "Save", exact: true }).click();
   await page.getByRole("button", { name: "Add step", exact: true }).click();
   await editor.locator('input[name="step_name"]').fill("browser check");
-  await editor.locator('textarea[name="step_script"]').fill("printf browser-runbook-step; sleep 5");
+  await editor.locator('textarea[name="step_script"]').fill("printf 'browser-runbook-step\\n'; sleep 5");
   await editor.locator('input[name="step_image"]:not([type="hidden"])').fill("harbor.durp.info/dockerhub/library/bash:5.2");
   await editor.getByRole("button", { name: "Save", exact: true }).click();
   await page.getByRole("button", { name: "Move step down" }).first().click();
@@ -163,17 +163,20 @@ try {
   assert.match(await page.locator(".md\\:block tr").filter({ hasText: "0 4 * * *" }).innerText(), /Disabled/);
 
   const waitForExecution = async (pid, id, desiredStatus) => {
-    for (let attempt = 0; attempt < 100; attempt += 1) {
+    const deadline = Date.now() + 60000;
+    let status;
+    while (Date.now() < deadline) {
       const execution = await api("GET", `/projects/${pid}/runbook-executions/${id}`, undefined, 200);
-      if (execution.status === desiredStatus) return;
+      status = execution.status;
+      if (status === desiredStatus) return;
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    assert.fail(`Runbook execution ${id} did not reach ${desiredStatus}`);
+    assert.fail(`Runbook execution ${id} did not reach ${desiredStatus}; last status=${status}`);
   };
 
   const longBook = await api("POST", `/projects/${projectID}/runbooks`, {
     name: "browser-cancel-check",
-    steps: [{ name: "wait", script_body: "sleep 15", interpreter: "bash", container_image: "harbor.durp.info/dockerhub/library/bash:5.2" }],
+    steps: [{ name: "wait", script_body: "printf 'browser-runbook-cancel-ready\\n'; sleep 60", interpreter: "bash", container_image: "harbor.durp.info/dockerhub/library/bash:5.2" }],
   });
   await page.goto(`${base}/projects/${projectID}/runbooks/${longBook.runbook.id}`);
   const longForm = page.locator(`form[action$="/runbooks/${longBook.runbook.id}/execute"]`);
@@ -181,6 +184,7 @@ try {
   await longForm.getByRole("button", { name: "Run book" }).click();
   await page.waitForURL(/\/runbooks\/executions\/\d+$/);
   const longExecutionID = Number(page.url().match(/\/executions\/(\d+)$/)?.[1]);
+  await page.getByText("browser-runbook-cancel-ready", { exact: true }).waitFor({ timeout: 30000 });
   await page.goto(`${base}/projects/${projectID}/edit`);
   page.once("dialog", (dialog) => dialog.accept());
   const blockedDelete = page.waitForResponse((response) =>

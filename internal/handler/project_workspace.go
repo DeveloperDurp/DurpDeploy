@@ -3,6 +3,7 @@ package handler
 import (
 	"database/sql"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
 	"net/http"
 )
@@ -56,6 +57,17 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	credentials, err := h.repo.ProjectCredentials(
+		r.Context(),
+		id,
+		variables,
+		panel.Inheritance,
+	)
+	if err != nil {
+		http.Error(w, "Unable to load credential status", 500)
+		return
+	}
+	panel.CredentialStatus = repository.SummarizeCredentials(credentials)
 	if isFragmentRequest(r) {
 		if err := pages.ProjectDetail(project, panel, variables, environments).
 			Render(r.Context(), w); err != nil {

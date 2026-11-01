@@ -67,6 +67,14 @@ func RefreshReleaseSnapshot(
 	if err := snapshot.insertVariables(ctx, queries, release.ID); err != nil {
 		return db.Release{}, err
 	}
+	if err := repo.SyncRotatedReleaseCredentials(
+		ctx,
+		queries,
+		release.ProjectID,
+		release.ID,
+	); err != nil {
+		return db.Release{}, err
+	}
 	if err := queries.DeleteReleaseArtifact(ctx, release.ID); err != nil {
 		return db.Release{}, err
 	}

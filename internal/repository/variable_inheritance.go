@@ -30,6 +30,9 @@ func (r *Repository) DeleteProjectVariable(
 	variable db.Variable,
 	reset bool,
 ) error {
+	if variable.IsCredential != 0 {
+		return sql.ErrNoRows
+	}
 	if !reset {
 		return r.Queries.DeleteVariable(ctx, variable.ID)
 	}

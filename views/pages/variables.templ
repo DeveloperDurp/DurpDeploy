@@ -16,7 +16,7 @@ templ VariableNameHelp() {
 func filterUnscoped(vars []db.Variable) []db.Variable {
 	result := make([]db.Variable, 0)
 	for _, v := range vars {
-		if !v.EnvironmentID.Valid {
+		if !v.EnvironmentID.Valid && v.IsCredential == 0 {
 			result = append(result, v)
 		}
 	}
@@ -26,7 +26,7 @@ func filterUnscoped(vars []db.Variable) []db.Variable {
 func filterScoped(vars []db.Variable) []db.Variable {
 	result := make([]db.Variable, 0)
 	for _, v := range vars {
-		if v.EnvironmentID.Valid {
+		if v.EnvironmentID.Valid && v.IsCredential == 0 {
 			result = append(result, v)
 		}
 	}

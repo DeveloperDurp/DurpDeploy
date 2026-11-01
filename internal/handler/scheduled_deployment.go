@@ -134,6 +134,62 @@ func (h *ScheduledDeploymentHandler) NewForm(
 	}
 }
 
+func (h *ScheduledDeploymentHandler) prepareScheduleForm(
+	r *http.Request,
+	projectID, scheduleID int64,
+) (*db.ScheduledDeployment, cron.Schedule, string, error) {
+	if err := r.ParseForm(); err != nil {
+		return nil, nil, "", err
+	}
+
+	releaseID, err := strconv.ParseInt(r.FormValue("release_id"), 10, 64)
+	if err != nil {
+		//nolint:staticcheck // Preserve the public validation message.
+		return nil, nil, "", errors.New("Invalid release ID")
+	}
+
+	environmentID, err := strconv.ParseInt(
+		r.FormValue("environment_id"),
+		10,
+		64,
+	)
+	if err != nil {
+		//nolint:staticcheck // Preserve the public validation message.
+		return nil, nil, "", errors.New("Invalid environment ID")
+	}
+
+	_, noteSubmitted := r.Form["note"]
+	submitted := &db.ScheduledDeployment{
+		ID:            scheduleID,
+		ProjectID:     projectID,
+		ReleaseID:     releaseID,
+		EnvironmentID: environmentID,
+		Cron:          strings.TrimSpace(r.FormValue("cron")),
+		Enabled:       0,
+		Note: sql.NullString{
+			String: r.FormValue("note"),
+			Valid:  noteSubmitted,
+		},
+	}
+	if isTruthy(r.FormValue("enabled")) {
+		submitted.Enabled = 1
+	}
+
+	if submitted.Cron == "" {
+		return submitted, nil, "Cron expression is required.", nil
+	}
+	if strings.HasPrefix(submitted.Cron, "TZ=") ||
+		strings.HasPrefix(submitted.Cron, "CRON_TZ=") {
+		return submitted, nil, "TZ= and CRON_TZ= prefixes are not supported. Use server local time only.", nil
+	}
+
+	sched, err := h.parser.Parse(submitted.Cron)
+	if err != nil {
+		return submitted, nil, "Invalid cron expression. Use 5-field standard cron (minute hour day month weekday). Descriptors like @hourly and TZ= prefixes are not supported.", nil
+	}
+	return submitted, sched, "", nil
+}
+
 // Create handles POST /projects/{id}/schedules.
 func (h *ScheduledDeploymentHandler) Create(
 	w http.ResponseWriter,
@@ -150,69 +206,15 @@ func (h *ScheduledDeploymentHandler) Create(
 		return
 	}
 
-	if err := r.ParseForm(); err != nil {
+	submitted, sched, validationMessage, err := h.prepareScheduleForm(
+		r, projectID, 0,
+	)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	releaseID, err := strconv.ParseInt(r.FormValue("release_id"), 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid release ID", http.StatusBadRequest)
-		return
-	}
-
-	environmentID, err := strconv.ParseInt(
-		r.FormValue("environment_id"),
-		10,
-		64,
-	)
-	if err != nil {
-		http.Error(w, "Invalid environment ID", http.StatusBadRequest)
-		return
-	}
-
-	_, noteSubmitted := r.Form["note"]
-	submitted := &db.ScheduledDeployment{
-		ProjectID:     projectID,
-		ReleaseID:     releaseID,
-		EnvironmentID: environmentID,
-		Cron:          strings.TrimSpace(r.FormValue("cron")),
-		Enabled:       0,
-		Note: sql.NullString{
-			String: r.FormValue("note"),
-			Valid:  noteSubmitted,
-		},
-	}
-	if isTruthy(r.FormValue("enabled")) {
-		submitted.Enabled = 1
-	}
-
-	if submitted.Cron == "" {
-		h.renderFormError(w, r, projectID, submitted,
-			"Cron expression is required.")
-		return
-	}
-	if strings.HasPrefix(submitted.Cron, "TZ=") ||
-		strings.HasPrefix(submitted.Cron, "CRON_TZ=") {
-		h.renderFormError(
-			w,
-			r,
-			projectID,
-			submitted,
-			"TZ= and CRON_TZ= prefixes are not supported. Use server local time only.",
-		)
-		return
-	}
-
-	sched, err := h.parser.Parse(submitted.Cron)
-	if err != nil {
-		h.renderFormError(
-			w,
-			r,
-			projectID,
-			submitted,
-			"Invalid cron expression. Use 5-field standard cron (minute hour day month weekday). Descriptors like @hourly and TZ= prefixes are not supported.",
-		)
+	if validationMessage != "" {
+		h.renderFormError(w, r, projectID, submitted, validationMessage)
 		return
 	}
 
@@ -395,70 +397,15 @@ func (h *ScheduledDeploymentHandler) Update(
 		return
 	}
 
-	if err := r.ParseForm(); err != nil {
+	submitted, sched, validationMessage, err := h.prepareScheduleForm(
+		r, projectID, schedID,
+	)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	releaseID, err := strconv.ParseInt(r.FormValue("release_id"), 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid release ID", http.StatusBadRequest)
-		return
-	}
-
-	environmentID, err := strconv.ParseInt(
-		r.FormValue("environment_id"),
-		10,
-		64,
-	)
-	if err != nil {
-		http.Error(w, "Invalid environment ID", http.StatusBadRequest)
-		return
-	}
-
-	_, noteSubmitted := r.Form["note"]
-	submitted := &db.ScheduledDeployment{
-		ID:            schedID,
-		ProjectID:     projectID,
-		ReleaseID:     releaseID,
-		EnvironmentID: environmentID,
-		Cron:          strings.TrimSpace(r.FormValue("cron")),
-		Enabled:       0,
-		Note: sql.NullString{
-			String: r.FormValue("note"),
-			Valid:  noteSubmitted,
-		},
-	}
-	if isTruthy(r.FormValue("enabled")) {
-		submitted.Enabled = 1
-	}
-
-	if submitted.Cron == "" {
-		h.renderFormError(w, r, projectID, submitted,
-			"Cron expression is required.")
-		return
-	}
-	if strings.HasPrefix(submitted.Cron, "TZ=") ||
-		strings.HasPrefix(submitted.Cron, "CRON_TZ=") {
-		h.renderFormError(
-			w,
-			r,
-			projectID,
-			submitted,
-			"TZ= and CRON_TZ= prefixes are not supported. Use server local time only.",
-		)
-		return
-	}
-
-	sched, err := h.parser.Parse(submitted.Cron)
-	if err != nil {
-		h.renderFormError(
-			w,
-			r,
-			projectID,
-			submitted,
-			"Invalid cron expression. Use 5-field standard cron (minute hour day month weekday). Descriptors like @hourly and TZ= prefixes are not supported.",
-		)
+	if validationMessage != "" {
+		h.renderFormError(w, r, projectID, submitted, validationMessage)
 		return
 	}
 
