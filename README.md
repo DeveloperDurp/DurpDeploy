@@ -95,6 +95,7 @@ are host-only. Preserve paired state when upgrading.
 | Set up optional OIDC | [OIDC / Authentik](docs/authentik-oidc.md) |
 | Assign user permissions | [Roles](docs/roles.md) |
 | Configure notifications | [Notifications](docs/notifications.md) |
+| Rotate a GitLab project token with a runbook | [GitLab token rotation](docs/gitlab-token-rotation.md) |
 | Review generated plans | [Artifact approval](docs/artifact-approval.md) |
 | Understand security boundaries | [Security](docs/security.md) and [attack drill](docs/attack-drill.md) |
 | Reproduce CI security gates | [Security scanning](docs/security-scanning.md) |

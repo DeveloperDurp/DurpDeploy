@@ -180,6 +180,14 @@ Project groups organize projects without changing access permissions.
 Each project response includes a nullable `group_id`.
 Existing projects remain in Ungrouped until assigned.
 
+Create a grouped project with `POST /api/v1/projects` and `{"name":"my-app","group_id":12}`.
+Omit `group_id` or send `null` to create an ungrouped project.
+Use a positive integer to select a visible group.
+Invalid field types return `400`.
+Nonpositive IDs return `422`.
+Missing or inaccessible groups return `404` without creating a project.
+Project creation saves the project, creator membership, and group assignment in one transaction.
+
 Call `GET /api/v1/project-groups` to list visible groups and their accessible `project_count` values.
 The response contains `items`, `total`, `limit`, and `offset`.
 Only global administrators using global access can see empty groups.
@@ -603,6 +611,24 @@ Agent-container steps apply the same reserved-name restrictions as local contain
 Steps, template versions, releases, and runbook versions preserve these fields.
 An empty `variable_names` list passes all resolved variables; a non-empty
 list restricts that step, including remote host steps.
+
+`DURPDEPLOY_ENVIRONMENT_NAME` and `DURPDEPLOY_ENVIRONMENT_ID` bypass this restriction.
+Every deployment and runbook step receives these non-secret variables.
+The ID is a numeric string.
+
+DurpDeploy captures the destination environment name when it accepts the deployment.
+Automatic retries keep that name after an environment rename.
+A new deployment, re-run, or promotion captures its destination environment at acceptance.
+
+The names are reserved against project, lifecycle, and credential definitions.
+Runtime identity replaces conflicting legacy definitions without changing stored variables or snapshots.
+Existing deployments capture the current environment name during the database upgrade.
+Historical secret values remain redacted in logs and artifact reviews.
+Matching text can remain redacted even when a runtime variable supplies it.
+
+Values enter the process as environment data without shell interpolation.
+Quote references according to the script interpreter.
+
 The server validates effective entries after environment overrides and variable selection.
 Names require 1–255 ASCII letters, digits, or underscores, starting with a letter or underscore.
 Values must not contain NUL. Empty and multiline values remain valid.
@@ -1143,6 +1169,11 @@ Predefined paths remain conditional because authoring has no deployment package 
 `DURPDEPLOY_APPROVED_DIR` requires an approved artifact volume and is unsupported on the current remote agent.
 Managed paths bypass configured-variable restrictions when injected.
 Their values are assigned at execution.
+
+`DURPDEPLOY_ENVIRONMENT_NAME` and `DURPDEPLOY_ENVIRONMENT_ID` have `status: "available"` and null values in authoring metadata.
+Both variables bypass `variable_names` and become fixed when DurpDeploy accepts a deployment.
+Legacy conflicts have `status: "overridden"` and an `overridden_by` runtime key.
+
 Host process environments and server configuration are excluded.
 This endpoint does not change snapshots, precedence, injection, or permissions.
 
@@ -1530,3 +1561,84 @@ By default, transfers stop after five minutes without progress.
 `DURPDEPLOY_LIMITS_TRANSFER_IDLE_TIMEOUT_SECONDS` changes the server's staging and package-transfer socket inactivity deadline.
 The server setting does not change an agent's client timeout or the upstream package-fetch timeout.
 Managed package files and volumes follow the same cleanup barrier as writable staging.
+
+## External credential expiry and rotation
+
+Use the dedicated rotation endpoints to update existing release secrets.
+Only explicitly enrolled variables are credentials.
+Existing secrets require individual enrollment, including secrets with expiry dates.
+Ordinary secrets remain variables and keep their existing snapshot behavior.
+Authenticated package sources remain credentials, including retained sources.
+
+Create credential variables with `POST /api/v1/projects/{id}/credentials`.
+Send `name`, a nonempty `value`, optional `environment_id`, and optional dates.
+Use the same endpoint under `/api/v1/lifecycles/{id}` for shared credentials.
+Creation returns `201` with secret-free metadata.
+Credential names and environment scopes stay fixed after creation.
+
+List enrollment candidates with `GET /api/v1/projects/{id}/credentials/candidates`.
+Enroll one existing secret with `POST /api/v1/projects/{id}/credentials/enroll`.
+Send its `variable_id` and the candidate `revision`.
+Use the same suffixes under `/api/v1/lifecycles/{id}` for shared secrets.
+Enrollment preserves the secret value and dates.
+Enrollment does not replace historical release values until rotation.
+
+Read project banner counts with `GET /api/v1/projects/{id}/credentials/status`.
+Counts include applicable inherited credentials and active or retained authenticated package sources.
+Exact project overrides suppress matching shared credentials.
+Project credential lists identify inherited entries with `inherited` and `lifecycle_id`.
+Manage inherited credentials through their lifecycle endpoints.
+
+Delete a variable credential with `DELETE /api/v1/projects/{id}/credentials/variable/{credentialId}`.
+Send the latest `revision` in the JSON body.
+For shared credentials, use `DELETE /api/v1/lifecycles/{id}/credentials/lifecycle/{credentialId}`.
+Deletion returns `204` and preserves release snapshots and execution history.
+Ordinary variable write endpoints cannot change enrolled credentials.
+
+- List project credential metadata with `GET /api/v1/projects/{id}/credentials`.
+- List shared lifecycle credential metadata with `GET /api/v1/lifecycles/{id}/credentials`.
+- Save dates and an optional replacement with `PUT /api/v1/projects/{id}/credentials/{kind}/{credentialId}`.
+- Rotate with `POST /api/v1/projects/{id}/credentials/{kind}/{credentialId}/rotate`.
+- For shared secrets, use the same write suffix under `/api/v1/lifecycles/{id}/credentials`.
+
+Project `kind` values are `variable` and `package`.
+Shared lifecycle writes require `kind=lifecycle`.
+Project writes require effective Maintainer permission.
+Shared lifecycle operations require a global administrator with unrestricted global access.
+
+Send `revision` from the latest metadata response with every write.
+Send `expires_at` and `rotation_due_at` as Unix seconds.
+Zero or an omitted date clears that date.
+For replacement through either write endpoint, include a nonempty `value`.
+For date-only saves through `PUT`, omit `value` or send an empty string.
+An empty replacement preserves the secret and its last rotation time.
+The explicit `POST .../rotate` endpoint requires a nonempty replacement.
+Responses contain metadata and `release_variables_updated`, never the credential value.
+
+Project rotation updates every matching secret in all releases and runbook versions.
+Matching uses project, exact variable name, and environment scope.
+Rotation does not insert missing variables or follow historical renames.
+Shared replacements affect new executions of every existing release while preserving project overrides.
+Queued deployments, pending approvals, and other existing executions keep their captured variables.
+Legacy executions receive encrypted captures before release variables change.
+Re-runs capture current release and lifecycle values.
+
+Package rotation updates active or retained source credentials without changing the active source selection.
+The next download uses the replacement while preserving package pins.
+An active transfer can retain the previous credential.
+
+Statuses are `unknown`, `current`, `due_soon`, `due`, and `expired`.
+The earliest configured date controls status, with expiry taking precedence after expiration.
+The warning window is 30 days.
+Metadata does not block execution or validate provider access.
+Create and validate replacement tokens with their provider separately.
+Coordinate revocation with executions that still hold captured credentials.
+Automatic provider rotation and scheduled reminders are unavailable.
+
+Successful metadata, enrollment, and rotation writes return `200`.
+Stale revisions return `409`.
+Invalid dates and whitespace-only replacements return `422`.
+An empty replacement on `POST .../rotate` also returns `422`.
+Unknown credentials return `404`.
+Permission denials return `403`.
+Audit events identify the operation and credential without secret values.

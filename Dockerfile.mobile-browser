@@ -10,6 +10,7 @@ FROM harbor.durp.info/microsoft/playwright:v1.61.1-noble
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
+ARG CI_RUNTIME_CACHE_EPOCH=0
 # hadolint ignore=DL3008
 RUN apt-get purge -y nodejs && \
     apt-get update && \
