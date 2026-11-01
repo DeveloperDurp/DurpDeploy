@@ -48,7 +48,8 @@ if [[ ( $trusted_main == true || -n $cache_scope ) && $refresh == false ]]; then
   branch=$(jq -rn --arg branch "${CI_DEFAULT_BRANCH:?}" '$branch | @uri')
   # Resolve a branch pipeline and its job through GitLab, not artifact claims.
   # A tag named like the default branch must not supply trusted metadata.
-  if fetch_cache "pipelines?ref=$branch&scope=branches&status=success&source=push&per_page=1" "$private/pipelines.json" && \
+  # branches scope selects only the newest pipeline before applying filters.
+  if fetch_cache "pipelines?ref=$branch&scope=finished&status=success&source=push&per_page=1" "$private/pipelines.json" && \
       pipeline=$(jq -er --arg ref "$CI_DEFAULT_BRANCH" --argjson project "$CI_PROJECT_ID" '
         .[0] | select(.ref == $ref and .project_id == $project and .status == "success" and .source == "push") |
         .id | select(type == "number" and . > 0 and . == floor)

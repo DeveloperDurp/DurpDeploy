@@ -49,6 +49,18 @@ case "$*" in
   *'/pipelines?'*) response=${FIXTURE_PIPELINES_JSON:-'[{"id":41,"project_id":3,"ref":"main","source":"push","status":"success"}]'} ;;
   *'/pipelines/41/jobs?'*) response=${FIXTURE_JOBS_JSON:-'[{"id":99,"name":"ci-runtime","ref":"main","tag":false,"status":"success","pipeline":{"id":41}}]'} ;;
 esac
+if [ -n "${FIXTURE_PIPELINE_HISTORY:-}" ]; then
+  case "$*" in
+    *'/pipelines?'*)
+      response=$FIXTURE_PIPELINE_HISTORY
+      # GitLab branches scope collapses history before status/source filters.
+      case "$*" in
+        *'scope=branches'*) response=$(printf '%s' "$response" | jq '.[0:1]') ;;
+      esac
+      response=$(printf '%s' "$response" | jq '[.[] | select(.status == "success" and .source == "push")] | .[0:1]')
+      ;;
+  esac
+fi
 while [ "$#" -gt 0 ]; do
   if [ "$1" = -o ]; then printf '%s' "$response" > "$2"; exit 0; fi
   shift
@@ -190,6 +202,57 @@ func runtimeCacheMetadata() map[string]any {
 			"d",
 			64,
 		),
+	}
+}
+
+func TestRuntimeCacheFindsSuccessfulPushBehindNewerPipeline(t *testing.T) {
+	for _, latest := range []struct{ name, status, source string }{
+		{"running", "running", "push"},
+		{"failed", "failed", "push"},
+		{"cleanup", "success", "schedule"},
+	} {
+		for _, event := range []string{"push", "merge_request_event"} {
+			t.Run(latest.name+"/"+event, func(t *testing.T) {
+				history, _ := json.Marshal([]map[string]any{
+					{
+						"id":         42,
+						"project_id": 3,
+						"ref":        "main",
+						"status":     latest.status,
+						"source":     latest.source,
+					},
+					{
+						"id":         41,
+						"project_id": 3,
+						"ref":        "main",
+						"status":     "success",
+						"source":     "push",
+					},
+				})
+				metadata, _ := json.Marshal(runtimeCacheMetadata())
+				env := []string{
+					"FIXTURE_PIPELINE_HISTORY=" + string(history),
+					"FIXTURE_CACHE_JSON=" + string(metadata),
+					"CI_PIPELINE_SOURCE=" + event,
+					"CI_COMMIT_REF_PROTECTED=true", "CI_COMMIT_BRANCH=main",
+				}
+				if event == "merge_request_event" {
+					env = append(
+						env,
+						"CI_COMMIT_REF_PROTECTED=false",
+						"CI_COMMIT_BRANCH=",
+						"CI_MERGE_REQUEST_SOURCE_PROJECT_ID=3",
+						"CI_MERGE_REQUEST_IID=64",
+					)
+				}
+				directory, err := runtimeImageFixture(t, env...)
+				if err != nil {
+					t.Fatal(err)
+				}
+				checkTrustedRuntimeCacheBuild(t, directory, true, true, false)
+				checkTrustedRuntimeCacheReport(t, directory, event == "push")
+			})
+		}
 	}
 }
 

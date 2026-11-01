@@ -4,13 +4,11 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 
 	"durpdeploy/internal/agentserver"
 	"durpdeploy/internal/audit"
-	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
 )
@@ -155,8 +153,10 @@ func (h *AgentsHandler) AddLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	agentID := chi.URLParam(r, "id")
-	label := strings.TrimSpace(r.FormValue("label"))
-	if label == "" || len(label) > 64 {
+	label, changed, err := h.repo.AddAgentLabel(
+		r.Context(), agentID, r.FormValue("label"),
+	)
+	if errors.Is(err, repository.ErrInvalidAgentLabel) {
 		http.Error(
 			w,
 			"Label must be between 1 and 64 characters",
@@ -164,18 +164,10 @@ func (h *AgentsHandler) AddLabel(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-	if _, err := h.repo.Queries.GetAgent(r.Context(), agentID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			http.NotFound(w, r)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if errors.Is(err, repository.ErrAgentNotFound) {
+		http.NotFound(w, r)
 		return
 	}
-	changed, err := h.repo.Queries.AddAgentLabel(
-		r.Context(),
-		db.AddAgentLabelParams{AgentID: agentID, Label: label},
-	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -193,8 +185,10 @@ func (h *AgentsHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	agentID := chi.URLParam(r, "id")
-	label := strings.TrimSpace(r.FormValue("label"))
-	if label == "" || len(label) > 64 {
+	label, changed, err := h.repo.DeleteAgentLabel(
+		r.Context(), agentID, r.FormValue("label"),
+	)
+	if errors.Is(err, repository.ErrInvalidAgentLabel) {
 		http.Error(
 			w,
 			"Label must be between 1 and 64 characters",
@@ -202,10 +196,6 @@ func (h *AgentsHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-	changed, err := h.repo.Queries.DeleteAgentLabel(
-		r.Context(),
-		db.DeleteAgentLabelParams{AgentID: agentID, Label: label},
-	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
