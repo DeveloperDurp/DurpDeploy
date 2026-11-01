@@ -156,7 +156,8 @@ func TestTestShardsPropagateFailure(t *testing.T) {
 }
 
 func TestRolloutContractsPreserveEveryCommandAndFlag(t *testing.T) {
-	// Captured from the original contracts shard before splitting its commands.
+	t.Setenv("DURPDEPLOY_CONTAINER_URL", "")
+	// Preserve the original commands and explicit fixture preparation.
 	data, err := os.ReadFile("testdata/rollout_contract_commands.jsonl")
 	if err != nil {
 		t.Fatal(err)
@@ -175,8 +176,8 @@ func TestRolloutContractsPreserveEveryCommandAndFlag(t *testing.T) {
 		want = append(want, fmt.Sprintf("%s %s|runtime=%s",
 			call.Command, strings.Join(call.Args, " "), call.Runtime))
 	}
-	if len(want) != 14 {
-		t.Fatalf("original contract inventory has %d commands", len(want))
+	if len(want) != 15 {
+		t.Fatalf("contract inventory has %d commands", len(want))
 	}
 	body := `printf '%s %s|runtime=%s\n' "${0##*/}" "$*" "${DURPDEPLOY_CONTAINER_RUNTIME:-}" >> "$FIXTURE_COMMANDS"`
 	path := fixtureCommand(

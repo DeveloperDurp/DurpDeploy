@@ -61,6 +61,8 @@ Eligible merge requests also embed inline metadata in their own pipeline images 
 They record both immutable image digests in `artifacts/runtime-cache.json`.
 Protected default-branch builds and eligible same-project merge requests read this artifact from the latest successful default-branch push pipeline.
 Consumers resolve the branch pipeline and its successful `ci-runtime` job through the GitLab API before downloading that job's artifact.
+The lookup filters finished pipeline history before selecting the latest successful push.
+Newer running pipelines and cleanup schedules cannot hide that push.
 Tags with the default branch name cannot supply the trusted cache.
 Consumers validate its project, branch, protection status, cache epoch, and digest paths before importing either image cache.
 Consumers never execute the artifact as shell code.
