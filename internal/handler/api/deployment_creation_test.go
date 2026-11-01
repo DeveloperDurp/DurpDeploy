@@ -2,14 +2,187 @@ package api_test
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler/api"
+	"durpdeploy/internal/repository"
 )
+
+func TestDeploymentRetryAndRedeployContracts(t *testing.T) {
+	for _, action := range []string{"retry", "redeploy"} {
+		for _, status := range []string{
+			"succeeded", "failed", "cancelled", "rejected", "expired",
+			"cleanup_unconfirmed", "pending", "pending_approval", "queued",
+			"running", "publishing_artifact", "awaiting_artifact_approval",
+		} {
+			t.Run(action+"/"+status, func(t *testing.T) {
+				assertDeploymentRetryAndRedeployContract(t, action, status)
+			})
+		}
+	}
+}
+
+func assertDeploymentRetryAndRedeployContract(
+	t *testing.T,
+	action, status string,
+) {
+	t.Helper()
+	h := newAPIHarness(t)
+	project := seedProject(t, h.repo)
+	env := seedEnv(t, h.repo)
+	release := seedRelease(t, h.repo, project.ID)
+	source := seedDeployment(t, h.repo, release.ID, env.ID, status)
+	lifecycle, err := h.repo.Queries.CreateLifecycle(t.Context(),
+		db.CreateLifecycleParams{Name: "approval"})
+	require.NoError(t, err)
+	_, err = h.repo.Queries.CreateLifecycleStage(t.Context(),
+		db.CreateLifecycleStageParams{
+			LifecycleID: lifecycle.ID, EnvironmentID: env.ID,
+			RequiresApproval: 1,
+		})
+	require.NoError(t, err)
+	require.NoError(
+		t,
+		h.repo.Queries.SetProjectLifecycle(t.Context(),
+			db.SetProjectLifecycleParams{
+				ID: project.ID,
+				LifecycleID: sql.NullInt64{
+					Int64: lifecycle.ID,
+					Valid: true,
+				},
+			}),
+	)
+	request := withAPIURLParam(httptest.NewRequest(
+		http.MethodPost, "/", nil), "id", fmt.Sprint(source.ID))
+	recorder := httptest.NewRecorder()
+	handler := api.NewDeploymentHandler(h.repo, h.runner)
+	call := handler.RetryDeployment
+	wantNote := sql.NullString{
+		String: fmt.Sprintf("Retry of #%d", source.ID), Valid: true,
+	}
+	if action == "redeploy" {
+		call = handler.RedeployDeployment
+		wantNote = sql.NullString{}
+	}
+	call(recorder, request)
+
+	wantStatus := http.StatusCreated
+	wantError := ""
+	switch status {
+	case "failed", "cancelled", "rejected", "expired":
+	case "cleanup_unconfirmed":
+		wantStatus = http.StatusConflict
+		wantError = repository.ErrContainerCleanupUnconfirmed.Error()
+	default:
+		if status != "succeeded" || action == "retry" {
+			wantStatus = http.StatusBadRequest
+			wantError = "Can only retry failed or cancelled deployments"
+			if action == "redeploy" {
+				wantStatus = http.StatusConflict
+				wantError = "Can only redeploy terminal deployments"
+			}
+		}
+	}
+	require.Equal(
+		t,
+		wantStatus,
+		recorder.Code,
+		recorder.Body.String(),
+	)
+	if wantError != "" {
+		var response struct{ Error string }
+		mustDecode(t, recorder.Body, &response)
+		require.Equal(t, wantError, response.Error)
+	} else {
+		var next db.Deployment
+		mustDecode(t, recorder.Body, &next)
+		require.Equal(t, "pending_approval", next.Status)
+		require.False(t, next.StartedAt.Valid)
+		require.Equal(t, wantNote, next.Note)
+	}
+	var count int
+	require.NoError(t, h.repo.DB.QueryRowContext(t.Context(),
+		"SELECT COUNT(*) FROM deployments").Scan(&count))
+	wantCount := 1
+	if wantStatus == http.StatusCreated {
+		wantCount++
+	}
+	require.Equal(t, wantCount, count)
+}
+
+func TestDeploymentRetryAndRedeployCreationFailures(t *testing.T) {
+	for _, action := range []string{"retry", "redeploy"} {
+		for _, failure := range []struct {
+			name, statement, message string
+			status                   int
+		}{
+			{"missing at lock", `CREATE TRIGGER disappear_at_release_lock
+BEFORE UPDATE OF version ON releases BEGIN SELECT RAISE(IGNORE); END`,
+				"Release or source deployment not found", http.StatusNotFound},
+			{"insert failure", `CREATE TRIGGER reject_deployment
+BEFORE INSERT ON deployments BEGIN SELECT RAISE(ABORT,'injected failure'); END`,
+				"injected failure", http.StatusInternalServerError},
+			{"legacy step", `UPDATE releases SET steps_json=
+'[{"name":"legacy","script_body":"true","execution_target":"local"}]'`,
+				repository.ErrLegacyServerStep.Error(), http.StatusConflict},
+		} {
+			t.Run(action+"/"+failure.name, func(t *testing.T) {
+				h := newAPIHarness(t)
+				project := seedProject(t, h.repo)
+				env := seedEnv(t, h.repo)
+				release := seedRelease(t, h.repo, project.ID)
+				source := seedDeployment(
+					t,
+					h.repo,
+					release.ID,
+					env.ID,
+					"failed",
+				)
+				_, err := h.repo.DB.ExecContext(t.Context(), failure.statement)
+				require.NoError(t, err)
+				request := withAPIURLParam(httptest.NewRequest(
+					http.MethodPost, "/", nil), "id", fmt.Sprint(source.ID))
+				recorder := httptest.NewRecorder()
+				handler := api.NewDeploymentHandler(h.repo, h.runner)
+				if action == "retry" {
+					handler.RetryDeployment(recorder, request)
+				} else {
+					handler.RedeployDeployment(recorder, request)
+				}
+				require.Equal(
+					t,
+					failure.status,
+					recorder.Code,
+					recorder.Body.String(),
+				)
+				var response struct{ Error string }
+				mustDecode(t, recorder.Body, &response)
+				if failure.status == http.StatusInternalServerError {
+					require.Contains(t, response.Error, failure.message)
+				} else {
+					require.Equal(t, failure.message, response.Error)
+				}
+				var count int
+				require.NoError(t, h.repo.DB.QueryRowContext(t.Context(),
+					"SELECT COUNT(*) FROM deployments").Scan(&count))
+				require.Equal(t, 1, count)
+				stored, err := h.repo.Queries.GetDeployment(
+					t.Context(),
+					source.ID,
+				)
+				require.NoError(t, err)
+				require.Equal(t, "failed", stored.Status)
+			})
+		}
+	}
+}
 
 func TestRetryDeploymentCreatesLocalSnapshot(t *testing.T) {
 	harness := newAPIHarness(t)

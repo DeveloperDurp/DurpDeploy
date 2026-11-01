@@ -763,6 +763,10 @@ Confirm that the new deployment prints `base-two` with the original script marke
 Read the original logs, then confirm that they remain unchanged.
 Repeat at phone and desktop widths.
 Repeat through `POST /api/v1/deployments/{id}/redeploy`.
+For retry, make the original script fail only when `RERUN_VALUE` equals `base-one`.
+Repeat through `POST /api/v1/deployments/{id}/retry` after the failure and release refresh.
+Confirm that the retry succeeds and shows `Retry of #` with the original deployment ID.
+Change a lifecycle variable before retrying and confirm that the retry uses its current value.
 Keep all deployment examples for repeat checks.
 These checks require no schedules.
 

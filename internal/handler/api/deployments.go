@@ -612,81 +612,7 @@ func (h *DeploymentHandler) RedeployDeployment(
 		)
 		return
 	}
-	release, err := h.repo.Queries.GetDeploymentRelease(
-		r.Context(),
-		deployment.ReleaseID,
-	)
-	if err != nil {
-		RespondError(w, http.StatusNotFound, "Release not found")
-		return
-	}
-	project, err := h.repo.Queries.GetProject(r.Context(), release.ProjectID)
-	if err != nil {
-		RespondError(w, http.StatusNotFound, projectNotFoundMessage)
-		return
-	}
-	blocked, reason, requiresApproval, err := gate.CheckAndApproval(
-		r.Context(),
-		h.repo.Queries,
-		project,
-		release,
-		deployment.EnvironmentID,
-	)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if blocked {
-		RespondError(w, http.StatusUnprocessableEntity, reason)
-		return
-	}
-
-	initialStatus := "pending"
-	if requiresApproval {
-		initialStatus = "pending_approval"
-	}
-	result, err := h.repo.CreateDeploymentFromDeployment(
-		r.Context(),
-		db.CreateDeploymentParams{
-			ReleaseID:     deployment.ReleaseID,
-			EnvironmentID: deployment.EnvironmentID,
-			Status:        initialStatus,
-		},
-		deployment.ID,
-	)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			RespondError(
-				w,
-				http.StatusNotFound,
-				"Release or source deployment not found",
-			)
-			return
-		}
-		if errors.Is(err, repository.ErrContainerCleanupUnconfirmed) {
-			RespondError(
-				w,
-				http.StatusConflict,
-				repository.ErrContainerCleanupUnconfirmed.Error(),
-			)
-			return
-		}
-		if writeArtifactError(w, err) {
-			return
-		}
-		if errors.Is(err, repository.ErrLegacyServerStep) {
-			RespondError(
-				w,
-				http.StatusConflict,
-				repository.ErrLegacyServerStep.Error(),
-			)
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	h.startLocalDeployment(result)
-	RespondJSON(w, http.StatusCreated, result.Deployment)
+	h.createDeploymentFromSource(w, r, deployment, sql.NullString{})
 }
 
 // swagger:route POST /deployments/{id}/cancel deployments cancelDeployment
@@ -846,6 +772,18 @@ func (h *DeploymentHandler) RetryDeployment(
 		return
 	}
 
+	h.createDeploymentFromSource(w, r, deployment, sql.NullString{
+		String: fmt.Sprintf("Retry of #%d", deployment.ID),
+		Valid:  true,
+	})
+}
+
+func (h *DeploymentHandler) createDeploymentFromSource(
+	w http.ResponseWriter,
+	r *http.Request,
+	deployment db.Deployment,
+	note sql.NullString,
+) {
 	release, err := h.repo.Queries.GetDeploymentRelease(
 		r.Context(),
 		deployment.ReleaseID,
@@ -874,6 +812,7 @@ func (h *DeploymentHandler) RetryDeployment(
 		RespondError(w, http.StatusUnprocessableEntity, reason)
 		return
 	}
+
 	initialStatus := "pending"
 	if requiresApproval {
 		initialStatus = "pending_approval"
@@ -884,10 +823,7 @@ func (h *DeploymentHandler) RetryDeployment(
 			ReleaseID:     deployment.ReleaseID,
 			EnvironmentID: deployment.EnvironmentID,
 			Status:        initialStatus,
-			Note: sql.NullString{
-				String: fmt.Sprintf("Retry of #%d", deployment.ID),
-				Valid:  true,
-			},
+			Note:          note,
 		},
 		deployment.ID,
 	)
