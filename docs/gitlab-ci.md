@@ -264,7 +264,8 @@ The agents shard retains its separate build-version checks.
 The running-server SQLite suite runs in `e2e` instead of repeating in the agents browser shard.
 Browser evidence uses a separate directory for each shard.
 The rollout job runs five shards: two contract groups, two artifact groups, and verification.
-The first contract group runs the agent rollout gate, concurrent log disconnect check, and artifact package race tests.
+The first contract group runs the agent rollout gate, concurrent log disconnect check, artifact package race tests, and two API batches.
+These API batches cover project and step policies, log export, and proxy request bodies.
 The second contract group runs the remaining API, handler, configuration, and environment queue checks.
 Both groups retain their original commands, required-test checks, build tags, race settings, and timeouts.
 The contract inventory test compares both groups with the original fourteen command invocations, including runtime settings.
