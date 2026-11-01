@@ -523,3 +523,44 @@ values:
 - **Compromised remote agent host:** An agent can run work explicitly routed to it. Isolate it from the control-plane host. Rotate its pairing and certificate material.
 
 See `docs/attack-drill.md` for hands-on verification of the active defenses.
+
+## External credential rotation
+
+Use **Credentials** in a project to manage secret variables and authenticated package sources.
+Use **Credentials** under shared lifecycle variables to manage shared secrets.
+Project changes require effective Maintainer permission.
+Shared lifecycle changes require a global administrator with unrestricted global access.
+
+Enter expiry and rotation dates in UTC.
+Select **Save** with an empty replacement field to preserve the stored secret.
+To change the secret and dates atomically, enter a replacement and select **Save**.
+Saving confirms storage only.
+Create and validate the replacement with its provider separately.
+
+Project rotation updates every matching secret in all releases and runbook versions.
+Matching requires the same project, exact variable name, and environment scope.
+Rotation does not insert missing variables or follow historical renames.
+Ordinary variable edits keep their existing snapshot behavior.
+Use the rotation workflow to update existing releases.
+
+Shared lifecycle replacements apply to new executions of every existing release and runbook.
+Project overrides keep their independent values.
+Existing deployment captures remain unchanged, including queued deployments and pending approvals.
+Legacy deployments receive an encrypted capture of their previous release values before rotation.
+Re-runs capture current release and lifecycle values.
+
+Package rotation changes only the selected source credential.
+Retained sources can rotate without becoming active.
+The next package download uses the replacement while preserving its pinned version, URL, checksum, and size.
+An active transfer can already hold the previous credential.
+
+Coordinate provider revocation with work that still uses captured credentials.
+Automatic provider rotation and scheduled reminders are unavailable.
+The status uses the earliest configured date, with a fixed 30-day warning window.
+Expired metadata does not block execution or prove provider revocation.
+
+API reads return metadata without secret values.
+Updates require the latest `revision` and return `409` for stale submissions.
+Dates use Unix seconds, with zero meaning unspecified.
+Successful writes use audit middleware.
+Failed rotation attempts record a separate event without submitted values or provider errors.

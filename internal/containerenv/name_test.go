@@ -29,3 +29,16 @@ func TestValidateNameRejectsStagingVariable(t *testing.T) {
 		}
 	}
 }
+
+func TestEnvironmentIdentityAllowsSelectionButRejectsDefinition(t *testing.T) {
+	for _, name := range []string{EnvironmentNameVariable, EnvironmentIDVariable} {
+		for _, local := range []bool{true, false} {
+			if !errors.Is(ValidateName(name, local), ErrReserved) {
+				t.Fatalf("accepted user definition %s", name)
+			}
+			if err := ValidateSelection(name, local); err != nil {
+				t.Fatalf("runtime selection %s: %v", name, err)
+			}
+		}
+	}
+}

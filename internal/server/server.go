@@ -213,6 +213,23 @@ func newRouter(
 
 		lifecycleH := handler.NewLifecycleHandler(repo)
 		lifecycleVariablesH := handler.NewLifecycleVariableHandler(repo)
+		lifecycleCredentialsH := handler.NewCredentialHandler(repo, true)
+		pr.With(auth.RequireRole("admin")).
+			Get("/lifecycles/{id}/credentials/new", lifecycleCredentialsH.List)
+		pr.With(auth.RequireRole("admin")).
+			Get("/lifecycles/{id}/credentials/{kind}/{credentialId}/edit", lifecycleCredentialsH.List)
+		pr.With(auth.RequireRole("admin")).
+			Get("/lifecycles/{id}/credentials/{kind}/{credentialId}/delete", lifecycleCredentialsH.List)
+		pr.With(auth.RequireRole("admin")).
+			Post("/lifecycles/{id}/credentials", lifecycleCredentialsH.Create)
+		pr.With(auth.RequireRole("admin")).
+			Post("/lifecycles/{id}/credentials/enroll", lifecycleCredentialsH.Enroll)
+		pr.With(auth.RequireRole("admin")).
+			Post("/lifecycles/{id}/credentials/{kind}/{credentialId}/delete", lifecycleCredentialsH.Delete)
+		pr.With(auth.RequireRole("admin")).
+			Get("/lifecycles/{id}/credentials", lifecycleCredentialsH.List)
+		pr.With(auth.RequireRole("admin")).
+			Post("/lifecycles/{id}/credentials/{kind}/{credentialId}", lifecycleCredentialsH.Save)
 		pr.With(auth.RequireRole("admin")).
 			Get("/lifecycles/{id}/variables", lifecycleVariablesH.List)
 		pr.With(auth.RequireRole("admin")).
@@ -438,6 +455,27 @@ func newRouter(
 				projectTemplatesH.Apply,
 			)
 			artifactH := handler.NewArtifactHandler(repo)
+			credentialsH := handler.NewCredentialHandler(repo, false)
+			ppr.Get("/projects/{id}/credentials/new", credentialsH.List)
+			ppr.Get(
+				"/projects/{id}/credentials/{kind}/{credentialId}/edit",
+				credentialsH.List,
+			)
+			ppr.Get(
+				"/projects/{id}/credentials/{kind}/{credentialId}/delete",
+				credentialsH.List,
+			)
+			ppr.Post("/projects/{id}/credentials", credentialsH.Create)
+			ppr.Post("/projects/{id}/credentials/enroll", credentialsH.Enroll)
+			ppr.Post(
+				"/projects/{id}/credentials/{kind}/{credentialId}/delete",
+				credentialsH.Delete,
+			)
+			ppr.Get("/projects/{id}/credentials", credentialsH.List)
+			ppr.Post(
+				"/projects/{id}/credentials/{kind}/{credentialId}",
+				credentialsH.Save,
+			)
 			ppr.Get("/projects/{id}/package-repository", artifactH.Get)
 			ppr.Get("/projects/{id}/package-repository/edit", artifactH.Form)
 			ppr.Post("/projects/{id}/package-repository", artifactH.Save)
@@ -748,6 +786,21 @@ func newRouter(
 
 		apiLcH := api.NewLifecycleHandler(repo)
 		apiLcVariablesH := api.NewLifecycleVariableHandler(repo)
+		apiLifecycleCredentialsH := api.NewCredentialHandler(repo, true)
+		ar.With(auth.RequireRole("admin")).
+			Get("/lifecycles/{id}/credentials/candidates", apiLifecycleCredentialsH.Candidates)
+		ar.With(auth.RequireRole("admin")).
+			Post("/lifecycles/{id}/credentials", apiLifecycleCredentialsH.Create)
+		ar.With(auth.RequireRole("admin")).
+			Post("/lifecycles/{id}/credentials/enroll", apiLifecycleCredentialsH.Enroll)
+		ar.With(auth.RequireRole("admin")).
+			Delete("/lifecycles/{id}/credentials/{kind}/{credentialId}", apiLifecycleCredentialsH.Delete)
+		ar.With(auth.RequireRole("admin")).
+			Get("/lifecycles/{id}/credentials", apiLifecycleCredentialsH.List)
+		ar.With(auth.RequireRole("admin")).
+			Put("/lifecycles/{id}/credentials/{kind}/{credentialId}", apiLifecycleCredentialsH.Save)
+		ar.With(auth.RequireRole("admin")).
+			Post("/lifecycles/{id}/credentials/{kind}/{credentialId}/rotate", apiLifecycleCredentialsH.Save)
 		ar.With(auth.RequireRole("admin")).
 			Get("/lifecycles/{id}/variables", apiLcVariablesH.List)
 		ar.With(auth.RequireRole("admin")).
@@ -911,6 +964,30 @@ func newRouter(
 
 			apiVarH := api.NewVariableHandler(repo)
 			artifactH := api.NewArtifactHandler(repo)
+			apiCredentialsH := api.NewCredentialHandler(repo, false)
+			par.Get("/projects/{id}/credentials/status", apiCredentialsH.Status)
+			par.Get(
+				"/projects/{id}/credentials/candidates",
+				apiCredentialsH.Candidates,
+			)
+			par.Post("/projects/{id}/credentials", apiCredentialsH.Create)
+			par.Post(
+				"/projects/{id}/credentials/enroll",
+				apiCredentialsH.Enroll,
+			)
+			par.Delete(
+				"/projects/{id}/credentials/{kind}/{credentialId}",
+				apiCredentialsH.Delete,
+			)
+			par.Get("/projects/{id}/credentials", apiCredentialsH.List)
+			par.Put(
+				"/projects/{id}/credentials/{kind}/{credentialId}",
+				apiCredentialsH.Save,
+			)
+			par.Post(
+				"/projects/{id}/credentials/{kind}/{credentialId}/rotate",
+				apiCredentialsH.Save,
+			)
 			par.Get("/projects/{id}/package-repository", artifactH.Get)
 			par.Put("/projects/{id}/package-repository", artifactH.Save)
 			par.Delete(

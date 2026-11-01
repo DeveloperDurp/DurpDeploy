@@ -132,6 +132,14 @@ func (r *Repository) SaveRunbook(
 					return err
 				}
 			}
+			if err := r.SyncRotatedReleaseCredentials(
+				ctx,
+				q,
+				arg.ProjectID,
+				release.ID,
+			); err != nil {
+				return err
+			}
 			version, txErr = q.CreateRunbookVersion(
 				ctx,
 				db.CreateRunbookVersionParams{

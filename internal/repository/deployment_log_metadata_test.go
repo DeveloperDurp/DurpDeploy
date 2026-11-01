@@ -123,10 +123,11 @@ func seedPreMigrationLogMetadata(
 	t *testing.T, repo *Repository, provider *goose.Provider, name string,
 ) (int64, string) {
 	t.Helper()
-	deployment, err := repo.Queries.CreateDeployment(t.Context(),
-		db.CreateDeploymentParams{
-			ReleaseID: 1, EnvironmentID: 1, Status: "running",
-		})
+	// Historical fixtures cannot use queries that read the current schema.
+	var deployment db.Deployment
+	err := repo.DB.QueryRowContext(t.Context(),
+		`INSERT INTO deployments(release_id,environment_id,status)
+		 VALUES(1,1,'running') RETURNING id`).Scan(&deployment.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
