@@ -77,3 +77,73 @@ esac
 		}
 	}
 }
+
+func TestLocalAttemptApprovalStorage(t *testing.T) {
+	for _, kind := range []string{"docker", "podman"} {
+		for _, approved := range []bool{false, true} {
+			name := kind + "/plan"
+			if approved {
+				name = kind + "/approved"
+			}
+			t.Run(name, func(t *testing.T) {
+				testLocalAttemptApprovalStorage(t, kind, approved)
+			})
+		}
+	}
+}
+
+func testLocalAttemptApprovalStorage(
+	t *testing.T, kind string, approved bool,
+) {
+	t.Helper()
+	r, repo, trace := podmanFixture(t, "")
+	r.engine.kind = kind
+	client := `#!/bin/sh
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --remote|--host=*|--url=*) shift;;
+    *) break;;
+  esac
+done
+case "$1" in
+  image) printf 'null\n';;
+  inspect) printf 'true\n';;
+  run) printf '%s\n' "$@" > "$PODMAN_TRACE";;
+esac
+`
+	if err := os.WriteFile(
+		r.engine.binary,
+		[]byte(client),
+		0o700,
+	); err != nil {
+		t.Fatal(err)
+	}
+	request := localStepAttempt{
+		step: deploymentStep{
+			ContainerImage:       "example/worker:1",
+			ApprovalArtifactPath: "plan.out",
+		},
+		logWriter: attemptLogWriter(t, r, repo, 1),
+	}
+	if approved {
+		request.step.ApprovalArtifactPath = ""
+		request.approved = artifactStage{
+			volume: "approved", keeper: "approved-keeper",
+		}
+	}
+	if err := r.runStepAttempt(t.Context(), request); err != nil {
+		t.Fatal(err)
+	}
+	args, err := os.ReadFile(trace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(args),
+		"--tmpfs=/tmp:rw,exec,nosuid,nodev,size=381681664\n") {
+		t.Fatalf("missing approval temporary storage: %s", args)
+	}
+	mount := "--volume=approved:" + approvedMount + ":ro,nocopy\n"
+	if strings.Contains(string(args), mount) != approved {
+		t.Fatalf("incorrect approved mount: %s", args)
+	}
+}

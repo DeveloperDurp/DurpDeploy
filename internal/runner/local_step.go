@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/agentexecution"
+	"durpdeploy/internal/config"
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/interpreter"
 )
@@ -32,7 +33,11 @@ type localStepAttempt struct {
 func (r *DeploymentRunner) runStepAttempt(
 	runCtx context.Context, request localStepAttempt,
 ) (result error) {
-	if err := agentexecution.ValidateLimitsWithPolicy(request.step.TimeoutSeconds, request.step.MaxRetries, r.repo.ResourceLimits().Execution); err != nil {
+	if err := agentexecution.ValidateLimitsWithPolicy(
+		request.step.TimeoutSeconds,
+		request.step.MaxRetries,
+		r.repo.ResourceLimits().Execution,
+	); err != nil {
 		return err
 	}
 	if !r.beginLocalWork() {
@@ -122,70 +127,22 @@ func (r *DeploymentRunner) runStepAttempt(
 		request.attempt,
 		hex.EncodeToString(nonce),
 	)
-	args := []string{"run"}
-	if r.engine.kind == "podman" {
-		args = append(args, "--rm")
-	}
-	timeoutFlag := "--stop-timeout="
-	if r.engine.kind == "podman" {
-		timeoutFlag = "--timeout="
-	}
-	network := request.step.NetworkMode
-	tmpfs := fmt.Sprintf("--tmpfs=/tmp:rw,nosuid,size=%d",
-		limits.Container.TmpfsBytes)
-	if request.step.ApprovalArtifactPath != "" ||
-		request.approved.volume != "" {
-		// Providers execute in /tmp; staging and approved context stay noexec.
-		tmpfs = fmt.Sprintf(
-			"--tmpfs=/tmp:rw,exec,nosuid,nodev,size=%d",
-			limits.Artifact.DownloadBytes+limits.Container.TmpfsBytes,
-		)
-	}
-	if network == "" {
-		network = "none"
-	}
-	args = append(args,
-		"--interactive", "--pull=missing",
-		timeoutFlag+fmt.Sprint(int64(timeout/time.Second)),
-		"--log-driver=none",
-		"--name="+name, "--label=io.durpdeploy.attempt="+name,
-		"--label=io.durpdeploy.namespace="+r.engine.scope(),
-		"--network="+network, "--read-only", "--cap-drop=ALL",
-		"--security-opt=no-new-privileges", "--user=65534:65534",
-		tmpfs,
-		"--env=HOME=/tmp", "--env=TERM=dumb",
-		fmt.Sprintf("--pids-limit=%d", r.repo.ResourceLimits().Container.PIDs))
-	if r.engine.kind == "podman" {
-		args = append(args, "--image-volume=ignore", "--http-proxy=false")
-	}
-	args = append(args, envArgs...)
-	args = append(args, r.artifactMountArgs(request.artifact)...)
-	args = append(args, r.deploymentMountArgs(request.handoff)...)
-	if request.approved.volume != "" {
-		args = append(
-			args,
-			"--volume="+request.approved.volume+":"+approvedMount+":ro,nocopy",
-		)
-	}
-	args = append(args, "--entrypoint="+selected, request.step.ContainerImage)
-	switch selected {
-	case interpreter.Bash:
-		if request.verification {
-			args = append(args, "-p")
-		}
-		args = append(args, "-s")
-	case interpreter.PowerShell:
-		args = append(
-			args,
-			"-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "-",
-		)
-	case interpreter.Python:
-		args = append(args, "-")
-	}
+	args := r.localContainerArgs(
+		request,
+		name,
+		selected,
+		timeout,
+		envArgs,
+		limits,
+	)
 	if _, err := io.WriteString(request.logWriter, fmt.Sprintf(
 		"Execution location: target=server host=%q mode=container runtime=%q container=%q image=%q interpreter=%q attempt=%d\n",
 		request.logWriter.scrubber.Scrub(host),
-		r.engine.kind, name, request.step.ContainerImage, selected, request.attempt,
+		r.engine.kind,
+		name,
+		request.step.ContainerImage,
+		selected,
+		request.attempt,
 	)); err != nil {
 		return fmt.Errorf("record execution location: %w", err)
 	}
@@ -262,4 +219,74 @@ func (r *DeploymentRunner) runStepAttempt(
 		}
 	}
 	return err
+}
+
+func (r *DeploymentRunner) localContainerArgs(
+	request localStepAttempt,
+	name, selected string,
+	timeout time.Duration,
+	envArgs []string,
+	limits config.Limits,
+) []string {
+	args := []string{"run"}
+	if r.engine.kind == "podman" {
+		args = append(args, "--rm")
+	}
+	timeoutFlag := "--stop-timeout="
+	if r.engine.kind == "podman" {
+		timeoutFlag = "--timeout="
+	}
+	network := request.step.NetworkMode
+	tmpfs := fmt.Sprintf("--tmpfs=/tmp:rw,nosuid,size=%d",
+		limits.Container.TmpfsBytes)
+	if request.step.ApprovalArtifactPath != "" ||
+		request.approved.volume != "" {
+		// Providers execute in /tmp; staging and approved context stay noexec.
+		tmpfs = fmt.Sprintf(
+			"--tmpfs=/tmp:rw,exec,nosuid,nodev,size=%d",
+			limits.Artifact.DownloadBytes+limits.Container.TmpfsBytes,
+		)
+	}
+	if network == "" {
+		network = "none"
+	}
+	args = append(args,
+		"--interactive", "--pull=missing",
+		timeoutFlag+fmt.Sprint(int64(timeout/time.Second)),
+		"--log-driver=none",
+		"--name="+name, "--label=io.durpdeploy.attempt="+name,
+		"--label=io.durpdeploy.namespace="+r.engine.scope(),
+		"--network="+network, "--read-only", "--cap-drop=ALL",
+		"--security-opt=no-new-privileges", "--user=65534:65534",
+		tmpfs,
+		"--env=HOME=/tmp", "--env=TERM=dumb",
+		fmt.Sprintf("--pids-limit=%d", r.repo.ResourceLimits().Container.PIDs))
+	if r.engine.kind == "podman" {
+		args = append(args, "--image-volume=ignore", "--http-proxy=false")
+	}
+	args = append(args, envArgs...)
+	args = append(args, r.artifactMountArgs(request.artifact)...)
+	args = append(args, r.deploymentMountArgs(request.handoff)...)
+	if request.approved.volume != "" {
+		args = append(
+			args,
+			"--volume="+request.approved.volume+":"+approvedMount+":ro,nocopy",
+		)
+	}
+	args = append(args, "--entrypoint="+selected, request.step.ContainerImage)
+	switch selected {
+	case interpreter.Bash:
+		if request.verification {
+			args = append(args, "-p")
+		}
+		args = append(args, "-s")
+	case interpreter.PowerShell:
+		args = append(
+			args,
+			"-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "-",
+		)
+	case interpreter.Python:
+		args = append(args, "-")
+	}
+	return args
 }

@@ -1,5 +1,24 @@
 # Manual checks after `make e2e-test`
 
+## Local container argument regression (#158)
+
+The retained example runs Bash, Python, PowerShell, and Bash verification through the public API.
+The state directory is `/home/user/.local/state/durpdeploy/issue158-retained`.
+This standalone stack is outside thread teardown.
+No schedules are configured.
+
+1. Read `url` and `ca_file` from `connection.json` in the state directory.
+2. Open `/deployments/1` at that URL.
+3. Sign in with `admin@stack.test` and the development password `e2e-admin-password-1234`.
+4. Expand each step panel.
+5. Confirm `bash-158`, `python-158`, and `powershell-158` in the saved logs.
+6. Confirm successful verification and execution locations.
+7. Select **Re-run** to repeat the release.
+
+Stop this example with `make dev-stack ACTION=down STATE=/home/user/.local/state/durpdeploy/issue158-retained`.
+This command deletes its database and volumes.
+Keep the example running during manual review.
+
 ## Agent policy handshake
 
 Use a disposable paired agent with its scoped mTLS identity and server certificate trust.
