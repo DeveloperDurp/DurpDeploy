@@ -2,10 +2,12 @@ package cicontract
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -134,7 +136,8 @@ func TestTestShardsPropagateFailure(t *testing.T) {
 	path := fixtureCommand(t, "bash", "exit 9\n")
 	path = fixtureCommand(t, "make", "exit 9\n") + ":" + path
 	for _, shard := range []string{
-		"rollout-contracts", "rollout-artifacts-1", "rollout-artifacts-2", "rollout-verification",
+		"rollout-contracts", "rollout-contracts-1", "rollout-contracts-2",
+		"rollout-artifacts-1", "rollout-artifacts-2", "rollout-verification",
 		"browser-navigation", "browser-resources", "browser-permissions", "browser-execution",
 		"browser-agents", "unknown",
 	} {
@@ -149,6 +152,73 @@ func TestTestShardsPropagateFailure(t *testing.T) {
 			exit.ExitCode() != want {
 			t.Fatalf("%s: exit=%v want=%d: %s", shard, err, want, output)
 		}
+	}
+}
+
+func TestRolloutContractsPreserveEveryCommandAndFlag(t *testing.T) {
+	// Captured from the original contracts shard before splitting its commands.
+	data, err := os.ReadFile("testdata/rollout_contract_commands.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want []string
+	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	for decoder.More() {
+		var call struct {
+			Command string
+			Args    []string
+			Runtime string
+		}
+		if err := decoder.Decode(&call); err != nil {
+			t.Fatal(err)
+		}
+		want = append(want, fmt.Sprintf("%s %s|runtime=%s",
+			call.Command, strings.Join(call.Args, " "), call.Runtime))
+	}
+	if len(want) != 14 {
+		t.Fatalf("original contract inventory has %d commands", len(want))
+	}
+	body := `printf '%s %s|runtime=%s\n' "${0##*/}" "$*" "${DURPDEPLOY_CONTAINER_RUNTIME:-}" >> "$FIXTURE_COMMANDS"`
+	path := fixtureCommand(
+		t,
+		"bash",
+		body,
+	) + ":" + fixtureCommand(
+		t,
+		"make",
+		body,
+	)
+	commands := filepath.Join(t.TempDir(), "commands")
+	shards := pipeline(t)["agent-rollout"].Parallel.Matrix[0]["ROLLOUT_SHARD"]
+	count := 0
+	for _, shard := range shards {
+		if !strings.HasPrefix(shard, "contracts-") {
+			continue
+		}
+		count++
+		cmd := exec.Command(
+			"bash",
+			"../../scripts/ci_test_shard.sh",
+			"rollout-"+shard,
+		)
+		cmd.Env = append(os.Environ(), "PATH="+path+":"+os.Getenv("PATH"),
+			"FIXTURE_COMMANDS="+commands, "DURPDEPLOY_CONTAINER_RUNTIME=")
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%s: %v: %s", shard, err, output)
+		}
+	}
+	if count != 2 {
+		t.Fatalf("want two contract groups, got %d", count)
+	}
+	data, err = os.ReadFile(commands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Split(strings.TrimSpace(string(data)), "\n")
+	slices.Sort(want)
+	slices.Sort(got)
+	if !slices.Equal(got, want) {
+		t.Fatalf("contract commands changed:\ngot %q\nwant %q", got, want)
 	}
 }
 

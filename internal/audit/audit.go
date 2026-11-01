@@ -128,6 +128,10 @@ func Middleware(repo *repository.Repository) func(http.Handler) http.Handler {
 				state.projectGroupChange == nil {
 				return
 			}
+			if (action == "update_credential_metadata" || action == "rotate_credential" || action == "create_credential" || action == "enroll_credential" || action == "delete_credential") &&
+				state.overridden == nil {
+				return
+			}
 
 			var userID sql.NullInt64
 			if u := auth.UserFromContext(r.Context()); u != nil {
