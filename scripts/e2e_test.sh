@@ -265,7 +265,8 @@ if [[ -n "$LONG_STEP_ID" ]]; then
   do_delete "$BASE/projects/$PROJECT_ID/steps/$LONG_STEP_ID"
 fi
 
-CODE=$(curl_silent -X POST -d "name=TimeoutStep&script_body=sleep+10&timeout_seconds=1&container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps")
+# The execution budget includes container setup. Allow setup before timing out.
+CODE=$(curl_silent -X POST -d "name=TimeoutStep&script_body=sleep+30&timeout_seconds=5&container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps")
 [[ "$CODE" == "200" ]] || { echo "FAIL: create timeout step got $CODE"; exit 1; }
 
 CODE=$(curl_silent -X POST -d "version=1.0.2&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/releases")
@@ -287,7 +288,10 @@ done
 END=$(date +%s)
 ELAPSED=$((END - START))
 
-echo "$STATUS_BODY" | grep -q 'failed' || { echo "FAIL: timeout deploy did not fail, got status: $STATUS_BODY"; exit 1; }
+echo "$STATUS_BODY" | grep -q 'failed' || {
+  curl_body "$BASE/deployments/$TIMEOUT_DEP/logs.txt" >&2
+  echo "FAIL: timeout deploy did not fail, got status: $STATUS_BODY"; exit 1;
+}
 [[ $ELAPSED -lt 25 ]] || { echo "FAIL: timeout deploy took ${ELAPSED}s, expected <25s"; exit 1; }
 curl_body "$BASE/deployments/$TIMEOUT_DEP/logs.txt" | grep 'timed out' >/dev/null || { echo "FAIL: timeout log missing"; exit 1; }
 echo "  Per-step timeout killed long sleep: OK (failed in ${ELAPSED}s)"
@@ -308,7 +312,11 @@ for i in {1..100}; do
   if echo "$RERUN_STATUS" | grep -qE 'failed|succeeded|cancelled'; then break; fi
   sleep 0.2
 done
-echo "$RERUN_STATUS" | grep -q 'failed' || { echo "FAIL: re-run deploy did not fail, got status: $RERUN_STATUS"; exit 1; }
+echo "$RERUN_STATUS" | grep -q 'failed' || {
+  curl_body "$BASE/deployments/$NEW_DEP/logs.txt" >&2
+  echo "FAIL: re-run deploy did not fail, got status: $RERUN_STATUS"; exit 1;
+}
+curl_body "$BASE/deployments/$NEW_DEP/logs.txt" | grep 'timed out' >/dev/null || { echo "FAIL: re-run timeout log missing"; exit 1; }
 echo "  Re-run deployment failed as expected: OK"
 
 # The new deployment's note should record the lineage.
