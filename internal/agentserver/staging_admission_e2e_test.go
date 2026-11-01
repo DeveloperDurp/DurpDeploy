@@ -181,6 +181,65 @@ func testDeploymentStagingAdmission(t *testing.T, action string) {
 	s.assertRuntimeStagingPurged(t)
 }
 
+func TestOccupyStagingAdmissionPermitsWaitsForCapacity(t *testing.T) {
+	repo := repository.New(nil)
+	finish, ok := repo.TryBeginStagingTransfer(
+		db.GetStagingSnapshotParams{Producer: "in-flight"},
+	)
+	if !ok {
+		t.Fatal("failed to start existing transfer")
+	}
+	t.Cleanup(finish)
+	result := make(chan []func(), 1)
+	go func() {
+		result <- occupyStagingAdmissionPermits(t, repo, "download")
+	}()
+	var permits []func()
+	t.Cleanup(func() {
+		finish()
+		if permits == nil {
+			select {
+			case permits = <-result:
+			case <-time.After(6 * time.Second):
+				t.Error("permit setup did not finish")
+				return
+			}
+		}
+		for _, done := range permits {
+			done()
+		}
+	})
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		probe, admitted := repo.TryBeginStagingTransfer(
+			db.GetStagingSnapshotParams{Producer: "probe"},
+		)
+		if !admitted {
+			break
+		}
+		probe()
+		if time.Now().After(deadline) {
+			t.Fatal("fixture did not fill available capacity")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	finish()
+	select {
+	case permits = <-result:
+		if len(permits) != 4 {
+			t.Fatalf("fixture permits=%d, want 4", len(permits))
+		}
+	case <-time.After(6 * time.Second):
+		t.Fatal("fixture did not acquire released capacity")
+	}
+	if done, admitted := repo.TryBeginStagingTransfer(
+		db.GetStagingSnapshotParams{Producer: "overflow"},
+	); admitted {
+		done()
+		t.Error("fixture did not retain full capacity")
+	}
+}
+
 func occupyStagingAdmissionPermits(
 	t *testing.T,
 	repo *repository.Repository,
@@ -192,8 +251,9 @@ func occupyStagingAdmissionPermits(
 	if action == "upload" {
 		count = 1
 	}
-	for i := range count {
-		agent := fmt.Sprintf("occupied-%d", i)
+	deadline := time.Now().Add(5 * time.Second)
+	for len(permits) < count {
+		agent := fmt.Sprintf("occupied-%d", len(permits))
 		if action == "upload" {
 			agent = "test-agent"
 		}
@@ -203,10 +263,15 @@ func occupyStagingAdmissionPermits(
 			},
 		)
 		if !ok {
+			// A real transfer can still be releasing its permit.
+			if time.Now().Before(deadline) {
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
 			t.Error(
 				"failed to occupy transfer capacity",
 			)
-			continue
+			break
 		}
 		permits = append(permits, done)
 	}
