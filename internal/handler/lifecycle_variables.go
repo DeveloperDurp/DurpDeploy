@@ -35,6 +35,13 @@ func loadLifecycleVariables(
 		return data, err
 	}
 	data.Environments, err = repo.Queries.ListEnvironments(ctx)
+	ordinary := data.Variables[:0]
+	for _, variable := range data.Variables {
+		if variable.IsCredential == 0 {
+			ordinary = append(ordinary, variable)
+		}
+	}
+	data.Variables = ordinary
 	if err != nil {
 		return data, err
 	}
@@ -108,11 +115,13 @@ func (h *LifecycleVariableHandler) render(
 	data pages.LifecycleVariables,
 ) {
 	if r.Header.Get("HX-Request") == "true" {
-		if err := pages.SharedLifecycleVariables(data).Render(r.Context(), w); err != nil {
+		if err := pages.SharedLifecycleVariables(data).
+			Render(r.Context(), w); err != nil {
 			lifecycleVariableWebError(w, err)
 		}
 	} else {
-		if err := pages.LifecycleVariablesPage(data, r.URL.Path).Render(r.Context(), w); err != nil {
+		if err := pages.LifecycleVariablesPage(data, r.URL.Path).
+			Render(r.Context(), w); err != nil {
 			lifecycleVariableWebError(w, err)
 		}
 	}
@@ -149,6 +158,19 @@ func (h *LifecycleVariableHandler) Edit(
 		lifecycleVariableWebError(w, err)
 		return
 	}
+	if data.Editing.IsCredential != 0 {
+		http.Redirect(
+			w,
+			r,
+			fmt.Sprintf(
+				"/lifecycles/%d/credentials/lifecycle/%d/edit",
+				data.Lifecycle.ID,
+				id,
+			),
+			http.StatusSeeOther,
+		)
+		return
+	}
 	h.render(w, r, data)
 }
 
@@ -183,6 +205,11 @@ func (h *LifecycleVariableHandler) Delete(
 	if r.Header.Get("HX-Request") == "true" {
 		h.List(w, r)
 	} else {
-		http.Redirect(w, r, fmt.Sprintf("/lifecycles/%d#shared-variables", data.Lifecycle.ID), http.StatusSeeOther)
+		http.Redirect(
+			w,
+			r,
+			fmt.Sprintf("/lifecycles/%d#shared-variables", data.Lifecycle.ID),
+			http.StatusSeeOther,
+		)
 	}
 }

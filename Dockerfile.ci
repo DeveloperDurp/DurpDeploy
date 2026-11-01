@@ -7,6 +7,7 @@ FROM harbor.durp.info/dockerhub/alpine/helm:4.2.2@sha256:ee6fe3e96d9f8ea8dd1af9e
 FROM harbor.durp.info/dockerhub/alpine/helm:3.16.2@sha256:a19a2968fd672336d39771f6c899781424d725229148656dbc2a1e305003cdec AS helm3
 FROM ${BROWSER_IMAGE}
 
+ARG CI_RUNTIME_CACHE_EPOCH=0
 # Retain distribution license notices in /usr/share/doc.
 # hadolint ignore=DL3008
 RUN apt-get update && \

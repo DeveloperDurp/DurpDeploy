@@ -24,8 +24,13 @@ printf '%s\n' "$TEST_INVENTORY"
 }
 
 func TestArtifactShardsSelectEveryCompiledTestOnce(t *testing.T) {
-	names := []string{"TestArtifactGateAlphaE2E", "TestArtifactGateBetaE2E",
-		"TestArtifactGateFutureE2E", "TestArtifactGateOtherE2E", "TestArtifactGateÜnicodeE2E"}
+	names := []string{
+		"TestArtifactGateAlphaE2E",
+		"TestArtifactGateBetaE2E",
+		"TestArtifactGateFutureE2E",
+		"TestArtifactGateOtherE2E",
+		"TestArtifactGateÜnicodeE2E",
+	}
 	counts := map[string]int{}
 	for _, shard := range []string{"1", "2"} {
 		inventory := "noise\n" + strings.Join(names, "\n") + "\nok package\n"
@@ -136,7 +141,7 @@ func TestEveryPackageAndArtifactShardIsScheduled(t *testing.T) {
 	}{
 		{"coverage", "COVERAGE_SHARD", []string{"api-1", "api-2", "handlers", "repository", "migrations", "core"}},
 		{"package-browser", "BROWSER_SHARD", []string{"navigation", "resources", "permissions", "execution", "agents"}},
-		{"agent-rollout", "ROLLOUT_SHARD", []string{"contracts", "artifacts-1", "artifacts-2", "verification"}},
+		{"agent-rollout", "ROLLOUT_SHARD", []string{"contracts-1", "contracts-2", "artifacts-1", "artifacts-2", "verification"}},
 	} {
 		var actual []string
 		for _, entry := range jobs[fixture.job].Parallel.Matrix {

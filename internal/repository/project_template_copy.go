@@ -166,6 +166,10 @@ func (r *Repository) copyTemplateVariables(
 			return err
 		}
 		secret := int64(0)
+		var credential int64
+		if v.IsCredential {
+			credential = 1
+		}
 		if v.Secret {
 			secret = 1
 		}
@@ -177,6 +181,7 @@ func (r *Repository) copyTemplateVariables(
 				Value:         encrypted,
 				EnvironmentID: environment,
 				Secret:        secret,
+				IsCredential:  credential,
 			},
 		); err != nil {
 			return err
@@ -272,7 +277,11 @@ func (r *Repository) validateTemplateStep(s ProjectTemplateStep) error {
 		s.MaxRetries < 0 {
 		return templateInvalid("invalid step configuration")
 	}
-	if err := agentexecution.ValidateLimitsWithPolicy(s.TimeoutSeconds, s.MaxRetries, r.ResourceLimits().Execution); err != nil {
+	if err := agentexecution.ValidateLimitsWithPolicy(
+		s.TimeoutSeconds,
+		s.MaxRetries,
+		r.ResourceLimits().Execution,
+	); err != nil {
 		return templateInvalid(err.Error())
 	}
 	if _, err := interpreter.Validate(s.Interpreter); err != nil {
@@ -294,7 +303,7 @@ func (r *Repository) validateTemplateStep(s ProjectTemplateStep) error {
 	}
 	seen := map[string]bool{}
 	for _, name := range s.VariableNames {
-		if err := containerenv.ValidateName(name, local); err != nil {
+		if err := containerenv.ValidateSelection(name, local); err != nil {
 			return templateInvalid(err.Error())
 		}
 		if seen[name] {

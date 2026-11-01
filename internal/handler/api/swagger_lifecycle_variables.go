@@ -4,9 +4,10 @@ package api
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerLifecycleVariable struct {
-	ID          int64  `json:"id"`
-	LifecycleID int64  `json:"lifecycle_id"`
-	Name        string `json:"name"`
+	IsCredential int64  `json:"is_credential"`
+	ID           int64  `json:"id"`
+	LifecycleID  int64  `json:"lifecycle_id"`
+	Name         string `json:"name"`
 	// Empty when Secret is 1.
 	Value         string `json:"value"`
 	EnvironmentID *int64 `json:"environment_id"`

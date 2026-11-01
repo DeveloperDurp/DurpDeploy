@@ -26,11 +26,13 @@ type lifecycleVariableResponse struct {
 	EnvironmentID *int64 `json:"environment_id"`
 	Secret        int64  `json:"secret"`
 	CreatedAt     int64  `json:"created_at"`
+	IsCredential  int64  `json:"is_credential"`
 }
 
 func lifecycleVariableJSON(v db.LifecycleVariable) lifecycleVariableResponse {
 	result := lifecycleVariableResponse{
-		ID: v.ID, LifecycleID: v.LifecycleID, Name: v.Name,
+		IsCredential: v.IsCredential,
+		ID:           v.ID, LifecycleID: v.LifecycleID, Name: v.Name,
 		Secret: v.Secret, CreatedAt: v.CreatedAt,
 	}
 	if v.EnvironmentID.Valid {
