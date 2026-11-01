@@ -15,10 +15,10 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
       --tests TestConcurrentLogDisconnectAPIWebE2E \
       --require TestConcurrentLogDisconnectAPIWebE2E
     bash scripts/go_test.sh -race -count=1 ./internal/artifact
-    ;;
-  rollout-contracts-2)
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^Test(Project(UpdateAtomic|PanelScope|PanelFailure|PanelBatch)|StepExecutionLimits|ConfiguredExecutionLimits|StepFields|RouteAuditAuthorization|TerminalRetryShutdown|FramingPolicy|TokenFormat|JSONNotificationDelivery|UserRoleValidation|TextLogExport)APIWebE2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestProxyBodyAPIWebE2E$' ./internal/handler/api
+    ;;
+  rollout-contracts-2)
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestConfigured(RequestBody(APIWeb|Isolation)|PasswordCompatibility|ArtifactTimeoutsAPIWeb|ArtifactDownload(APIWeb|RemoteAPI)|ArtifactSafety(APIWeb|RemoteAPI))E2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^Test(UserUpdateAtomic|RoleChangeRevocation|ReleaseCaptureConsistent|LifecycleStageOrder)APIWebE2E$' ./internal/handler
     bash scripts/run_named_go_tests.sh --race --tags e2e --timeout 5m \
