@@ -584,6 +584,214 @@ func TestUpdateScheduled_clears_note_when_note_is_explicitly_empty(
 	}
 }
 
+func TestCreateScheduledAndUpdateScheduled_ValidationParity(t *testing.T) {
+	for _, method := range []string{http.MethodPost, http.MethodPut} {
+		t.Run(method, func(t *testing.T) {
+			checkScheduleValidationParity(t, method)
+		})
+	}
+}
+
+func checkScheduleValidationParity(t *testing.T, method string) {
+	t.Helper()
+	h := newScheduledHarness(t)
+	project := h.makeProject("validation-parity")
+	foreignProject := h.makeProject("foreign-release")
+	environment := h.makeEnv("validation-env")
+	release := h.makeRelease(project.ID, "1.0.0", "true")
+	foreignRelease := h.makeRelease(foreignProject.ID, "1.0.0", "true")
+	original, err := h.repo.Queries.CreateScheduledDeployment(
+		t.Context(), db.CreateScheduledDeploymentParams{
+			ProjectID: project.ID, ReleaseID: release.ID,
+			EnvironmentID: environment.ID, Cron: "0 0 * * *",
+			NextRunAt:   time.Now().Add(time.Hour).Unix(),
+			LastFiredAt: sql.NullInt64{Int64: 12345, Valid: true},
+			Note: sql.NullString{
+				String: "original note",
+				Valid:  true,
+			},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := fmt.Sprintf("/projects/%d/schedules", project.ID)
+	var scheduleID int64
+	if method == http.MethodPut {
+		scheduleID = original.ID
+		path += fmt.Sprintf("/%d", original.ID)
+	}
+	path += "?offset=50"
+	foreignID := fmt.Sprint(foreignRelease.ID)
+	for _, tc := range []struct {
+		name    string
+		values  url.Values
+		status  int
+		message string
+	}{
+		{"empty cron", url.Values{"cron": {"  "}}, 422,
+			"Cron expression is required."},
+		{"timezone", url.Values{"cron": {"TZ=UTC 0 0 * * *"}}, 422,
+			"TZ= and CRON_TZ= prefixes are not supported."},
+		{"cron timezone", url.Values{"cron": {"CRON_TZ=UTC 0 0 * * *"}}, 422,
+			"TZ= and CRON_TZ= prefixes are not supported."},
+		{"malformed cron", url.Values{"cron": {"bad cron"}}, 422,
+			"Invalid cron expression. Use 5-field standard cron"},
+		{"omitted note", url.Values{"cron": {"bad cron"}, "note": nil}, 422,
+			"Invalid cron expression. Use 5-field standard cron"},
+		{"empty note", url.Values{"cron": {"bad cron"}, "note": {""}}, 422,
+			"Invalid cron expression. Use 5-field standard cron"},
+		{"descriptor", url.Values{"cron": {"@hourly"}}, 422,
+			"Invalid cron expression. Use 5-field standard cron"},
+		{"unsatisfiable", url.Values{"cron": {"0 0 31 2 *"}}, 422,
+			"Cron expression is unsatisfiable (never fires)."},
+		{"release ID before cron", url.Values{
+			"release_id": {"bad"}, "cron": {"bad cron"},
+		}, 400, "Invalid release ID"},
+		{"environment ID before cron", url.Values{
+			"environment_id": {"bad"}, "cron": {"bad cron"},
+		}, 400, "Invalid environment ID"},
+		{"missing release", url.Values{"release_id": {"999999"}}, 400,
+			"Release not found"},
+		{"foreign release", url.Values{"release_id": {foreignID}}, 400,
+			"Release does not belong to this project"},
+		{"parse cron before ownership", url.Values{
+			"release_id": {foreignID}, "cron": {"bad cron"},
+		}, 422, "Invalid cron expression. Use 5-field standard cron"},
+		{"ownership before next run", url.Values{
+			"release_id": {foreignID}, "cron": {"0 0 31 2 *"},
+		}, 400, "Release does not belong to this project"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			form := url.Values{
+				"release_id":     {fmt.Sprint(release.ID)},
+				"environment_id": {fmt.Sprint(environment.ID)},
+				"cron":           {"0 12 * * *"}, "enabled": {"true"},
+				"note": {"rejected draft"},
+			}
+			for key, values := range tc.values {
+				form[key] = values
+			}
+			status, body := h.scheduleRequest(method, path, form)
+			if status != tc.status ||
+				!strings.Contains(body, tc.message) {
+				t.Fatalf("got %d %s, want %d %q", status, body,
+					tc.status, tc.message)
+			}
+			if status == http.StatusUnprocessableEntity {
+				assertRejectedScheduleForm(t, body, form, scheduleID)
+			}
+			assertScheduleUnchanged(t, h, original)
+		})
+	}
+}
+
+func assertScheduleUnchanged(
+	t *testing.T,
+	h *scheduledHarness,
+	original db.ScheduledDeployment,
+) {
+	t.Helper()
+	saved, err := h.repo.Queries.ListScheduledDeploymentsByProject(
+		t.Context(),
+		original.ProjectID,
+	)
+	if err != nil || len(saved) != 1 || saved[0] != original {
+		t.Fatalf("rejected form changed schedules: %+v, %v", saved, err)
+	}
+}
+
+func assertRejectedScheduleForm(
+	t *testing.T,
+	body string,
+	form url.Values,
+	scheduleID int64,
+) {
+	t.Helper()
+	for _, value := range []string{
+		`value="` + strings.TrimSpace(form.Get("cron")) + `"`,
+		form.Get("note"), "?offset=50",
+	} {
+		if !strings.Contains(body, value) {
+			t.Errorf("rejected form lost %q", value)
+		}
+	}
+	if !scheduleFormEnabled(body) {
+		t.Error("rejected form lost enabled state")
+	}
+	if strings.Contains(body, "original note") {
+		t.Error("rejected form restored the saved note")
+	}
+	if scheduleID != 0 && !strings.Contains(
+		body,
+		fmt.Sprintf("/schedules/%d?offset=50", scheduleID),
+	) {
+		t.Error("rejected update lost schedule ID")
+	}
+}
+
+func TestUpdateScheduled_PreservesHistoryAndClearsOmittedNote(t *testing.T) {
+	h := newScheduledHarness(t)
+	project := h.makeProject("update-history")
+	environment := h.makeEnv("history-env")
+	release := h.makeRelease(project.ID, "1.0.0", "true")
+	original, err := h.repo.Queries.CreateScheduledDeployment(t.Context(),
+		db.CreateScheduledDeploymentParams{
+			ProjectID: project.ID, ReleaseID: release.ID,
+			EnvironmentID: environment.ID, Cron: "0 0 * * *",
+			NextRunAt:   time.Now().Add(-time.Hour).Unix(),
+			LastFiredAt: sql.NullInt64{Int64: 12345, Valid: true},
+			Note: sql.NullString{
+				String: "clear omitted note",
+				Valid:  true,
+			},
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := time.Now()
+	status, body := h.scheduleRequest(http.MethodPut,
+		fmt.Sprintf("/projects/%d/schedules/%d", project.ID, original.ID),
+		url.Values{
+			"release_id":     {fmt.Sprint(release.ID)},
+			"environment_id": {fmt.Sprint(environment.ID)},
+			"cron":           {"  0 12 * * *  "},
+		})
+	if status != http.StatusSeeOther {
+		t.Fatalf("update: %d %s", status, body)
+	}
+	after := time.Now()
+	updated, err := h.repo.Queries.GetScheduledDeployment(
+		t.Context(),
+		original.ID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parser := cron.NewParser(
+		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
+	)
+	schedule, err := parser.Parse("0 12 * * *")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.NextRunAt < schedule.Next(before).Unix() ||
+		updated.NextRunAt > schedule.Next(after).Unix() {
+		t.Errorf(
+			"next run: got %d outside expected interval",
+			updated.NextRunAt,
+		)
+	}
+	if updated.LastFiredAt != original.LastFiredAt ||
+		updated.CreatedAt != original.CreatedAt {
+		t.Errorf("update changed history: %+v", updated)
+	}
+	if updated.Cron != "0 12 * * *" || updated.Enabled != 0 ||
+		updated.Note.Valid || updated.Note.String != "" {
+		t.Errorf("saved form values: %+v", updated)
+	}
+}
+
 func TestCreateScheduled_Valid(t *testing.T) {
 	h := newScheduledHarness(t)
 	proj := h.makeProject("sched-valid")

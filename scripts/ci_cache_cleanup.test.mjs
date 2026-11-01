@@ -3,7 +3,7 @@ import test from 'node:test';
 import { cleanup, configuration, createApi } from './ci_cache_cleanup.mjs';
 
 const now = Date.parse('2026-10-20T12:00:00Z');
-const options = { projectId: 3, projectPath: 'durfy/apps/durpdeploy', now, log() {} };
+const options = { projectId: 3, projectPath: 'durfy/apps/durpdeploy', defaultBranch: 'main', now, log() {} };
 const repository = { id: 12, project_id: 3, path: `${options.projectPath}/ci-cache/mr-64` };
 const merged = { iid: 64, target_project_id: 3, state: 'merged', merged_at: '2026-10-19T11:59:59Z', head_pipeline: { status: 'success' } };
 
@@ -98,14 +98,14 @@ test('deletion failures stop the job', async () => {
 });
 
 test('only explicitly enabled schedules on the protected default branch can apply', () => {
-  const env = { GITLAB_CI: 'true', CI_PROJECT_ID: '3', CI_PROJECT_PATH: options.projectPath };
+  const env = { GITLAB_CI: 'true', CI_PROJECT_ID: '3', CI_PROJECT_PATH: options.projectPath, CI_DEFAULT_BRANCH: 'main' };
   assert.equal(configuration(env).dryRun, true);
   const apply = { ...env, CI_CACHE_CLEANUP_DRY_RUN: 'false', CI_PIPELINE_SOURCE: 'schedule', CI_CACHE_CLEANUP: 'true', CI_COMMIT_REF_PROTECTED: 'true', CI_COMMIT_BRANCH: 'main', CI_DEFAULT_BRANCH: 'main' };
   assert.equal(configuration(apply).dryRun, false);
   for (const change of [
     { GITLAB_CI: 'false' }, { CI_CACHE_CLEANUP_DRY_RUN: 'FALSE' },
     { CI_PIPELINE_SOURCE: 'merge_request_event' }, { CI_CACHE_CLEANUP: '' },
-    { CI_COMMIT_REF_PROTECTED: 'false' }, { CI_COMMIT_BRANCH: 'feature' }, { CI_COMMIT_BRANCH: '' },
+    { CI_COMMIT_REF_PROTECTED: 'false' }, { CI_COMMIT_BRANCH: 'feature' }, { CI_COMMIT_BRANCH: '' }, { CI_DEFAULT_BRANCH: '' },
   ]) assert.throws(() => configuration({ ...apply, ...change }));
 });
 
@@ -128,7 +128,7 @@ test('API requests paginate, use job-token headers, and reject redirects and HTT
 
 function pipelineFixture(path = `${options.projectPath}/ci`, changes = {}) {
   const repo = { ...repository, path };
-  const pipeline = { id: 42, project_id: 3, status: 'success', finished_at: '2026-10-18T12:00:00Z', ref: 'main', ...changes };
+  const pipeline = { id: 42, project_id: 3, status: 'success', finished_at: '2026-10-18T12:00:00Z', ref: 'feature', ...changes };
   const calls = [];
   let recheck;
   const api = {
@@ -164,6 +164,21 @@ test('CI image dry runs never delete tags', async () => {
   const { api, calls } = pipelineFixture();
   assert.equal((await cleanup(api, options))[0].action, 'WOULD_DELETE');
   assert.equal(calls.length, 1);
+});
+
+test('successful default-branch runtime images remain for the eight-day artifact lifetime', async () => {
+  for (const path of [`${options.projectPath}/ci`, `${options.projectPath}/ci-browser`]) {
+    for (const [change, action] of [
+      [{ ref: 'main', finished_at: '2026-10-12T12:00:01Z' }, 'KEEP'],
+      [{ ref: 'main', finished_at: '2026-10-12T12:00:00Z' }, 'DELETE_REQUESTED'],
+      [{ ref: 'main', status: 'failed' }, 'DELETE_REQUESTED'],
+      [{ ref: 'feature' }, 'DELETE_REQUESTED'],
+    ]) {
+      const { api, calls } = pipelineFixture(path, change);
+      assert.equal((await cleanup(api, { ...options, dryRun: false }))[0].action, action);
+      assert.equal(calls.some(call => call.method === 'DELETE'), action === 'DELETE_REQUESTED');
+    }
+  }
 });
 
 test('active, unknown, and recent pipelines retain their images', async () => {

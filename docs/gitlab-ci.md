@@ -52,15 +52,33 @@ Only successful lint jobs upload this cache.
 The same one-day bucket lifecycle applies.
 Same-project merge requests reuse separate browser and helper build caches under `ci-cache/mr-<number>`.
 Registry caches export final-image layers with `mode=min`.
+Cache export failures produce warnings and do not stop image builds.
+Image build and push failures stop the pipeline.
 Intermediate build stages are rebuilt when their output is absent from the cache.
 Merge request jobs never write shared protected caches.
-Protected and other pipelines do not import merge request caches.
+Protected default-branch builds export inline cache metadata in their browser and helper images.
+Eligible merge requests also embed inline metadata in their own pipeline images to keep browser digest formats compatible with protected builds.
+They record both immutable image digests in `artifacts/runtime-cache.json`.
+Protected default-branch builds and eligible same-project merge requests read this artifact from the latest successful default-branch push pipeline.
+Consumers resolve the branch pipeline and its successful `ci-runtime` job through the GitLab API before downloading that job's artifact.
+Tags with the default branch name cannot supply the trusted cache.
+Consumers validate its project, branch, protection status, cache epoch, and digest paths before importing either image cache.
+Consumers never execute the artifact as shell code.
+Missing, expired, inaccessible, or invalid metadata causes a build without the trusted cache.
+Fork merge requests, protected merge requests, tags, and other branches retain their existing cache restrictions.
+Protected builds never import merge request caches.
+The registry requires no shared mutable cache tag or additional credentials.
+Both Dockerfiles receive a cache epoch that changes every seven days, measured from the Unix epoch in UTC.
+The epoch invalidates package installation layers even when source files do not change.
+Scheduled pipelines force both images to rebuild with `--no-cache`.
+For an explicit refresh, set `CI_RUNTIME_REFRESH=true` in a manual pipeline.
 Builds check upstream base references before using cached layers.
 The helper image also builds the pinned security scanners and downloads checksum-verified lint and Trivy binaries.
 The existing registry cache retains that tool layer and its license notices.
 Job installers check the tool versions before reuse and retain their local installation fallback.
 Scanner jobs still analyze the current commit and fetch current vulnerability data.
 Build timing evidence records browser and helper build durations.
+It also records the cache epoch, trusted cache availability, and refresh mode.
 
 Product images are published to both the GitLab registry and GHCR.
 Application images use `$CI_REGISTRY_IMAGE` and `ghcr.io/developerdurp/durpdeploy`.
@@ -147,6 +165,7 @@ Before deletion, it checks the merge request state again.
 
 For `ci` and `ci-browser`, it deletes only `pipeline-<number>` tags.
 It waits 24 hours after the corresponding pipeline finishes.
+It retains successful default-branch pipeline images for eight days to match runtime cache artifact retention.
 It preserves active pipelines and the latest pipeline of each open merge request.
 Before deleting a tag, it checks the pipeline state again.
 It preserves unrelated repositories, release tags, and `latest` tags.
@@ -242,7 +261,12 @@ These processes retain race detection and isolated browser contexts.
 The agents shard retains its separate build-version checks.
 The running-server SQLite suite runs in `e2e` instead of repeating in the agents browser shard.
 Browser evidence uses a separate directory for each shard.
-The rollout job runs four shards: contracts, two artifact groups, and verification.
+The rollout job runs five shards: two contract groups, two artifact groups, and verification.
+The first contract group runs the agent rollout gate, concurrent log disconnect check, and artifact package race tests.
+The second contract group runs the remaining API, handler, configuration, and environment queue checks.
+Both groups retain their original commands, required-test checks, build tags, race settings, and timeouts.
+The contract inventory test compares both groups with the original fourteen command invocations, including runtime settings.
+Each shard reports its elapsed time through `CI_TIMING`.
 The full coverage suite owns the twelve ordinary API tests previously repeated without race detection in rollout contracts.
 Targeted rollout race checks still run separately.
 Artifact groups split the compiled test inventory and require every selected test to pass.
@@ -351,7 +375,8 @@ Merge request checks consume the original image artifacts directly.
 If the artifacts expire, run a new pipeline before publication.
 Source and configuration security reports remain available for seven days.
 Browser and agent evidence remains available for one day.
-Agent archives, runtime metadata, version metadata, and coverage reports expire after four hours.
+Agent archives, version metadata, and coverage reports expire after four hours.
+Runtime metadata expires after eight days so protected builds can reuse trusted cache digests.
 If handoff artifacts expire, run a new pipeline instead of retrying downstream jobs.
 
 Consumers exclude downloaded image archives and build metadata from their artifact uploads.
