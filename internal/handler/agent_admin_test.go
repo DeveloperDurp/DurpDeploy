@@ -41,21 +41,9 @@ func TestAdminAgentManagementFlow(t *testing.T) {
 		return response
 	}
 
-	response, err := h.authedClient().Get(h.server.URL + "/admin/agents")
-	if err != nil {
-		t.Fatalf("GET agents: %v", err)
-	}
-	body, err := io.ReadAll(response.Body)
-	response.Body.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if response.StatusCode != http.StatusOK ||
-		!strings.Contains(string(body), "Original") {
-		t.Fatalf("agent list status=%d body=%s", response.StatusCode, body)
-	}
+	checkAgentPage(t, h, "/admin/agents", "Original")
 
-	response = post(
+	response := post(
 		"/admin/agents/agent-a/name",
 		url.Values{"name": {"Renamed Agent"}},
 	)
@@ -72,6 +60,7 @@ func TestAdminAgentManagementFlow(t *testing.T) {
 	if response.StatusCode != http.StatusSeeOther {
 		t.Fatalf("add label status=%d", response.StatusCode)
 	}
+	checkAgentLabelWebPolicy(t, h, post)
 
 	response = post(
 		"/admin/agents/agent-a/environments",
@@ -82,27 +71,8 @@ func TestAdminAgentManagementFlow(t *testing.T) {
 		t.Fatalf("add environment status=%d", response.StatusCode)
 	}
 
-	response, err = h.authedClient().Get(
-		h.server.URL + "/admin/agents/agent-a",
-	)
-	if err != nil {
-		t.Fatalf("GET agent detail: %v", err)
-	}
-	body, err = io.ReadAll(response.Body)
-	response.Body.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, text := range []string{
-		"Renamed Agent",
-		"linux",
-		"agent environment",
-		"python3",
-	} {
-		if !strings.Contains(string(body), text) {
-			t.Fatalf("agent detail missing %q: %s", text, body)
-		}
-	}
+	checkAgentPage(t, h, "/admin/agents/agent-a",
+		"Renamed Agent", "linux", "agent environment", "python3")
 
 	response = post(
 		"/admin/agents/agent-a/labels/delete",
@@ -133,6 +103,171 @@ func TestAdminAgentManagementFlow(t *testing.T) {
 	if agent.Name != "Renamed Agent" || agent.Status != "revoked" {
 		t.Fatalf("agent name=%q status=%q", agent.Name, agent.Status)
 	}
+}
+
+func checkAgentPage(
+	t *testing.T,
+	h *projectHarness,
+	path string,
+	texts ...string,
+) {
+	t.Helper()
+	response, err := h.authedClient().Get(h.server.URL + path)
+	if err != nil {
+		t.Fatalf("GET %s: %v", path, err)
+	}
+	body, err := io.ReadAll(response.Body)
+	response.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf(
+			"agent page %s status=%d body=%s",
+			path,
+			response.StatusCode,
+			body,
+		)
+	}
+	for _, text := range texts {
+		if !strings.Contains(string(body), text) {
+			t.Fatalf("agent page %s missing %q: %s", path, text, body)
+		}
+	}
+}
+
+func checkAgentLabelWebPolicy(
+	t *testing.T,
+	h *projectHarness,
+	post func(string, url.Values) *http.Response,
+) {
+	t.Helper()
+	response := post(
+		"/admin/agents/agent-a/labels",
+		url.Values{"label": {" \tlinux\u2003"}},
+	)
+	response.Body.Close()
+	if response.StatusCode != http.StatusSeeOther {
+		t.Fatalf("duplicate label status=%d", response.StatusCode)
+	}
+	var audits int
+	if err := h.repo.DB.QueryRowContext(t.Context(),
+		"SELECT COUNT(*) FROM audit_log WHERE action='add_agent_label'",
+	).Scan(&audits); err != nil || audits != 1 {
+		t.Fatalf("duplicate label audits=%d err=%v", audits, err)
+	}
+	checkInvalidAgentLabelsWeb(t, post)
+	for _, label := range []string{"x", strings.Repeat("a", 64), strings.Repeat("é", 32)} {
+		for _, suffix := range []string{"", "/delete"} {
+			response = post("/admin/agents/agent-a/labels"+suffix,
+				url.Values{"label": {"\u2003" + label + "\t"}})
+			response.Body.Close()
+			if response.StatusCode != http.StatusSeeOther {
+				t.Fatalf(
+					"boundary label %q %s: status=%d",
+					label,
+					suffix,
+					response.StatusCode,
+				)
+			}
+		}
+	}
+	for _, path := range []string{
+		"/admin/agents/missing/labels",
+		"/admin/agents/missing/labels/delete",
+		"/admin/agents/agent-a/labels/delete",
+	} {
+		response = post(path, url.Values{"label": {"absent"}})
+		response.Body.Close()
+		if response.StatusCode != http.StatusNotFound {
+			t.Fatalf(
+				"missing label/agent %s: status=%d",
+				path,
+				response.StatusCode,
+			)
+		}
+	}
+}
+
+func checkInvalidAgentLabelsWeb(
+	t *testing.T,
+	post func(string, url.Values) *http.Response,
+) {
+	t.Helper()
+	for _, raw := range []string{
+		"", " \t\u2003", strings.Repeat("a", 65), strings.Repeat("é", 33),
+	} {
+		for _, suffix := range []string{"", "/delete"} {
+			response := post("/admin/agents/agent-a/labels"+suffix,
+				url.Values{"label": {raw}})
+			body, err := io.ReadAll(response.Body)
+			response.Body.Close()
+			if err != nil ||
+				response.StatusCode != http.StatusUnprocessableEntity ||
+				!strings.Contains(
+					string(body),
+					"Label must be between 1 and 64 characters",
+				) {
+				t.Fatalf(
+					"invalid label %q %s: status=%d body=%s err=%v",
+					raw,
+					suffix,
+					response.StatusCode,
+					body,
+					err,
+				)
+			}
+		}
+	}
+}
+
+func TestAgentLabelWebDatabaseFailures(t *testing.T) {
+	h := newProjectHarness(t)
+	if _, err := h.repo.Queries.CreateAgent(t.Context(), db.CreateAgentParams{
+		ID: "failure-agent", Name: "Failure", Endpoint: "https://agent.test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.DB.ExecContext(t.Context(), `
+INSERT INTO agent_labels VALUES ('failure-agent','existing');
+CREATE TRIGGER fail_label_add BEFORE INSERT ON agent_labels
+BEGIN SELECT RAISE(FAIL, 'label insert failed'); END;
+CREATE TRIGGER fail_label_delete BEFORE DELETE ON agent_labels
+BEGIN SELECT RAISE(FAIL, 'label delete failed'); END`); err != nil {
+		t.Fatal(err)
+	}
+	csrf := h.csrfToken()
+	check := func(suffix, label string) {
+		t.Helper()
+		response, err := h.authedClient().PostForm(
+			h.server.URL+"/admin/agents/failure-agent/labels"+suffix,
+			url.Values{"label": {label}, "csrf_token": {csrf}},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(response.Body)
+		response.Body.Close()
+		if err != nil ||
+			response.StatusCode != http.StatusInternalServerError ||
+			strings.TrimSpace(string(body)) != "Internal server error" {
+			t.Fatalf(
+				"failure %s: status=%d body=%s err=%v",
+				suffix,
+				response.StatusCode,
+				body,
+				err,
+			)
+		}
+	}
+	check("", "new")
+	check("/delete", "existing")
+	if _, err := h.repo.DB.ExecContext(t.Context(),
+		"ALTER TABLE agents RENAME COLUMN name TO unavailable_name",
+	); err != nil {
+		t.Fatal(err)
+	}
+	check("", "new")
 }
 
 func TestViewerAgentControlsHidden(t *testing.T) {

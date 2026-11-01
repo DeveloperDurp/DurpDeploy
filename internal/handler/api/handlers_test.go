@@ -222,6 +222,7 @@ func TestAgents_AdminManagementFlow(t *testing.T) {
 		`{"label":" linux "}`,
 	)
 	h.assertStatus(t, recorder, http.StatusNoContent)
+	checkAgentLabelAPIPolicy(t, h, token)
 	recorder = h.request(
 		t, http.MethodGet, "/api/v1/admin/agents/api-agent", token, "",
 	)
@@ -262,6 +263,110 @@ func TestAgents_AdminManagementFlow(t *testing.T) {
 	if agent.Status != "revoked" {
 		t.Fatalf("agent status=%q", agent.Status)
 	}
+}
+
+func checkAgentLabelAPIPolicy(t *testing.T, h *testHarness, token string) {
+	t.Helper()
+	recorder := h.request(t, http.MethodPost,
+		"/api/v1/admin/agents/api-agent/labels", token,
+		`{"label":"\tlinux\u2003"}`)
+	h.assertStatus(t, recorder, http.StatusNoContent)
+	var audits int
+	if err := h.repo.DB.QueryRowContext(t.Context(),
+		"SELECT COUNT(*) FROM audit_log WHERE action='add_agent_label'",
+	).Scan(&audits); err != nil || audits != 1 {
+		t.Fatalf("duplicate label audits=%d err=%v", audits, err)
+	}
+	checkInvalidAgentLabelsAPI(t, h, token)
+	for _, label := range []string{"x", strings.Repeat("a", 64), strings.Repeat("é", 32)} {
+		body, err := json.Marshal(
+			map[string]string{"label": "\u2003" + label + "\t"},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, method := range []string{http.MethodPost, http.MethodDelete} {
+			recorder = h.request(t, method,
+				"/api/v1/admin/agents/api-agent/labels", token, string(body))
+			h.assertStatus(t, recorder, http.StatusNoContent)
+		}
+	}
+	for _, scenario := range []struct{ method, agent, message string }{
+		{http.MethodPost, "missing", "Agent not found"},
+		{http.MethodDelete, "missing", "Agent label not found"},
+		{http.MethodDelete, "api-agent", "Agent label not found"},
+	} {
+		recorder = h.request(t, scenario.method,
+			"/api/v1/admin/agents/"+scenario.agent+"/labels", token,
+			`{"label":"absent"}`)
+		h.assertStatus(t, recorder, http.StatusNotFound)
+		if !strings.Contains(recorder.Body.String(), scenario.message) {
+			t.Fatalf("missing label/agent response=%s", recorder.Body.String())
+		}
+	}
+}
+
+func checkInvalidAgentLabelsAPI(t *testing.T, h *testHarness, token string) {
+	t.Helper()
+	for _, raw := range []string{
+		"", " \t\u2003", strings.Repeat("a", 65), strings.Repeat("é", 33),
+	} {
+		body, err := json.Marshal(map[string]string{"label": raw})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, method := range []string{http.MethodPost, http.MethodDelete} {
+			recorder := h.request(t, method,
+				"/api/v1/admin/agents/api-agent/labels", token, string(body))
+			h.assertStatus(t, recorder, http.StatusBadRequest)
+			if !strings.Contains(
+				recorder.Body.String(),
+				"label must be between 1 and 64 characters",
+			) {
+				t.Fatalf(
+					"invalid label %q response=%s",
+					raw,
+					recorder.Body.String(),
+				)
+			}
+		}
+	}
+}
+
+func TestAgentLabelAPIDatabaseFailures(t *testing.T) {
+	h := newHarness(t)
+	token := h.adminToken(t)
+	if _, err := h.repo.Queries.CreateAgent(t.Context(), db.CreateAgentParams{
+		ID: "failure-agent", Name: "Failure", Endpoint: "https://agent.test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.DB.ExecContext(t.Context(), `
+INSERT INTO agent_labels VALUES ('failure-agent','existing');
+CREATE TRIGGER fail_label_add BEFORE INSERT ON agent_labels
+BEGIN SELECT RAISE(FAIL, 'label insert failed'); END;
+CREATE TRIGGER fail_label_delete BEFORE DELETE ON agent_labels
+BEGIN SELECT RAISE(FAIL, 'label delete failed'); END`); err != nil {
+		t.Fatal(err)
+	}
+	check := func(method, label, message string) {
+		t.Helper()
+		recorder := h.request(t, method,
+			"/api/v1/admin/agents/failure-agent/labels", token,
+			`{"label":"`+label+`"}`)
+		h.assertStatus(t, recorder, http.StatusInternalServerError)
+		if !strings.Contains(recorder.Body.String(), message) {
+			t.Fatalf("database failure response=%s", recorder.Body.String())
+		}
+	}
+	check(http.MethodPost, "new", "label insert failed")
+	check(http.MethodDelete, "existing", "label delete failed")
+	if _, err := h.repo.DB.ExecContext(t.Context(),
+		"ALTER TABLE agents RENAME COLUMN name TO unavailable_name",
+	); err != nil {
+		t.Fatal(err)
+	}
+	check(http.MethodPost, "new", "name")
 }
 
 func (h *testHarness) seedUser(t *testing.T, email, role string) *db.User {
