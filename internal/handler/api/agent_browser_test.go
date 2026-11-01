@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"net/http/httptest"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -149,6 +151,7 @@ func TestAgentFleetBrowserE2E(t *testing.T) {
 		fleetBrowserLoaded(t, browser)
 		browser.wait(t, `location.pathname === '/admin/agents/active'`)
 	}
+	checkFleetLabelMutations(t, h, srv, browser, user.ID)
 	// Then: health details and fleet states remain readable at every breakpoint.
 	for _, width := range []int{375, 768, 1280} {
 		browser.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
@@ -228,6 +231,138 @@ func TestAgentFleetBrowserE2E(t *testing.T) {
 		`!document.querySelector('form[action$="/drain"]') && document.body.innerText.includes('Unauthorized')`,
 	)
 	browser.screenshot(t, "fleet-viewer-forbidden")
+}
+
+func checkFleetLabelMutations(
+	t *testing.T,
+	h *harness,
+	srv *httptest.Server,
+	browser *packageBrowser,
+	userID int64,
+) {
+	t.Helper()
+	_, token := seedAPIToken(t, h.repo, userID)
+	f := &artifactE2E{baseURL: srv.URL, client: srv.Client(), token: token}
+	// Public API mutations preserve byte limits, idempotence, and missing records.
+	label := strings.Repeat("é", 32)
+	for _, raw := range []string{"\u2003" + label + "\t", label} {
+		f.api(
+			t,
+			"POST",
+			"/api/v1/admin/agents/active/labels",
+			map[string]string{"label": raw},
+			204,
+		)
+		checkFleetLabels(t, f, []string{label}, 1, 0)
+	}
+	for _, raw := range []string{" \t\u2003", strings.Repeat("é", 33)} {
+		for _, method := range []string{"POST", "DELETE"} {
+			f.api(
+				t,
+				method,
+				"/api/v1/admin/agents/active/labels",
+				map[string]string{"label": raw},
+				400,
+			)
+			checkFleetLabels(t, f, []string{label}, 1, 0)
+		}
+	}
+	for _, scenario := range []struct{ method, agent string }{
+		{"POST", "missing"}, {"DELETE", "missing"}, {"DELETE", "active"},
+	} {
+		f.api(
+			t,
+			scenario.method,
+			"/api/v1/admin/agents/"+scenario.agent+"/labels",
+			map[string]string{"label": "absent"},
+			404,
+		)
+		checkFleetLabels(t, f, []string{label}, 1, 0)
+	}
+	f.api(
+		t,
+		"DELETE",
+		"/api/v1/admin/agents/active/labels",
+		map[string]string{"label": "\t" + label + "\u2003"},
+		204,
+	)
+	checkFleetLabels(t, f, nil, 1, 1)
+
+	// Native web submissions use the same policy and audit only real changes.
+	for range 2 {
+		browser.wire.events = nil
+		browser.evaluate(t, `(() => {
+			const form = document.querySelector('form[action="/admin/agents/active/labels"]');
+			form.querySelector('[name="label"]').value = '  Browser label  ';
+			form.querySelector('button').click();
+			return true;
+		})()`)
+		fleetBrowserLoaded(t, browser)
+		browser.wait(
+			t,
+			`location.pathname === '/admin/agents/active' && document.querySelector('button[aria-label="Remove label Browser label"]') !== null`,
+		)
+		checkFleetLabels(t, f, []string{"Browser label"}, 2, 1)
+	}
+	browser.screenshot(t, "fleet-label-added")
+	browser.wire.events = nil
+	browser.evaluate(
+		t,
+		`document.querySelector('button[aria-label="Remove label Browser label"]').click(); true`,
+	)
+	fleetBrowserLoaded(t, browser)
+	browser.wait(
+		t,
+		`location.pathname === '/admin/agents/active' && document.body.innerText.includes('No labels assigned.')`,
+	)
+	checkFleetLabels(t, f, nil, 2, 2)
+	browser.screenshot(t, "fleet-label-deleted")
+}
+
+func checkFleetLabels(
+	t *testing.T,
+	f *artifactE2E,
+	labels []string,
+	adds, deletes int,
+) {
+	t.Helper()
+	var detail struct{ Labels []string }
+	decodeStepLogTest(
+		t,
+		f.api(t, "GET", "/api/v1/admin/agents/active", nil, 200),
+		&detail,
+	)
+	if !reflect.DeepEqual(detail.Labels, labels) {
+		t.Fatalf("labels=%v want=%v", detail.Labels, labels)
+	}
+	for action, want := range map[string]int{"add_agent_label": adds, "delete_agent_label": deletes} {
+		var audit struct{ Items []db.AuditLog }
+		decodeStepLogTest(
+			t,
+			f.api(t, "GET", "/api/v1/admin/audit?action="+action, nil, 200),
+			&audit,
+		)
+		if len(audit.Items) != want {
+			t.Fatalf("%s audits=%d want=%d", action, len(audit.Items), want)
+		}
+		for _, entry := range audit.Items {
+			var details map[string]any
+			decodeStepLogTest(t, []byte(entry.Details.String), &details)
+			if details["label"] != strings.Repeat("é", 32) &&
+				details["label"] != "Browser label" {
+				t.Fatalf(
+					"audit label is not normalized: %s",
+					entry.Details.String,
+				)
+			}
+			if _, exists := details["environment_id"]; exists {
+				t.Fatalf(
+					"custom label recorded an environment: %s",
+					entry.Details.String,
+				)
+			}
+		}
+	}
 }
 
 // Only the read-only confirmation page is used; other pairing calls must fail.

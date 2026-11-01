@@ -982,6 +982,34 @@ Keep all test accounts and project memberships for repeat checks.
 Run `bash scripts/go_test.sh -run '^TestProjectMemberRolesAPIWebE2E$' ./internal/handler/api` for API and web contracts.
 Run `bash scripts/go_test.sh -tags=e2e,packagebrowser -run '^TestProjectMemberRolesBrowserE2E$' ./internal/handler/api` for rendered browser coverage.
 
+## Agent custom labels
+
+Use a retained stack outside automatic thread teardown.
+Keep its agent, administrator account, and audit records for repeat checks.
+Keep schedules disabled.
+
+Open `/admin/agents` as an administrator.
+Open a disposable agent.
+Add `  Manual label  ` with **Add label**.
+Confirm that `Manual label` appears.
+Add the same label again.
+Confirm that the audit log contains one `add_agent_label` event.
+Select **Remove** beside the label.
+Confirm that the label disappears and one `delete_agent_label` event appears.
+
+Repeat additions and deletions through `/api/v1/admin/agents/{id}/labels` with a bearer token.
+Use `POST` to add labels.
+Use `DELETE` to remove labels.
+Confirm that successful API mutations return `204`.
+Confirm that 64 ASCII bytes and 32 copies of `é` succeed.
+Confirm that blank labels, 65 ASCII bytes, and 33 copies of `é` return API `400` or web `422`.
+Confirm that missing-agent additions and absent-label deletions return `404` through both transports.
+Read the agent detail and `/api/v1/admin/audit` after each action.
+Confirm that rejected requests and duplicate additions create no audit event.
+
+Run `TestAgentFleetBrowserE2E` with `-tags=e2e,agentbrowser` for rendered label forms and public API checks.
+Run `TestAdminAgentManagementFlow` and `TestAgents_AdminManagementFlow` for transport boundary checks.
+
 ## Software build identity
 
 Run `durpdeploy version`, `durpdeploy --version`, and `durpdeploy -v` without runtime configuration.
