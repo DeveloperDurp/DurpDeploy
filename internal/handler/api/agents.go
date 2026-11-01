@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -332,8 +331,11 @@ func (h *AgentHandler) AddLabel(w http.ResponseWriter, r *http.Request) {
 	if !readJSONBool(w, r, &request) {
 		return
 	}
-	request.Label = strings.TrimSpace(request.Label)
-	if request.Label == "" || len(request.Label) > 64 {
+	agentID := chi.URLParam(r, "id")
+	label, changed, err := h.repo.AddAgentLabel(
+		r.Context(), agentID, request.Label,
+	)
+	if errors.Is(err, repository.ErrInvalidAgentLabel) {
 		RespondError(
 			w,
 			http.StatusBadRequest,
@@ -341,15 +343,10 @@ func (h *AgentHandler) AddLabel(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-	agentID := chi.URLParam(r, "id")
-	if _, err := h.repo.Queries.GetAgent(r.Context(), agentID); err != nil {
-		writeAgentNotFound(w, err)
+	if errors.Is(err, repository.ErrAgentNotFound) {
+		RespondError(w, http.StatusNotFound, "Agent not found")
 		return
 	}
-	changed, err := h.repo.Queries.AddAgentLabel(
-		r.Context(),
-		db.AddAgentLabelParams{AgentID: agentID, Label: request.Label},
-	)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -357,7 +354,7 @@ func (h *AgentHandler) AddLabel(w http.ResponseWriter, r *http.Request) {
 	if changed == 0 {
 		audit.Suppress(r)
 	}
-	audit.SetAgentAssignment(r, request.Label, 0)
+	audit.SetAgentAssignment(r, label, 0)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -382,8 +379,10 @@ func (h *AgentHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 	if !readJSONBool(w, r, &request) {
 		return
 	}
-	request.Label = strings.TrimSpace(request.Label)
-	if request.Label == "" || len(request.Label) > 64 {
+	label, changed, err := h.repo.DeleteAgentLabel(
+		r.Context(), chi.URLParam(r, "id"), request.Label,
+	)
+	if errors.Is(err, repository.ErrInvalidAgentLabel) {
 		RespondError(
 			w,
 			http.StatusBadRequest,
@@ -391,13 +390,6 @@ func (h *AgentHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-	changed, err := h.repo.Queries.DeleteAgentLabel(
-		r.Context(),
-		db.DeleteAgentLabelParams{
-			AgentID: chi.URLParam(r, "id"),
-			Label:   request.Label,
-		},
-	)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -406,7 +398,7 @@ func (h *AgentHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusNotFound, "Agent label not found")
 		return
 	}
-	audit.SetAgentAssignment(r, request.Label, 0)
+	audit.SetAgentAssignment(r, label, 0)
 	w.WriteHeader(http.StatusNoContent)
 }
 
