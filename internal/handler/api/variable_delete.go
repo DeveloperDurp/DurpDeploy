@@ -45,7 +45,7 @@ func (h *VariableHandler) DeleteVariable(
 	if !ok {
 		return
 	}
-	if existing.ProjectID != projectID {
+	if existing.ProjectID != projectID || existing.IsCredential != 0 {
 		RespondError(w, http.StatusNotFound, "Variable not found")
 		return
 	}
