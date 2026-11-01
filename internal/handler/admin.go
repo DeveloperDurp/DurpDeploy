@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
@@ -113,54 +112,17 @@ func (h *AdminHandler) UpdateNotificationSettings(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	webhook := notificationCredential(r, "slack_webhook_url")
-	emails := strings.TrimSpace(r.FormValue("notify_emails"))
-	gotifyURL := strings.TrimSpace(r.FormValue("gotify_url"))
-	gotifyToken := strings.TrimSpace(r.FormValue("gotify_token"))
-	discordWebhook := notificationCredential(r, "discord_webhook_url")
-
-	if err := validateNotificationURLs(
-		webhook,
-		gotifyURL,
-		discordWebhook,
-	); err != nil {
+	params, err := PrepareNotificationSettings(
+		notificationFormInput(r),
+	)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
 
-	_, err := h.repo.UpdateGlobalNotifications(
+	_, err = h.repo.UpdateGlobalNotifications(
 		r.Context(),
-		db.UpdateGlobalNotificationsParams{
-			ClearSlackWebhookUrl: notificationClearFlag(
-				r,
-				"clear_slack_webhook_url",
-			),
-			ClearGotifyToken: notificationClearFlag(
-				r,
-				"clear_gotify_token",
-			),
-			ClearDiscordWebhookUrl: notificationClearFlag(
-				r,
-				"clear_discord_webhook_url",
-			),
-			SlackWebhookUrl: sql.NullString{
-				String: webhook,
-				Valid:  webhook != "",
-			},
-			NotifyEmails: sql.NullString{String: emails, Valid: emails != ""},
-			GotifyUrl: sql.NullString{
-				String: gotifyURL,
-				Valid:  gotifyURL != "",
-			},
-			GotifyToken: sql.NullString{
-				String: gotifyToken,
-				Valid:  gotifyToken != "",
-			},
-			DiscordWebhookUrl: sql.NullString{
-				String: discordWebhook,
-				Valid:  discordWebhook != "",
-			},
-		},
+		params,
 	)
 	if err != nil {
 		http.Error(

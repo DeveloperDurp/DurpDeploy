@@ -2042,6 +2042,28 @@ Open the project page as a viewer and confirm that it shows no inputs or Save bu
 Confirm that a viewer receives HTTP 403 for global settings and notification writes.
 Retain the test project and settings. Keep schedules disabled after testing.
 
+# Notification settings preparation
+
+Run the notification preparation regression:
+
+```bash
+bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=10m -run '^TestNotificationSettingsPreparationAPIWebE2E$' ./internal/handler/api
+```
+
+Open the retained project and global notification settings pages listed in the MR evidence.
+Enter spaces around an email address, Gotify URL, and synthetic token.
+Save each form.
+Verify that both forms trim these values and mask credentials after saving.
+Repeat through both notification API endpoints.
+Verify that only the global API preserves spaces around email addresses and Gotify tokens.
+Verify that all four paths trim the Gotify URL.
+Enter an invalid webhook URL and save.
+Verify that the form retains the draft and the saved settings remain unchanged.
+Select **Clear credential** for the invalid webhook and save.
+Verify that the credential shows **not configured**.
+Keep the retained project and test account available for manual review.
+Keep schedules disabled.
+
 # Gotify destination binding
 
 Run the API and web delivery regression:

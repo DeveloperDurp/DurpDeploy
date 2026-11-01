@@ -13,7 +13,6 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
-	"durpdeploy/internal/notify"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
 )
@@ -235,17 +234,10 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 		return
 	}
 
-	webhook := notificationCredential(r, "slack_webhook_url")
-	emails := strings.TrimSpace(r.FormValue("notify_emails"))
-	gotifyURL := strings.TrimSpace(r.FormValue("gotify_url"))
-	gotifyToken := strings.TrimSpace(r.FormValue("gotify_token"))
-	discordWebhook := notificationCredential(r, "discord_webhook_url")
-
-	if err := validateNotificationURLs(
-		webhook,
-		gotifyURL,
-		discordWebhook,
-	); err != nil {
+	params, err := PrepareNotificationSettings(
+		notificationFormInput(r),
+	)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
@@ -253,36 +245,15 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 	err = h.repo.UpdateProjectNotifications(
 		r.Context(),
 		db.UpdateProjectNotificationsParams{
-			ClearSlackWebhookUrl: notificationClearFlag(
-				r,
-				"clear_slack_webhook_url",
-			),
-			ClearGotifyToken: notificationClearFlag(
-				r,
-				"clear_gotify_token",
-			),
-			ClearDiscordWebhookUrl: notificationClearFlag(
-				r,
-				"clear_discord_webhook_url",
-			),
-			SlackWebhookUrl: sql.NullString{
-				String: webhook,
-				Valid:  webhook != "",
-			},
-			NotifyEmails: sql.NullString{String: emails, Valid: emails != ""},
-			GotifyUrl: sql.NullString{
-				String: gotifyURL,
-				Valid:  gotifyURL != "",
-			},
-			GotifyToken: sql.NullString{
-				String: gotifyToken,
-				Valid:  gotifyToken != "",
-			},
-			DiscordWebhookUrl: sql.NullString{
-				String: discordWebhook,
-				Valid:  discordWebhook != "",
-			},
-			ID: id,
+			ClearSlackWebhookUrl:   params.ClearSlackWebhookUrl,
+			ClearGotifyToken:       params.ClearGotifyToken,
+			ClearDiscordWebhookUrl: params.ClearDiscordWebhookUrl,
+			SlackWebhookUrl:        params.SlackWebhookUrl,
+			NotifyEmails:           params.NotifyEmails,
+			GotifyUrl:              params.GotifyUrl,
+			GotifyToken:            params.GotifyToken,
+			DiscordWebhookUrl:      params.DiscordWebhookUrl,
+			ID:                     id,
 		},
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -611,13 +582,4 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 func parseProjectID(r *http.Request) (int64, error) {
 	idStr := chi.URLParam(r, "id")
 	return strconv.ParseInt(idStr, 10, 64)
-}
-
-func validateNotificationURLs(urls ...string) error {
-	for _, raw := range urls {
-		if err := notify.ValidateEndpointURL(raw); err != nil {
-			return err
-		}
-	}
-	return nil
 }

@@ -9,7 +9,7 @@ import (
 
 	"durpdeploy/internal/db"
 	eventbus "durpdeploy/internal/events"
-	"durpdeploy/internal/notify"
+	"durpdeploy/internal/handler"
 	"durpdeploy/internal/repository"
 )
 
@@ -220,65 +220,31 @@ func (h *AdminHandler) UpdateNotificationSettings(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	var req struct {
-		ClearSlackWebhookURL   bool   `json:"clear_slack_webhook_url"`
-		ClearGotifyToken       bool   `json:"clear_gotify_token"`
-		ClearDiscordWebhookURL bool   `json:"clear_discord_webhook_url"`
-		SlackWebhookURL        string `json:"slack_webhook_url"`
-		NotifyEmails           string `json:"notify_emails"`
-		GotifyURL              string `json:"gotify_url"`
-		GotifyToken            string `json:"gotify_token"`
-		DiscordWebhookURL      string `json:"discord_webhook_url"`
-	}
+	var req projectNotificationsRequest
 	if !readJSONBool(w, r, &req) {
 		return
 	}
 
-	webhook := notify.CredentialValue(
-		req.SlackWebhookURL,
-		req.ClearSlackWebhookURL,
+	params, err := handler.PrepareNotificationSettings(
+		handler.NotificationSettingsInput{
+			SlackWebhookURL:        req.SlackWebhookURL,
+			NotifyEmails:           req.NotifyEmails,
+			GotifyURL:              trimSpace(req.GotifyURL),
+			GotifyToken:            req.GotifyToken,
+			DiscordWebhookURL:      req.DiscordWebhookURL,
+			ClearSlackWebhookURL:   req.ClearSlackWebhookURL,
+			ClearGotifyToken:       req.ClearGotifyToken,
+			ClearDiscordWebhookURL: req.ClearDiscordWebhookURL,
+		},
 	)
-	gotifyURL := trimSpace(req.GotifyURL)
-	discordWebhook := notify.CredentialValue(
-		req.DiscordWebhookURL,
-		req.ClearDiscordWebhookURL,
-	)
-	if err := validateNotificationURLs(
-		webhook,
-		gotifyURL,
-		discordWebhook,
-	); err != nil {
+	if err != nil {
 		RespondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	settings, err := h.repo.UpdateGlobalNotifications(
 		r.Context(),
-		db.UpdateGlobalNotificationsParams{
-			ClearSlackWebhookUrl:   boolInt(req.ClearSlackWebhookURL),
-			ClearGotifyToken:       boolInt(req.ClearGotifyToken),
-			ClearDiscordWebhookUrl: boolInt(req.ClearDiscordWebhookURL),
-			SlackWebhookUrl: sql.NullString{
-				String: webhook,
-				Valid:  webhook != "",
-			},
-			NotifyEmails: sql.NullString{
-				String: req.NotifyEmails,
-				Valid:  req.NotifyEmails != "",
-			},
-			GotifyUrl: sql.NullString{
-				String: gotifyURL,
-				Valid:  gotifyURL != "",
-			},
-			GotifyToken: sql.NullString{
-				String: req.GotifyToken,
-				Valid:  req.GotifyToken != "",
-			},
-			DiscordWebhookUrl: sql.NullString{
-				String: discordWebhook,
-				Valid:  discordWebhook != "",
-			},
-		},
+		params,
 	)
 	if err != nil {
 		RespondError(
