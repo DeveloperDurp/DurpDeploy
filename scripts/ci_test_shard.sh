@@ -31,6 +31,12 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
     export DURPDEPLOY_CONTAINER_RUNTIME=docker
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestConfiguredStaging(CaptureAPIWeb|CapacityAPI|RemoteAPI|ApprovalResumeAPI)E2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestConfigured(LogsAPIWeb|PendingLogsAPI)E2E$' ./internal/handler/api
+    fixture_runtime=(docker)
+    if [[ -n ${DURPDEPLOY_CONTAINER_URL:-} ]]; then
+      fixture_runtime+=("--host=$DURPDEPLOY_CONTAINER_URL")
+    fi
+    bash scripts/ensure_fixture_image.sh \
+      harbor.durp.info/dockerhub/library/python:3.12 "${fixture_runtime[@]}"
     bash scripts/go_test.sh -tags=e2e -count=1 -run '^(TestConfiguredContainer(PIDs|Resources|ResourcesRemoteRejection)APIE2E|TestConfiguredPIDRemoteRejectionAPIE2E|TestConfiguredArtifact(SafetyContainer|ApprovalNodes|ApprovalResume)APIE2E|TestConfiguredDefaultTimeout(API|RemoteAPI)E2E)$' ./internal/handler/api
     )
     (
