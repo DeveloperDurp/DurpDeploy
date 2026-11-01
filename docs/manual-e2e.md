@@ -1595,6 +1595,19 @@ Delete the last entry on the last page.
 Confirm that the list shows the preceding page.
 Compare the list with `GET /api/v1/projects/{id}/schedules?limit=50&offset=50`.
 
+Create a disabled schedule with a note through **New Schedule**.
+At desktop width, select **Edit**.
+Change the cron.
+Select **Save**.
+At phone width, repeat the edit through the schedule card.
+Confirm that both edits preserve the note and keep the schedule disabled.
+
+Read `GET /api/v1/projects/{id}/schedules/{schedId}` after each edit.
+Confirm that `cron`, `note`, and `enabled` match the saved values.
+Submit an invalid cron through **New Schedule**.
+Confirm that the form preserves the release, environment, cron, note, and enabled state.
+Keep the schedule disabled after these checks.
+
 Run the schedule page browser regression:
 
 ```bash
@@ -2156,6 +2169,28 @@ Use its project, lifecycle, environment, and saved step for these checks.
 9. Copy the name and reference into a scratch editor.
 10. Confirm the clipboard contains a name or reference without the secret value.
 
+Search for `DURPDEPLOY_ENVIRONMENT_NAME` and `DURPDEPLOY_ENVIRONMENT_ID`.
+Confirm both predefined variables show available status, interpreter references, and the `variable_names` bypass explanation.
+Confirm neither variable shows a secret flag or an authoring value.
+Select another environment and repeat these checks.
+
+The running suite also prints a retained environment identity project and two deployment links.
+Open each deployment and inspect its logs.
+Confirm both attempts print the destination environment name and numeric ID.
+Confirm both deployments use the same release.
+
+Re-run a deployment after renaming its environment.
+Confirm the new deployment prints the new name.
+Confirm the original deployment logs keep the accepted name.
+These examples have no schedules.
+
+Run `TestDeploymentEnvironmentIdentityAPIE2E` with the `e2e,agentstaging` tags for the isolated execution matrix.
+Set `DURPDEPLOY_AGENT_E2E_BINARY` to the pinned agent binary before that test.
+Set `AGENT_TEST_SOCKET` to the selected runtime socket before that test.
+Provide Bash, Python, and PowerShell on the test host.
+The matrix covers all three interpreters on server containers, agent hosts, and agent containers.
+It also covers promotion, automatic retries, renaming, legacy conflicts, and literal shell metacharacters.
+
 Repeat these editor checks in **Add Step**, **Edit**, and fullscreen script mode:
 
 1. Change the name, script, interpreter, timeout, retries, and variable selection without saving.
@@ -2275,6 +2310,20 @@ As a Maintainer, open Manage Groups to move authorized projects between visible 
 Expect project permissions and deployment links to remain unchanged.
 
 Use `GET /api/v1/project-groups` to inspect authorized groups and counts.
+Open New Project and select an existing Group.
+Save the project and confirm its group through `GET /api/v1/projects/{id}`.
+Repeat with Ungrouped and confirm `group_id` is `null`.
+Submit a duplicate project name and confirm the selected group and other fields remain.
+Cancel the dialog and confirm no project was created.
+Repeat these checks at desktop and phone widths.
+Open `/projects/new` and confirm the same Group selector appears.
+
+Use `POST /api/v1/projects` with `{"name":"grouped-example","group_id":12}` to create a grouped project.
+Replace `12` with a visible group ID.
+Omit `group_id` or send `null` to create an ungrouped project.
+Expect invalid field types to return `400` and nonpositive IDs to return `422`.
+Expect missing or inaccessible groups to return `404` without creating a project.
+
 Use `PUT /api/v1/projects/{id}/group` with `{"group_id":null}` to clear an assignment.
 Use `GET /api/v1/projects?group_id=0` to inspect Ungrouped projects.
 Use the public Swagger UI for group CRUD and project search, sorting, filtering, and pagination.
@@ -3275,3 +3324,69 @@ Confirm both agent staging directories are empty and the runtime retains no owne
 Create the instance's `stop` file to stop only that fixture and its two agents.
 Keep its database, identity files, logs, requests, and deployment history.
 The automated checks also cover raised ceilings, cumulative visits, cancellation, invalid startup ranges, and preflight rejection before decryption.
+
+## Credential expiry and rotation
+
+Use synthetic credentials for these checks.
+Retain the projects, releases, runbook versions, and deployment history after testing.
+Keep schedules disabled.
+
+1. Create `ROTATING_TOKEN` with `POST /api/v1/projects/{id}/credentials` and a nonempty `value`.
+2. Create two releases and one runbook version with that secret.
+3. Create an environment override and an unrelated project secret with the same name.
+4. Open **Credentials** from the project menu.
+5. Select **Edit credential** and set an expiry date within 30 days.
+6. Select **Save** with the replacement field empty.
+7. Confirm `due_soon` status and an unchanged secret.
+8. Set a past expiry date and confirm `expired` status.
+9. Select **Save** without a replacement and confirm that the secret and last rotation time stay unchanged.
+10. Enter a replacement and a future expiry date.
+11. Select **Save** and confirm success and an updated last rotation time.
+12. Deploy both earlier releases and execute the earlier runbook version.
+13. Confirm that each execution receives the replacement.
+14. Confirm that the environment override and unrelated project keep their values.
+15. Confirm that queued deployments and pending approvals keep their captured variables.
+16. Re-run a deployment and confirm that it captures the replacement.
+17. Submit an earlier `revision` through the API and confirm `409` without changes.
+18. Confirm that API responses, forms, logs, and audit details contain no credential values.
+
+For shared lifecycle secrets, repeat rotation through the lifecycle **Credentials** page.
+Confirm that new executions of earlier releases use the replacement.
+Confirm that project overrides keep their independent values.
+
+For package credentials, remove an authenticated source after creating a pinned release.
+Rotate its retained credential without activating the source.
+Deploy the earlier release and confirm authenticated package download.
+Confirm that its version and checksum remain pinned.
+
+As a Viewer or Deployer, confirm that rotation controls are absent and writes receive permission denial.
+As a scoped Maintainer, confirm project rotation and denial of shared lifecycle administration.
+Check the forms at 375-pixel and 1280-pixel viewport widths.
+
+Create an ordinary secret through the Variables page.
+Confirm that the Credentials page does not list it.
+Open **New credential or enroll secret** and enroll that secret individually.
+Confirm that its value stays masked and its Variables row disappears.
+Repeat these steps for a shared lifecycle secret.
+Confirm that existing secrets with dates also require enrollment.
+
+Open the project overview after setting a past credential expiry date.
+Confirm that the banner reports the expired credential and links to Credentials.
+Set a date within 30 days and confirm the warning count.
+Confirm that applicable inherited credentials appear and overridden shared credentials do not appear.
+Use an account without lifecycle administration access and confirm that shared management controls are absent.
+
+Create a disposable credential through the dedicated page.
+Select **Delete credential** and confirm deletion on its dedicated page.
+Confirm that release snapshots and execution history remain available.
+Recreate the disposable example for manual checks.
+
+Run the automated checks:
+
+```bash
+bash scripts/go_test.sh -run '^TestCredential' ./internal/repository
+bash scripts/go_test.sh -tags=e2e -run '^TestCredential' ./internal/handler/api
+DURPDEPLOY_CONTAINER_RUNTIME=podman bash scripts/ci_browser_shard.sh -- \
+  bash scripts/go_test.sh -tags=e2e,packagebrowser \
+  -run '^TestCredential' ./internal/handler/api
+```

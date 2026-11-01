@@ -8,7 +8,7 @@ import (
 
 // swagger:route GET /projects/{id}/variables/available variables availableVariables
 //
-// Inspect current configured and conditional runtime variables for step authoring.
+// Inspect current configured and predefined runtime variables for step authoring.
 // Secret values are null. Requires project access. Does not inspect snapshots or host environments.
 //
 // Produces:

@@ -3,10 +3,12 @@
 package api_test
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 	"testing"
 
+	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/repository"
@@ -120,13 +122,23 @@ func checkViewerReferences(t *testing.T, f *artifactE2E, query string) {
 				"draft interpreter, selection, or unavailable name was ignored",
 			)
 		}
-		for _, runtime := range c.Predefined {
-			if runtime.Status != "conditional" || runtime.Value != nil ||
-				!strings.Contains(runtime.Reason, "bypass variable_names") {
-				t.Fatal(
-					"managed runtime paths must remain conditional and bypass the allowlist",
-				)
-			}
+		checkViewerPredefined(t, c.Predefined)
+	}
+}
+
+func checkViewerPredefined(
+	t *testing.T,
+	variables []repository.VariableDefinition,
+) {
+	t.Helper()
+	for _, runtime := range variables {
+		status := "conditional"
+		if containerenv.IsEnvironmentIdentity(runtime.Name) {
+			status = "available"
+		}
+		if runtime.Status != status || runtime.Value != nil || runtime.Secret ||
+			!strings.Contains(runtime.Reason, "bypass variable_names") {
+			t.Fatalf("incorrect predefined variable metadata: %+v", runtime)
 		}
 	}
 }
@@ -138,6 +150,7 @@ func TestStepVariablesAPIWebE2E(t *testing.T) {
 	checkViewerCatalogDefinitions(t, f, query)
 	checkViewerReferences(t, f, query)
 	checkViewerExecutionTargets(t, f, query)
+	checkIdentityViewer(t, f, lifecycleID, query)
 	f.api(t, "POST", f.base()+"/variables", map[string]any{
 		"name":           "REGION",
 		"value":          "project-env",
@@ -204,6 +217,91 @@ func TestStepVariablesAPIWebE2E(t *testing.T) {
 	if strings.Contains(web, "viewer-secret-sentinel") ||
 		!strings.Contains(web, "predefined") {
 		t.Fatal("session metadata API did not preserve masking and groups")
+	}
+}
+
+func checkIdentityViewer(
+	t *testing.T,
+	f *artifactE2E,
+	lifecycleID int64,
+	query string,
+) {
+	t.Helper()
+	for _, name := range []string{containerenv.EnvironmentNameVariable, containerenv.EnvironmentIDVariable} {
+		for _, path := range []string{f.base() + "/variables", fmt.Sprintf("/api/v1/lifecycles/%d/variables", lifecycleID)} {
+			f.api(
+				t,
+				"POST",
+				path,
+				map[string]string{"name": name, "value": "rejected"},
+				422,
+			)
+		}
+		seedViewerIdentityConflict(t, f, lifecycleID, name)
+	}
+	for _, target := range []string{"", "&execution_target=agent", "&execution_target=agent&agent_execution_mode=container"} {
+		catalog := readVariableCatalog(
+			t,
+			f,
+			query+target+"&variable_names=DURPDEPLOY_ENVIRONMENT_NAME,DURPDEPLOY_ENVIRONMENT_ID",
+		)
+		checkIdentityCatalog(t, catalog)
+	}
+}
+
+func seedViewerIdentityConflict(
+	t *testing.T,
+	f *artifactE2E,
+	lifecycleID int64,
+	name string,
+) {
+	t.Helper()
+	// Simulate stored definitions from before these names were reserved.
+	value, err := f.h.repo.EncryptValue(
+		sql.NullString{String: "legacy", Valid: true},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name == containerenv.EnvironmentNameVariable {
+		_, err = f.h.repo.Queries.CreateVariable(
+			t.Context(),
+			db.CreateVariableParams{
+				ProjectID: f.project.ID, Name: name, Value: value,
+			},
+		)
+	} else {
+		_, err = f.h.repo.Queries.CreateLifecycleVariable(t.Context(), db.CreateLifecycleVariableParams{
+			LifecycleID: lifecycleID, Name: name, Value: value,
+		})
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func checkIdentityCatalog(t *testing.T, catalog repository.AvailableVariables) {
+	t.Helper()
+	count := 0
+	for _, v := range catalog.Predefined {
+		if !containerenv.IsEnvironmentIdentity(v.Name) {
+			continue
+		}
+		count++
+		if v.Status != "available" || v.Value != nil || v.Secret ||
+			!strings.Contains(v.Reason, "bypass variable_names") {
+			t.Fatalf("incorrect runtime identity metadata: %+v", v)
+		}
+	}
+	if count != 2 ||
+		strings.Contains(strings.Join(catalog.Warnings, " "), "has no value") {
+		t.Fatalf("missing identity or false selection warning: %+v", catalog)
+	}
+	for _, v := range catalog.Configured {
+		if containerenv.IsEnvironmentIdentity(v.Name) &&
+			(v.Effective || v.Status != "overridden" || v.OverriddenBy != "runtime:"+v.Name) {
+			t.Fatalf("legacy conflict not explained: %+v", v)
+		}
 	}
 }
 
