@@ -26,7 +26,7 @@ WITH ranked AS (
       AND d.environment_id IN (/*SLICE:environment_ids*/?)
       AND d.kind = 'deployment'
 )
-SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at, d.finished_at, d.created_at, d.forced, d.note, d.assigned_agent_id, d.kind, d.container_namespace, d.cleanup_confirmed_at, ranked.project_id, ranked.version
+SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at, d.finished_at, d.created_at, d.forced, d.note, d.assigned_agent_id, d.kind, d.container_namespace, d.cleanup_confirmed_at, d.environment_name_snapshot, ranked.project_id, ranked.version
 FROM ranked JOIN deployments d ON d.id = ranked.id
 WHERE ranked.recent_rank <= 5
    OR (ranked.status = 'succeeded' AND ranked.status_rank = 1)
@@ -85,6 +85,7 @@ func (q *Queries) ListProjectPanelDeployments(ctx context.Context, arg ListProje
 			&i.Deployment.Kind,
 			&i.Deployment.ContainerNamespace,
 			&i.Deployment.CleanupConfirmedAt,
+			&i.Deployment.EnvironmentNameSnapshot,
 			&i.ProjectID,
 			&i.Version,
 		); err != nil {

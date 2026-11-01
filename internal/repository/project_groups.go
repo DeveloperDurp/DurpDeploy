@@ -43,9 +43,14 @@ func (r *Repository) ProjectCatalog(
 	projects, err := r.Queries.ListProjectCatalog(
 		ctx,
 		db.ListProjectCatalogParams{
-			IsAdmin: filter.IsAdmin, UserID: filter.UserID, TokenID: filter.TokenID,
-			GroupFilter: filter.GroupFilter, Search: filter.Search,
-			SortOrder: options.Sort, PageLimit: options.Limit, PageOffset: options.Offset,
+			IsAdmin:     filter.IsAdmin,
+			UserID:      filter.UserID,
+			TokenID:     filter.TokenID,
+			GroupFilter: filter.GroupFilter,
+			Search:      filter.Search,
+			SortOrder:   options.Sort,
+			PageLimit:   options.Limit,
+			PageOffset:  options.Offset,
 		},
 	)
 	return projects, total, err
@@ -86,24 +91,9 @@ func (r *Repository) MoveProjectGroup(
 ) (project db.Project, err error) {
 	err = withSQLiteBusyRetry(ctx, func() error {
 		return r.WithTx(ctx, func(q *db.Queries) error {
-			var group sql.NullInt64
-			if groupID != nil {
-				if *groupID <= 0 {
-					return sql.ErrNoRows
-				}
-				groups, err := q.ListAccessibleProjectGroups(ctx, access)
-				if err != nil {
-					return err
-				}
-				if !slices.ContainsFunc(
-					groups,
-					func(candidate db.ListAccessibleProjectGroupsRow) bool {
-						return candidate.ID == *groupID
-					},
-				) {
-					return sql.ErrNoRows
-				}
-				group = sql.NullInt64{Int64: *groupID, Valid: true}
+			group, err := accessibleProjectGroup(ctx, q, access, groupID)
+			if err != nil {
+				return err
 			}
 			var moveErr error
 			project, moveErr = q.SetProjectGroup(
@@ -114,4 +104,29 @@ func (r *Repository) MoveProjectGroup(
 		})
 	})
 	return project, err
+}
+
+func accessibleProjectGroup(
+	ctx context.Context,
+	q *db.Queries,
+	access ProjectCatalogAccess,
+	groupID *int64,
+) (sql.NullInt64, error) {
+	if groupID == nil {
+		return sql.NullInt64{}, nil
+	}
+	if *groupID <= 0 {
+		return sql.NullInt64{}, sql.ErrNoRows
+	}
+	groups, err := q.ListAccessibleProjectGroups(ctx, access)
+	if err != nil {
+		return sql.NullInt64{}, err
+	}
+	if !slices.ContainsFunc(groups,
+		func(group db.ListAccessibleProjectGroupsRow) bool {
+			return group.ID == *groupID
+		}) {
+		return sql.NullInt64{}, sql.ErrNoRows
+	}
+	return sql.NullInt64{Int64: *groupID, Valid: true}, nil
 }

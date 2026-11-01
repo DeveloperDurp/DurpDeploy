@@ -31,7 +31,7 @@ func (q *Queries) CountVariablesByProject(ctx context.Context, arg CountVariable
 }
 
 const createVariable = `-- name: CreateVariable :one
-INSERT INTO variables (project_id, name, value, environment_id, secret) VALUES (?, ?, ?, ?, ?) RETURNING id, project_id, name, value, environment_id, created_at, secret
+INSERT INTO variables (project_id, name, value, environment_id, secret, is_credential, expires_at, rotation_due_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, project_id, name, value, environment_id, created_at, secret, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential
 `
 
 type CreateVariableParams struct {
@@ -40,6 +40,9 @@ type CreateVariableParams struct {
 	Value         sql.NullString `json:"value"`
 	EnvironmentID sql.NullInt64  `json:"environment_id"`
 	Secret        int64          `json:"secret"`
+	IsCredential  int64          `json:"is_credential"`
+	ExpiresAt     int64          `json:"expires_at"`
+	RotationDueAt int64          `json:"rotation_due_at"`
 }
 
 func (q *Queries) CreateVariable(ctx context.Context, arg CreateVariableParams) (Variable, error) {
@@ -49,6 +52,9 @@ func (q *Queries) CreateVariable(ctx context.Context, arg CreateVariableParams) 
 		arg.Value,
 		arg.EnvironmentID,
 		arg.Secret,
+		arg.IsCredential,
+		arg.ExpiresAt,
+		arg.RotationDueAt,
 	)
 	var i Variable
 	err := row.Scan(
@@ -59,12 +65,17 @@ func (q *Queries) CreateVariable(ctx context.Context, arg CreateVariableParams) 
 		&i.EnvironmentID,
 		&i.CreatedAt,
 		&i.Secret,
+		&i.ExpiresAt,
+		&i.RotationDueAt,
+		&i.RotatedAt,
+		&i.RotationRevision,
+		&i.IsCredential,
 	)
 	return i, err
 }
 
 const deleteVariable = `-- name: DeleteVariable :exec
-DELETE FROM variables WHERE id = ?
+DELETE FROM variables WHERE id = ? AND is_credential = 0
 `
 
 func (q *Queries) DeleteVariable(ctx context.Context, id int64) error {
@@ -74,7 +85,7 @@ func (q *Queries) DeleteVariable(ctx context.Context, id int64) error {
 
 const deleteVariableOverrides = `-- name: DeleteVariableOverrides :exec
 DELETE FROM variables
-WHERE project_id = ?1 AND name = ?2
+WHERE project_id = ?1 AND name = ?2 AND is_credential = 0
   AND (environment_id = ?3
        OR (environment_id IS NULL AND ?3 IS NULL))
 `
@@ -91,7 +102,7 @@ func (q *Queries) DeleteVariableOverrides(ctx context.Context, arg DeleteVariabl
 }
 
 const getVariable = `-- name: GetVariable :one
-SELECT id, project_id, name, value, environment_id, created_at, secret FROM variables WHERE id = ?
+SELECT id, project_id, name, value, environment_id, created_at, secret, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential FROM variables WHERE id = ?
 `
 
 func (q *Queries) GetVariable(ctx context.Context, id int64) (Variable, error) {
@@ -105,12 +116,17 @@ func (q *Queries) GetVariable(ctx context.Context, id int64) (Variable, error) {
 		&i.EnvironmentID,
 		&i.CreatedAt,
 		&i.Secret,
+		&i.ExpiresAt,
+		&i.RotationDueAt,
+		&i.RotatedAt,
+		&i.RotationRevision,
+		&i.IsCredential,
 	)
 	return i, err
 }
 
 const listAllVariables = `-- name: ListAllVariables :many
-SELECT id, project_id, name, value, environment_id, created_at, secret FROM variables ORDER BY id
+SELECT id, project_id, name, value, environment_id, created_at, secret, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential FROM variables ORDER BY id
 `
 
 func (q *Queries) ListAllVariables(ctx context.Context) ([]Variable, error) {
@@ -130,6 +146,11 @@ func (q *Queries) ListAllVariables(ctx context.Context) ([]Variable, error) {
 			&i.EnvironmentID,
 			&i.CreatedAt,
 			&i.Secret,
+			&i.ExpiresAt,
+			&i.RotationDueAt,
+			&i.RotatedAt,
+			&i.RotationRevision,
+			&i.IsCredential,
 		); err != nil {
 			return nil, err
 		}
@@ -145,7 +166,7 @@ func (q *Queries) ListAllVariables(ctx context.Context) ([]Variable, error) {
 }
 
 const listVariablesByProject = `-- name: ListVariablesByProject :many
-SELECT id, project_id, name, value, environment_id, created_at, secret FROM variables WHERE project_id = ? ORDER BY created_at DESC
+SELECT id, project_id, name, value, environment_id, created_at, secret, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential FROM variables WHERE project_id = ? ORDER BY created_at DESC
 `
 
 func (q *Queries) ListVariablesByProject(ctx context.Context, projectID int64) ([]Variable, error) {
@@ -165,6 +186,11 @@ func (q *Queries) ListVariablesByProject(ctx context.Context, projectID int64) (
 			&i.EnvironmentID,
 			&i.CreatedAt,
 			&i.Secret,
+			&i.ExpiresAt,
+			&i.RotationDueAt,
+			&i.RotatedAt,
+			&i.RotationRevision,
+			&i.IsCredential,
 		); err != nil {
 			return nil, err
 		}
@@ -180,7 +206,7 @@ func (q *Queries) ListVariablesByProject(ctx context.Context, projectID int64) (
 }
 
 const listVariablesByProjectPaginated = `-- name: ListVariablesByProjectPaginated :many
-SELECT id, project_id, name, value, environment_id, created_at, secret FROM variables
+SELECT id, project_id, name, value, environment_id, created_at, secret, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential FROM variables
 WHERE project_id = ?1
   AND (CAST(?2 AS BIGINT) IS NULL OR environment_id = ?2)
   AND (CAST(?3 AS BIGINT) IS NULL OR secret = ?3)
@@ -219,6 +245,11 @@ func (q *Queries) ListVariablesByProjectPaginated(ctx context.Context, arg ListV
 			&i.EnvironmentID,
 			&i.CreatedAt,
 			&i.Secret,
+			&i.ExpiresAt,
+			&i.RotationDueAt,
+			&i.RotatedAt,
+			&i.RotationRevision,
+			&i.IsCredential,
 		); err != nil {
 			return nil, err
 		}
@@ -234,7 +265,7 @@ func (q *Queries) ListVariablesByProjectPaginated(ctx context.Context, arg ListV
 }
 
 const updateVariable = `-- name: UpdateVariable :one
-UPDATE variables SET name = ?, value = ?, environment_id = ?, secret = ? WHERE id = ? RETURNING id, project_id, name, value, environment_id, created_at, secret
+UPDATE variables SET name = ?, value = ?, environment_id = ?, secret = ?, rotation_revision = rotation_revision + 1 WHERE id = ? AND is_credential = 0 RETURNING id, project_id, name, value, environment_id, created_at, secret, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential
 `
 
 type UpdateVariableParams struct {
@@ -262,12 +293,17 @@ func (q *Queries) UpdateVariable(ctx context.Context, arg UpdateVariableParams) 
 		&i.EnvironmentID,
 		&i.CreatedAt,
 		&i.Secret,
+		&i.ExpiresAt,
+		&i.RotationDueAt,
+		&i.RotatedAt,
+		&i.RotationRevision,
+		&i.IsCredential,
 	)
 	return i, err
 }
 
 const updateVariableKeepValue = `-- name: UpdateVariableKeepValue :one
-UPDATE variables SET name = ?, environment_id = ?, secret = ? WHERE id = ? RETURNING id, project_id, name, value, environment_id, created_at, secret
+UPDATE variables SET name = ?, environment_id = ?, secret = ?, rotation_revision = rotation_revision + 1 WHERE id = ? AND is_credential = 0 RETURNING id, project_id, name, value, environment_id, created_at, secret, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential
 `
 
 type UpdateVariableKeepValueParams struct {
@@ -293,6 +329,11 @@ func (q *Queries) UpdateVariableKeepValue(ctx context.Context, arg UpdateVariabl
 		&i.EnvironmentID,
 		&i.CreatedAt,
 		&i.Secret,
+		&i.ExpiresAt,
+		&i.RotationDueAt,
+		&i.RotatedAt,
+		&i.RotationRevision,
+		&i.IsCredential,
 	)
 	return i, err
 }

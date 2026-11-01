@@ -166,19 +166,20 @@ type AuditLog struct {
 }
 
 type Deployment struct {
-	ID                 int64          `json:"id"`
-	ReleaseID          int64          `json:"release_id"`
-	EnvironmentID      int64          `json:"environment_id"`
-	Status             string         `json:"status"`
-	StartedAt          sql.NullInt64  `json:"started_at"`
-	FinishedAt         sql.NullInt64  `json:"finished_at"`
-	CreatedAt          int64          `json:"created_at"`
-	Forced             int64          `json:"forced"`
-	Note               sql.NullString `json:"note"`
-	AssignedAgentID    sql.NullString `json:"assigned_agent_id"`
-	Kind               string         `json:"kind"`
-	ContainerNamespace sql.NullString `json:"container_namespace"`
-	CleanupConfirmedAt sql.NullInt64  `json:"cleanup_confirmed_at"`
+	ID                      int64          `json:"id"`
+	ReleaseID               int64          `json:"release_id"`
+	EnvironmentID           int64          `json:"environment_id"`
+	Status                  string         `json:"status"`
+	StartedAt               sql.NullInt64  `json:"started_at"`
+	FinishedAt              sql.NullInt64  `json:"finished_at"`
+	CreatedAt               int64          `json:"created_at"`
+	Forced                  int64          `json:"forced"`
+	Note                    sql.NullString `json:"note"`
+	AssignedAgentID         sql.NullString `json:"assigned_agent_id"`
+	Kind                    string         `json:"kind"`
+	ContainerNamespace      sql.NullString `json:"container_namespace"`
+	CleanupConfirmedAt      sql.NullInt64  `json:"cleanup_confirmed_at"`
+	EnvironmentNameSnapshot sql.NullString `json:"-"`
 }
 
 type DeploymentApproval struct {
@@ -368,13 +369,18 @@ type LifecycleStage struct {
 }
 
 type LifecycleVariable struct {
-	ID            int64          `json:"id"`
-	LifecycleID   int64          `json:"lifecycle_id"`
-	Name          string         `json:"name"`
-	Value         sql.NullString `json:"value"`
-	EnvironmentID sql.NullInt64  `json:"environment_id"`
-	Secret        int64          `json:"secret"`
-	CreatedAt     int64          `json:"created_at"`
+	ID               int64          `json:"id"`
+	LifecycleID      int64          `json:"lifecycle_id"`
+	Name             string         `json:"name"`
+	Value            sql.NullString `json:"value"`
+	EnvironmentID    sql.NullInt64  `json:"environment_id"`
+	Secret           int64          `json:"secret"`
+	CreatedAt        int64          `json:"created_at"`
+	ExpiresAt        int64          `json:"expires_at"`
+	RotationDueAt    int64          `json:"rotation_due_at"`
+	RotatedAt        int64          `json:"rotated_at"`
+	RotationRevision int64          `json:"rotation_revision"`
+	IsCredential     int64          `json:"is_credential"`
 }
 
 type LocalAdministrationLock struct {
@@ -441,13 +447,17 @@ type OidcTransaction struct {
 }
 
 type PackageRepository struct {
-	ID          int64  `json:"id"`
-	ProjectID   int64  `json:"project_id"`
-	Name        string `json:"name"`
-	UrlTemplate string `json:"url_template"`
-	AuthType    string `json:"auth_type"`
-	Username    string `json:"username"`
-	Credential  string `json:"credential"`
+	ID               int64  `json:"id"`
+	ProjectID        int64  `json:"project_id"`
+	Name             string `json:"name"`
+	UrlTemplate      string `json:"url_template"`
+	AuthType         string `json:"auth_type"`
+	Username         string `json:"username"`
+	Credential       string `json:"credential"`
+	ExpiresAt        int64  `json:"expires_at"`
+	RotationDueAt    int64  `json:"rotation_due_at"`
+	RotatedAt        int64  `json:"rotated_at"`
+	RotationRevision int64  `json:"rotation_revision"`
 }
 
 type Project struct {
@@ -741,13 +751,18 @@ type User struct {
 }
 
 type Variable struct {
-	ID            int64          `json:"id"`
-	ProjectID     int64          `json:"project_id"`
-	Name          string         `json:"name"`
-	Value         sql.NullString `json:"value"`
-	EnvironmentID sql.NullInt64  `json:"environment_id"`
-	CreatedAt     int64          `json:"created_at"`
-	Secret        int64          `json:"secret"`
+	ID               int64          `json:"id"`
+	ProjectID        int64          `json:"project_id"`
+	Name             string         `json:"name"`
+	Value            sql.NullString `json:"value"`
+	EnvironmentID    sql.NullInt64  `json:"environment_id"`
+	CreatedAt        int64          `json:"created_at"`
+	Secret           int64          `json:"secret"`
+	ExpiresAt        int64          `json:"expires_at"`
+	RotationDueAt    int64          `json:"rotation_due_at"`
+	RotatedAt        int64          `json:"rotated_at"`
+	RotationRevision int64          `json:"rotation_revision"`
+	IsCredential     int64          `json:"is_credential"`
 }
 
 type WebauthnCredential struct {
