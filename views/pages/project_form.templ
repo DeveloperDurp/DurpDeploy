@@ -19,7 +19,7 @@ func projectFormID(project db.Project, isEdit bool) string {
 	return "project-form-new"
 }
 
-templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles []db.Lifecycle, members []db.ListProjectMembersRow, availableUsers []db.ListUsersRow, canManage bool) {
+templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles []db.Lifecycle, groups []db.ListAccessibleProjectGroupsRow, members []db.ListProjectMembersRow, availableUsers []db.ListUsersRow, canManage bool) {
 	<div id="project-settings-panel" data-project-form class="max-w-2xl mx-auto">
 		<div class="page-header">
 			<h1 class="text-3xl font-bold">
@@ -80,6 +80,26 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 				</label>
 				<textarea name="description" class="textarea textarea-bordered" rows="4">{ project.Description.String }</textarea>
 			</div>
+			if !isEdit {
+				<div class="form-control">
+					<label class="label" for="project-group">
+						<span class="label-text">Group</span>
+					</label>
+					<select id="project-group" name="group_id" class="select select-bordered">
+						<option value="">Ungrouped</option>
+						for _, group := range groups {
+							<option
+								value={ strconv.FormatInt(group.ID, 10) }
+								if project.GroupID.Valid && project.GroupID.Int64 == group.ID {
+									selected
+								}
+							>
+								{ group.Name }
+							</option>
+						}
+					</select>
+				</div>
+			}
 			<div class="form-control">
 				<label class="label">
 					<span class="label-text">Lifecycle</span>
@@ -153,7 +173,7 @@ templ ResourceFormDialog(title string, selector string) {
 	</dialog>
 }
 
-templ ProjectFormPage(project db.Project, isEdit bool, errorMsg string, lifecycles []db.Lifecycle, members []db.ListProjectMembersRow, availableUsers []db.ListUsersRow, canManage bool, currentPath string) {
+templ ProjectFormPage(project db.Project, isEdit bool, errorMsg string, lifecycles []db.Lifecycle, groups []db.ListAccessibleProjectGroupsRow, members []db.ListProjectMembersRow, availableUsers []db.ListUsersRow, canManage bool, currentPath string) {
 	if !CanWrite(ctx) {
 		@ViewerForbiddenMessage(
 			projectFormTitle(isEdit),
@@ -168,7 +188,7 @@ templ ProjectFormPage(project db.Project, isEdit bool, errorMsg string, lifecycl
 		}
 	} else {
 		@layouts.Base("Project Form", currentPath) {
-			@ProjectForm(project, isEdit, errorMsg, lifecycles, members, availableUsers, canManage)
+			@ProjectForm(project, isEdit, errorMsg, lifecycles, groups, members, availableUsers, canManage)
 		}
 	}
 }

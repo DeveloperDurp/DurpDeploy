@@ -48,6 +48,7 @@ type ProjectTemplateStep struct {
 }
 
 type ProjectTemplateVariable struct {
+	IsCredential    bool    `json:"is_credential"`
 	Key             string  `json:"key"`
 	Name            string  `json:"name"`
 	Default         *string `json:"default,omitempty"`
@@ -259,9 +260,10 @@ func (r *Repository) captureTemplateVariables(
 			return nil, err
 		}
 		definition := ProjectTemplateVariable{
-			Key:    strconv.Itoa(i + 1),
-			Name:   v.Name,
-			Secret: v.Secret != 0,
+			Key:          strconv.Itoa(i + 1),
+			Name:         v.Name,
+			Secret:       v.Secret != 0,
+			IsCredential: v.IsCredential != 0,
 		}
 		if value.Valid {
 			definition.Default = &value.String

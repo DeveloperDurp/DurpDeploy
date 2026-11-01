@@ -6,7 +6,6 @@ source "$SCRIPT_DIR/project_members_e2e.sh"
 source "$SCRIPT_DIR/project_groups_e2e.sh"
 source "$SCRIPT_DIR/deployment_list_e2e.sh"
 source "$SCRIPT_DIR/provenance_e2e.sh"
-source "$SCRIPT_DIR/step_variables_e2e.sh"
 
 echo "=== Software build identity ==="
 BUILD_INFO=$(api_get "$BASE/api/v1/version")
@@ -106,6 +105,8 @@ wait_running_deployment() {
         exit 1
     }
 }
+
+source "$SCRIPT_DIR/step_variables_e2e.sh"
 VERIFY_RELEASE=$(api_post '{"version":"verified-v1"}' "$BASE/api/v1/projects/$VERIFY_PROJECT_ID/releases")
 VERIFY_RELEASE_ID=$(echo "$VERIFY_RELEASE" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
 VERIFY_DEP=$(api_post "{\"release_id\":$VERIFY_RELEASE_ID,\"environment_id\":$VERIFY_ENV_ID}" "$BASE/api/v1/projects/$VERIFY_PROJECT_ID/deployments")

@@ -31,6 +31,9 @@ func validateVariableName(name string) error {
 	if len(name) > 255 || !variableNamePattern.MatchString(name) {
 		return ErrVariableName
 	}
+	if containerenv.IsEnvironmentIdentity(name) {
+		return containerenv.ErrReserved
+	}
 	return nil
 }
 
@@ -53,22 +56,8 @@ func (r *Repository) SaveLifecycleVariable(
 	var result db.LifecycleVariable
 	err := withSQLiteBusyRetry(ctx, func() error {
 		return r.WithTx(ctx, func(q *db.Queries) error {
-			if _, err := q.GetLifecycle(ctx, input.LifecycleID); err != nil {
+			if err := checkLifecycleVariableScope(ctx, q, input); err != nil {
 				return err
-			}
-			if input.EnvironmentID.Valid {
-				count, err := q.LifecycleVariableScopeAllowed(
-					ctx,
-					db.LifecycleVariableScopeAllowedParams{
-						LifecycleID: input.LifecycleID, EnvironmentID: input.EnvironmentID.Int64,
-					},
-				)
-				if err != nil {
-					return err
-				}
-				if count == 0 {
-					return ErrLifecycleVariableScope
-				}
 			}
 			var existing db.LifecycleVariable
 			if input.ID != 0 {
@@ -122,6 +111,30 @@ func (r *Repository) SaveLifecycleVariable(
 		)
 	}
 	return result, nil
+}
+
+func checkLifecycleVariableScope(
+	ctx context.Context, q *db.Queries, input LifecycleVariableInput,
+) error {
+	if _, err := q.GetLifecycle(ctx, input.LifecycleID); err != nil {
+		return err
+	}
+	if !input.EnvironmentID.Valid {
+		return nil
+	}
+	count, err := q.LifecycleVariableScopeAllowed(
+		ctx,
+		db.LifecycleVariableScopeAllowedParams{
+			LifecycleID: input.LifecycleID, EnvironmentID: input.EnvironmentID.Int64,
+		},
+	)
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrLifecycleVariableScope
+	}
+	return nil
 }
 
 func (r *Repository) ListLifecycleVariables(

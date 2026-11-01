@@ -5,8 +5,8 @@ SELECT * FROM deployments WHERE release_id = ? AND kind = 'deployment' ORDER BY 
 SELECT * FROM deployments WHERE id = ?;
 
 -- name: CreateDeployment :one
-INSERT INTO deployments (release_id, environment_id, status, started_at, finished_at, forced, note, assigned_agent_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *;
+INSERT INTO deployments (release_id, environment_id, status, started_at, finished_at, forced, note, assigned_agent_id, environment_name_snapshot)
+VALUES (sqlc.arg(release_id), sqlc.arg(environment_id), sqlc.arg(status), sqlc.narg(started_at), sqlc.narg(finished_at), sqlc.arg(forced), sqlc.narg(note), sqlc.narg(assigned_agent_id), (SELECT name FROM environments WHERE id = sqlc.arg(environment_id))) RETURNING *;
 
 -- name: UpdateDeployment :one
 UPDATE deployments SET release_id = ?, environment_id = ?, status = ?, started_at = ?, finished_at = ?, note = ? WHERE id = ? RETURNING *;

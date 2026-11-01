@@ -164,3 +164,12 @@ Role changes invalidate browser sessions.
 Group removal takes effect on the next OIDC login.
 Password login uses the last stored role.
 See [OIDC configuration and recovery](authentik-oidc.md).
+
+## Credential rotation
+
+Project credential metadata and rotation require effective Maintainer permission for writes.
+Accessible project credentials remain readable without secret values.
+Viewers and Deployers receive no rotation controls.
+Shared lifecycle credentials require a global administrator and unrestricted global access.
+Scoped tokens cannot manage shared lifecycle credentials.
+Rotation does not grant secret export permission.
