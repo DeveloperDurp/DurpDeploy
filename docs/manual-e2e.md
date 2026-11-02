@@ -1,5 +1,36 @@
 # Manual checks after `make e2e-test`
 
+## Bearer script warnings (#177)
+
+Use an isolated development stack and task-owned PATs.
+Keep synthetic scripts and request evidence in private task storage.
+Repeat each case with global and scoped viewer, deployer, maintainer, and admin tokens.
+Send only caller text to `POST /api/v1/lint`.
+Do not run the submitted text as a command.
+For the stalled-upload HTTP/1 capacity check, configure the owned proxy for early responses.
+The default development Caddy proxy does not enable full duplex.
+Use Caddy's `enable_full_duplex` only with tested clients.
+Check the [proxy boundary](bearer-lint.md#limits-and-completion) before this test.
+Record the actual proxy configuration with the wire evidence.
+
+| Case | Expected |
+| --- | --- |
+| Missing, invalid, expired, revoked, or cookie-only credentials | JSON `401` before analysis |
+| Supported profile with a quoted `$name` | Fixed code `2086` warning without the identifier |
+| Shebang followed by invalid shell syntax | Complete empty warnings without a safety claim |
+| Exactly 100 versus 101 findings | 100 warnings with false versus true truncation |
+| Unknown, duplicate, null, malformed, or invalid Unicode fields | Bounded `400` without source |
+| Encoded or decoded ceiling exceeded | `413` |
+| Four occupied requests and a fifth request | Fail-fast `503` without buffering the fifth body |
+| Canceled request or partial delivery | No complete result |
+| Owned file, callback, substitution, include, and shebang canaries | No execution or resource mutation |
+
+Inspect responses, application logs, and audit rows for synthetic source disclosure.
+Allow normal token last-use telemetry.
+Keep the [body, output, and deadline limits](bearer-lint.md) unchanged.
+Retain actual stack connection and cleanup records with the evidence.
+Keep schedules disabled after manual checks.
+
 ## Local container argument regression (#158)
 
 The retained example runs Bash, Python, PowerShell, and Bash verification through the public API.

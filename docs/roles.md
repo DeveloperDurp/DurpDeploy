@@ -1,5 +1,10 @@
 # DurpDeploy roles
 
+The bearer [script warning API](bearer-lint.md) accepts caller text from every valid effective role.
+Scoped and global PATs can use the exact `POST /api/v1/lint` operation.
+This read-only exception grants no stored script or project access.
+Other POST operations retain their existing permission checks.
+
 DurpDeploy uses four permission levels: `viewer < deployer < maintainer < admin`.
 Each user has one global role.
 Administrators manage global roles through **Admin → Users** or the public user API.

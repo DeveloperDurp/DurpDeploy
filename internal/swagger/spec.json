@@ -7,7 +7,7 @@
   ],
   "swagger": "2.0",
   "info": {
-    "description": "JSON request bodies are limited to 4 MiB of encoded bytes and must contain\nexactly one object matching the endpoint schema. Unknown fields, null, and\ntrailing data return 400. Oversized bodies return 413 before mutation.\nControl actions accept an empty body or an empty JSON object.\n\nPermission order: viewer \u003c deployer \u003c maintainer \u003c admin.\nDeployers can start existing releases, retry, re-run, and cancel deployments.\nMaintainers can author content and execute runbooks within admin boundaries.\nProject membership and token ceilings also limit each operation.\nExplicit-role tokens cannot manage API tokens.\nUnrestricted global tokens can change their owner's local password with\ncurrent-password verification, including for Viewer and Deployer owners.\n\nRequests use the host, port, and scheme that serve this specification.",
+    "description": "JSON request bodies are limited to 4 MiB of encoded bytes and must contain\nexactly one object matching the endpoint schema. Unknown fields, null, and\ntrailing data return 400. Oversized bodies return 413 before mutation.\nControl actions accept an empty body or an empty JSON object.\nCaller-text lint has smaller fixed ceilings documented at POST /lint.\nIts strict schema also rejects duplicate fields and invalid Unicode.\n\nPermission order: viewer \u003c deployer \u003c maintainer \u003c admin.\nDeployers can start existing releases, retry, re-run, and cancel deployments.\nMaintainers can author content and execute runbooks within admin boundaries.\nProject membership and token ceilings also limit each operation.\nExplicit-role tokens cannot manage API tokens.\nUnrestricted global tokens can change their owner's local password with\ncurrent-password verification, including for Viewer and Deployer owners.\n\nRequests use the host, port, and scheme that serve this specification.",
     "title": "durpdeploy REST API.",
     "version": "1.0.0"
   },
@@ -5342,6 +5342,157 @@
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/lint": {
+      "post": {
+        "description": "Every valid effective role and global or scoped PAT can use this operation.\nThis grants no stored project or script access. Browser lint stays separate.\nEmpty diagnostics do not establish valid syntax or safe execution.\nReject duplicate fields, invalid UTF-8, lone surrogates, NUL, and query selectors.\nEncoded bodies are limited to 524288 bytes. Scripts are limited to 65536 UTF-8 bytes.\nA smaller configured JSON ceiling applies. Admission has four router-owned slots and no queue.\nListener deadlines cover I/O. Analysis has a separate two-second deadline after decoding.\nUse Cache-Control: no-store. Retain no source or results in application logs or audit.\nNormal token last-use telemetry remains enabled. External proxy logging is outside this contract.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "lint"
+        ],
+        "summary": "Analyze caller text with built-in regex warnings without execution.",
+        "operationId": "lintScriptWarnings",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "profile",
+                "script"
+              ],
+              "properties": {
+                "profile": {
+                  "type": "string",
+                  "enum": [
+                    "builtin-shell-warnings-v1"
+                  ]
+                },
+                "script": {
+                  "description": "The UTF-8 byte ceiling applies in addition to the character ceiling.",
+                  "type": "string",
+                  "maxLength": 65536,
+                  "x-max-utf8-bytes": 65536
+                }
+              },
+              "additionalProperties": false,
+              "x-max-json-bytes": 524288
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complete analysis. Exactly 100 findings are not truncated. More findings return the first 100 with truncated true.",
+            "schema": {
+              "type": "object",
+              "required": [
+                "profile",
+                "diagnostics",
+                "truncated"
+              ],
+              "properties": {
+                "diagnostics": {
+                  "type": "array",
+                  "maxItems": 100,
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "line",
+                      "level",
+                      "code",
+                      "message"
+                    ],
+                    "properties": {
+                      "code": {
+                        "type": "integer",
+                        "enum": [
+                          1000,
+                          2086
+                        ]
+                      },
+                      "level": {
+                        "type": "string",
+                        "enum": [
+                          "warning"
+                        ]
+                      },
+                      "line": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "message": {
+                        "type": "string",
+                        "maxLength": 128,
+                        "enum": [
+                          "Script is missing a shebang line",
+                          "Variable reference matched the built-in warning rule"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "profile": {
+                  "type": "string",
+                  "enum": [
+                    "builtin-shell-warnings-v1"
+                  ]
+                },
+                "truncated": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false,
+              "x-max-json-bytes": 32768
+            },
+            "headers": {
+              "Cache-Control": {
+                "type": "string",
+                "description": "no-store"
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request, profile, text, JSON, or query selectors. Error details contain no source."
+          },
+          "401": {
+            "description": "Missing, invalid, expired, or revoked bearer credential. Cookie authentication is not accepted."
+          },
+          "403": {
+            "description": "Effective role is not supported. No analysis occurs."
+          },
+          "408": {
+            "description": "Request cancellation or read deadline. Disconnected callers cannot receive a promised response."
+          },
+          "413": {
+            "description": "Encoded, decoded, or smaller configured JSON ceiling exceeded."
+          },
+          "415": {
+            "description": "Expected application/json with absent or UTF-8 charset."
+          },
+          "500": {
+            "description": "Internal response failure. Normal generic error scrubbing applies."
+          },
+          "503": {
+            "description": "All four admission slots are occupied. No buffering or analysis occurs. Normal generic error scrubbing applies."
+          },
+          "504": {
+            "description": "Analysis deadline exceeded. Discard partial diagnostics. Normal generic error scrubbing applies."
           }
         },
         "security": [

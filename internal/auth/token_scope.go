@@ -15,6 +15,12 @@ import (
 
 type tokenAccessKey struct{}
 
+// IsReadOnlyLintRequest identifies only caller-supplied text analysis.
+// It grants no access to stored projects, scripts, or other POST operations.
+func IsReadOnlyLintRequest(r *http.Request) bool {
+	return r.Method == http.MethodPost && r.URL.Path == "/api/v1/lint"
+}
+
 type TokenAccess struct {
 	ID        string
 	ProjectID int64
@@ -126,7 +132,8 @@ func TokenScopeMiddleware() func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			if !scopedTokenPathAllowed(r.Method, path) {
+			if !IsReadOnlyLintRequest(r) &&
+				!scopedTokenPathAllowed(r.Method, path) {
 				RenderJSONError(w, http.StatusForbidden,
 					"token is restricted to selected projects")
 				return

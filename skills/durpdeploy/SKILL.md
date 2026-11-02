@@ -7,6 +7,20 @@ metadata:
 
 # Operating DurpDeploy over HTTP
 
+## Analyze caller-supplied script text
+
+Send `POST /api/v1/lint` with a valid PAT and an `application/json` body.
+Include only `profile: "builtin-shell-warnings-v1"` and the `script` string.
+All effective roles and valid scoped or global PATs can use this operation.
+It grants no stored script or project access and performs no execution.
+Limit scripts to 65,536 UTF-8 bytes and encoded bodies to 524,288 bytes.
+A smaller configured JSON ceiling still applies.
+Read at most 100 complete warnings and check the explicit `truncated` flag.
+Empty warnings do not prove valid syntax or safe execution.
+Reject incomplete responses and preserve authorization errors.
+Protect real bodies from request logs and use only synthetic evidence.
+Use the served OpenAPI specification for the exact response schema.
+
 ## Export secret variables
 
 Require an instance administrator with the global `admin` role.

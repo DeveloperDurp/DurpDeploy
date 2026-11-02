@@ -51,6 +51,7 @@ var publicAuthentication = map[string]string{
 // redirects, logout's direct event, and unchanged assignments on named routes.
 var noAuditEvent = map[string]string{
 	"POST /api/lint":                                "read-only script validation",
+	"POST /api/v1/lint":                             "read-only caller text analysis",
 	"POST /api/v1/admin/maintenance":                "operational maintenance command",
 	"POST /login/mfa/webauthn/begin":                "pending authentication options",
 	"POST /login/mfa/cancel":                        "pending authentication cancellation",

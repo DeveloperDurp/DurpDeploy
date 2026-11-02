@@ -663,11 +663,15 @@ func newRouter(
 	// API v1 group — token-auth only, no CSRF, no session cookies.
 	// Healthz is mounted above on the root mux so it stays public.
 	r.Route("/api/v1", func(ar chi.Router) {
+		ar.Use(api.LintNoStore)
 		ar.Use(auth.ApiTokenMiddleware(repo))
 		ar.Use(auth.TokenScopeMiddleware())
 		ar.Use(auth.WriteBlockMiddleware())
 		ar.Use(api.RequestBodyLimit)
 		ar.Use(audit.Middleware(repo))
+		lintH := api.NewLintHandler()
+		ar.With(auth.RequireRole("viewer", "deployer", "maintainer", "admin")).
+			Post("/lint", lintH.Analyze)
 		exports := handler.NewSecretExportHandler(repo)
 		ar.With(auth.RequireRole("admin")).
 			Post("/admin/secret-exports", exports.APIStart)

@@ -74,36 +74,37 @@ func RenderRequestError(
 func WriteBlockMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == http.MethodPost &&
-				r.URL.Path == "/api/v1/users/me/password" {
-				servePasswordChangeWrite(w, r, next)
-				return
-			}
-			switch r.Method {
-			case http.MethodPost,
-				http.MethodPut,
-				http.MethodPatch,
-				http.MethodDelete:
-				if RoleFromContext(r.Context()) == "viewer" {
-					RenderJSONError(
-						w,
-						http.StatusForbidden,
-						"viewers cannot perform write operations",
-					)
-					return
-				}
-				if !projectWriteAllowed(r) {
-					RenderJSONError(
-						w,
-						http.StatusForbidden,
-						"maintainer permission is required for configuration writes",
-					)
-					return
-				}
-			}
-			next.ServeHTTP(w, r)
+			serveApplicationWrite(w, r, next)
 		})
 	}
+}
+
+func serveApplicationWrite(
+	w http.ResponseWriter, r *http.Request, next http.Handler,
+) {
+	if IsReadOnlyLintRequest(r) {
+		next.ServeHTTP(w, r)
+		return
+	}
+	if r.Method == http.MethodPost &&
+		r.URL.Path == "/api/v1/users/me/password" {
+		servePasswordChangeWrite(w, r, next)
+		return
+	}
+	switch r.Method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		if RoleFromContext(r.Context()) == "viewer" {
+			RenderJSONError(w, http.StatusForbidden,
+				"viewers cannot perform write operations")
+			return
+		}
+		if !projectWriteAllowed(r) {
+			RenderJSONError(w, http.StatusForbidden,
+				"maintainer permission is required for configuration writes")
+			return
+		}
+	}
+	next.ServeHTTP(w, r)
 }
 
 func servePasswordChangeWrite(

@@ -129,6 +129,7 @@ var actionMap = map[string]string{
 	"POST /projects/{id}/runbooks/executions/{executionId}/retry":             "retry_runbook_execution",
 	"POST /projects/{id}/runbooks/executions/{executionId}/approve":           "approve_runbook_execution",
 	"POST /api/lint":                                                          "",
+	"POST /api/v1/lint":                                                       "",
 
 	"GET /api/v1/deployments":                                                        "list_deployments",
 	"POST /api/v1/tokens":                                                            "create_api_token",
