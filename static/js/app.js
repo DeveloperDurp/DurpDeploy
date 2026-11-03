@@ -2,11 +2,12 @@ import Alpine from 'alpinejs'
 import htmx from 'htmx.org'
 import { createVariablesPage } from './variables.js'
 import { createStepVariables } from './step-variables.js'
-import { handleBoostedError } from './navigation.js'
+import { handleBoostedError, initNavigationFavicon } from './navigation.js'
 import { registerLogComponents } from './deployment-logs.js'
 
 window.Alpine = Alpine
 window.htmx = htmx
+initNavigationFavicon();
 
 // The keyboard can shrink the visible viewport without resizing the page.
 if (window.visualViewport) {
@@ -211,8 +212,17 @@ htmx.onLoad((root) => {
 		link.setAttribute('hx-select-oob', '#app-navbar');
 		link.setAttribute('hx-swap', 'outerHTML show:window:top');
 		link.setAttribute('hx-sync', 'body:replace');
+		link.setAttribute('hx-indicator', '#navigation-loading');
 		htmx.process(link);
 	}
+});
+
+document.addEventListener('htmx:beforeRequest', (event) => {
+	if (!event.detail.requestConfig?.boosted) return;
+	const menus = [...document.querySelectorAll('#app-navbar details[open]')];
+	const focusedMenu = menus.find((menu) => menu.contains(document.activeElement));
+	for (const menu of menus) menu.open = false;
+	focusedMenu?.querySelector(':scope > summary')?.focus({ preventScroll: true });
 });
 
 document.addEventListener('htmx:afterSwap', (event) => {

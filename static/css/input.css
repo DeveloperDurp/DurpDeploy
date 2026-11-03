@@ -32,6 +32,42 @@
   opacity: 0.65;
 }
 
+#navigation-loading {
+  display: none;
+  position: relative;
+  height: 4px;
+  margin-bottom: -4px;
+  z-index: 10;
+  overflow: hidden;
+  background: var(--color-base-300);
+  pointer-events: none;
+}
+
+#navigation-loading.htmx-request {
+  display: block;
+}
+
+#navigation-loading::before {
+  content: "";
+  display: block;
+  width: 35%;
+  height: 100%;
+  background: var(--color-primary);
+  animation: navigation-progress 1.2s linear infinite;
+}
+
+@keyframes navigation-progress {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(286%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #navigation-loading::before {
+    animation: none;
+    width: 100%;
+  }
+}
+
 @theme {
   --color-rosewater: #f5e0dc;
   --color-flamingo: #f2cdcd;

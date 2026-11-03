@@ -1,5 +1,28 @@
 # Manual checks after `make e2e-test`
 
+## Navigation loading feedback
+
+Sign in and open the home page.
+Select a slow network profile in browser developer tools.
+Select Projects in the navigation bar.
+Confirm that a loading bar moves from left to right directly below the navigation bar.
+Confirm that open navigation menus close before the destination page loads.
+Confirm that the current page remains visible without a layout shift.
+
+Confirm that the indicator disappears when the Projects page loads.
+Confirm that the tab icon shows a rotating loading ring during navigation.
+Confirm that the DurpDeploy tab icon returns after completion or failure.
+Repeat with the mobile navigation menu and both themes.
+Open a project and repeat with Variables in the Project menu.
+Enable reduced motion and confirm that the loading bar remains visible without animation.
+
+Confirm that the tab loading ring does not rotate with reduced motion enabled.
+Block the Projects request and confirm that the indicator clears after failure.
+Unblock requests and select Environments to confirm that navigation still works.
+
+The MFA browser suite runs these checks through `scripts/navigation_browser_contract.mjs`.
+The checks retain screenshots and do not delete application data.
+
 ## Bearer script warnings (#177)
 
 Use an isolated development stack and task-owned PATs.

@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { chromium } from "playwright";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { navigationLoadingContract } from "./navigation_browser_contract.mjs";
 
 import {
 	addAuthenticator,
@@ -615,6 +616,7 @@ async function run() {
 		const browserErrors = [];
 		monitorBrowserErrors(adminPage, browserErrors);
 		await passwordLogin(adminPage, app.url, "admin@mfa.test", passwords.admin);
+		await navigationLoadingContract(adminContext, app.url, artifactDir);
 		const adminToken = await mintToken(adminPage, app.url);
 		const deployer = await createUser(adminPage, app.url, adminToken, { email: "deployer@mfa.test", name: longDeployerName, password: passwords.deployer, role: "maintainer" });
 		const viewer = await createUser(adminPage, app.url, adminToken, { email: "viewer@mfa.test", name: "Viewer", password: passwords.viewer, role: "viewer" });

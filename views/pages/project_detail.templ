@@ -23,7 +23,7 @@ templ ProjectMenuDialog(project db.Project) {
 					<button type="button" class="btn btn-ghost" @click="close" aria-label="Close project menu">Close</button>
 				</div>
 			</div>
-			<nav aria-label="Project sections" @click="closeForLink" class="p-4 space-y-4" hx-boost="true" hx-target="#page-content" hx-select="#page-content" hx-select-oob="#app-navbar" hx-swap="outerHTML show:window:top" hx-sync="body:replace">
+			<nav aria-label="Project sections" @click="closeForLink" class="p-4 space-y-4" hx-boost="true" hx-target="#page-content" hx-select="#page-content" hx-select-oob="#app-navbar" hx-swap="outerHTML show:window:top" hx-sync="body:replace" hx-indicator="#navigation-loading">
 				<p class="text-sm opacity-70 break-all">{ project.Name }</p>
 				<ul class="menu w-full">
 					<li class="menu-title">Configuration</li>
