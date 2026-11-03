@@ -11,8 +11,9 @@ import (
 )
 
 type runbookExecuteRequest struct {
-	EnvironmentID int64 `json:"environment_id"`
-	VersionID     int64 `json:"version_id"`
+	EnvironmentID    int64 `json:"environment_id"`
+	VersionID        int64 `json:"version_id"`
+	AnsibleCheckMode bool  `json:"ansible_check_mode,omitempty"`
 }
 
 // swagger:route POST /projects/{id}/runbooks/{runbookId}/executions runbooks executeRunbook
@@ -61,7 +62,8 @@ func (h *RunbookHandler) Execute(w http.ResponseWriter, r *http.Request) {
 		r.Context(), repository.RunbookExecutionRequest{
 			ProjectID: projectID, RunbookID: id,
 			VersionID: req.VersionID, EnvironmentID: req.EnvironmentID,
-			ActorUserID: actor,
+			ActorUserID:      actor,
+			AnsibleCheckMode: req.AnsibleCheckMode,
 		})
 	if errors.Is(err, sql.ErrNoRows) {
 		RespondError(w, http.StatusNotFound, "Runbook or version not found")

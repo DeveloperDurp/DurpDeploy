@@ -53,6 +53,7 @@ templ RunbooksPage(project db.Project, books []db.Runbook, executions []db.ListR
 				for _, execution := range executions {
 					<div data-runbook-execution-id={ strconv.FormatInt(execution.ID, 10) }>
 						@ResourceCard(fmt.Sprintf("#%d — %s", execution.ID, execution.RunbookName), fmt.Sprintf("/projects/%d/runbooks/executions/%d", project.ID, execution.ID)) {
+							@components.AnsibleCheckBadge(execution.AnsibleCheckMode)
 							<dl class="grid grid-cols-2 sm:grid-cols-4 gap-3">
 								<div class="min-w-0"><dt class="text-xs opacity-70 mb-1">Version</dt><dd data-execution-version>{ strconv.FormatInt(execution.Version, 10) }</dd></div>
 								<div class="min-w-0"><dt class="text-xs opacity-70 mb-1">Environment</dt><dd data-execution-environment>{ execution.EnvironmentName }</dd></div>
@@ -126,7 +127,9 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, art
 							<div class="flex-1 min-w-0"><h2 class="font-bold break-words" x-text="step.name || `Step ${index + 1}`"></h2><p class="text-sm opacity-70" x-text="step.interpreter"></p></div>
 							<div class="flex gap-2"><button type="button" class="btn btn-xs" aria-label="Move step up" @click="moveStep(index, -1)" :disabled="index === 0">↑</button><button type="button" class="btn btn-xs" aria-label="Move step down" @click="moveStep(index, 1)" :disabled="index === steps.length - 1">↓</button><button type="button" class="btn btn-secondary btn-sm" @click="editStep(step)">Edit</button></div>
 							<input type="hidden" name="step_name" :value="step.name"/>
-							<input type="hidden" name="step_script" :value="step.script_body"/>
+							<input type="hidden" name="step_kind" :value="step.kind || 'script'"/>
+ <input type="hidden" name="step_ansible" :value="step.ansible ? JSON.stringify(step.ansible) : ''"/>
+ <input type="hidden" name="step_script" :value="step.script_body"/>
 							<input type="hidden" name="step_interpreter" :value="step.interpreter"/>
 							<input type="hidden" name="step_timeout" :value="step.timeout_seconds"/>
 							<input type="hidden" name="step_retries" :value="step.max_retries"/>
@@ -150,7 +153,7 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, art
 								</div>
 								<div class="min-h-0 overflow-y-auto space-y-4" data-runbook-step-fields>
 									<label class="form-control"><span class="label-text">Step name</span><input name="step_name" class="input input-bordered" x-model="draft.name" required/></label>
-									<label class="form-control"><span class="label-text">Script</span><textarea name="step_script" class="textarea textarea-bordered font-mono min-h-36" x-model="draft.script_body" required></textarea></label>
+									<label class="form-control"><span class="label-text">Script</span><textarea name="step_script" class="textarea textarea-bordered font-mono min-h-36" x-model="draft.script_body" :required="draft.kind !== 'ansible'" :readonly="draft.kind === 'ansible'"></textarea></label>
 									<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
 										<label class="form-control"><span class="label-text">Interpreter</span><select name="step_interpreter" class="select select-bordered" x-model="draft.interpreter"><option value="bash">Bash</option><option value="pwsh">PowerShell</option><option value="python3">Python</option></select></label>
 										<label class="form-control"><span class="label-text">Timeout (seconds)</span><input name="step_timeout" type="number" min="0" max={ strconv.FormatInt(agentexecution.RequestLimits(ctx).MaxTimeoutSeconds, 10) } class="input input-bordered" x-model="draft.timeout_seconds"/></label>

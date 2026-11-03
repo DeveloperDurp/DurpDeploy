@@ -80,6 +80,11 @@ func (r *Repository) remotePayloadSnapshot(
 		return RemotePayloadSnapshot{}, fmt.Errorf("list claim steps: %w", err)
 	}
 	for _, step := range steps {
+		if step.Kind == "ansible" && step.ExecutionTarget == "agent" {
+			return RemotePayloadSnapshot{}, errors.New(
+				"native Ansible execution is unsupported on remote agents",
+			)
+		}
 		if err := agentexecution.ValidateLimitsWithPolicy(step.TimeoutSeconds, step.MaxRetries, r.ResourceLimits().Execution); err != nil {
 			return RemotePayloadSnapshot{}, fmt.Errorf(
 				"step %q: %w",

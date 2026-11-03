@@ -50,6 +50,12 @@ func assertStepFields(
 	if len(got.VariableNames) == 0 {
 		got.VariableNames = nil
 	}
+	if want.Kind == "" {
+		want.Kind = "script"
+	}
+	if got.Kind == "" {
+		got.Kind = "script"
+	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("step fields\ngot  %+v\nwant %+v", got, want)
 	}

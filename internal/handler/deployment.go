@@ -368,6 +368,9 @@ func (h *DeploymentHandler) ScheduleDeployment(
 			FinishedAt:    sql.NullInt64{},
 			Forced:        forcedFlag,
 			Note:          noteParam,
+			AnsibleCheckMode: repository.AnsibleCheckMode(
+				isTruthy(r.FormValue("ansible_check_mode")),
+			),
 		},
 	)
 	if err != nil {
@@ -817,15 +820,16 @@ func (h *DeploymentHandler) ListDeployments(
 	for i, row := range rows {
 		items[i] = pages.DeploymentListItem{
 			Deployment: db.Deployment{
-				ID:            row.ID,
-				ReleaseID:     row.ReleaseID,
-				EnvironmentID: row.EnvironmentID,
-				Status:        row.Status,
-				StartedAt:     row.StartedAt,
-				FinishedAt:    row.FinishedAt,
-				CreatedAt:     row.CreatedAt,
-				Forced:        row.Forced,
-				Note:          row.Note,
+				ID:               row.ID,
+				ReleaseID:        row.ReleaseID,
+				EnvironmentID:    row.EnvironmentID,
+				Status:           row.Status,
+				StartedAt:        row.StartedAt,
+				FinishedAt:       row.FinishedAt,
+				CreatedAt:        row.CreatedAt,
+				Forced:           row.Forced,
+				Note:             row.Note,
+				AnsibleCheckMode: row.AnsibleCheckMode,
 			},
 			ProjectName:     row.ProjectName,
 			ReleaseVersion:  row.ReleaseVersion,

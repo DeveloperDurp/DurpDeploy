@@ -252,7 +252,7 @@ func TestResourceEditModalBrowserE2E(t *testing.T) {
 			b.evaluate(
 				t,
 				fmt.Sprintf(
-					`const content = document.querySelector('#project-edit-content'); content.querySelector('[name="name"]').value = %q; content.querySelector('textarea').value = 'retained'; content.querySelector('button[form]').click(); true`,
+					`const content = document.querySelector('#project-edit-content'); content.querySelector('[name="name"]').value = %q; content.querySelector('textarea:enabled').value = 'retained'; content.querySelector('button[form]').click(); true`,
 					payload["name"],
 				),
 			)
@@ -269,7 +269,7 @@ func TestResourceEditModalBrowserE2E(t *testing.T) {
 			if string(
 				b.evaluate(
 					t,
-					`document.querySelector('#project-edit-content textarea').value === 'retained'`,
+					`document.querySelector('#project-edit-content textarea:enabled').value === 'retained'`,
 				),
 			) != "true" {
 				t.Fatal("validation discarded submitted fields")

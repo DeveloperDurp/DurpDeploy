@@ -49,6 +49,11 @@ func (h *RunbookHandler) formSteps(r *http.Request) (string, error) {
 	}
 	images := r.Form["step_image"]
 	modes := r.Form["step_agent_mode"]
+	kinds, ansibleValues := r.Form["step_kind"], r.Form["step_ansible"]
+	if len(kinds) != 0 && len(kinds) != len(names) ||
+		len(ansibleValues) != 0 && len(ansibleValues) != len(names) {
+		return "", errors.New("incomplete step fields")
+	}
 	networks := r.Form["step_network"]
 	variableLists := r.Form["step_variable_names"]
 	// Absent arrays mean empty values for every step; a partially
@@ -66,11 +71,29 @@ func (h *RunbookHandler) formSteps(r *http.Request) (string, error) {
 	steps := make([]runbookFormStep, len(names))
 	for i, name := range names {
 		name = strings.TrimSpace(name)
+		kind := ""
+		var ansible *stepdefinition.Ansible
+		if len(kinds) == len(names) {
+			kind = kinds[i]
+		}
+		if len(ansibleValues) == len(names) {
+			var err error
+			ansible, err = stepdefinition.DecodeAnsible(ansibleValues[i])
+			if err != nil {
+				return "", err
+			}
+		}
 		script := r.Form["step_script"][i]
-		if name == "" || strings.TrimSpace(script) == "" {
+		if name == "" ||
+			kind != stepdefinition.AnsibleKind &&
+				strings.TrimSpace(script) == "" {
 			return "", errors.New("each step needs a name and script")
 		}
-		selected, err := interpreter.Validate(r.Form["step_interpreter"][i])
+		selected := ""
+		var err error
+		if kind != stepdefinition.AnsibleKind {
+			selected, err = interpreter.Validate(r.Form["step_interpreter"][i])
+		}
 		if err != nil {
 			return "", err
 		}
@@ -132,6 +155,7 @@ func (h *RunbookHandler) formSteps(r *http.Request) (string, error) {
 			return "", err
 		}
 		steps[i] = runbookFormStep{
+			Kind: kind, Ansible: ansible,
 			Name: name, ScriptBody: script, Interpreter: selected,
 			SortOrder: int64(i), TimeoutSeconds: timeout,
 			MaxRetries: retries, ExecutionTarget: target,
@@ -139,6 +163,9 @@ func (h *RunbookHandler) formSteps(r *http.Request) (string, error) {
 			AgentSelectors:     selectors, ContainerImage: image,
 			NetworkMode:   network,
 			VariableNames: variableNames,
+		}
+		if err := stepdefinition.Definition(steps[i]).ValidateWrite(); err != nil {
+			return "", err
 		}
 	}
 	encoded, err := json.Marshal(steps)

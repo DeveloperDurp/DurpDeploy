@@ -88,7 +88,19 @@ func (h *RunbookHandler) Execution(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	queueCtx = pages.WithLogHistory(queueCtx, page, nil)
-	if err := pages.RunbookExecutionPage(project, book, execution, page.Logs(), r.URL.Path).
+	source, err := h.repo.Queries.GetDeploymentStepSource(
+		r.Context(),
+		execution.DeploymentID,
+	)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		http.Error(
+			w,
+			"Cannot read execution steps",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+	if err := pages.RunbookExecutionPage(project, book, execution, source.StepsJson, page.Logs(), r.URL.Path).
 		Render(queueCtx, w); err != nil {
 		http.Error(w, "Cannot render execution", http.StatusInternalServerError)
 	}

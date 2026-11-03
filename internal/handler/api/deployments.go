@@ -35,8 +35,9 @@ func NewDeploymentHandler(
 }
 
 type deploymentCreateRequest struct {
-	ReleaseID     int64 `json:"release_id"`
-	EnvironmentID int64 `json:"environment_id"`
+	ReleaseID        int64 `json:"release_id"`
+	EnvironmentID    int64 `json:"environment_id"`
+	AnsibleCheckMode bool  `json:"ansible_check_mode,omitempty"`
 }
 
 func deploymentIDFromRequest(r *http.Request) (int64, error) {
@@ -149,9 +150,10 @@ func (h *DeploymentHandler) CreateDeployment(
 	result, err := h.repo.CreateDeploymentIdempotent(
 		r.Context(),
 		db.CreateDeploymentParams{
-			ReleaseID:     req.ReleaseID,
-			EnvironmentID: req.EnvironmentID,
-			Status:        status,
+			ReleaseID:        req.ReleaseID,
+			EnvironmentID:    req.EnvironmentID,
+			Status:           status,
+			AnsibleCheckMode: repository.AnsibleCheckMode(req.AnsibleCheckMode),
 		},
 		request,
 	)

@@ -431,8 +431,9 @@ func (h *StepHandler) ReorderSteps(w http.ResponseWriter, r *http.Request) {
 	for i, sid := range req.StepIDs {
 		s := existing[sid]
 		if _, err := qtx.UpdateStep(r.Context(), db.UpdateStepParams{
-			ID:                   s.ID,
-			Name:                 s.Name,
+			ID:   s.ID,
+			Name: s.Name,
+			Kind: s.Kind, AnsibleJson: s.AnsibleJson,
 			ScriptBody:           s.ScriptBody,
 			SortOrder:            int64(i + 1),
 			TimeoutSeconds:       s.TimeoutSeconds,

@@ -428,7 +428,11 @@ Alpine.data('deploymentForm', ({ releaseID, environmentID }) => ({
 	},
 }));
 
-Alpine.data('stepPlacement', (executionTarget = 'local', agentLabel = '', agentExecutionMode = 'host') => ({
+Alpine.data('stepPlacement', (executionTarget = 'local', agentLabel = '', agentExecutionMode = 'host', kind = 'script') => ({
+ kind: kind || 'script',
+ changeKind() {
+ if (this.kind === 'ansible') { this.executionTarget = 'local'; this.agentExecutionMode = 'host'; this.agentLabel = ''; }
+ },
 	executionTarget,
 	agentLabel,
 	agentExecutionMode: agentExecutionMode || 'host',

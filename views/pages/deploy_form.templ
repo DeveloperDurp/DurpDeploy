@@ -4,6 +4,7 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/views/components"
 	"durpdeploy/views/layouts"
+	"encoding/json"
 	"fmt"
 	"strconv"
 )
@@ -179,6 +180,9 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 						}
 					}
 				</div>
+				if releaseHasAnsible(selectedRelease) {
+					@components.AnsibleCheckOption()
+				}
 				if hasForceableEnvs(envs) {
 					<label class="label cursor-pointer gap-2 justify-start">
 						<input
@@ -207,6 +211,24 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 			</div>
 		}
 	</div>
+}
+
+func releaseHasAnsible(release *db.Release) bool {
+	if release == nil {
+		return false
+	}
+	var steps []struct {
+		Kind string `json:"kind"`
+	}
+	if json.Unmarshal([]byte(release.StepsJson), &steps) != nil {
+		return false
+	}
+	for _, step := range steps {
+		if step.Kind == "ansible" {
+			return true
+		}
+	}
+	return false
 }
 
 // hasForceableEnvs reports whether the env list contains any env whose

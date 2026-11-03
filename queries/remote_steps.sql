@@ -4,6 +4,9 @@ SELECT s.deployment_id, s.step_index, s.agent_id
 FROM eligible_remote_step_agents s JOIN deployments d ON d.id = s.deployment_id
 WHERE s.deployment_id = sqlc.arg(deployment_id)
   AND s.step_index = sqlc.arg(step_index)
+  AND EXISTS (SELECT 1 FROM deployment_steps ds
+      WHERE ds.deployment_id = s.deployment_id
+        AND ds.step_index = s.step_index AND ds.kind = 'script')
   AND d.status = 'running'
   AND EXISTS (SELECT 1 FROM environment_deployment_slots slot WHERE slot.deployment_id = d.id)
   AND NOT EXISTS (

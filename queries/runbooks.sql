@@ -45,7 +45,7 @@ INSERT INTO runbook_executions
 VALUES (?, ?, ?, ?) RETURNING *;
 
 -- name: GetRunbookExecution :one
-SELECT x.*, d.environment_id, d.status, d.started_at, d.finished_at,
+SELECT x.*, d.environment_id, d.status, d.started_at, d.finished_at, d.ansible_check_mode,
     v.runbook_id, v.version, b.project_id, b.name AS runbook_name, b.deleted_at AS runbook_deleted_at,
     e.name AS environment_name
 FROM runbook_executions x
@@ -56,7 +56,7 @@ JOIN environments e ON e.id = d.environment_id
 WHERE x.id = ? AND b.project_id = ?;
 
 -- name: ListRunbookExecutions :many
-SELECT x.*, d.environment_id, d.status, d.started_at, d.finished_at,
+SELECT x.*, d.environment_id, d.status, d.started_at, d.finished_at, d.ansible_check_mode,
     v.runbook_id, v.version, b.project_id, b.name AS runbook_name, b.deleted_at AS runbook_deleted_at,
     e.name AS environment_name
 FROM runbook_executions x

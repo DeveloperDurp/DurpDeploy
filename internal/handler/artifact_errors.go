@@ -8,6 +8,7 @@ import (
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/stepdefinition"
 	"durpdeploy/internal/verification"
 )
 
@@ -18,6 +19,8 @@ func ArtifactErrorStatus(err error) int {
 	}
 	switch {
 	case errors.Is(err, artifact.ErrGateConfig),
+		errors.Is(err, repository.ErrAnsibleCheckMode),
+		errors.Is(err, stepdefinition.ErrInvalidAnsible),
 		errors.Is(err, agentexecution.ErrLimits),
 		errors.Is(err, artifact.ErrInvalid),
 		errors.Is(err, verification.ErrInvalid),

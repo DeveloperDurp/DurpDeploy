@@ -128,19 +128,20 @@ func (q *Queries) CountDeploymentsWithRefsFiltered(ctx context.Context, arg Coun
 }
 
 const createDeployment = `-- name: CreateDeployment :one
-INSERT INTO deployments (release_id, environment_id, status, started_at, finished_at, forced, note, assigned_agent_id, environment_name_snapshot)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, (SELECT name FROM environments WHERE id = ?2)) RETURNING id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot
+INSERT INTO deployments (release_id, environment_id, status, started_at, finished_at, forced, note, assigned_agent_id, environment_name_snapshot, ansible_check_mode)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, (SELECT name FROM environments WHERE id = ?2), ?9) RETURNING id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot, ansible_check_mode
 `
 
 type CreateDeploymentParams struct {
-	ReleaseID       int64          `json:"release_id"`
-	EnvironmentID   int64          `json:"environment_id"`
-	Status          string         `json:"status"`
-	StartedAt       sql.NullInt64  `json:"started_at"`
-	FinishedAt      sql.NullInt64  `json:"finished_at"`
-	Forced          int64          `json:"forced"`
-	Note            sql.NullString `json:"note"`
-	AssignedAgentID sql.NullString `json:"assigned_agent_id"`
+	ReleaseID        int64          `json:"release_id"`
+	EnvironmentID    int64          `json:"environment_id"`
+	Status           string         `json:"status"`
+	StartedAt        sql.NullInt64  `json:"started_at"`
+	FinishedAt       sql.NullInt64  `json:"finished_at"`
+	Forced           int64          `json:"forced"`
+	Note             sql.NullString `json:"note"`
+	AssignedAgentID  sql.NullString `json:"assigned_agent_id"`
+	AnsibleCheckMode sql.NullInt64  `json:"ansible_check_mode"`
 }
 
 func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentParams) (Deployment, error) {
@@ -153,6 +154,7 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 		arg.Forced,
 		arg.Note,
 		arg.AssignedAgentID,
+		arg.AnsibleCheckMode,
 	)
 	var i Deployment
 	err := row.Scan(
@@ -170,6 +172,7 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 		&i.ContainerNamespace,
 		&i.CleanupConfirmedAt,
 		&i.EnvironmentNameSnapshot,
+		&i.AnsibleCheckMode,
 	)
 	return i, err
 }
@@ -293,7 +296,7 @@ func (q *Queries) FailOrphanedDeployments(ctx context.Context, now sql.NullInt64
 }
 
 const getDeployment = `-- name: GetDeployment :one
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot FROM deployments WHERE id = ?
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot, ansible_check_mode FROM deployments WHERE id = ?
 `
 
 func (q *Queries) GetDeployment(ctx context.Context, id int64) (Deployment, error) {
@@ -314,12 +317,13 @@ func (q *Queries) GetDeployment(ctx context.Context, id int64) (Deployment, erro
 		&i.ContainerNamespace,
 		&i.CleanupConfirmedAt,
 		&i.EnvironmentNameSnapshot,
+		&i.AnsibleCheckMode,
 	)
 	return i, err
 }
 
 const getLatestDeploymentForReleaseEnv = `-- name: GetLatestDeploymentForReleaseEnv :one
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot FROM deployments WHERE release_id = ? AND environment_id = ? ORDER BY created_at DESC LIMIT 1
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot, ansible_check_mode FROM deployments WHERE release_id = ? AND environment_id = ? ORDER BY created_at DESC LIMIT 1
 `
 
 type GetLatestDeploymentForReleaseEnvParams struct {
@@ -345,14 +349,16 @@ func (q *Queries) GetLatestDeploymentForReleaseEnv(ctx context.Context, arg GetL
 		&i.ContainerNamespace,
 		&i.CleanupConfirmedAt,
 		&i.EnvironmentNameSnapshot,
+		&i.AnsibleCheckMode,
 	)
 	return i, err
 }
 
 const getLatestSuccessfulDeploymentForProjectEnv = `-- name: GetLatestSuccessfulDeploymentForProjectEnv :one
-SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at, d.finished_at, d.created_at, d.forced, d.note, d.assigned_agent_id, d.kind, d.container_namespace, d.cleanup_confirmed_at, d.environment_name_snapshot FROM deployments d JOIN releases r ON r.id = d.release_id
+SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at, d.finished_at, d.created_at, d.forced, d.note, d.assigned_agent_id, d.kind, d.container_namespace, d.cleanup_confirmed_at, d.environment_name_snapshot, d.ansible_check_mode FROM deployments d JOIN releases r ON r.id = d.release_id
 WHERE r.project_id = ? AND d.environment_id = ?
-  AND d.status = 'succeeded' AND d.kind = 'deployment'
+  AND d.status = 'succeeded' AND d.kind = 'deployment' AND COALESCE(d.ansible_check_mode, 0) = 0
+  AND NOT EXISTS (SELECT 1 FROM deployment_steps s WHERE d.ansible_check_mode IS NULL AND s.deployment_id = d.id AND s.kind = 'ansible' AND s.ansible_json LIKE '%"check":true%')
 ORDER BY d.created_at DESC, d.id DESC LIMIT 1
 `
 
@@ -379,12 +385,15 @@ func (q *Queries) GetLatestSuccessfulDeploymentForProjectEnv(ctx context.Context
 		&i.ContainerNamespace,
 		&i.CleanupConfirmedAt,
 		&i.EnvironmentNameSnapshot,
+		&i.AnsibleCheckMode,
 	)
 	return i, err
 }
 
 const getLatestSuccessfulDeploymentForReleaseEnv = `-- name: GetLatestSuccessfulDeploymentForReleaseEnv :one
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot FROM deployments WHERE release_id = ? AND environment_id = ? AND status = 'succeeded' ORDER BY created_at DESC LIMIT 1
+SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at, d.finished_at, d.created_at, d.forced, d.note, d.assigned_agent_id, d.kind, d.container_namespace, d.cleanup_confirmed_at, d.environment_name_snapshot, d.ansible_check_mode FROM deployments d WHERE release_id = ? AND environment_id = ? AND status = 'succeeded' AND COALESCE(ansible_check_mode, 0) = 0
+  AND NOT EXISTS (SELECT 1 FROM deployment_steps s WHERE d.ansible_check_mode IS NULL AND s.deployment_id = d.id AND s.kind = 'ansible' AND s.ansible_json LIKE '%"check":true%')
+ORDER BY created_at DESC, id DESC LIMIT 1
 `
 
 type GetLatestSuccessfulDeploymentForReleaseEnvParams struct {
@@ -392,6 +401,8 @@ type GetLatestSuccessfulDeploymentForReleaseEnvParams struct {
 	EnvironmentID int64 `json:"environment_id"`
 }
 
+// Legacy ansible_json is the canonical JSON written by the snapshot decoder.
+// Check the frozen step column only when no execution-wide override exists.
 func (q *Queries) GetLatestSuccessfulDeploymentForReleaseEnv(ctx context.Context, arg GetLatestSuccessfulDeploymentForReleaseEnvParams) (Deployment, error) {
 	row := q.db.QueryRowContext(ctx, getLatestSuccessfulDeploymentForReleaseEnv, arg.ReleaseID, arg.EnvironmentID)
 	var i Deployment
@@ -410,6 +421,7 @@ func (q *Queries) GetLatestSuccessfulDeploymentForReleaseEnv(ctx context.Context
 		&i.ContainerNamespace,
 		&i.CleanupConfirmedAt,
 		&i.EnvironmentNameSnapshot,
+		&i.AnsibleCheckMode,
 	)
 	return i, err
 }
@@ -440,11 +452,26 @@ func (q *Queries) HasUnconfirmedContainerCleanup(ctx context.Context, deployment
 	return column_1, err
 }
 
+const isAnsibleCheckDeployment = `-- name: IsAnsibleCheckDeployment :one
+SELECT CAST(CASE WHEN d.ansible_check_mode = 1 OR (d.ansible_check_mode IS NULL AND EXISTS (
+    SELECT 1 FROM deployment_steps s WHERE s.deployment_id = d.id
+      AND s.kind = 'ansible' AND s.ansible_json LIKE '%"check":true%'
+)) THEN 1 ELSE 0 END AS INTEGER) AS is_check
+FROM deployments d WHERE d.id = ?
+`
+
+func (q *Queries) IsAnsibleCheckDeployment(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, isAnsibleCheckDeployment, id)
+	var is_check int64
+	err := row.Scan(&is_check)
+	return is_check, err
+}
+
 const listActiveDeploymentsWithRefs = `-- name: ListActiveDeploymentsWithRefs :many
 SELECT
     d.id, d.release_id, d.environment_id, d.status,
     d.started_at, d.finished_at, d.created_at, d.forced, d.note,
-    d.assigned_agent_id,
+    d.assigned_agent_id, d.ansible_check_mode,
     p.name AS project_name,
     r.version AS release_version,
     e.name AS environment_name
@@ -457,19 +484,20 @@ ORDER BY d.created_at DESC
 `
 
 type ListActiveDeploymentsWithRefsRow struct {
-	ID              int64          `json:"id"`
-	ReleaseID       int64          `json:"release_id"`
-	EnvironmentID   int64          `json:"environment_id"`
-	Status          string         `json:"status"`
-	StartedAt       sql.NullInt64  `json:"started_at"`
-	FinishedAt      sql.NullInt64  `json:"finished_at"`
-	CreatedAt       int64          `json:"created_at"`
-	Forced          int64          `json:"forced"`
-	Note            sql.NullString `json:"note"`
-	AssignedAgentID sql.NullString `json:"assigned_agent_id"`
-	ProjectName     string         `json:"project_name"`
-	ReleaseVersion  string         `json:"release_version"`
-	EnvironmentName string         `json:"environment_name"`
+	ID               int64          `json:"id"`
+	ReleaseID        int64          `json:"release_id"`
+	EnvironmentID    int64          `json:"environment_id"`
+	Status           string         `json:"status"`
+	StartedAt        sql.NullInt64  `json:"started_at"`
+	FinishedAt       sql.NullInt64  `json:"finished_at"`
+	CreatedAt        int64          `json:"created_at"`
+	Forced           int64          `json:"forced"`
+	Note             sql.NullString `json:"note"`
+	AssignedAgentID  sql.NullString `json:"assigned_agent_id"`
+	AnsibleCheckMode sql.NullInt64  `json:"ansible_check_mode"`
+	ProjectName      string         `json:"project_name"`
+	ReleaseVersion   string         `json:"release_version"`
+	EnvironmentName  string         `json:"environment_name"`
 }
 
 func (q *Queries) ListActiveDeploymentsWithRefs(ctx context.Context) ([]ListActiveDeploymentsWithRefsRow, error) {
@@ -492,6 +520,7 @@ func (q *Queries) ListActiveDeploymentsWithRefs(ctx context.Context) ([]ListActi
 			&i.Forced,
 			&i.Note,
 			&i.AssignedAgentID,
+			&i.AnsibleCheckMode,
 			&i.ProjectName,
 			&i.ReleaseVersion,
 			&i.EnvironmentName,
@@ -510,7 +539,7 @@ func (q *Queries) ListActiveDeploymentsWithRefs(ctx context.Context) ([]ListActi
 }
 
 const listDeployments = `-- name: ListDeployments :many
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot FROM deployments WHERE kind = 'deployment' ORDER BY created_at DESC
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot, ansible_check_mode FROM deployments WHERE kind = 'deployment' ORDER BY created_at DESC
 `
 
 func (q *Queries) ListDeployments(ctx context.Context) ([]Deployment, error) {
@@ -537,6 +566,7 @@ func (q *Queries) ListDeployments(ctx context.Context) ([]Deployment, error) {
 			&i.ContainerNamespace,
 			&i.CleanupConfirmedAt,
 			&i.EnvironmentNameSnapshot,
+			&i.AnsibleCheckMode,
 		); err != nil {
 			return nil, err
 		}
@@ -552,7 +582,7 @@ func (q *Queries) ListDeployments(ctx context.Context) ([]Deployment, error) {
 }
 
 const listDeploymentsByRelease = `-- name: ListDeploymentsByRelease :many
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot FROM deployments WHERE release_id = ? AND kind = 'deployment' ORDER BY created_at DESC
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot, ansible_check_mode FROM deployments WHERE release_id = ? AND kind = 'deployment' ORDER BY created_at DESC
 `
 
 func (q *Queries) ListDeploymentsByRelease(ctx context.Context, releaseID int64) ([]Deployment, error) {
@@ -579,6 +609,7 @@ func (q *Queries) ListDeploymentsByRelease(ctx context.Context, releaseID int64)
 			&i.ContainerNamespace,
 			&i.CleanupConfirmedAt,
 			&i.EnvironmentNameSnapshot,
+			&i.AnsibleCheckMode,
 		); err != nil {
 			return nil, err
 		}
@@ -597,7 +628,7 @@ const listDeploymentsWithRefs = `-- name: ListDeploymentsWithRefs :many
 SELECT
     d.id, d.release_id, d.environment_id, d.status,
     d.started_at, d.finished_at, d.created_at, d.forced, d.note,
-    d.assigned_agent_id,
+    d.assigned_agent_id, d.ansible_check_mode,
     p.name AS project_name,
     r.version AS release_version,
     e.name AS environment_name
@@ -610,19 +641,20 @@ ORDER BY d.created_at DESC
 `
 
 type ListDeploymentsWithRefsRow struct {
-	ID              int64          `json:"id"`
-	ReleaseID       int64          `json:"release_id"`
-	EnvironmentID   int64          `json:"environment_id"`
-	Status          string         `json:"status"`
-	StartedAt       sql.NullInt64  `json:"started_at"`
-	FinishedAt      sql.NullInt64  `json:"finished_at"`
-	CreatedAt       int64          `json:"created_at"`
-	Forced          int64          `json:"forced"`
-	Note            sql.NullString `json:"note"`
-	AssignedAgentID sql.NullString `json:"assigned_agent_id"`
-	ProjectName     string         `json:"project_name"`
-	ReleaseVersion  string         `json:"release_version"`
-	EnvironmentName string         `json:"environment_name"`
+	ID               int64          `json:"id"`
+	ReleaseID        int64          `json:"release_id"`
+	EnvironmentID    int64          `json:"environment_id"`
+	Status           string         `json:"status"`
+	StartedAt        sql.NullInt64  `json:"started_at"`
+	FinishedAt       sql.NullInt64  `json:"finished_at"`
+	CreatedAt        int64          `json:"created_at"`
+	Forced           int64          `json:"forced"`
+	Note             sql.NullString `json:"note"`
+	AssignedAgentID  sql.NullString `json:"assigned_agent_id"`
+	AnsibleCheckMode sql.NullInt64  `json:"ansible_check_mode"`
+	ProjectName      string         `json:"project_name"`
+	ReleaseVersion   string         `json:"release_version"`
+	EnvironmentName  string         `json:"environment_name"`
 }
 
 func (q *Queries) ListDeploymentsWithRefs(ctx context.Context) ([]ListDeploymentsWithRefsRow, error) {
@@ -645,6 +677,7 @@ func (q *Queries) ListDeploymentsWithRefs(ctx context.Context) ([]ListDeployment
 			&i.Forced,
 			&i.Note,
 			&i.AssignedAgentID,
+			&i.AnsibleCheckMode,
 			&i.ProjectName,
 			&i.ReleaseVersion,
 			&i.EnvironmentName,
@@ -666,7 +699,7 @@ const listDeploymentsWithRefsFiltered = `-- name: ListDeploymentsWithRefsFiltere
 SELECT
     d.id, d.release_id, d.environment_id, d.status,
     d.started_at, d.finished_at, d.created_at, d.forced, d.note,
-    d.assigned_agent_id,
+    d.assigned_agent_id, d.ansible_check_mode,
     p.name AS project_name,
     r.version AS release_version,
     e.name AS environment_name
@@ -702,19 +735,20 @@ type ListDeploymentsWithRefsFilteredParams struct {
 }
 
 type ListDeploymentsWithRefsFilteredRow struct {
-	ID              int64          `json:"id"`
-	ReleaseID       int64          `json:"release_id"`
-	EnvironmentID   int64          `json:"environment_id"`
-	Status          string         `json:"status"`
-	StartedAt       sql.NullInt64  `json:"started_at"`
-	FinishedAt      sql.NullInt64  `json:"finished_at"`
-	CreatedAt       int64          `json:"created_at"`
-	Forced          int64          `json:"forced"`
-	Note            sql.NullString `json:"note"`
-	AssignedAgentID sql.NullString `json:"assigned_agent_id"`
-	ProjectName     string         `json:"project_name"`
-	ReleaseVersion  string         `json:"release_version"`
-	EnvironmentName string         `json:"environment_name"`
+	ID               int64          `json:"id"`
+	ReleaseID        int64          `json:"release_id"`
+	EnvironmentID    int64          `json:"environment_id"`
+	Status           string         `json:"status"`
+	StartedAt        sql.NullInt64  `json:"started_at"`
+	FinishedAt       sql.NullInt64  `json:"finished_at"`
+	CreatedAt        int64          `json:"created_at"`
+	Forced           int64          `json:"forced"`
+	Note             sql.NullString `json:"note"`
+	AssignedAgentID  sql.NullString `json:"assigned_agent_id"`
+	AnsibleCheckMode sql.NullInt64  `json:"ansible_check_mode"`
+	ProjectName      string         `json:"project_name"`
+	ReleaseVersion   string         `json:"release_version"`
+	EnvironmentName  string         `json:"environment_name"`
 }
 
 func (q *Queries) ListDeploymentsWithRefsFiltered(ctx context.Context, arg ListDeploymentsWithRefsFilteredParams) ([]ListDeploymentsWithRefsFilteredRow, error) {
@@ -748,6 +782,7 @@ func (q *Queries) ListDeploymentsWithRefsFiltered(ctx context.Context, arg ListD
 			&i.Forced,
 			&i.Note,
 			&i.AssignedAgentID,
+			&i.AnsibleCheckMode,
 			&i.ProjectName,
 			&i.ReleaseVersion,
 			&i.EnvironmentName,
@@ -767,36 +802,38 @@ func (q *Queries) ListDeploymentsWithRefsFiltered(ctx context.Context, arg ListD
 
 const listLatestDeploymentPerReleaseEnv = `-- name: ListLatestDeploymentPerReleaseEnv :many
 SELECT id, release_id, environment_id, status, started_at, finished_at,
-       created_at, forced, note, assigned_agent_id, project_name,
+       created_at, forced, note, assigned_agent_id, ansible_check_mode, project_name,
        release_version, environment_name
 FROM (
     SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at,
            d.finished_at, d.created_at, d.forced, d.note,
-           d.assigned_agent_id,
+           d.assigned_agent_id, d.ansible_check_mode,
            p.name AS project_name, r.version AS release_version, e.name AS environment_name,
            ROW_NUMBER() OVER (PARTITION BY d.release_id, d.environment_id ORDER BY d.created_at DESC) AS rn
     FROM deployments d
     JOIN releases r ON d.release_id = r.id
     JOIN projects p ON r.project_id = p.id
     JOIN environments e ON d.environment_id = e.id
-    WHERE d.kind = 'deployment'
+    WHERE d.kind = 'deployment' AND COALESCE(d.ansible_check_mode, 0) = 0
+      AND NOT EXISTS (SELECT 1 FROM deployment_steps s WHERE d.ansible_check_mode IS NULL AND s.deployment_id = d.id AND s.kind = 'ansible' AND s.ansible_json LIKE '%"check":true%')
 ) WHERE rn = 1 ORDER BY created_at DESC
 `
 
 type ListLatestDeploymentPerReleaseEnvRow struct {
-	ID              int64          `json:"id"`
-	ReleaseID       int64          `json:"release_id"`
-	EnvironmentID   int64          `json:"environment_id"`
-	Status          string         `json:"status"`
-	StartedAt       sql.NullInt64  `json:"started_at"`
-	FinishedAt      sql.NullInt64  `json:"finished_at"`
-	CreatedAt       int64          `json:"created_at"`
-	Forced          int64          `json:"forced"`
-	Note            sql.NullString `json:"note"`
-	AssignedAgentID sql.NullString `json:"assigned_agent_id"`
-	ProjectName     string         `json:"project_name"`
-	ReleaseVersion  string         `json:"release_version"`
-	EnvironmentName string         `json:"environment_name"`
+	ID               int64          `json:"id"`
+	ReleaseID        int64          `json:"release_id"`
+	EnvironmentID    int64          `json:"environment_id"`
+	Status           string         `json:"status"`
+	StartedAt        sql.NullInt64  `json:"started_at"`
+	FinishedAt       sql.NullInt64  `json:"finished_at"`
+	CreatedAt        int64          `json:"created_at"`
+	Forced           int64          `json:"forced"`
+	Note             sql.NullString `json:"note"`
+	AssignedAgentID  sql.NullString `json:"assigned_agent_id"`
+	AnsibleCheckMode sql.NullInt64  `json:"ansible_check_mode"`
+	ProjectName      string         `json:"project_name"`
+	ReleaseVersion   string         `json:"release_version"`
+	EnvironmentName  string         `json:"environment_name"`
 }
 
 func (q *Queries) ListLatestDeploymentPerReleaseEnv(ctx context.Context) ([]ListLatestDeploymentPerReleaseEnvRow, error) {
@@ -819,6 +856,7 @@ func (q *Queries) ListLatestDeploymentPerReleaseEnv(ctx context.Context) ([]List
 			&i.Forced,
 			&i.Note,
 			&i.AssignedAgentID,
+			&i.AnsibleCheckMode,
 			&i.ProjectName,
 			&i.ReleaseVersion,
 			&i.EnvironmentName,
@@ -840,7 +878,7 @@ const listPendingDeployments = `-- name: ListPendingDeployments :many
 SELECT
     d.id, d.release_id, d.environment_id, d.status,
     d.started_at, d.finished_at, d.created_at, d.forced, d.note,
-    d.assigned_agent_id,
+    d.assigned_agent_id, d.ansible_check_mode,
     p.name AS project_name,
     r.version AS release_version,
     e.name AS environment_name
@@ -853,19 +891,20 @@ ORDER BY d.created_at ASC
 `
 
 type ListPendingDeploymentsRow struct {
-	ID              int64          `json:"id"`
-	ReleaseID       int64          `json:"release_id"`
-	EnvironmentID   int64          `json:"environment_id"`
-	Status          string         `json:"status"`
-	StartedAt       sql.NullInt64  `json:"started_at"`
-	FinishedAt      sql.NullInt64  `json:"finished_at"`
-	CreatedAt       int64          `json:"created_at"`
-	Forced          int64          `json:"forced"`
-	Note            sql.NullString `json:"note"`
-	AssignedAgentID sql.NullString `json:"assigned_agent_id"`
-	ProjectName     string         `json:"project_name"`
-	ReleaseVersion  string         `json:"release_version"`
-	EnvironmentName string         `json:"environment_name"`
+	ID               int64          `json:"id"`
+	ReleaseID        int64          `json:"release_id"`
+	EnvironmentID    int64          `json:"environment_id"`
+	Status           string         `json:"status"`
+	StartedAt        sql.NullInt64  `json:"started_at"`
+	FinishedAt       sql.NullInt64  `json:"finished_at"`
+	CreatedAt        int64          `json:"created_at"`
+	Forced           int64          `json:"forced"`
+	Note             sql.NullString `json:"note"`
+	AssignedAgentID  sql.NullString `json:"assigned_agent_id"`
+	AnsibleCheckMode sql.NullInt64  `json:"ansible_check_mode"`
+	ProjectName      string         `json:"project_name"`
+	ReleaseVersion   string         `json:"release_version"`
+	EnvironmentName  string         `json:"environment_name"`
 }
 
 // Used by startup recovery to re-launch runners for deployments that
@@ -891,6 +930,7 @@ func (q *Queries) ListPendingDeployments(ctx context.Context) ([]ListPendingDepl
 			&i.Forced,
 			&i.Note,
 			&i.AssignedAgentID,
+			&i.AnsibleCheckMode,
 			&i.ProjectName,
 			&i.ReleaseVersion,
 			&i.EnvironmentName,
@@ -909,7 +949,7 @@ func (q *Queries) ListPendingDeployments(ctx context.Context) ([]ListPendingDepl
 }
 
 const listRecentDeployments = `-- name: ListRecentDeployments :many
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot FROM deployments WHERE kind = 'deployment' ORDER BY created_at DESC LIMIT ?
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot, ansible_check_mode FROM deployments WHERE kind = 'deployment' ORDER BY created_at DESC LIMIT ?
 `
 
 func (q *Queries) ListRecentDeployments(ctx context.Context, limit int64) ([]Deployment, error) {
@@ -936,6 +976,7 @@ func (q *Queries) ListRecentDeployments(ctx context.Context, limit int64) ([]Dep
 			&i.ContainerNamespace,
 			&i.CleanupConfirmedAt,
 			&i.EnvironmentNameSnapshot,
+			&i.AnsibleCheckMode,
 		); err != nil {
 			return nil, err
 		}
@@ -951,7 +992,7 @@ func (q *Queries) ListRecentDeployments(ctx context.Context, limit int64) ([]Dep
 }
 
 const listRecentDeploymentsForProjectEnv = `-- name: ListRecentDeploymentsForProjectEnv :many
-SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at, d.finished_at, d.created_at, d.forced, d.note, d.assigned_agent_id, d.kind, d.container_namespace, d.cleanup_confirmed_at, d.environment_name_snapshot FROM deployments d JOIN releases r ON r.id = d.release_id
+SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at, d.finished_at, d.created_at, d.forced, d.note, d.assigned_agent_id, d.kind, d.container_namespace, d.cleanup_confirmed_at, d.environment_name_snapshot, d.ansible_check_mode FROM deployments d JOIN releases r ON r.id = d.release_id
 WHERE r.project_id = ? AND d.environment_id = ? AND d.kind = 'deployment'
 ORDER BY d.created_at DESC, d.id DESC LIMIT ?
 `
@@ -986,6 +1027,7 @@ func (q *Queries) ListRecentDeploymentsForProjectEnv(ctx context.Context, arg Li
 			&i.ContainerNamespace,
 			&i.CleanupConfirmedAt,
 			&i.EnvironmentNameSnapshot,
+			&i.AnsibleCheckMode,
 		); err != nil {
 			return nil, err
 		}
@@ -1042,7 +1084,7 @@ func (q *Queries) RecordContainerNamespace(ctx context.Context, arg RecordContai
 }
 
 const updateDeployment = `-- name: UpdateDeployment :one
-UPDATE deployments SET release_id = ?, environment_id = ?, status = ?, started_at = ?, finished_at = ?, note = ? WHERE id = ? RETURNING id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot
+UPDATE deployments SET release_id = ?, environment_id = ?, status = ?, started_at = ?, finished_at = ?, note = ? WHERE id = ? RETURNING id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot, ansible_check_mode
 `
 
 type UpdateDeploymentParams struct {
@@ -1081,6 +1123,7 @@ func (q *Queries) UpdateDeployment(ctx context.Context, arg UpdateDeploymentPara
 		&i.ContainerNamespace,
 		&i.CleanupConfirmedAt,
 		&i.EnvironmentNameSnapshot,
+		&i.AnsibleCheckMode,
 	)
 	return i, err
 }

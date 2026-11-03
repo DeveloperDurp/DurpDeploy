@@ -11,6 +11,8 @@ import (
 )
 
 type Definition struct {
+	Kind                 string   `json:"kind"`
+	Ansible              *Ansible `json:"ansible,omitempty"`
 	Name                 string   `json:"name"`
 	ScriptBody           string   `json:"script_body"`
 	Interpreter          string   `json:"interpreter"`
@@ -33,7 +35,17 @@ func FromStep(step db.Step, selectors []string) (Definition, error) {
 	if err != nil {
 		return Definition{}, err
 	}
+	if step.Kind == AnsibleKind {
+		// ponytail: retain the legacy interpreter column constraint;
+		// kind selects the adapter and the public Ansible contract omits it.
+		step.Interpreter = ""
+	}
+	ansible, err := DecodeAnsible(step.AnsibleJson)
+	if err != nil {
+		return Definition{}, err
+	}
 	return Definition{
+		Kind: step.Kind, Ansible: ansible,
 		Name: step.Name, ScriptBody: step.ScriptBody,
 		Interpreter: step.Interpreter, SortOrder: step.SortOrder,
 		TimeoutSeconds: step.TimeoutSeconds, MaxRetries: step.MaxRetries,
@@ -68,6 +80,7 @@ func (d Definition) CreateStepParams(
 	projectID int64, variableNames string,
 ) db.CreateStepParams {
 	return db.CreateStepParams{
+		Kind: d.StepKind(), AnsibleJson: d.Ansible.JSON(),
 		ProjectID: projectID, Name: d.Name, ScriptBody: d.ScriptBody,
 		SortOrder: d.SortOrder, TimeoutSeconds: d.TimeoutSeconds,
 		MaxRetries: d.MaxRetries, Interpreter: d.Interpreter,
@@ -82,6 +95,7 @@ func (d Definition) UpdateStepParams(
 	id int64, variableNames string,
 ) db.UpdateStepParams {
 	return db.UpdateStepParams{
+		Kind: d.StepKind(), AnsibleJson: d.Ansible.JSON(),
 		ID: id, Name: d.Name, ScriptBody: d.ScriptBody,
 		SortOrder: d.SortOrder, TimeoutSeconds: d.TimeoutSeconds,
 		MaxRetries: d.MaxRetries, Interpreter: d.Interpreter,
@@ -96,6 +110,7 @@ func (d Definition) CreateTemplateParams(
 	variableNames string,
 ) db.CreateStepTemplateParams {
 	return db.CreateStepTemplateParams{
+		Kind: d.StepKind(), AnsibleJson: d.Ansible.JSON(),
 		Name: d.Name, ScriptBody: d.ScriptBody, Interpreter: d.Interpreter,
 		ContainerImage: d.ContainerImage, AgentExecutionMode: d.AgentExecutionMode,
 		NetworkMode: d.NetworkMode, ApprovalArtifactPath: d.ApprovalArtifactPath,
@@ -108,6 +123,7 @@ func (d Definition) UpdateTemplateParams(
 	id int64, variableNames string,
 ) db.UpdateStepTemplateParams {
 	return db.UpdateStepTemplateParams{
+		Kind: d.StepKind(), AnsibleJson: d.Ansible.JSON(),
 		ID: id, Name: d.Name, ScriptBody: d.ScriptBody, Interpreter: d.Interpreter,
 		ContainerImage: d.ContainerImage, AgentExecutionMode: d.AgentExecutionMode,
 		NetworkMode: d.NetworkMode, ApprovalArtifactPath: d.ApprovalArtifactPath,

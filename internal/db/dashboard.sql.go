@@ -47,7 +47,7 @@ func (q *Queries) CountDashboardProjects(ctx context.Context, arg CountDashboard
 
 const listDashboardDeployments = `-- name: ListDashboardDeployments :many
 SELECT d.id, d.release_id, d.environment_id, d.status,
- d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+ d.started_at, d.finished_at, d.created_at, d.forced, d.note, d.ansible_check_mode,
  p.name AS project_name, r.version AS release_version, e.name AS environment_name
 FROM deployments d JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id JOIN environments e ON d.environment_id = e.id
@@ -55,7 +55,11 @@ WHERE d.kind = 'deployment'
 AND (CAST(?1 AS INTEGER) = 1 OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ?2))
 AND (?3 = 'recent'
  OR (?3 = 'active' AND d.status IN ('queued', 'pending', 'running', 'publishing_artifact', 'pending_approval', 'awaiting_artifact_approval'))
- OR (?3 = 'latest' AND NOT EXISTS (SELECT 1 FROM deployments newer WHERE newer.release_id = d.release_id AND newer.environment_id = d.environment_id AND newer.kind = 'deployment' AND (newer.created_at > d.created_at OR (newer.created_at = d.created_at AND newer.id > d.id)))))
+ OR (?3 = 'latest' AND COALESCE(d.ansible_check_mode, 0) = 0
+     AND NOT EXISTS (SELECT 1 FROM deployment_steps s WHERE d.ansible_check_mode IS NULL AND s.deployment_id = d.id AND s.kind = 'ansible' AND s.ansible_json LIKE '%"check":true%')
+     AND NOT EXISTS (SELECT 1 FROM deployments newer WHERE newer.release_id = d.release_id AND newer.environment_id = d.environment_id AND newer.kind = 'deployment' AND COALESCE(newer.ansible_check_mode, 0) = 0
+         AND NOT EXISTS (SELECT 1 FROM deployment_steps s WHERE newer.ansible_check_mode IS NULL AND s.deployment_id = newer.id AND s.kind = 'ansible' AND s.ansible_json LIKE '%"check":true%')
+         AND (newer.created_at > d.created_at OR (newer.created_at = d.created_at AND newer.id > d.id)))))
 ORDER BY d.created_at DESC, d.id DESC LIMIT ?4
 `
 
@@ -67,18 +71,19 @@ type ListDashboardDeploymentsParams struct {
 }
 
 type ListDashboardDeploymentsRow struct {
-	ID              int64          `json:"id"`
-	ReleaseID       int64          `json:"release_id"`
-	EnvironmentID   int64          `json:"environment_id"`
-	Status          string         `json:"status"`
-	StartedAt       sql.NullInt64  `json:"started_at"`
-	FinishedAt      sql.NullInt64  `json:"finished_at"`
-	CreatedAt       int64          `json:"created_at"`
-	Forced          int64          `json:"forced"`
-	Note            sql.NullString `json:"note"`
-	ProjectName     string         `json:"project_name"`
-	ReleaseVersion  string         `json:"release_version"`
-	EnvironmentName string         `json:"environment_name"`
+	ID               int64          `json:"id"`
+	ReleaseID        int64          `json:"release_id"`
+	EnvironmentID    int64          `json:"environment_id"`
+	Status           string         `json:"status"`
+	StartedAt        sql.NullInt64  `json:"started_at"`
+	FinishedAt       sql.NullInt64  `json:"finished_at"`
+	CreatedAt        int64          `json:"created_at"`
+	Forced           int64          `json:"forced"`
+	Note             sql.NullString `json:"note"`
+	AnsibleCheckMode sql.NullInt64  `json:"ansible_check_mode"`
+	ProjectName      string         `json:"project_name"`
+	ReleaseVersion   string         `json:"release_version"`
+	EnvironmentName  string         `json:"environment_name"`
 }
 
 func (q *Queries) ListDashboardDeployments(ctx context.Context, arg ListDashboardDeploymentsParams) ([]ListDashboardDeploymentsRow, error) {
@@ -105,6 +110,7 @@ func (q *Queries) ListDashboardDeployments(ctx context.Context, arg ListDashboar
 			&i.CreatedAt,
 			&i.Forced,
 			&i.Note,
+			&i.AnsibleCheckMode,
 			&i.ProjectName,
 			&i.ReleaseVersion,
 			&i.EnvironmentName,

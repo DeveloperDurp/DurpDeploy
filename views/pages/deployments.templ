@@ -162,6 +162,7 @@ templ DeploymentListCards(view DeploymentsView) {
 templ DeploymentListRow(item DeploymentListItem) {
 	<div data-deployment-id={ strconv.FormatInt(item.Deployment.ID, 10) }>
 		@ResourceCard(item.ProjectName, fmt.Sprintf("/deployments/%d", item.Deployment.ID)) {
+			@components.AnsibleCheckBadge(item.Deployment.AnsibleCheckMode)
 			<dl class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
 				<div class="min-w-0"><dt class="text-xs opacity-70 mb-1">Version</dt><dd>{ item.ReleaseVersion }</dd></div>
 				<div class="min-w-0"><dt class="text-xs opacity-70 mb-1">Environment</dt><dd>{ item.EnvironmentName }</dd></div>
@@ -395,6 +396,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 				<div class="flex flex-wrap items-center gap-2 min-w-0">
 					<h1 class="text-3xl font-bold break-words">Deployment #{ strconv.FormatInt(deployment.ID, 10) }</h1>
 					@StatusBadgeContainer(deployment, waitingForAgents)
+					@components.AnsibleCheckBadge(deployment.AnsibleCheckMode)
 				</div>
 				<a href={ fmt.Sprintf("/projects/%d/releases/%d", project.ID, release.ID) } class="btn btn-ghost sm:btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
@@ -430,6 +432,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 				<details
 					class="bg-base-200 rounded-box p-4"
 					data-step-index={ strconv.Itoa(panel.Index) }
+					data-log-kind={ panel.Kind }
 					open?={ panel.Open }
 					if panel.Index == -1 {
 						if len(panel.Logs) == 0 {

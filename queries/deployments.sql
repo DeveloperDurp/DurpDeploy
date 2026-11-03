@@ -5,8 +5,8 @@ SELECT * FROM deployments WHERE release_id = ? AND kind = 'deployment' ORDER BY 
 SELECT * FROM deployments WHERE id = ?;
 
 -- name: CreateDeployment :one
-INSERT INTO deployments (release_id, environment_id, status, started_at, finished_at, forced, note, assigned_agent_id, environment_name_snapshot)
-VALUES (sqlc.arg(release_id), sqlc.arg(environment_id), sqlc.arg(status), sqlc.narg(started_at), sqlc.narg(finished_at), sqlc.arg(forced), sqlc.narg(note), sqlc.narg(assigned_agent_id), (SELECT name FROM environments WHERE id = sqlc.arg(environment_id))) RETURNING *;
+INSERT INTO deployments (release_id, environment_id, status, started_at, finished_at, forced, note, assigned_agent_id, environment_name_snapshot, ansible_check_mode)
+VALUES (sqlc.arg(release_id), sqlc.arg(environment_id), sqlc.arg(status), sqlc.narg(started_at), sqlc.narg(finished_at), sqlc.arg(forced), sqlc.narg(note), sqlc.narg(assigned_agent_id), (SELECT name FROM environments WHERE id = sqlc.arg(environment_id)), sqlc.narg(ansible_check_mode)) RETURNING *;
 
 -- name: UpdateDeployment :one
 UPDATE deployments SET release_id = ?, environment_id = ?, status = ?, started_at = ?, finished_at = ?, note = ? WHERE id = ? RETURNING *;
@@ -71,7 +71,7 @@ SELECT * FROM deployments WHERE kind = 'deployment' ORDER BY created_at DESC;
 SELECT
     d.id, d.release_id, d.environment_id, d.status,
     d.started_at, d.finished_at, d.created_at, d.forced, d.note,
-    d.assigned_agent_id,
+    d.assigned_agent_id, d.ansible_check_mode,
     p.name AS project_name,
     r.version AS release_version,
     e.name AS environment_name
@@ -92,12 +92,24 @@ DELETE FROM deployments WHERE id = ?;
 SELECT * FROM deployments WHERE release_id = ? AND environment_id = ? ORDER BY created_at DESC LIMIT 1;
 
 -- name: GetLatestSuccessfulDeploymentForReleaseEnv :one
-SELECT * FROM deployments WHERE release_id = ? AND environment_id = ? AND status = 'succeeded' ORDER BY created_at DESC LIMIT 1;
+-- Legacy ansible_json is the canonical JSON written by the snapshot decoder.
+-- Check the frozen step column only when no execution-wide override exists.
+SELECT d.* FROM deployments d WHERE release_id = ? AND environment_id = ? AND status = 'succeeded' AND COALESCE(ansible_check_mode, 0) = 0
+  AND NOT EXISTS (SELECT 1 FROM deployment_steps s WHERE d.ansible_check_mode IS NULL AND s.deployment_id = d.id AND s.kind = 'ansible' AND s.ansible_json LIKE '%"check":true%')
+ORDER BY created_at DESC, id DESC LIMIT 1;
+
+-- name: IsAnsibleCheckDeployment :one
+SELECT CAST(CASE WHEN d.ansible_check_mode = 1 OR (d.ansible_check_mode IS NULL AND EXISTS (
+    SELECT 1 FROM deployment_steps s WHERE s.deployment_id = d.id
+      AND s.kind = 'ansible' AND s.ansible_json LIKE '%"check":true%'
+)) THEN 1 ELSE 0 END AS INTEGER) AS is_check
+FROM deployments d WHERE d.id = ?;
 
 -- name: GetLatestSuccessfulDeploymentForProjectEnv :one
 SELECT d.* FROM deployments d JOIN releases r ON r.id = d.release_id
 WHERE r.project_id = ? AND d.environment_id = ?
-  AND d.status = 'succeeded' AND d.kind = 'deployment'
+  AND d.status = 'succeeded' AND d.kind = 'deployment' AND COALESCE(d.ansible_check_mode, 0) = 0
+  AND NOT EXISTS (SELECT 1 FROM deployment_steps s WHERE d.ansible_check_mode IS NULL AND s.deployment_id = d.id AND s.kind = 'ansible' AND s.ansible_json LIKE '%"check":true%')
 ORDER BY d.created_at DESC, d.id DESC LIMIT 1;
 
 -- name: ListRecentDeploymentsForProjectEnv :many
@@ -112,7 +124,7 @@ SELECT COUNT(*) FROM deployments WHERE kind = 'deployment' AND created_at >= str
 SELECT
     d.id, d.release_id, d.environment_id, d.status,
     d.started_at, d.finished_at, d.created_at, d.forced, d.note,
-    d.assigned_agent_id,
+    d.assigned_agent_id, d.ansible_check_mode,
     p.name AS project_name,
     r.version AS release_version,
     e.name AS environment_name
@@ -130,7 +142,7 @@ ORDER BY d.created_at DESC;
 SELECT
     d.id, d.release_id, d.environment_id, d.status,
     d.started_at, d.finished_at, d.created_at, d.forced, d.note,
-    d.assigned_agent_id,
+    d.assigned_agent_id, d.ansible_check_mode,
     p.name AS project_name,
     r.version AS release_version,
     e.name AS environment_name
@@ -188,26 +200,27 @@ WHERE (status = 'running' OR (status = 'failed' AND EXISTS (
 
 -- name: ListLatestDeploymentPerReleaseEnv :many
 SELECT id, release_id, environment_id, status, started_at, finished_at,
-       created_at, forced, note, assigned_agent_id, project_name,
+       created_at, forced, note, assigned_agent_id, ansible_check_mode, project_name,
        release_version, environment_name
 FROM (
     SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at,
            d.finished_at, d.created_at, d.forced, d.note,
-           d.assigned_agent_id,
+           d.assigned_agent_id, d.ansible_check_mode,
            p.name AS project_name, r.version AS release_version, e.name AS environment_name,
            ROW_NUMBER() OVER (PARTITION BY d.release_id, d.environment_id ORDER BY d.created_at DESC) AS rn
     FROM deployments d
     JOIN releases r ON d.release_id = r.id
     JOIN projects p ON r.project_id = p.id
     JOIN environments e ON d.environment_id = e.id
-    WHERE d.kind = 'deployment'
+    WHERE d.kind = 'deployment' AND COALESCE(d.ansible_check_mode, 0) = 0
+      AND NOT EXISTS (SELECT 1 FROM deployment_steps s WHERE d.ansible_check_mode IS NULL AND s.deployment_id = d.id AND s.kind = 'ansible' AND s.ansible_json LIKE '%"check":true%')
 ) WHERE rn = 1 ORDER BY created_at DESC;
 
 -- name: ListDeploymentsWithRefsFiltered :many
 SELECT
     d.id, d.release_id, d.environment_id, d.status,
     d.started_at, d.finished_at, d.created_at, d.forced, d.note,
-    d.assigned_agent_id,
+    d.assigned_agent_id, d.ansible_check_mode,
     p.name AS project_name,
     r.version AS release_version,
     e.name AS environment_name

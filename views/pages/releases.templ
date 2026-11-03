@@ -11,6 +11,7 @@ import (
 )
 
 type ReleaseStep struct {
+	Kind            string   `json:"kind"`
 	Name            string   `json:"name"`
 	ScriptBody      string   `json:"script_body"`
 	Interpreter     string   `json:"interpreter"`

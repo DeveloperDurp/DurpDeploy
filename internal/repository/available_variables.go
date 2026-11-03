@@ -57,6 +57,7 @@ type AvailableVariables struct {
 // VariableContext contains only draft metadata, never script text or values.
 // swagger:model VariableContext
 type VariableContext struct {
+	Kind          string   `json:"kind,omitempty"`
 	EnvironmentID int64    `json:"environment_id"`
 	Interpreter   string   `json:"interpreter"`
 	Target        string   `json:"execution_target"`
@@ -152,6 +153,9 @@ func (result *AvailableVariables) resolveConfigured() {
 	for i := range result.Configured {
 		v := &result.Configured[i]
 		v.Reference = variableReference(v.Name, result.Context.Interpreter)
+		if result.Context.Kind == "ansible" {
+			v.Reference = ""
+		}
 		winner := result.configuredWinner(*v, scopes)
 		switch {
 		case containerenv.IsEnvironmentIdentity(v.Name):

@@ -498,6 +498,8 @@ func newRouter(
 
 			ppr.Get("/projects/{id}/steps", sh.ListSteps)
 			ppr.Get("/projects/{id}/steps-page", sh.StepsPage)
+			ppr.Post("/projects/{id}/ansible/preview", sh.PreviewAnsible)
+			ppr.Get("/projects/{id}/ansible/credentials", sh.AnsibleCredentials)
 			ppr.Get("/projects/{id}/steps/new", sh.NewStepForm)
 			ppr.Post("/projects/{id}/steps", sh.CreateStep)
 			ppr.Get("/projects/{id}/steps/{stepId}/edit", sh.EditStepForm)
@@ -956,6 +958,7 @@ func newRouter(
 			)
 
 			apiStepH := api.NewStepHandler(repo)
+			par.Post("/projects/{id}/ansible/preview", apiStepH.PreviewAnsible)
 			par.Get("/projects/{id}/steps", apiStepH.ListSteps)
 			par.Post("/projects/{id}/steps", apiStepH.CreateStep)
 			par.Get("/projects/{id}/steps/{stepId}", apiStepH.GetStep)

@@ -152,6 +152,7 @@ templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.Runbo
 						<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/%d/execute", project.ID, book.ID) } class="space-y-3">
 							@RunbookEnvironmentSelect(environments)
 							@RunbookVersionSelect(versions, "Latest saved version")
+							@components.AnsibleCheckOption()
 							<button class="btn btn-primary" type="submit">Run book</button>
 						</form>
 					</div>
@@ -277,7 +278,8 @@ func runbookHistoryCrumb(projectID int64, book db.Runbook) components.Crumb {
 	return components.Crumb{Label: book.Name, Href: fmt.Sprintf("/projects/%d/runbooks/%d", projectID, book.ID)}
 }
 
-templ RunbookExecutionPage(project db.Project, book db.Runbook, execution db.GetRunbookExecutionRow, logs []db.DeploymentLog, currentPath string) {
+templ RunbookExecutionPage(project db.Project, book db.Runbook, execution db.GetRunbookExecutionRow, stepsJSON string, logs []db.DeploymentLog, currentPath string) {
+	{{ steps := parseReleaseSteps(stepsJSON) }}
 	{{ page := logHistoryPage(ctx) }}
 	@layouts.Base("Runbook execution", currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
@@ -292,6 +294,7 @@ templ RunbookExecutionPage(project db.Project, book db.Runbook, execution db.Get
 				<div class="flex gap-2 items-center">
 					<span role="status" aria-live="polite" aria-atomic="true">
 						@RunbookExecutionStatus(project.ID, execution)
+						@components.AnsibleCheckBadge(execution.AnsibleCheckMode)
 					</span>
 					@RunbookExecutionActions(project.ID, execution, false)
 					<a
@@ -310,7 +313,7 @@ templ RunbookExecutionPage(project db.Project, book db.Runbook, execution db.Get
 					data-deleted-runbook="true"
 				}
 				if page.Before == 0 {
-					x-data={ fmt.Sprintf("deploymentStream({ url: '/projects/%d/runbooks/executions/%d/logs/stream?format=structured&preview=true', after: '%d', limit: %d, byteLimit: %d, olderBefore: '%d' })", project.ID, execution.ID, page.LastID, page.Limit, page.ByteLimit, page.NextBefore) }
+					x-data={ fmt.Sprintf("deploymentStream({ url: '/projects/%d/runbooks/executions/%d/logs/stream?format=structured&preview=true', after: '%d', limit: %d, byteLimit: %d, olderBefore: '%d', stepKinds: %s })", project.ID, execution.ID, page.LastID, page.Limit, page.ByteLimit, page.NextBefore, logStepKinds(steps)) }
 					x-bind="logFollowing"
 				}
 			>
@@ -319,7 +322,14 @@ templ RunbookExecutionPage(project db.Project, book db.Runbook, execution db.Get
 				@LogHistoryNavigation(currentPath, currentPath + "/logs.txt")
 				<div class="bg-base-300 p-4 rounded overflow-x-auto font-mono text-sm space-y-1">
 					for _, log := range logs {
-						<div class="whitespace-pre-wrap" data-log-id={ strconv.FormatInt(log.ID, 10) }>{ log.Line }</div>
+						<div class="whitespace-pre-wrap" data-log-id={ strconv.FormatInt(log.ID, 10) } data-log-kind={ logStepKind(steps, log) }>
+							if logStepKind(steps, log) == "ansible" {
+								<span class="text-gray-500 select-none">[{ formatUnixTime(log.CreatedAt) }] </span>
+								<span x-data="ansibleLog">{ log.Line }</span>
+							} else {
+								{ log.Line }
+							}
+						</div>
 					}
 					<div x-ref="logs" class="whitespace-pre-wrap"></div>
 					<div x-ref="logEnd"></div>

@@ -72,10 +72,11 @@ func stepInterpreter(step db.Step) string {
 
 func StepPlacementData(step db.Step, selectedLabel string) string {
 	return fmt.Sprintf(
-		"stepPlacement(%s, %s, %s)",
+		"stepPlacement(%s, %s, %s, %s)",
 		strconv.Quote(stepExecutionTarget(step)),
 		strconv.Quote(selectedLabel),
 		strconv.Quote(step.AgentExecutionMode),
+ strconv.Quote(step.Kind),
 	)
 }
 
@@ -146,7 +147,8 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 					<span class="text-error text-sm mt-1" data-form-error role="alert" tabindex="-1">{ errorMsg }</span>
 				}
 			</div>
-			if !isNew && stepLegacyHostStep(step) {
+			@AnsibleFields(step.AnsibleJson, projectID, stepInputID(step, isNew, "ansible"))
+ if !isNew && stepLegacyHostStep(step) {
 				<div class="alert alert-warning text-sm" data-step-legacy-warning>
 					<span>
 						Legacy local step: no container image. This step cannot run on the host anymore — recreate it with a container image and the variable names the script needs.
@@ -154,11 +156,11 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 				</div>
 			}
 			<div class="grid min-w-0 gap-4 sm:grid-cols-2">
-				<div class="form-control min-w-0">
+				<div class="form-control min-w-0" x-show="kind !== 'ansible'">
 					<label class="label" for={ stepInputID(step, isNew, "interpreter") }>
 						<span class="label-text">Interpreter</span>
 					</label>
-					<select id={ stepInputID(step, isNew, "interpreter") } name="interpreter" class="select select-bordered min-w-0 w-full">
+					<select id={ stepInputID(step, isNew, "interpreter") } name="interpreter" x-bind:disabled="kind === 'ansible'" class="select select-bordered min-w-0 w-full">
 						<option value="bash" selected?={ stepInterpreter(step) == "bash" }>Bash</option>
 						<option value="pwsh" selected?={ stepInterpreter(step) == "pwsh" }>PowerShell</option>
 						<option value="python3" selected?={ stepInterpreter(step) == "python3" }>Python</option>
@@ -170,7 +172,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 					</label>
 					<select id={ stepInputID(step, isNew, "execution-target") } name="execution_target" x-model="executionTarget" class="select select-bordered min-w-0 w-full">
 						<option value="local">Server container</option>
-						<option value="agent">Agent</option>
+						<option value="agent" x-bind:disabled="kind === 'ansible'">Agent</option>
 					</select>
 				</div>
 				@AgentExecutionMode(step.AgentExecutionMode, stepInputID(step, isNew, "agent-mode"))
@@ -204,16 +206,16 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 						x-bind:disabled="!usesContainer"
 						class="input input-bordered min-w-0 w-full"
 					/>
-					<label class="label"><span class="label-text-alt">Required for container execution. The image must contain the selected interpreter.</span></label>
+					<label class="label" x-show="kind !== 'ansible'"><span class="label-text-alt">Required for container execution. The image must contain the selected interpreter.</span></label>
 				</div>
-				<div class="form-control min-w-0">
+				<div class="form-control min-w-0" x-show="kind !== 'ansible'">
 					<label class="label" for={ stepInputID(step, isNew, "variable-names") }>
 						<span class="label-text">Limit variables (optional)</span>
 					</label>
 					<input
 						id={ stepInputID(step, isNew, "variable-names") }
 						type="text"
-						name="variable_names"
+						name="variable_names" x-bind:disabled="kind === 'ansible'"
 						value={ stepVariableNamesCSV(step) }
 						placeholder="comma-separated, e.g. DEPLOY_ENV, API_KEY"
 						class="input input-bordered min-w-0 w-full"
@@ -222,14 +224,14 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 				</div>
 			</div>
 			@StepArtifactFields(step, isNew)
-<div x-data="stepEditor" class="form-control">
+<div x-data="stepEditor" x-show="kind !== 'ansible'" class="form-control">
 				<label class="label" for={ stepInputID(step, isNew, "script") }>
 					<span class="label-text">Script Body</span>
 					<button type="button" class="btn btn-ghost btn-xs" x-on:click="fullscreen">Fullscreen</button>
 				</label>
 				<div class="flex font-mono text-sm border border-base-300 rounded bg-base-100 overflow-hidden">
 					<pre x-ref="gutter" x-text="lineNumbers" class="select-none text-right px-2 py-2 text-gray-500 bg-base-200 overflow-hidden" rows="4" style="line-height:1.5rem"></pre>
-					<textarea id={ stepInputID(step, isNew, "script") } x-model="script" x-ref="textarea" x-on:scroll="scroll" x-on:input="input" name="script_body" class="textarea textarea-bordered rounded-none border-0 flex-1 !bg-base-100 !text-base-content" style="line-height:1.5rem; color: var(--fallback-bc, oklch(var(--bc) / 1)) !important; -webkit-text-fill-color: var(--fallback-bc, oklch(var(--bc) / 1)) !important" rows="4">{ step.ScriptBody }</textarea>
+					<textarea id={ stepInputID(step, isNew, "script") } x-model="script" x-ref="textarea" x-on:scroll="scroll" x-on:input="input" name="script_body" x-bind:disabled="kind === 'ansible'" class="textarea textarea-bordered rounded-none border-0 flex-1 !bg-base-100 !text-base-content" style="line-height:1.5rem; color: var(--fallback-bc, oklch(var(--bc) / 1)) !important; -webkit-text-fill-color: var(--fallback-bc, oklch(var(--bc) / 1)) !important" rows="4">{ step.ScriptBody }</textarea>
 				</div>
 				<dialog data-fullscreen-dialog x-cloak :class="{ hidden: !modalOpen }" x-ref="modal" x-id="['script-editor-title']" :aria-labelledby="$id('script-editor-title')" x-on:close="modalOpen = false" class="fixed inset-0 z-50 bg-base-100 text-base-content p-4 flex flex-col gap-4 w-screen h-screen max-w-none max-h-none">
 					<div class="flex shrink-0 items-center justify-between gap-4">
@@ -316,7 +318,8 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 				data-toast-error="Failed to update step"
 				class="grid w-full grid-cols-1 gap-4 items-start xl:grid-cols-7"
 			>
-				if stepLegacyHostStep(step) {
+				@AnsibleFields(step.AnsibleJson, projectID, stepInputID(step, false, "ansible"))
+ if stepLegacyHostStep(step) {
 					<div class="alert alert-warning text-sm xl:col-span-7" data-step-legacy-warning>
 						<span>
 							Legacy local step: no container image. This step cannot run on the host anymore — recreate it with a container image and the variable names the script needs.
@@ -332,9 +335,9 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 						<span class="text-error text-sm mt-1" data-form-error role="alert" tabindex="-1">{ errorMsg }</span>
 					}
 				</div>
-				<div class="form-control min-w-0">
+				<div class="form-control min-w-0" x-show="kind !== 'ansible'">
 					<label class="label" for={ fmt.Sprintf("step-%d-interpreter", step.ID) }><span class="label-text">Interpreter</span></label>
-					<select id={ fmt.Sprintf("step-%d-interpreter", step.ID) } name="interpreter" class="select select-bordered select-sm min-w-0 w-full">
+					<select id={ fmt.Sprintf("step-%d-interpreter", step.ID) } name="interpreter" x-bind:disabled="kind === 'ansible'" class="select select-bordered select-sm min-w-0 w-full">
 						<option value="bash" selected?={ stepInterpreter(step) == "bash" }>Bash</option>
 						<option value="pwsh" selected?={ stepInterpreter(step) == "pwsh" }>PowerShell</option>
 						<option value="python3" selected?={ stepInterpreter(step) == "python3" }>Python</option>
@@ -344,7 +347,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 					<label class="label" for={ fmt.Sprintf("step-%d-target", step.ID) }><span class="label-text">Run on</span></label>
 					<select id={ fmt.Sprintf("step-%d-target", step.ID) } name="execution_target" x-model="executionTarget" class="select select-bordered select-sm min-w-0 w-full">
 						<option value="local">Server container</option>
-						<option value="agent">Agent</option>
+						<option value="agent" x-bind:disabled="kind === 'ansible'">Agent</option>
 					</select>
 					<label class="label" for={ fmt.Sprintf("step-%d-agent-label", step.ID) }><span class="label-text">Agent label</span></label>
 					<select id={ fmt.Sprintf("step-%d-agent-label", step.ID) } name="agent_label" x-on:change="agentLabel = $event.target.value" x-cloak x-show="executionTarget === 'agent'" x-bind:disabled="executionTarget !== 'agent'" class="select select-bordered select-sm min-w-0 w-full">
@@ -369,26 +372,26 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 						class="input input-bordered input-sm min-w-0 w-full"
 					/>
 				</div>
-				<div class="form-control min-w-0 xl:col-span-2">
+				<div class="form-control min-w-0 xl:col-span-2" x-show="kind !== 'ansible'">
 					<label class="label" for={ fmt.Sprintf("step-%d-variable-names", step.ID) }><span class="label-text">Limit variables (optional)</span></label>
 					<input
 						id={ fmt.Sprintf("step-%d-variable-names", step.ID) }
 						type="text"
-						name="variable_names"
+						name="variable_names" x-bind:disabled="kind === 'ansible'"
 						value={ stepVariableNamesCSV(step) }
 						placeholder="comma-separated, e.g. DEPLOY_ENV, API_KEY"
 						class="input input-bordered input-sm min-w-0 w-full"
 					/>
 					<label class="label"><span class="label-text-alt">Leave empty to pass all project variables.</span></label>
 				</div>
-				<div x-data="stepEditor" class="form-control flex-1 xl:col-span-2">
+				<div x-data="stepEditor" x-show="kind !== 'ansible'" class="form-control flex-1 xl:col-span-2">
 					<label class="label" for={ fmt.Sprintf("step-%d-script", step.ID) }>
 						<span class="label-text">Script Body</span>
 						<button type="button" class="btn btn-ghost btn-xs" x-on:click="fullscreen">Fullscreen</button>
 					</label>
 					<div class="flex font-mono text-xs border border-base-300 rounded bg-base-100 overflow-hidden">
 						<pre x-ref="gutter" x-text="lineNumbers" class="select-none text-right px-2 py-2 text-gray-500 bg-base-200 overflow-hidden" style="line-height:1.25rem"></pre>
-					<textarea id={ fmt.Sprintf("step-%d-script", step.ID) } x-model="script" x-ref="textarea" x-on:scroll="scroll" x-on:input="input" name="script_body" class="textarea textarea-bordered textarea-sm resize-y rounded-none border-0 flex-1 !bg-base-100 !text-base-content" style="line-height:1.25rem; color: var(--fallback-bc, oklch(var(--bc) / 1)) !important; -webkit-text-fill-color: var(--fallback-bc, oklch(var(--bc) / 1)) !important" rows="2">{ step.ScriptBody }</textarea>
+					<textarea id={ fmt.Sprintf("step-%d-script", step.ID) } x-model="script" x-ref="textarea" x-on:scroll="scroll" x-on:input="input" name="script_body" x-bind:disabled="kind === 'ansible'" class="textarea textarea-bordered textarea-sm resize-y rounded-none border-0 flex-1 !bg-base-100 !text-base-content" style="line-height:1.25rem; color: var(--fallback-bc, oklch(var(--bc) / 1)) !important; -webkit-text-fill-color: var(--fallback-bc, oklch(var(--bc) / 1)) !important" rows="2">{ step.ScriptBody }</textarea>
 					</div>
 					<dialog data-fullscreen-dialog x-cloak :class="{ hidden: !modalOpen }" x-ref="modal" x-id="['script-editor-title']" :aria-labelledby="$id('script-editor-title')" x-on:close="modalOpen = false" class="fixed inset-0 z-50 bg-base-100 text-base-content p-4 flex flex-col gap-4 w-screen h-screen max-w-none max-h-none">
 						<div class="flex shrink-0 items-center justify-between gap-4">

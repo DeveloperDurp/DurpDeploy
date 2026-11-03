@@ -97,11 +97,64 @@ function logFollowing() {
 	};
 }
 
-function renderLogLine(element, line = element.textContent) {
+function ansibleLineStyle(line) {
+	const heading = line.match(/^(PLAY \[.*\]|TASK \[.*\]|RUNNING HANDLER \[.*\]|PLAY RECAP)\s+\*+\s*$/);
+	if (heading) return { line: heading[1], color: 'text-info', bold: true };
+	if (/^(fatal|failed):|^ERROR!|^\[ERROR\]/.test(line)) return { line, color: 'text-error' };
+	if (/^changed:|^\[WARNING\]/.test(line)) return { line, color: 'text-warning' };
+	if (line.startsWith('ok:')) return { line, color: 'text-success' };
+	if (line.startsWith('skipping:')) return { line, color: 'text-info' };
+	return { line, color: '' };
+}
+
+function styleAnsibleRow(element, line) {
+	const row = element.closest('[data-log-id]');
+	row.classList.add('ansible-log-line');
+	row.classList.toggle('ansible-log-blank', line.trim() === '');
+	const timestamp = row.querySelector('.text-gray-500');
+	if (timestamp) {
+		timestamp.title ||= timestamp.textContent.trim().slice(1, -1);
+		timestamp.textContent = `[${timestamp.title.slice(-8)}]`;
+	}
+}
+
+function renderAnsibleRecap(element, line) {
+	if (line.includes('\x1b')) return false;
+	const recap = line.match(/^(\S+\s+:\s+)(ok=\d+\s+changed=\d+\s+unreachable=\d+\s+failed=\d+(?:\s+(?:skipped|rescued|ignored)=\d+)*\s*)$/);
+	if (!recap) return false;
+	const colors = { ok: 'text-success', changed: 'text-warning',
+		unreachable: 'text-error', failed: 'text-error', skipped: 'text-info',
+		rescued: 'text-warning', ignored: 'text-warning' };
 	const fragment = document.createDocumentFragment();
-	let color = /^\s*[-+]\/[-+]/.test(line) ? 'text-warning'
-		: ({ '+': 'text-success', '-': 'text-error', '~': 'text-warning' })[line.trimStart().match(/^([+~-])\s/)?.[1]] || '';
-	let bold = false;
+	fragment.append(document.createTextNode(recap[1]));
+	let offset = 0;
+	for (const count of recap[2].matchAll(/(ok|changed|unreachable|failed|skipped|rescued|ignored)=(\d+)/g)) {
+		fragment.append(document.createTextNode(recap[2].slice(offset, count.index)));
+		const span = document.createElement('span');
+		span.className = Number(count[2]) === 0 ? 'ansible-recap-zero' : colors[count[1]];
+		span.textContent = count[0];
+		fragment.append(span);
+		offset = count.index + count[0].length;
+	}
+	fragment.append(document.createTextNode(recap[2].slice(offset)));
+	element.replaceChildren(fragment);
+	return true;
+}
+
+function renderLogLine(element, line = element.textContent) {
+	const ansible = element.closest('[data-log-kind]')?.dataset.logKind === 'ansible';
+	const style = ansible ? ansibleLineStyle(line) : {};
+	if (ansible) styleAnsibleRow(element, line);
+	line = style.line ?? line;
+	if (ansible && renderAnsibleRecap(element, line)) return;
+	renderColoredLogLine(element, line, style);
+}
+
+function renderColoredLogLine(element, line, style) {
+	const fragment = document.createDocumentFragment();
+	let color = style.color ?? (/^\s*[-+]\/[-+]/.test(line) ? 'text-warning'
+		: ({ '+': 'text-success', '-': 'text-error', '~': 'text-warning' })[line.trimStart().match(/^([+~-])\s/)?.[1]] || '');
+	let bold = style.bold ?? false;
 	const append = text => {
 		if (!text) return;
 		const span = document.createElement('span');
@@ -127,7 +180,25 @@ function renderLogLine(element, line = element.textContent) {
 	element.replaceChildren(fragment);
 }
 
+function renderLogEntry(element, entry) {
+	element.replaceChildren();
+	const timestamp = document.createElement('span');
+	timestamp.className = 'text-gray-500 select-none';
+	timestamp.textContent = `[${entry.display_timestamp}] `;
+	element.append(timestamp);
+	if (entry.step?.includes(' @ ')) {
+		const step = document.createElement('span');
+		step.className = 'text-accent';
+		step.textContent = `[${entry.step}] `;
+		element.append(step);
+	}
+	const message = document.createElement('span');
+	element.append(message);
+	renderLogLine(message, entry.line);
+}
+
 export function registerLogComponents(Alpine) {
+	Alpine.data('ansibleLog', () => ({ init() { renderLogLine(this.$el); } }));
 	Alpine.bind('logFollowing', () => ({
 		'@scroll.window': 'trackLogScroll',
 		'@resize.window': 'trackLogScroll',
@@ -167,7 +238,7 @@ export function registerLogComponents(Alpine) {
 		component.retainedBytes += row.bytes;
 		trim(component);
 	};
-	Alpine.data('deploymentStream', ({ url, after, limit, byteLimit, olderBefore }) => ({
+	Alpine.data('deploymentStream', ({ url, after, limit, byteLimit, olderBefore, stepKinds = [] }) => ({
 		...logFollowing(),
 		url,
 		lastID: after,
@@ -204,7 +275,9 @@ export function registerLogComponents(Alpine) {
 			this.lastID = entry.id;
 			const node = document.createElement('div');
 			node.dataset.logId = entry.id;
-			node.textContent = entry.line;
+			node.dataset.logKind = stepKinds[entry.step_index] || '';
+			if (node.dataset.logKind === 'ansible') renderLogEntry(node, entry);
+			else node.textContent = entry.line;
 			this.$refs.logs.append(node);
 			retain(this, { id: entry.id, node }, entry);
 		},
@@ -220,19 +293,7 @@ export function registerLogComponents(Alpine) {
 	Alpine.data('deploymentStepLogs', ({ url, status, view }) => ({
 		...logFollowing(),
 		renderLogLine,
-		renderEntry(element, entry) {
-			renderLogLine(element, entry.line);
-			if (entry.step.includes(' @ ')) {
-				const step = document.createElement('span');
-				step.className = 'text-accent';
-				step.textContent = `[${entry.step}] `;
-				element.prepend(step);
-			}
-			const timestamp = document.createElement('span');
-			timestamp.className = 'text-gray-500 select-none';
-			timestamp.textContent = `[${entry.display_timestamp}] `;
-			element.prepend(timestamp);
-		},
+		renderEntry: renderLogEntry,
 		url,
 		deploymentStatus: status,
 		panels: view.panels,

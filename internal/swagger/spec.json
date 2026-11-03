@@ -6206,6 +6206,76 @@
         ]
       }
     },
+    "/projects/{id}/ansible/preview": {
+      "post": {
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "steps"
+        ],
+        "summary": "Preview static Ansible inventory targets without resolving credentials.",
+        "operationId": "previewAnsible",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "Body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/Ansible"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/AnsiblePreview"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/projects/{id}/credentials": {
       "get": {
         "description": "Project writes require effective Maintainer permission. Retained package sources can rotate without becoming active.\nSaving confirms storage only. Provider rotation and provider validation are manual.",
@@ -12322,6 +12392,64 @@
       "x-go-name": "swaggerAgentListResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "Ansible": {
+      "type": "object",
+      "title": "Ansible contains configuration and variable references, never credentials.",
+      "properties": {
+        "extra_vars": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "x-go-name": "ExtraVars"
+        },
+        "inventory": {
+          "type": "string",
+          "x-go-name": "Inventory"
+        },
+        "known_hosts": {
+          "type": "string",
+          "x-go-name": "KnownHosts"
+        },
+        "limit": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "Limit"
+        },
+        "playbook": {
+          "type": "string",
+          "x-go-name": "Playbook"
+        },
+        "ssh_key_variable": {
+          "type": "string",
+          "x-go-name": "SSHKeyVariable"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "Tags"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/stepdefinition"
+    },
+    "AnsiblePreview": {
+      "type": "object",
+      "properties": {
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "Targets"
+        }
+      },
+      "x-go-name": "ansiblePreview",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
     "ApplyLibraryTemplate": {
       "type": "object",
       "properties": {
@@ -13043,6 +13171,88 @@
       "x-go-name": "swaggerDbTableListResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "Definition": {
+      "type": "object",
+      "properties": {
+        "agent_execution_mode": {
+          "type": "string",
+          "x-go-name": "AgentExecutionMode"
+        },
+        "agent_selectors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "AgentSelectors"
+        },
+        "ansible": {
+          "$ref": "#/definitions/Ansible"
+        },
+        "approval_artifact_path": {
+          "type": "string",
+          "x-go-name": "ApprovalArtifactPath"
+        },
+        "approval_review_format": {
+          "type": "string",
+          "x-go-name": "ApprovalReviewFormat"
+        },
+        "approval_review_path": {
+          "type": "string",
+          "x-go-name": "ApprovalReviewPath"
+        },
+        "container_image": {
+          "type": "string",
+          "x-go-name": "ContainerImage"
+        },
+        "execution_target": {
+          "type": "string",
+          "x-go-name": "ExecutionTarget"
+        },
+        "interpreter": {
+          "type": "string",
+          "x-go-name": "Interpreter"
+        },
+        "kind": {
+          "type": "string",
+          "x-go-name": "Kind"
+        },
+        "max_retries": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "MaxRetries"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "network_mode": {
+          "type": "string",
+          "x-go-name": "NetworkMode"
+        },
+        "script_body": {
+          "type": "string",
+          "x-go-name": "ScriptBody"
+        },
+        "sort_order": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "SortOrder"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "TimeoutSeconds"
+        },
+        "variable_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "VariableNames"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/stepdefinition"
+    },
     "Deployment": {
       "type": "object",
       "title": "Deployment represents a release executing against an environment.",
@@ -13055,6 +13265,9 @@
         "active_work_url": {
           "type": "string",
           "x-go-name": "ActiveWorkURL"
+        },
+        "ansible_check_mode": {
+          "$ref": "#/definitions/swaggerSQLNullInteger"
         },
         "created_at": {
           "type": "integer",
@@ -13135,6 +13348,9 @@
       "type": "object",
       "title": "DeploymentListItem is the enriched row returned by ListDeployments.",
       "properties": {
+        "ansible_check_mode": {
+          "$ref": "#/definitions/swaggerSQLNullInteger"
+        },
         "created_at": {
           "type": "integer",
           "format": "int64",
@@ -13268,6 +13484,11 @@
       "type": "object",
       "title": "DeploymentScheduleRequest is the body for scheduling a deployment.",
       "properties": {
+        "ansible_check_mode": {
+          "description": "Default false. Applies to Ansible steps only.",
+          "type": "boolean",
+          "x-go-name": "AnsibleCheckMode"
+        },
         "environment_id": {
           "type": "integer",
           "format": "int64",
@@ -15096,79 +15317,7 @@
       "x-go-package": "durpdeploy/internal/repository"
     },
     "ProjectTemplateStep": {
-      "type": "object",
-      "properties": {
-        "agent_execution_mode": {
-          "type": "string",
-          "x-go-name": "AgentExecutionMode"
-        },
-        "agent_selectors": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "x-go-name": "AgentSelectors"
-        },
-        "approval_artifact_path": {
-          "type": "string",
-          "x-go-name": "ApprovalArtifactPath"
-        },
-        "approval_review_format": {
-          "type": "string",
-          "x-go-name": "ApprovalReviewFormat"
-        },
-        "approval_review_path": {
-          "type": "string",
-          "x-go-name": "ApprovalReviewPath"
-        },
-        "container_image": {
-          "type": "string",
-          "x-go-name": "ContainerImage"
-        },
-        "execution_target": {
-          "type": "string",
-          "x-go-name": "ExecutionTarget"
-        },
-        "interpreter": {
-          "type": "string",
-          "x-go-name": "Interpreter"
-        },
-        "max_retries": {
-          "type": "integer",
-          "format": "int64",
-          "x-go-name": "MaxRetries"
-        },
-        "name": {
-          "type": "string",
-          "x-go-name": "Name"
-        },
-        "network_mode": {
-          "type": "string",
-          "x-go-name": "NetworkMode"
-        },
-        "script_body": {
-          "type": "string",
-          "x-go-name": "ScriptBody"
-        },
-        "sort_order": {
-          "type": "integer",
-          "format": "int64",
-          "x-go-name": "SortOrder"
-        },
-        "timeout_seconds": {
-          "type": "integer",
-          "format": "int64",
-          "x-go-name": "TimeoutSeconds"
-        },
-        "variable_names": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "x-go-name": "VariableNames"
-        }
-      },
-      "x-go-package": "durpdeploy/internal/repository"
+      "$ref": "#/definitions/Definition"
     },
     "ProjectTemplateVariable": {
       "type": "object",
@@ -15640,6 +15789,11 @@
     "RunbookExecuteRequest": {
       "type": "object",
       "properties": {
+        "ansible_check_mode": {
+          "description": "Default false. Retries retain the accepted execution option.",
+          "type": "boolean",
+          "x-go-name": "AnsibleCheckMode"
+        },
         "environment_id": {
           "type": "integer",
           "format": "int64",
@@ -15658,6 +15812,9 @@
       "type": "object",
       "properties": {
         "actor_user_id": {
+          "$ref": "#/definitions/swaggerSQLNullInteger"
+        },
+        "ansible_check_mode": {
           "$ref": "#/definitions/swaggerSQLNullInteger"
         },
         "created_at": {
@@ -15972,6 +16129,9 @@
           },
           "x-go-name": "AgentSelectors"
         },
+        "ansible": {
+          "$ref": "#/definitions/Ansible"
+        },
         "approval_artifact_path": {
           "type": "string",
           "x-go-name": "ApprovalArtifactPath"
@@ -15995,6 +16155,10 @@
         "interpreter": {
           "type": "string",
           "x-go-name": "Interpreter"
+        },
+        "kind": {
+          "type": "string",
+          "x-go-name": "Kind"
         },
         "max_retries": {
           "type": "integer",
@@ -16290,6 +16454,9 @@
           },
           "x-go-name": "AgentSelectors"
         },
+        "ansible": {
+          "$ref": "#/definitions/Ansible"
+        },
         "approval_artifact_path": {
           "type": "string",
           "x-go-name": "ApprovalArtifactPath"
@@ -16324,6 +16491,10 @@
         "interpreter": {
           "type": "string",
           "x-go-name": "Interpreter"
+        },
+        "kind": {
+          "type": "string",
+          "x-go-name": "Kind"
         },
         "max_retries": {
           "type": "integer",
@@ -16393,6 +16564,9 @@
           },
           "x-go-name": "AgentSelectors"
         },
+        "ansible": {
+          "$ref": "#/definitions/Ansible"
+        },
         "approval_artifact_path": {
           "type": "string",
           "x-go-name": "ApprovalArtifactPath"
@@ -16417,6 +16591,10 @@
         "interpreter": {
           "type": "string",
           "x-go-name": "Interpreter"
+        },
+        "kind": {
+          "type": "string",
+          "x-go-name": "Kind"
         },
         "max_retries": {
           "type": "integer",
@@ -16472,6 +16650,9 @@
           },
           "x-go-name": "AgentSelectors"
         },
+        "ansible": {
+          "$ref": "#/definitions/Ansible"
+        },
         "approval_artifact_path": {
           "type": "string",
           "x-go-name": "ApprovalArtifactPath"
@@ -16505,6 +16686,10 @@
         "interpreter": {
           "type": "string",
           "x-go-name": "Interpreter"
+        },
+        "kind": {
+          "type": "string",
+          "x-go-name": "Kind"
         },
         "name": {
           "type": "string",
@@ -16553,6 +16738,9 @@
           },
           "x-go-name": "AgentSelectors"
         },
+        "ansible": {
+          "$ref": "#/definitions/Ansible"
+        },
         "approval_artifact_path": {
           "type": "string",
           "x-go-name": "ApprovalArtifactPath"
@@ -16577,6 +16765,10 @@
         "interpreter": {
           "type": "string",
           "x-go-name": "Interpreter"
+        },
+        "kind": {
+          "type": "string",
+          "x-go-name": "Kind"
         },
         "name": {
           "type": "string",
@@ -16617,6 +16809,9 @@
           },
           "x-go-name": "AgentSelectors"
         },
+        "ansible": {
+          "$ref": "#/definitions/Ansible"
+        },
         "approval_artifact_path": {
           "type": "string",
           "x-go-name": "ApprovalArtifactPath"
@@ -16650,6 +16845,10 @@
         "interpreter": {
           "type": "string",
           "x-go-name": "Interpreter"
+        },
+        "kind": {
+          "type": "string",
+          "x-go-name": "Kind"
         },
         "name": {
           "type": "string",
@@ -17144,6 +17343,10 @@
         "interpreter": {
           "type": "string",
           "x-go-name": "Interpreter"
+        },
+        "kind": {
+          "type": "string",
+          "x-go-name": "Kind"
         },
         "variable_names": {
           "type": "array",

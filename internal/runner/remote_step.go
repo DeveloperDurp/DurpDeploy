@@ -25,6 +25,11 @@ func (r *DeploymentRunner) runRemoteStep(
 	cancelCtx context.Context,
 	request remoteStepRequest,
 ) (result error) {
+	if request.step.Kind == "ansible" {
+		return errors.New(
+			"native Ansible execution is unsupported on remote agents",
+		)
+	}
 	if err := agentexecution.ValidateLimitsWithPolicy(request.step.TimeoutSeconds, request.step.MaxRetries, r.repo.ResourceLimits().Execution); err != nil {
 		return err
 	}

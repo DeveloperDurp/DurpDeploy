@@ -26,6 +26,12 @@ func variableReference(name, language string) string {
 func (preview VariableContext) configuredAvailability(
 	name string,
 ) (string, string) {
+	if preview.Kind == "ansible" {
+		if !slices.Contains(preview.VariableNames, name) {
+			return "excluded", "Not selected by an Ansible extra-variable mapping."
+		}
+		return "available", "Selected by an Ansible extra-variable mapping."
+	}
 	if len(preview.VariableNames) > 0 &&
 		!slices.Contains(preview.VariableNames, name) {
 		return "excluded", "Excluded by this step's variable_names restriction."
@@ -100,5 +106,16 @@ func (result *AvailableVariables) addPredefined() {
 				result.Context.Interpreter,
 			),
 		})
+	}
+	if result.Context.Kind == "ansible" {
+		for i := range result.Predefined {
+			v := &result.Predefined[i]
+			v.Reference = ""
+			if !slices.Contains(result.Context.VariableNames, v.Name) {
+				v.Status, v.Reason = "excluded", "Requires an explicit Ansible extra-variable mapping."
+			} else if v.Status == "available" {
+				v.Reason = "Mapped from the accepted environment identity."
+			}
+		}
 	}
 }

@@ -1,0 +1,66 @@
+package components
+
+import (
+ "encoding/json"
+ "fmt"
+ "strings"
+ "durpdeploy/internal/stepdefinition"
+)
+
+func ansibleFields(raw string) stepdefinition.Ansible {
+ a, _ := stepdefinition.DecodeAnsible(raw)
+ if a == nil { return stepdefinition.Ansible{} }
+ return *a
+}
+
+func ansibleMappings(a stepdefinition.Ansible) string {
+ if len(a.ExtraVars) == 0 { return "{}" }
+ value, _ := json.MarshalIndent(a.ExtraVars, "", "  ")
+ return string(value)
+}
+
+templ AnsibleFields(raw string, projectID int64, prefix string) {
+ {{ a := ansibleFields(raw) }}
+ <div class="form-control xl:col-span-7">
+  <label for={ prefix+"-kind" } class="label">Step type</label>
+  <select id={ prefix+"-kind" } name="kind" x-model="kind" x-on:change="changeKind" class="select select-bordered">
+   <option value="script">Script</option><option value="ansible">Ansible</option>
+  </select>
+ </div>
+ <fieldset x-show="kind === 'ansible'" x-bind:disabled="kind !== 'ansible'" class="space-y-4 xl:col-span-7" data-ansible-fields>
+  <p>Run in a server Linux container. Use inline static YAML inventory. Inventory uploads and dynamic inventory are unsupported.</p>
+  <p>Select an image with ansible-playbook, Python, SSH, and the required collections. Select bridge networking for SSH targets.</p>
+  <div class="form-control"><label for={ prefix+"-playbook" } class="label">YAML playbook</label><textarea id={ prefix+"-playbook" } name="ansible_playbook" rows="12" spellcheck="false" class="textarea textarea-bordered font-mono">{ a.Playbook }</textarea></div>
+  <div class="form-control"><label for={ prefix+"-inventory" } class="label">Static YAML inventory</label><textarea id={ prefix+"-inventory" } name="ansible_inventory" rows="8" spellcheck="false" class="textarea textarea-bordered font-mono">{ a.Inventory }</textarea></div>
+  <div class="form-control"><label for={ prefix+"-mappings" } class="label">Extra variable mappings</label><textarea id={ prefix+"-mappings" } name="ansible_extra_vars" rows="4" class="textarea textarea-bordered font-mono">{ ansibleMappings(a) }</textarea><p>Use a JSON object: Ansible variable name to DurpDeploy variable name. Empty mappings pass no user variables.</p></div>
+  <div class="form-control"><label for={ prefix+"-credential" } class="label">SSH credential reference</label><input id={ prefix+"-credential" } name="ansible_ssh_key_variable" value={ a.SSHKeyVariable } list={ prefix+"-credentials" } class="input input-bordered"/>
+   if projectID > 0 {
+    <datalist id={ prefix+"-credentials" } hx-get={ fmt.Sprintf("/projects/%d/ansible/credentials", projectID) } hx-trigger="load" hx-target="this" hx-swap="innerHTML"></datalist>
+   }
+   <p>Select an enrolled secret credential containing an unencrypted SSH private key. Key values stay protected.</p>
+  </div>
+  <div class="form-control"><label for={ prefix+"-known-hosts" } class="label">SSH known_hosts</label><textarea id={ prefix+"-known-hosts" } name="ansible_known_hosts" rows="4" class="textarea textarea-bordered font-mono">{ a.KnownHosts }</textarea><p>Host verification is required. Verify host keys through a trusted channel.</p></div>
+  <div class="form-control"><label for={ prefix+"-tags" } class="label">Tags</label><input id={ prefix+"-tags" } name="ansible_tags" value={ strings.Join(a.Tags, ", ") } class="input input-bordered"/></div>
+  <div class="form-control"><label for={ prefix+"-limit" } class="label">Host limit</label><input id={ prefix+"-limit" } name="ansible_limit" value={ strings.Join(a.Limit, ", ") } class="input input-bordered"/><p>Enter comma-separated inventory hosts or groups. Pattern expressions are unsupported.</p></div>
+  if projectID > 0 {
+   <button type="button" class="btn btn-secondary" hx-post={ fmt.Sprintf("/projects/%d/ansible/preview", projectID) } hx-include="closest form" hx-target="next [data-ansible-preview]">Preview targets</button>
+   <div data-ansible-preview aria-live="polite"></div>
+  }
+  <p>Playbooks are trusted code. Use no_log for secret tasks. Task output can disclose selected secrets.</p>
+ </fieldset>
+}
+
+templ AnsibleTargets(targets []string, message string) {
+ if message != "" {
+  <p class="text-error">{ message }</p>
+ } else {
+  <p>Static inventory targets: { strings.Join(targets, ", ") }</p>
+  <p>This preview does not describe all effects of a trusted playbook.</p>
+ }
+}
+
+templ AnsibleCredentialOptions(names []string) {
+ for _, name := range names {
+  <option value={ name }>{ name }</option>
+ }
+}

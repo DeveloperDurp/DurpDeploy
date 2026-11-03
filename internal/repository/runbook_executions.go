@@ -21,6 +21,7 @@ type RunbookExecutionRequest struct {
 	ScheduleExpectedRunAt   int64
 	FiredAt                 int64
 	RetrySourceDeploymentID int64
+	AnsibleCheckMode        bool
 }
 
 var ErrRunbookScheduleConflict = errors.New("runbook schedule already fired")
@@ -127,15 +128,22 @@ func (r *Repository) CreateRunbookExecution(
 				if approval {
 					status = "pending_approval"
 				}
-				result, err = r.createDeployment(
-					ctx,
-					q,
-					db.CreateDeploymentParams{
-						ReleaseID:     version.ReleaseID,
-						EnvironmentID: arg.EnvironmentID,
-						Status:        status,
-					},
-				)
+				params := db.CreateDeploymentParams{
+					ReleaseID:        version.ReleaseID,
+					EnvironmentID:    arg.EnvironmentID,
+					Status:           status,
+					AnsibleCheckMode: AnsibleCheckMode(arg.AnsibleCheckMode),
+				}
+				if arg.RetrySourceDeploymentID != 0 {
+					result, err = r.createDeploymentFromDeployment(
+						ctx,
+						q,
+						params,
+						arg.RetrySourceDeploymentID,
+					)
+				} else {
+					result, err = r.createDeployment(ctx, q, params)
+				}
 				if err != nil {
 					return err
 				}

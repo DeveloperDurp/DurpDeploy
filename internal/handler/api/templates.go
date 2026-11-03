@@ -20,22 +20,25 @@ func NewStepTemplateHandler(repo *repository.Repository) *StepTemplateHandler {
 }
 
 type stepTemplateRequest struct {
-	Name                 string   `json:"name"`
-	ScriptBody           string   `json:"script_body"`
-	Interpreter          string   `json:"interpreter"`
-	ExecutionTarget      string   `json:"execution_target"`
-	AgentExecutionMode   string   `json:"agent_execution_mode"`
-	AgentSelectors       []string `json:"agent_selectors"`
-	ContainerImage       string   `json:"container_image"`
-	NetworkMode          string   `json:"network_mode"`
-	ApprovalArtifactPath string   `json:"approval_artifact_path"`
-	ApprovalReviewPath   string   `json:"approval_review_path"`
-	ApprovalReviewFormat string   `json:"approval_review_format"`
-	VariableNames        []string `json:"variable_names"`
+	Kind                 string                  `json:"kind"`
+	Ansible              *stepdefinition.Ansible `json:"ansible,omitempty"`
+	Name                 string                  `json:"name"`
+	ScriptBody           string                  `json:"script_body"`
+	Interpreter          string                  `json:"interpreter"`
+	ExecutionTarget      string                  `json:"execution_target"`
+	AgentExecutionMode   string                  `json:"agent_execution_mode"`
+	AgentSelectors       []string                `json:"agent_selectors"`
+	ContainerImage       string                  `json:"container_image"`
+	NetworkMode          string                  `json:"network_mode"`
+	ApprovalArtifactPath string                  `json:"approval_artifact_path"`
+	ApprovalReviewPath   string                  `json:"approval_review_path"`
+	ApprovalReviewFormat string                  `json:"approval_review_format"`
+	VariableNames        []string                `json:"variable_names"`
 }
 
 func (req stepTemplateRequest) definition() stepdefinition.Definition {
 	return stepdefinition.Definition{
+		Kind: req.Kind, Ansible: req.Ansible,
 		Name: req.Name, ScriptBody: req.ScriptBody,
 		Interpreter: req.Interpreter, ExecutionTarget: req.ExecutionTarget,
 		AgentExecutionMode: req.AgentExecutionMode, AgentSelectors: req.AgentSelectors,

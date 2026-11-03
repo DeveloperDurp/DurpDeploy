@@ -21,9 +21,9 @@ func (q *Queries) CountStepTemplates(ctx context.Context) (int64, error) {
 }
 
 const createStepTemplate = `-- name: CreateStepTemplate :one
-INSERT INTO step_templates (name, script_body, interpreter, agent_execution_mode, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format)
-VALUES (?, ?, COALESCE(NULLIF(CAST(?3 AS TEXT), ''), 'bash'), COALESCE(NULLIF(CAST(?4 AS TEXT), ''), 'host'), ?5, ?6, ?7, ?8, ?9, ?10)
-RETURNING id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode
+INSERT INTO step_templates (name, script_body, interpreter, agent_execution_mode, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, kind, ansible_json)
+VALUES (?, ?, COALESCE(NULLIF(CAST(?3 AS TEXT), ''), 'bash'), COALESCE(NULLIF(CAST(?4 AS TEXT), ''), 'host'), ?5, ?6, ?7, ?8, ?9, ?10, COALESCE(NULLIF(CAST(?11 AS TEXT), ''), 'script'), ?12)
+RETURNING id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode, kind, ansible_json
 `
 
 type CreateStepTemplateParams struct {
@@ -37,6 +37,8 @@ type CreateStepTemplateParams struct {
 	ApprovalArtifactPath string `json:"approval_artifact_path"`
 	ApprovalReviewPath   string `json:"approval_review_path"`
 	ApprovalReviewFormat string `json:"approval_review_format"`
+	Kind                 string `json:"kind"`
+	AnsibleJson          string `json:"ansible_json"`
 }
 
 func (q *Queries) CreateStepTemplate(ctx context.Context, arg CreateStepTemplateParams) (StepTemplate, error) {
@@ -51,6 +53,8 @@ func (q *Queries) CreateStepTemplate(ctx context.Context, arg CreateStepTemplate
 		arg.ApprovalArtifactPath,
 		arg.ApprovalReviewPath,
 		arg.ApprovalReviewFormat,
+		arg.Kind,
+		arg.AnsibleJson,
 	)
 	var i StepTemplate
 	err := row.Scan(
@@ -67,14 +71,16 @@ func (q *Queries) CreateStepTemplate(ctx context.Context, arg CreateStepTemplate
 		&i.ApprovalReviewPath,
 		&i.ApprovalReviewFormat,
 		&i.AgentExecutionMode,
+		&i.Kind,
+		&i.AnsibleJson,
 	)
 	return i, err
 }
 
 const createStepTemplateVersion = `-- name: CreateStepTemplateVersion :one
-INSERT INTO step_template_versions (template_id, version_number, name, script_body, interpreter, agent_execution_mode, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format)
-VALUES (?, ?, ?, ?, COALESCE(NULLIF(CAST(?5 AS TEXT), ''), 'bash'), COALESCE(NULLIF(CAST(?6 AS TEXT), ''), 'host'), ?7, ?8, ?9, ?10, ?11, ?12)
-RETURNING id, template_id, version_number, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode
+INSERT INTO step_template_versions (template_id, version_number, name, script_body, interpreter, agent_execution_mode, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, kind, ansible_json)
+VALUES (?, ?, ?, ?, COALESCE(NULLIF(CAST(?5 AS TEXT), ''), 'bash'), COALESCE(NULLIF(CAST(?6 AS TEXT), ''), 'host'), ?7, ?8, ?9, ?10, ?11, ?12, COALESCE(NULLIF(CAST(?13 AS TEXT), ''), 'script'), ?14)
+RETURNING id, template_id, version_number, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode, kind, ansible_json
 `
 
 type CreateStepTemplateVersionParams struct {
@@ -90,6 +96,8 @@ type CreateStepTemplateVersionParams struct {
 	ApprovalArtifactPath string `json:"approval_artifact_path"`
 	ApprovalReviewPath   string `json:"approval_review_path"`
 	ApprovalReviewFormat string `json:"approval_review_format"`
+	Kind                 string `json:"kind"`
+	AnsibleJson          string `json:"ansible_json"`
 }
 
 func (q *Queries) CreateStepTemplateVersion(ctx context.Context, arg CreateStepTemplateVersionParams) (StepTemplateVersion, error) {
@@ -106,6 +114,8 @@ func (q *Queries) CreateStepTemplateVersion(ctx context.Context, arg CreateStepT
 		arg.ApprovalArtifactPath,
 		arg.ApprovalReviewPath,
 		arg.ApprovalReviewFormat,
+		arg.Kind,
+		arg.AnsibleJson,
 	)
 	var i StepTemplateVersion
 	err := row.Scan(
@@ -124,6 +134,8 @@ func (q *Queries) CreateStepTemplateVersion(ctx context.Context, arg CreateStepT
 		&i.ApprovalReviewPath,
 		&i.ApprovalReviewFormat,
 		&i.AgentExecutionMode,
+		&i.Kind,
+		&i.AnsibleJson,
 	)
 	return i, err
 }
@@ -150,7 +162,7 @@ func (q *Queries) GetLatestStepTemplateVersionNumber(ctx context.Context, templa
 }
 
 const getStepTemplate = `-- name: GetStepTemplate :one
-SELECT id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode FROM step_templates WHERE id = ?
+SELECT id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode, kind, ansible_json FROM step_templates WHERE id = ?
 `
 
 func (q *Queries) GetStepTemplate(ctx context.Context, id int64) (StepTemplate, error) {
@@ -170,12 +182,14 @@ func (q *Queries) GetStepTemplate(ctx context.Context, id int64) (StepTemplate, 
 		&i.ApprovalReviewPath,
 		&i.ApprovalReviewFormat,
 		&i.AgentExecutionMode,
+		&i.Kind,
+		&i.AnsibleJson,
 	)
 	return i, err
 }
 
 const getStepTemplateVersion = `-- name: GetStepTemplateVersion :one
-SELECT id, template_id, version_number, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode FROM step_template_versions WHERE id = ?
+SELECT id, template_id, version_number, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode, kind, ansible_json FROM step_template_versions WHERE id = ?
 `
 
 func (q *Queries) GetStepTemplateVersion(ctx context.Context, id int64) (StepTemplateVersion, error) {
@@ -197,12 +211,14 @@ func (q *Queries) GetStepTemplateVersion(ctx context.Context, id int64) (StepTem
 		&i.ApprovalReviewPath,
 		&i.ApprovalReviewFormat,
 		&i.AgentExecutionMode,
+		&i.Kind,
+		&i.AnsibleJson,
 	)
 	return i, err
 }
 
 const listStepTemplateVersions = `-- name: ListStepTemplateVersions :many
-SELECT id, template_id, version_number, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode FROM step_template_versions WHERE template_id = ? ORDER BY version_number DESC
+SELECT id, template_id, version_number, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode, kind, ansible_json FROM step_template_versions WHERE template_id = ? ORDER BY version_number DESC
 `
 
 func (q *Queries) ListStepTemplateVersions(ctx context.Context, templateID int64) ([]StepTemplateVersion, error) {
@@ -230,6 +246,8 @@ func (q *Queries) ListStepTemplateVersions(ctx context.Context, templateID int64
 			&i.ApprovalReviewPath,
 			&i.ApprovalReviewFormat,
 			&i.AgentExecutionMode,
+			&i.Kind,
+			&i.AnsibleJson,
 		); err != nil {
 			return nil, err
 		}
@@ -245,7 +263,7 @@ func (q *Queries) ListStepTemplateVersions(ctx context.Context, templateID int64
 }
 
 const listStepTemplates = `-- name: ListStepTemplates :many
-SELECT id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode FROM step_templates ORDER BY name ASC
+SELECT id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode, kind, ansible_json FROM step_templates ORDER BY name ASC
 `
 
 func (q *Queries) ListStepTemplates(ctx context.Context) ([]StepTemplate, error) {
@@ -271,6 +289,8 @@ func (q *Queries) ListStepTemplates(ctx context.Context) ([]StepTemplate, error)
 			&i.ApprovalReviewPath,
 			&i.ApprovalReviewFormat,
 			&i.AgentExecutionMode,
+			&i.Kind,
+			&i.AnsibleJson,
 		); err != nil {
 			return nil, err
 		}
@@ -286,7 +306,7 @@ func (q *Queries) ListStepTemplates(ctx context.Context) ([]StepTemplate, error)
 }
 
 const listStepTemplatesPaginated = `-- name: ListStepTemplatesPaginated :many
-SELECT id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode FROM step_templates ORDER BY name ASC
+SELECT id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode, kind, ansible_json FROM step_templates ORDER BY name ASC
 LIMIT ? OFFSET ?
 `
 
@@ -318,6 +338,8 @@ func (q *Queries) ListStepTemplatesPaginated(ctx context.Context, arg ListStepTe
 			&i.ApprovalReviewPath,
 			&i.ApprovalReviewFormat,
 			&i.AgentExecutionMode,
+			&i.Kind,
+			&i.AnsibleJson,
 		); err != nil {
 			return nil, err
 		}
@@ -336,8 +358,8 @@ const updateStepTemplate = `-- name: UpdateStepTemplate :one
 UPDATE step_templates SET name = ?, script_body = ?,
 interpreter = COALESCE(NULLIF(CAST(?3 AS TEXT), ''), 'bash'),
 agent_execution_mode = COALESCE(NULLIF(CAST(?4 AS TEXT), ''), 'host'),
-container_image = ?5, variable_names = ?6, network_mode = ?7, approval_artifact_path = ?8, approval_review_path = ?9, approval_review_format = ?10
-WHERE id = ?11 RETURNING id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode
+container_image = ?5, variable_names = ?6, network_mode = ?7, approval_artifact_path = ?8, approval_review_path = ?9, approval_review_format = ?10, kind = COALESCE(NULLIF(CAST(?11 AS TEXT), ''), 'script'), ansible_json = ?12
+WHERE id = ?13 RETURNING id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode, kind, ansible_json
 `
 
 type UpdateStepTemplateParams struct {
@@ -351,6 +373,8 @@ type UpdateStepTemplateParams struct {
 	ApprovalArtifactPath string `json:"approval_artifact_path"`
 	ApprovalReviewPath   string `json:"approval_review_path"`
 	ApprovalReviewFormat string `json:"approval_review_format"`
+	Kind                 string `json:"kind"`
+	AnsibleJson          string `json:"ansible_json"`
 	ID                   int64  `json:"id"`
 }
 
@@ -366,6 +390,8 @@ func (q *Queries) UpdateStepTemplate(ctx context.Context, arg UpdateStepTemplate
 		arg.ApprovalArtifactPath,
 		arg.ApprovalReviewPath,
 		arg.ApprovalReviewFormat,
+		arg.Kind,
+		arg.AnsibleJson,
 		arg.ID,
 	)
 	var i StepTemplate
@@ -383,6 +409,8 @@ func (q *Queries) UpdateStepTemplate(ctx context.Context, arg UpdateStepTemplate
 		&i.ApprovalReviewPath,
 		&i.ApprovalReviewFormat,
 		&i.AgentExecutionMode,
+		&i.Kind,
+		&i.AnsibleJson,
 	)
 	return i, err
 }

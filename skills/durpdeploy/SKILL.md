@@ -571,6 +571,37 @@ while this flag is true; polling updates it automatically.
 1. **Project** `POST /api/v1/projects` `{"name":"my-app"}` → reply has `id`.
 2. **Environment** `POST /api/v1/environments` `{"name":"prod"}` → `id`.
    Environments can carry tags; agents can be routed by tag later.
+Native Ansible uses `kind: "ansible"` and an `ansible` configuration object.
+Read `docs/ansible.md` for the complete contract and execution limits.
+Use inline static YAML inventory and an explicit server execution image.
+Map each extra variable to an effective DurpDeploy variable name.
+Empty mappings pass no user variables.
+Select an enrolled secret SSH credential by name.
+Supply verified `known_hosts` entries.
+Select `network_mode: "bridge"` for SSH access.
+Use `POST /api/v1/projects/$PID/ansible/preview` with the Ansible configuration object to preview selected targets.
+The response contains a sorted `targets` array without credential values.
+Omit `script_body`, `interpreter`, and `variable_names` for Ansible steps.
+Remote-agent Ansible execution is unsupported.
+Existing script steps retain their variable selection behavior.
+
+The web log view formats captured Ansible steps with compact timestamps, headings, and status colors.
+Recap counts highlight nonzero results by status and mute zero counts.
+JSON, SSE, NDJSON, and plain-text exports retain the original log text.
+
+Select check mode when you start an execution, not in its step configuration.
+Set `ansible_check_mode: true` on deployment creation or manual runbook execution requests.
+Each fresh execution defaults to apply mode.
+The Deploy page shows check mode only when the selected release snapshot contains an Ansible step.
+Schedules use apply mode.
+Retries and redeploys copy the source execution mode.
+Successful check runs do not unlock promotion or change the current deployed version.
+Other step kinds run normally, and trusted Ansible tasks can still make changes.
+The option requires an Ansible step and otherwise returns `422`.
+Deployment and runbook execution history expose `ansible_check_mode` as a nullable integer object.
+`Int64: 1, Valid: true` means check mode, and `Int64: 0, Valid: true` means apply mode.
+`Valid: false` retains historical per-step options.
+
 3. **Steps** `POST /api/v1/projects/$PID/steps`:
 
 ```json

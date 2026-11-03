@@ -14,6 +14,7 @@ import (
 type deploymentLogPanel struct {
 	Index int                  `json:"index"`
 	Name  string               `json:"name"`
+	Kind  string               `json:"kind"`
 	State string               `json:"state"`
 	Open  bool                 `json:"-"`
 	Live  []httpstream.StepLog `json:"live"`
@@ -46,6 +47,7 @@ func deploymentLogPanels(
 		view.Panels[index] = deploymentLogPanel{
 			Index: index,
 			Name:  step.Name,
+			Kind:  step.Kind,
 			State: "pending",
 			Live:  []httpstream.StepLog{},
 		}
@@ -112,6 +114,23 @@ func deploymentLogPanels(
 		}
 	}
 	return view
+}
+
+func logStepKinds(steps []ReleaseStep) string {
+	kinds := make([]string, len(steps))
+	for i, step := range steps {
+		kinds[i] = step.Kind
+	}
+	data, _ := json.Marshal(kinds)
+	return string(data)
+}
+
+func logStepKind(steps []ReleaseStep, log db.DeploymentLog) string {
+	if log.StepIndex.Valid && log.StepIndex.Int64 >= 0 &&
+		log.StepIndex.Int64 < int64(len(steps)) {
+		return steps[log.StepIndex.Int64].Kind
+	}
+	return ""
 }
 
 func deploymentActiveStepLabel(view deploymentLogView, status string) string {

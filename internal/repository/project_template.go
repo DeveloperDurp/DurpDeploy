@@ -13,6 +13,7 @@ import (
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/roles"
+	"durpdeploy/internal/stepdefinition"
 )
 
 var (
@@ -29,23 +30,7 @@ type ProjectTemplateActor struct {
 	Scoped bool
 }
 
-type ProjectTemplateStep struct {
-	Name                 string   `json:"name"`
-	ScriptBody           string   `json:"script_body"`
-	Interpreter          string   `json:"interpreter"`
-	SortOrder            int64    `json:"sort_order"`
-	TimeoutSeconds       int64    `json:"timeout_seconds"`
-	MaxRetries           int64    `json:"max_retries"`
-	ExecutionTarget      string   `json:"execution_target"`
-	AgentExecutionMode   string   `json:"agent_execution_mode"`
-	AgentSelectors       []string `json:"agent_selectors"`
-	ContainerImage       string   `json:"container_image"`
-	NetworkMode          string   `json:"network_mode"`
-	ApprovalArtifactPath string   `json:"approval_artifact_path"`
-	ApprovalReviewPath   string   `json:"approval_review_path"`
-	ApprovalReviewFormat string   `json:"approval_review_format"`
-	VariableNames        []string `json:"variable_names"`
-}
+type ProjectTemplateStep stepdefinition.Definition
 
 type ProjectTemplateVariable struct {
 	IsCredential    bool    `json:"is_credential"`
@@ -209,7 +194,15 @@ func (r *Repository) captureProjectTemplate(
 		if selectors[s.ID] == nil {
 			selectors[s.ID] = []string{}
 		}
+		if s.Kind == stepdefinition.AnsibleKind {
+			s.Interpreter = ""
+		}
+		a, err := stepdefinition.DecodeAnsible(s.AnsibleJson)
+		if err != nil {
+			return snapshot, err
+		}
 		snapshot.Steps = append(snapshot.Steps, ProjectTemplateStep{
+			Kind: s.Kind, Ansible: a,
 			Name:                 s.Name,
 			ScriptBody:           s.ScriptBody,
 			Interpreter:          s.Interpreter,

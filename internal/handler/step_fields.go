@@ -25,12 +25,21 @@ func PrepareStepFields(
 	if err := agentexecution.ValidateLimitsWithPolicy(step.TimeoutSeconds, step.MaxRetries, limits); err != nil {
 		return step, err
 	}
+	if err := step.ValidateWrite(); err != nil {
+		return step, err
+	}
+	if step.StepKind() == stepdefinition.AnsibleKind {
+		return step, nil
+	}
 	selected, err := interpreter.Validate(step.Interpreter)
 	step.Interpreter = selected
 	return step, err
 }
 
 func ValidateStepExecutionFields(step stepdefinition.Definition) error {
+	if err := step.ValidateWrite(); err != nil {
+		return err
+	}
 	if err := artifact.ValidateGateConfig(step.ExecutionTarget,
 		step.NetworkMode, step.ApprovalArtifactPath,
 		step.ApprovalReviewPath, step.ApprovalReviewFormat,
@@ -49,7 +58,9 @@ func ValidateStepExecutionFields(step stepdefinition.Definition) error {
 // Form parsing remains separate because forms and JSON requests have different
 // numeric validation, defaults, empty variable columns, and rendering behavior.
 func formStepFields(r *http.Request) stepdefinition.Definition {
+	a, _ := formAnsible(r)
 	return stepdefinition.Definition{
+		Kind: r.FormValue("kind"), Ansible: a,
 		Name:                 strings.TrimSpace(r.FormValue("name")),
 		ScriptBody:           r.FormValue("script_body"),
 		Interpreter:          r.FormValue("interpreter"),

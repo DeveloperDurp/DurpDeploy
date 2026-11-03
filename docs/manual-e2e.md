@@ -50,6 +50,103 @@ Stop this example with `make dev-stack ACTION=down STATE=/home/user/.local/state
 This command deletes its database and volumes.
 Keep the example running during manual review.
 
+## Native Ansible
+
+Read [native Ansible steps](ansible.md) before changing SSH targets or credentials.
+Use a disposable SSH target and a dedicated test key.
+Keep the target, project, environment, releases, and deployments available after testing.
+Keep schedules disabled.
+
+Open the populated [Native Ansible test project](https://citadel.durp.loc:43415/projects/50).
+Deployment [52](https://citadel.durp.loc:43415/deployments/52) captures check mode.
+Deployment [53](https://citadel.durp.loc:43415/deployments/53) applies the same release.
+Both executions use release `36`.
+
+Expand the Ansible step logs on deployment `53`.
+Confirm that play, task, and recap headings have no star banners.
+Confirm that status words use colors and remain readable.
+Confirm that recap counts use green for nonzero `ok` and amber for nonzero `changed`, `rescued`, or `ignored`.
+Confirm that nonzero `failed` or `unreachable` counts use red and nonzero `skipped` counts use blue.
+Confirm that zero counts stay muted.
+
+Confirm that timestamps use a separate compact column on mobile.
+Point to a timestamp to read its full date and time.
+Reload the page and confirm that formatting stays the same.
+Select **Export all logs** and confirm that the raw banners remain present.
+Repeat these checks during a new deployment or manual runbook execution.
+
+Open the [saved runbook](https://citadel.durp.loc:43415/projects/50/runbooks/5) to test manual execution options.
+
+Read the generated login from `tmp/demo.F0Q48G/login.txt` in this worktree.
+Use `tmp/demo.F0Q48G/tls/cert.pem` for scoped certificate trust.
+The data and logs remain in `tmp/demo.F0Q48G`.
+Before stopping the demo, finish or cancel active executions and confirm cleanup.
+Run `bash tmp/demo.F0Q48G/stop-ansible-demo.sh` to stop its server, agent, proxy, and SSH target.
+
+1. Open the retained Native Ansible project.
+2. Open Steps.
+3. Edit the Ansible step.
+4. Confirm that the YAML playbook, static inventory, image, and network selection are present.
+5. Confirm that Extra variable mappings contains variable references without resolved values.
+6. Confirm that SSH credential reference contains a name without private key bytes.
+7. Select Preview targets.
+8. Confirm that the preview lists only the selected inventory host.
+9. Confirm that the step editor has no Check mode option.
+10. Save the step.
+11. Create a release.
+12. Open Deploy, select the Ansible release, and select **Ansible check mode**.
+13. Deploy to the disposable environment and confirm success without the example file.
+14. Open a fresh deployment of the same release and confirm that check mode defaults off.
+15. Confirm that the disposable target contains the expected example file.
+16. Edit the project playbook after both deployments finish.
+17. Confirm that both saved releases and deployment captures retain their original configuration.
+
+Redeploy the check execution and confirm its check-mode badge.
+Retry a failed check execution and confirm that it retains check mode.
+Run an Ansible runbook with check mode, then retry it.
+Confirm that the retry retains check mode.
+Open Run now again and confirm that check mode defaults off.
+Open Deploy without a selected release and confirm that check mode is hidden.
+Select a script-only release and confirm that check mode stays hidden.
+Select an Ansible or mixed release and confirm that check mode appears unchecked.
+Switch back to a script-only release and confirm that check mode disappears.
+Confirm that a successful check deployment does not unlock the next lifecycle stage.
+
+Use a separate release for each failure check.
+Replace a known host key and confirm an SSH verification failure.
+Select an image without Ansible and confirm an executable failure.
+Use a missing collection and confirm an Ansible dependency failure.
+Use an unreachable address and confirm failure within the saved timeout.
+Run a sleeping task and cancel the deployment.
+Confirm that process and private staging cleanup completes before another execution starts.
+
+Submit invalid YAML from the active editor.
+Confirm one inline error and preserved input.
+Repeat with unknown variable mappings, conflicting script fields, and unsupported remote-agent execution through the public API.
+Confirm validation errors without creating or changing the step.
+Use another project's credential name and confirm rejection.
+Use a nonmember token and confirm rejection for step reads, writes, previews, and credential metadata.
+
+Run a secret task with `no_log` and confirm censored task output.
+Run the fixture's direct secret-output task and confirm that the log scrubber removes the captured secret value.
+Confirm that public responses, process arguments, and retained staging contain no private key bytes.
+Keep playbooks trusted because transformed output can disclose selected values.
+
+Run the automated API and browser scenarios with these commands:
+
+```bash
+DURPDEPLOY_CONTAINER_RUNTIME=podman bash scripts/go_test.sh \
+  -tags=e2e -race -count=1 -timeout=8m \
+  -run '^TestAnsible.*APIE2E$' ./internal/handler/api
+DURPDEPLOY_CONTAINER_RUNTIME=podman bash scripts/ci_browser_shard.sh -- \
+  bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 \
+  -timeout=10m -run '^TestAnsibleBrowserE2E$' ./internal/handler/api
+```
+
+The API tests build the pinned AMD64 fixture image from `testdata/ansible`.
+The isolated Go fixtures remove their SSH containers and databases after testing.
+Retain a separate running-instance example for manual review.
+
 ## Agent policy handshake
 
 Use a disposable paired agent with its scoped mTLS identity and server certificate trust.

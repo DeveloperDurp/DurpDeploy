@@ -411,7 +411,7 @@ func (q *Queries) GetRunbookByID(ctx context.Context, id int64) (Runbook, error)
 }
 
 const getRunbookExecution = `-- name: GetRunbookExecution :one
-SELECT x.id, x.runbook_version_id, x.deployment_id, x.actor_user_id, x.schedule_id, x.created_at, d.environment_id, d.status, d.started_at, d.finished_at,
+SELECT x.id, x.runbook_version_id, x.deployment_id, x.actor_user_id, x.schedule_id, x.created_at, d.environment_id, d.status, d.started_at, d.finished_at, d.ansible_check_mode,
     v.runbook_id, v.version, b.project_id, b.name AS runbook_name, b.deleted_at AS runbook_deleted_at,
     e.name AS environment_name
 FROM runbook_executions x
@@ -438,6 +438,7 @@ type GetRunbookExecutionRow struct {
 	Status           string        `json:"status"`
 	StartedAt        sql.NullInt64 `json:"started_at"`
 	FinishedAt       sql.NullInt64 `json:"finished_at"`
+	AnsibleCheckMode sql.NullInt64 `json:"ansible_check_mode"`
 	RunbookID        int64         `json:"runbook_id"`
 	Version          int64         `json:"version"`
 	ProjectID        int64         `json:"project_id"`
@@ -460,6 +461,7 @@ func (q *Queries) GetRunbookExecution(ctx context.Context, arg GetRunbookExecuti
 		&i.Status,
 		&i.StartedAt,
 		&i.FinishedAt,
+		&i.AnsibleCheckMode,
 		&i.RunbookID,
 		&i.Version,
 		&i.ProjectID,
@@ -636,7 +638,7 @@ func (q *Queries) ListDueRunbookSchedules(ctx context.Context, nextRunAt int64) 
 }
 
 const listRunbookExecutions = `-- name: ListRunbookExecutions :many
-SELECT x.id, x.runbook_version_id, x.deployment_id, x.actor_user_id, x.schedule_id, x.created_at, d.environment_id, d.status, d.started_at, d.finished_at,
+SELECT x.id, x.runbook_version_id, x.deployment_id, x.actor_user_id, x.schedule_id, x.created_at, d.environment_id, d.status, d.started_at, d.finished_at, d.ansible_check_mode,
     v.runbook_id, v.version, b.project_id, b.name AS runbook_name, b.deleted_at AS runbook_deleted_at,
     e.name AS environment_name
 FROM runbook_executions x
@@ -665,6 +667,7 @@ type ListRunbookExecutionsRow struct {
 	Status           string        `json:"status"`
 	StartedAt        sql.NullInt64 `json:"started_at"`
 	FinishedAt       sql.NullInt64 `json:"finished_at"`
+	AnsibleCheckMode sql.NullInt64 `json:"ansible_check_mode"`
 	RunbookID        int64         `json:"runbook_id"`
 	Version          int64         `json:"version"`
 	ProjectID        int64         `json:"project_id"`
@@ -693,6 +696,7 @@ func (q *Queries) ListRunbookExecutions(ctx context.Context, arg ListRunbookExec
 			&i.Status,
 			&i.StartedAt,
 			&i.FinishedAt,
+			&i.AnsibleCheckMode,
 			&i.RunbookID,
 			&i.Version,
 			&i.ProjectID,

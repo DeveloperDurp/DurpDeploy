@@ -20,7 +20,10 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
     ;;
   rollout-contracts-2)
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestConfigured(RequestBody(APIWeb|Isolation)|PasswordCompatibility|ArtifactTimeoutsAPIWeb|ArtifactDownload(APIWeb|RemoteAPI)|ArtifactSafety(APIWeb|RemoteAPI))E2E$' ./internal/handler/api
-    bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^Test(UserUpdateAtomic|RoleChangeRevocation|ReleaseCaptureConsistent|LifecycleStageOrder)APIWebE2E$' ./internal/handler
+    for test_name in TestUserUpdateAtomicAPIWebE2E TestRoleChangeRevocationAPIWebE2E TestReleaseCaptureConsistentAPIWebE2E TestLifecycleStageOrderAPIWebE2E; do
+      bash scripts/run_named_go_tests.sh --race --tags e2e --timeout 5m \
+        --packages ./internal/handler --tests "^$test_name$" --require "$test_name"
+    done
     bash scripts/run_named_go_tests.sh --race --tags e2e --timeout 5m \
       --packages ./internal/handler/api \
       --tests 'TestLifecycleReorderApprovalAPIWebE2E|TestLifecycleReorderAccessAPIWebE2E' \
@@ -84,6 +87,7 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
     ;;
   browser-resources)
     tests=(
+      '^TestAnsible.*E2E$'
       '^TestCredential.*E2E$'
       '^TestTemplateLibrary.*E2E$'
       '^TestStepVariables(APIWeb|Browser)E2E$'

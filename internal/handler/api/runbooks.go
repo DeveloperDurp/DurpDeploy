@@ -15,6 +15,7 @@ import (
 	"durpdeploy/internal/interpreter"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
+	"durpdeploy/internal/stepdefinition"
 )
 
 type RunbookHandler struct {
@@ -179,7 +180,9 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 			RespondError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
-		if step.Name == "" || strings.TrimSpace(step.ScriptBody) == "" {
+		if step.Name == "" ||
+			step.Kind != stepdefinition.AnsibleKind &&
+				strings.TrimSpace(step.ScriptBody) == "" {
 			RespondError(
 				w,
 				http.StatusUnprocessableEntity,
@@ -187,7 +190,21 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 		}
-		selected, err := interpreter.Validate(step.Interpreter)
+		if err := (stepdefinition.Definition(*step)).ValidateWrite(); err != nil {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		if step.Ansible != nil {
+			if err := h.repo.ValidateAnsibleReferences(r.Context(), projectID, step.Ansible); err != nil {
+				RespondError(w, http.StatusUnprocessableEntity, err.Error())
+				return
+			}
+		}
+		selected := ""
+		var err error
+		if step.Kind != stepdefinition.AnsibleKind {
+			selected, err = interpreter.Validate(step.Interpreter)
+		}
 		if err != nil {
 			RespondError(w, http.StatusUnprocessableEntity, err.Error())
 			return

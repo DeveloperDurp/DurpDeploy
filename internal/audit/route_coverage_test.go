@@ -50,6 +50,8 @@ var publicAuthentication = map[string]string{
 // audit for a new route. Handler-level Suppress still handles rejected/no-op
 // redirects, logout's direct event, and unchanged assignments on named routes.
 var noAuditEvent = map[string]string{
+	"POST /projects/{id}/ansible/preview":        "read-only static inventory validation",
+	"POST /api/v1/projects/{id}/ansible/preview": "read-only static inventory validation",
 	"POST /api/lint":                                "read-only script validation",
 	"POST /api/v1/lint":                             "read-only caller text analysis",
 	"POST /api/v1/admin/maintenance":                "operational maintenance command",

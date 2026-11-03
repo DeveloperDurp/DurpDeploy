@@ -159,7 +159,8 @@ func (h *RunbookHandler) Execute(w http.ResponseWriter, r *http.Request) {
 		repository.RunbookExecutionRequest{
 			ProjectID: project.ID, RunbookID: book.ID,
 			VersionID: versionID, EnvironmentID: environmentID,
-			ActorUserID: actor,
+			ActorUserID:      actor,
+			AnsibleCheckMode: isTruthy(r.FormValue("ansible_check_mode")),
 		})
 	if errors.Is(err, sql.ErrNoRows) {
 		http.NotFound(w, r)

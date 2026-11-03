@@ -1,5 +1,7 @@
 # Production deployment
 
+Read [native Ansible steps](ansible.md) for Ansible image, inventory, credential, networking, and cleanup requirements.
+
 Run `durpdeploy version` before and after an upgrade to record the installed software identity.
 Read [software versioning](versioning.md) for build numbers, container tags, and API diagnostics.
 

@@ -141,6 +141,9 @@ SELECT s.deployment_id, s.step_index, s.agent_id
 FROM eligible_remote_step_agents s JOIN deployments d ON d.id = s.deployment_id
 WHERE s.deployment_id = ?1
   AND s.step_index = ?2
+  AND EXISTS (SELECT 1 FROM deployment_steps ds
+      WHERE ds.deployment_id = s.deployment_id
+        AND ds.step_index = s.step_index AND ds.kind = 'script')
   AND d.status = 'running'
   AND EXISTS (SELECT 1 FROM environment_deployment_slots slot WHERE slot.deployment_id = d.id)
   AND NOT EXISTS (

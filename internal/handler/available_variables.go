@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -14,6 +16,7 @@ import (
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/interpreter"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/stepdefinition"
 )
 
 // ServeAvailableVariables is shared by the authenticated web and bearer APIs.
@@ -117,6 +120,9 @@ func variablePreviewContext(
 	if value, exists := query["agent_execution_mode"]; exists {
 		preview.AgentMode = value[0]
 	}
+	if kind, exists := query["kind"]; exists {
+		preview.Kind = kind[0]
+	}
 	return validateVariablePreview(preview)
 }
 
@@ -165,6 +171,17 @@ func savedVariablePreview(
 	}
 	preview.Interpreter, preview.Target = step.Interpreter, step.ExecutionTarget
 	preview.AgentMode = step.AgentExecutionMode
+	preview.Kind = step.Kind
+	if step.Kind == stepdefinition.AnsibleKind {
+		a, err := stepdefinition.DecodeAnsible(step.AnsibleJson)
+		if err != nil {
+			return preview, err
+		}
+		if a != nil {
+			preview.VariableNames = slices.Sorted(maps.Values(a.ExtraVars))
+		}
+		return preview, nil
+	}
 	if step.VariableNames != "" {
 		if err := json.Unmarshal(
 			[]byte(step.VariableNames), &preview.VariableNames,
@@ -186,6 +203,10 @@ func validateVariablePreview(
 			) == containerenv.ErrIdentifier {
 			return preview, repository.ErrVariableName
 		}
+	}
+	if preview.Kind != "" && preview.Kind != "script" &&
+		preview.Kind != "ansible" {
+		return preview, errors.New("unknown step kind")
 	}
 	var err error
 	preview.Interpreter, err = interpreter.Validate(preview.Interpreter)

@@ -147,6 +147,14 @@ func (r *DeploymentRunner) Run(
 		r.failUnlessCancelled(ctx, runCtx, deploymentID)
 		return
 	}
+	if deployment.AnsibleCheckMode.Valid {
+		for i := range steps {
+			if steps[i].Ansible != nil {
+				mode := deployment.AnsibleCheckMode.Int64 == 1
+				steps[i].Ansible.Check = &mode
+			}
+		}
+	}
 	for _, step := range steps {
 		if err := agentexecution.ValidateLimitsWithPolicy(step.TimeoutSeconds, step.MaxRetries, r.repo.ResourceLimits().Execution); err != nil {
 			r.failUnlessCancelled(ctx, runCtx, deploymentID)

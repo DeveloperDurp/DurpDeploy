@@ -1,6 +1,7 @@
 -- name: GetLatestProjectEnvironmentDeployment :one
 SELECT d.* FROM deployments d JOIN releases r ON r.id = d.release_id
-WHERE r.project_id = ? AND d.environment_id = ? AND d.kind = 'deployment'
+WHERE r.project_id = ? AND d.environment_id = ? AND d.kind = 'deployment' AND COALESCE(d.ansible_check_mode, 0) = 0
+  AND NOT EXISTS (SELECT 1 FROM deployment_steps s WHERE d.ansible_check_mode IS NULL AND s.deployment_id = d.id AND s.kind = 'ansible' AND s.ansible_json LIKE '%"check":true%')
 ORDER BY d.created_at DESC, d.id DESC LIMIT 1;
 
 -- name: GetRollbackTarget :one
@@ -9,7 +10,8 @@ JOIN deployments source ON source.id = sqlc.arg(source_deployment_id)
 JOIN releases source_release ON source_release.id = source.release_id
 WHERE r.project_id = source_release.project_id
   AND d.environment_id = source.environment_id
-  AND d.kind = 'deployment' AND d.status = 'succeeded'
+  AND d.kind = 'deployment' AND d.status = 'succeeded' AND COALESCE(d.ansible_check_mode, 0) = 0
+  AND NOT EXISTS (SELECT 1 FROM deployment_steps s WHERE d.ansible_check_mode IS NULL AND s.deployment_id = d.id AND s.kind = 'ansible' AND s.ansible_json LIKE '%"check":true%')
   AND d.release_id != source.release_id
   AND (d.created_at < source.created_at OR (d.created_at = source.created_at AND d.id < source.id))
 ORDER BY d.created_at DESC, d.id DESC LIMIT 1;

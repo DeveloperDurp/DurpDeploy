@@ -54,7 +54,8 @@ function check(condition, message) {
 
 function command(commandName, args, options = {}) {
 	return new Promise((resolvePromise, reject) => {
-		const child = spawn(commandName, args, { stdio: ["ignore", "pipe", "pipe"], ...options });
+		const commandArgs = commandName === "sqlite3" ? ["-cmd", ".timeout 5000", ...args] : args;
+		const child = spawn(commandName, commandArgs, { stdio: ["ignore", "pipe", "pipe"], ...options });
 		let stdout = "";
 		let stderr = "";
 		child.stdout.on("data", (chunk) => { stdout += chunk; });

@@ -1,0 +1,21 @@
+package components
+
+import "database/sql"
+
+templ AnsibleCheckOption() {
+	<div class="form-control">
+		<label class="label cursor-pointer">
+			<span class="flex items-center gap-2">
+				<input type="checkbox" name="ansible_check_mode" value="true" class="checkbox checkbox-sm" aria-describedby="ansible-check-help" autocomplete="off"/>
+				<span>Ansible check mode</span>
+			</span>
+		</label>
+		<p id="ansible-check-help" class="text-sm opacity-70">Requires an Ansible step. Preview Ansible changes while other steps run normally. Some Ansible tasks can still make changes.</p>
+	</div>
+}
+
+templ AnsibleCheckBadge(mode sql.NullInt64) {
+	if mode.Valid && mode.Int64 == 1 {
+		<span class="badge badge-warning" data-ansible-check-mode>Ansible check mode</span>
+	}
+}

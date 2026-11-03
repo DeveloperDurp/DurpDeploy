@@ -180,6 +180,7 @@ type Deployment struct {
 	ContainerNamespace      sql.NullString `json:"container_namespace"`
 	CleanupConfirmedAt      sql.NullInt64  `json:"cleanup_confirmed_at"`
 	EnvironmentNameSnapshot sql.NullString `json:"-"`
+	AnsibleCheckMode        sql.NullInt64  `json:"ansible_check_mode"`
 }
 
 type DeploymentApproval struct {
@@ -271,6 +272,8 @@ type DeploymentStep struct {
 	ApprovalReviewPath   string        `json:"approval_review_path"`
 	ApprovalReviewFormat string        `json:"approval_review_format"`
 	AgentExecutionMode   string        `json:"agent_execution_mode"`
+	Kind                 string        `json:"kind"`
+	AnsibleJson          string        `json:"ansible_json"`
 }
 
 type DeploymentStepAttempt struct {
@@ -678,6 +681,8 @@ type Step struct {
 	ApprovalReviewPath   string `json:"approval_review_path"`
 	ApprovalReviewFormat string `json:"approval_review_format"`
 	AgentExecutionMode   string `json:"agent_execution_mode"`
+	Kind                 string `json:"kind"`
+	AnsibleJson          string `json:"ansible_json"`
 }
 
 type StepAgentSelector struct {
@@ -699,6 +704,8 @@ type StepTemplate struct {
 	ApprovalReviewPath   string `json:"approval_review_path"`
 	ApprovalReviewFormat string `json:"approval_review_format"`
 	AgentExecutionMode   string `json:"agent_execution_mode"`
+	Kind                 string `json:"kind"`
+	AnsibleJson          string `json:"ansible_json"`
 }
 
 type StepTemplateAgentSelector struct {
@@ -722,6 +729,8 @@ type StepTemplateVersion struct {
 	ApprovalReviewPath   string `json:"approval_review_path"`
 	ApprovalReviewFormat string `json:"approval_review_format"`
 	AgentExecutionMode   string `json:"agent_execution_mode"`
+	Kind                 string `json:"kind"`
+	AnsibleJson          string `json:"ansible_json"`
 }
 
 type StepTemplateVersionAgentSelector struct {

@@ -8,9 +8,12 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/stepdefinition"
 )
 
 type stepResponse struct {
+	Ansible     *stepdefinition.Ansible `json:"ansible,omitempty"`
+	AnsibleJSON string                  `json:"ansible_json,omitempty"`
 	db.Step
 	AgentSelectors []string `json:"agent_selectors"`
 	// VariableNames shadows the raw JSON-array string column with the
@@ -43,12 +46,16 @@ func validatePlacement(
 }
 
 type stepTemplateResponse struct {
+	Ansible     *stepdefinition.Ansible `json:"ansible,omitempty"`
+	AnsibleJSON string                  `json:"ansible_json,omitempty"`
 	db.StepTemplate
 	AgentSelectors []string `json:"agent_selectors"`
 	VariableNames  []string `json:"variable_names"`
 }
 
 type stepTemplateVersionResponse struct {
+	Ansible     *stepdefinition.Ansible `json:"ansible,omitempty"`
+	AnsibleJSON string                  `json:"ansible_json,omitempty"`
 	db.StepTemplateVersion
 	AgentSelectors []string `json:"agent_selectors"`
 	VariableNames  []string `json:"variable_names"`
@@ -83,8 +90,12 @@ func newStepResponse(
 	if err != nil {
 		return stepResponse{}, err
 	}
+	if step.Kind == stepdefinition.AnsibleKind {
+		step.Interpreter = ""
+	}
 	return stepResponse{
 		Step:           step,
+		Ansible:        responseAnsible(step.AnsibleJson),
 		AgentSelectors: selectorList(selectors),
 		VariableNames:  variableNameList(step.VariableNames),
 	}, nil
@@ -105,8 +116,12 @@ func newStepResponses(
 	}
 	responses := make([]stepResponse, len(steps))
 	for index, step := range steps {
+		if step.Kind == stepdefinition.AnsibleKind {
+			step.Interpreter = ""
+		}
 		responses[index] = stepResponse{
 			Step:           step,
+			Ansible:        responseAnsible(step.AnsibleJson),
 			AgentSelectors: selectorList(selectors[step.ID]),
 			VariableNames:  variableNameList(step.VariableNames),
 		}
@@ -123,8 +138,12 @@ func newStepTemplateResponse(
 	if err != nil {
 		return stepTemplateResponse{}, err
 	}
+	if template.Kind == stepdefinition.AnsibleKind {
+		template.Interpreter = ""
+	}
 	return stepTemplateResponse{
 		StepTemplate:   template,
+		Ansible:        responseAnsible(template.AnsibleJson),
 		AgentSelectors: selectorList(selectors),
 		VariableNames:  variableNameList(template.VariableNames),
 	}, nil
@@ -155,8 +174,12 @@ func newStepTemplateResponses(
 	}
 	responses := make([]stepTemplateResponse, len(templates))
 	for index, template := range templates {
+		if template.Kind == stepdefinition.AnsibleKind {
+			template.Interpreter = ""
+		}
 		responses[index] = stepTemplateResponse{
 			StepTemplate:   template,
+			Ansible:        responseAnsible(template.AnsibleJson),
 			AgentSelectors: selectorList(selectors[template.ID]),
 			VariableNames:  variableNameList(template.VariableNames),
 		}
@@ -189,8 +212,13 @@ func newStepTemplateVersionResponses(
 	}
 	responses := make([]stepTemplateVersionResponse, len(versions))
 	for index, version := range versions {
+		ansible, _ := stepdefinition.DecodeAnsible(version.AnsibleJson)
+		if version.Kind == stepdefinition.AnsibleKind {
+			version.Interpreter = ""
+		}
 		responses[index] = stepTemplateVersionResponse{
 			StepTemplateVersion: version,
+			Ansible:             ansible,
 			AgentSelectors: selectorList(
 				selectors[version.ID],
 			),
@@ -198,4 +226,12 @@ func newStepTemplateVersionResponses(
 		}
 	}
 	return responses, nil
+}
+
+func responseAnsible(raw string) *stepdefinition.Ansible {
+	a, _ := stepdefinition.DecodeAnsible(raw)
+	if a != nil {
+		a.Check = nil
+	}
+	return a
 }

@@ -21,9 +21,9 @@ func (q *Queries) CountStepsByProject(ctx context.Context, projectID int64) (int
 }
 
 const createStep = `-- name: CreateStep :one
-INSERT INTO steps (project_id, name, script_body, sort_order, timeout_seconds, max_retries, interpreter, agent_execution_mode, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format)
-VALUES (?, ?, ?, ?, ?, ?, COALESCE(NULLIF(CAST(?7 AS TEXT), ''), 'bash'), COALESCE(NULLIF(CAST(?8 AS TEXT), ''), 'host'), ?9, ?10, ?11, ?12, ?13, ?14)
-RETURNING id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode
+INSERT INTO steps (project_id, name, script_body, sort_order, timeout_seconds, max_retries, interpreter, agent_execution_mode, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, kind, ansible_json)
+VALUES (?, ?, ?, ?, ?, ?, COALESCE(NULLIF(CAST(?7 AS TEXT), ''), 'bash'), COALESCE(NULLIF(CAST(?8 AS TEXT), ''), 'host'), ?9, ?10, ?11, ?12, ?13, ?14, COALESCE(NULLIF(CAST(?15 AS TEXT), ''), 'script'), ?16)
+RETURNING id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode, kind, ansible_json
 `
 
 type CreateStepParams struct {
@@ -41,6 +41,8 @@ type CreateStepParams struct {
 	ApprovalArtifactPath string `json:"approval_artifact_path"`
 	ApprovalReviewPath   string `json:"approval_review_path"`
 	ApprovalReviewFormat string `json:"approval_review_format"`
+	Kind                 string `json:"kind"`
+	AnsibleJson          string `json:"ansible_json"`
 }
 
 func (q *Queries) CreateStep(ctx context.Context, arg CreateStepParams) (Step, error) {
@@ -59,6 +61,8 @@ func (q *Queries) CreateStep(ctx context.Context, arg CreateStepParams) (Step, e
 		arg.ApprovalArtifactPath,
 		arg.ApprovalReviewPath,
 		arg.ApprovalReviewFormat,
+		arg.Kind,
+		arg.AnsibleJson,
 	)
 	var i Step
 	err := row.Scan(
@@ -79,6 +83,8 @@ func (q *Queries) CreateStep(ctx context.Context, arg CreateStepParams) (Step, e
 		&i.ApprovalReviewPath,
 		&i.ApprovalReviewFormat,
 		&i.AgentExecutionMode,
+		&i.Kind,
+		&i.AnsibleJson,
 	)
 	return i, err
 }
@@ -93,7 +99,7 @@ func (q *Queries) DeleteStep(ctx context.Context, id int64) error {
 }
 
 const getStep = `-- name: GetStep :one
-SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode FROM steps WHERE id = ?
+SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode, kind, ansible_json FROM steps WHERE id = ?
 `
 
 func (q *Queries) GetStep(ctx context.Context, id int64) (Step, error) {
@@ -117,12 +123,14 @@ func (q *Queries) GetStep(ctx context.Context, id int64) (Step, error) {
 		&i.ApprovalReviewPath,
 		&i.ApprovalReviewFormat,
 		&i.AgentExecutionMode,
+		&i.Kind,
+		&i.AnsibleJson,
 	)
 	return i, err
 }
 
 const listStepsByProject = `-- name: ListStepsByProject :many
-SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode FROM steps WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC
+SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode, kind, ansible_json FROM steps WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC
 `
 
 func (q *Queries) ListStepsByProject(ctx context.Context, projectID int64) ([]Step, error) {
@@ -152,6 +160,8 @@ func (q *Queries) ListStepsByProject(ctx context.Context, projectID int64) ([]St
 			&i.ApprovalReviewPath,
 			&i.ApprovalReviewFormat,
 			&i.AgentExecutionMode,
+			&i.Kind,
+			&i.AnsibleJson,
 		); err != nil {
 			return nil, err
 		}
@@ -167,7 +177,7 @@ func (q *Queries) ListStepsByProject(ctx context.Context, projectID int64) ([]St
 }
 
 const listStepsByProjectPaginated = `-- name: ListStepsByProjectPaginated :many
-SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode FROM steps WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC
+SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode, kind, ansible_json FROM steps WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC
 LIMIT ? OFFSET ?
 `
 
@@ -204,6 +214,8 @@ func (q *Queries) ListStepsByProjectPaginated(ctx context.Context, arg ListSteps
 			&i.ApprovalReviewPath,
 			&i.ApprovalReviewFormat,
 			&i.AgentExecutionMode,
+			&i.Kind,
+			&i.AnsibleJson,
 		); err != nil {
 			return nil, err
 		}
@@ -222,8 +234,8 @@ const updateStep = `-- name: UpdateStep :one
 UPDATE steps SET name = ?, script_body = ?, sort_order = ?, timeout_seconds = ?, max_retries = ?,
 interpreter = COALESCE(NULLIF(CAST(?6 AS TEXT), ''), 'bash'),
 agent_execution_mode = COALESCE(NULLIF(CAST(?7 AS TEXT), ''), 'host'),
-container_image = ?8, variable_names = ?9, network_mode = ?10, approval_artifact_path = ?11, approval_review_path = ?12, approval_review_format = ?13
-WHERE id = ?14 RETURNING id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode
+container_image = ?8, variable_names = ?9, network_mode = ?10, approval_artifact_path = ?11, approval_review_path = ?12, approval_review_format = ?13, kind = COALESCE(NULLIF(CAST(?14 AS TEXT), ''), 'script'), ansible_json = ?15
+WHERE id = ?16 RETURNING id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode, kind, ansible_json
 `
 
 type UpdateStepParams struct {
@@ -240,6 +252,8 @@ type UpdateStepParams struct {
 	ApprovalArtifactPath string `json:"approval_artifact_path"`
 	ApprovalReviewPath   string `json:"approval_review_path"`
 	ApprovalReviewFormat string `json:"approval_review_format"`
+	Kind                 string `json:"kind"`
+	AnsibleJson          string `json:"ansible_json"`
 	ID                   int64  `json:"id"`
 }
 
@@ -258,6 +272,8 @@ func (q *Queries) UpdateStep(ctx context.Context, arg UpdateStepParams) (Step, e
 		arg.ApprovalArtifactPath,
 		arg.ApprovalReviewPath,
 		arg.ApprovalReviewFormat,
+		arg.Kind,
+		arg.AnsibleJson,
 		arg.ID,
 	)
 	var i Step
@@ -279,6 +295,8 @@ func (q *Queries) UpdateStep(ctx context.Context, arg UpdateStepParams) (Step, e
 		&i.ApprovalReviewPath,
 		&i.ApprovalReviewFormat,
 		&i.AgentExecutionMode,
+		&i.Kind,
+		&i.AnsibleJson,
 	)
 	return i, err
 }

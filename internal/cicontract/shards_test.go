@@ -176,7 +176,7 @@ func TestRolloutContractsPreserveEveryCommandAndFlag(t *testing.T) {
 		want = append(want, fmt.Sprintf("%s %s|runtime=%s",
 			call.Command, strings.Join(call.Args, " "), call.Runtime))
 	}
-	if len(want) != 15 {
+	if len(want) != 18 {
 		t.Fatalf("contract inventory has %d commands", len(want))
 	}
 	body := `printf '%s %s|runtime=%s\n' "${0##*/}" "$*" "${DURPDEPLOY_CONTAINER_RUNTIME:-}" >> "$FIXTURE_COMMANDS"`

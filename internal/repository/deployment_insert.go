@@ -40,6 +40,7 @@ func (r *Repository) createDeploymentFromDeployment(
 			"source deployment release mismatch",
 		)
 	}
+	arg.AnsibleCheckMode = source.AnsibleCheckMode
 	stepSource, err := q.GetDeploymentStepSource(ctx, sourceDeploymentID)
 	if errors.Is(err, sql.ErrNoRows) {
 		release, releaseErr := q.GetRelease(ctx, arg.ReleaseID)
@@ -83,6 +84,9 @@ func (r *Repository) createDeployment(
 	q *db.Queries,
 	arg db.CreateDeploymentParams,
 ) (DeploymentResult, error) {
+	if !arg.AnsibleCheckMode.Valid {
+		arg.AnsibleCheckMode = AnsibleCheckMode(false)
+	}
 	if _, err := q.LockDeploymentEnvironment(
 		ctx,
 		arg.EnvironmentID,
@@ -123,8 +127,22 @@ func (r *Repository) createDeploymentWithSteps(
 	steps []DeploymentStepSnapshot,
 	stepsJSON string,
 ) (DeploymentResult, error) {
+	if arg.AnsibleCheckMode.Int64 == 1 {
+		found := false
+		for _, step := range steps {
+			found = found || step.Kind == "ansible"
+		}
+		if !found {
+			return DeploymentResult{}, ErrAnsibleCheckMode
+		}
+	}
 	releaseKind, err := q.GetRelease(ctx, arg.ReleaseID)
 	if err != nil {
+		return DeploymentResult{}, err
+	}
+	txRepo := *r
+	txRepo.Queries = q
+	if err := txRepo.validateAnsibleAdmission(ctx, releaseKind.ProjectID, arg.EnvironmentID, steps); err != nil {
 		return DeploymentResult{}, err
 	}
 	variables, err := q.ListReleaseVariablesByRelease(ctx, arg.ReleaseID)
@@ -150,6 +168,9 @@ func (r *Repository) createDeploymentWithSteps(
 		return DeploymentResult{}, fmt.Errorf("insert deployment: %w", err)
 	}
 	if err := r.snapshotDeploymentVariables(ctx, q, deployment); err != nil {
+		return DeploymentResult{}, err
+	}
+	if err := txRepo.validateAnsibleCapturedVariables(ctx, deployment, steps); err != nil {
 		return DeploymentResult{}, err
 	}
 	if gated {

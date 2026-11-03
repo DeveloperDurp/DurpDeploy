@@ -15,6 +15,7 @@ import (
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/interpreter"
+	"durpdeploy/internal/stepdefinition"
 )
 
 func validateTemplateInputs(
@@ -239,8 +240,9 @@ func (r *Repository) copyTemplateSteps(
 			return err
 		}
 		step, err := q.CreateStep(ctx, db.CreateStepParams{
-			ProjectID:            projectID,
-			Name:                 s.Name,
+			ProjectID: projectID,
+			Name:      s.Name,
+			Kind:      s.Kind, AnsibleJson: s.Ansible.JSON(),
 			ScriptBody:           s.ScriptBody,
 			Interpreter:          s.Interpreter,
 			SortOrder:            s.SortOrder,
@@ -284,7 +286,11 @@ func (r *Repository) validateTemplateStep(s ProjectTemplateStep) error {
 	); err != nil {
 		return templateInvalid(err.Error())
 	}
-	if _, err := interpreter.Validate(s.Interpreter); err != nil {
+	if err := (stepdefinition.Definition(s)).ValidateKind(); err != nil {
+		return err
+	}
+	if _, err := interpreter.Validate(s.Interpreter); s.Kind != stepdefinition.AnsibleKind &&
+		err != nil {
 		return templateInvalid(err.Error())
 	}
 	if _, err := agentexecution.Parse(

@@ -200,6 +200,9 @@ func (r *Repository) decodeDeploymentSteps(
 	}
 	steps := make([]DeploymentStepSnapshot, len(source))
 	for i, step := range source {
+		if err := step.ValidateKind(); err != nil {
+			return nil, fmt.Errorf("step %q: %w", step.Name, err)
+		}
 		// Refresh replaces historical limits with validated project steps.
 		// Retain malformed/negative and legacy-image checks on the old source.
 		if !forRefresh || step.TimeoutSeconds < 0 || step.MaxRetries < 0 {
@@ -241,6 +244,7 @@ func (r *Repository) decodeDeploymentSteps(
 		}
 		steps[i] = DeploymentStepSnapshot{
 			CreateDeploymentStepParams: db.CreateDeploymentStepParams{
+				Kind: step.StepKind(), AnsibleJson: step.Ansible.JSON(),
 				Name:                 step.Name,
 				ScriptBody:           step.ScriptBody,
 				TimeoutSeconds:       step.TimeoutSeconds,

@@ -87,6 +87,9 @@ func (r *DeploymentRunner) createStagingVolume(
 		capacity = limits.PayloadBytes + limits.Entries*int64(os.Getpagesize())
 		nodes = limits.Entries
 	}
+	if mount == ansibleMount {
+		capacity, nodes = ansibleStagingBytes, 16
+	}
 	r.mu.Lock()
 	stageIndex := len(r.staging[deploymentID])
 	r.staging[deploymentID] = append(r.staging[deploymentID], stage)
@@ -102,7 +105,8 @@ func (r *DeploymentRunner) createStagingVolume(
 		"volume", "create", "--label=io.durpdeploy.artifact=true",
 		"--label=io.durpdeploy.namespace=" + r.engine.scope(),
 	}
-	if r.engine.kind == "docker" || mount == deploymentStageMount {
+	if r.engine.kind == "docker" || mount == deploymentStageMount ||
+		mount == ansibleMount {
 		// tmpfs charges security attributes to its inode quota too.
 		args = append(args, "--driver=local", "--opt=type=tmpfs",
 			"--opt=device=tmpfs", fmt.Sprintf(
@@ -121,7 +125,7 @@ func (r *DeploymentRunner) createStagingVolume(
 	keeperMount := stage.volume + ":" + mount + ":rw,nocopy"
 	if r.engine.kind == "podman" {
 		keeperMount += ",noexec,nosuid,nodev"
-		if mount == deploymentStageMount {
+		if mount == deploymentStageMount || mount == ansibleMount {
 			keeperMount += ",z"
 		} else {
 			keeperMount += ",U"

@@ -14,6 +14,7 @@ import (
 	"durpdeploy/internal/config"
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/interpreter"
+	"durpdeploy/internal/stepdefinition"
 )
 
 var errContainerCleanup = errors.New("container cleanup unconfirmed")
@@ -28,6 +29,7 @@ type localStepAttempt struct {
 	verification bool
 	handoff      artifactStage
 	approved     artifactStage
+	ansible      ansibleAttempt
 }
 
 func (r *DeploymentRunner) runStepAttempt(
@@ -81,9 +83,16 @@ func (r *DeploymentRunner) runStepAttempt(
 			return errors.New("staging container is unavailable")
 		}
 	}
-	selected, err := interpreter.Validate(request.step.Interpreter)
-	if err != nil {
+	if err := stepdefinition.Definition(request.step).ValidateKind(); err != nil {
 		return err
+	}
+	selected := "ansible-playbook"
+	var err error
+	if request.step.Kind != stepdefinition.AnsibleKind {
+		selected, err = interpreter.Validate(request.step.Interpreter)
+		if err != nil {
+			return err
+		}
 	}
 	host := r.engine.hostname(runCtx)
 	limits := r.repo.ResourceLimits()
@@ -108,6 +117,20 @@ func (r *DeploymentRunner) runStepAttempt(
 			))
 			request.logWriter.Flush()
 			return err
+		}
+	}
+	if request.step.Kind == stepdefinition.AnsibleKind {
+		request.ansible, err = r.prepareAnsibleAttempt(stepCtx, request)
+		defer func() { result = errors.Join(result, r.cleanupAnsibleAttempt(request.ansible.stage)) }()
+		if err != nil {
+			_, logErr := fmt.Fprintf(
+				request.logWriter,
+				"step %q: Ansible preparation failed: %v\n",
+				request.step.Name,
+				err,
+			)
+			request.logWriter.Flush()
+			return errors.Join(err, logErr)
 		}
 	}
 	selectedEnv, envArgs, err := request.containerEnvironment()
@@ -148,7 +171,9 @@ func (r *DeploymentRunner) runStepAttempt(
 	}
 	cmd := r.engine.command(stepCtx, args...)
 	cmd.Env = append(cmd.Env, selectedEnv...)
-	cmd.Stdin = strings.NewReader(request.step.ScriptBody)
+	if request.step.Kind != stepdefinition.AnsibleKind {
+		cmd.Stdin = strings.NewReader(request.step.ScriptBody)
+	}
 	cmd.Stdout = request.logWriter
 	cmd.Stderr = request.logWriter
 	r.trackAttempt(request.deploymentID, name)
@@ -273,7 +298,16 @@ func (r *DeploymentRunner) localContainerArgs(
 			"--volume="+request.approved.volume+":"+approvedMount+":ro,nocopy",
 		)
 	}
+	if request.ansible.stage.volume != "" {
+		args = append(
+			args,
+			"--volume="+request.ansible.stage.volume+":"+ansibleMount+":ro,nocopy",
+		)
+	}
 	args = append(args, "--entrypoint="+selected, request.step.ContainerImage)
+	if request.step.Kind == stepdefinition.AnsibleKind {
+		return append(args, request.ansible.args...)
+	}
 	switch selected {
 	case interpreter.Bash:
 		if request.verification {

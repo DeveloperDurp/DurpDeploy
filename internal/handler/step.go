@@ -15,7 +15,6 @@ import (
 	"durpdeploy/internal/agentexecution"
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
-	"durpdeploy/internal/interpreter"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/components"
 	"durpdeploy/views/pages"
@@ -37,6 +36,9 @@ func parseStepContainerConfig(
 	target string,
 ) (string, []string, string) {
 	fields := formStepFields(r)
+	if _, err := formAnsible(r); err != nil {
+		return fields.ContainerImage, fields.VariableNames, err.Error()
+	}
 	fields.ExecutionTarget = target
 	if err := ValidateStepExecutionFields(fields); err != nil {
 		return fields.ContainerImage, fields.VariableNames, err.Error()
@@ -316,7 +318,7 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	script := r.FormValue("script_body")
-	selectedInterpreter, err := interpreter.Validate(r.FormValue("interpreter"))
+	selectedInterpreter, err := formInterpreter(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		return
@@ -370,6 +372,11 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		r,
 		target,
 	)
+	if a, _ := formAnsible(r); a != nil && containerErr == "" {
+		if err := h.repo.ValidateAnsibleReferences(r.Context(), projectID, a); err != nil {
+			containerErr = err.Error()
+		}
+	}
 	if err := agentexecution.ValidateLimitsWithPolicy(timeoutSeconds, maxRetries, h.repo.ResourceLimits().Execution); err != nil {
 		containerErr = err.Error()
 	}
@@ -500,6 +507,8 @@ func writeStepFormError(
 	labels []string,
 	agentLabel, errorMsg string,
 ) {
+	a, _ := formAnsible(r)
+	step.Kind, step.AnsibleJson = r.FormValue("kind"), a.JSON()
 	if r.FormValue("dialog") == "1" {
 		step.Interpreter = r.FormValue("interpreter")
 		step.ContainerImage = r.FormValue("container_image")
@@ -660,7 +669,7 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	script := r.FormValue("script_body")
-	selectedInterpreter, err := interpreter.Validate(r.FormValue("interpreter"))
+	selectedInterpreter, err := formInterpreter(r)
 	if err != nil {
 		step := existing
 		step.Name, step.ScriptBody = name, script
@@ -721,6 +730,11 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		r,
 		target,
 	)
+	if a, _ := formAnsible(r); a != nil && containerErr == "" {
+		if err := h.repo.ValidateAnsibleReferences(r.Context(), projectID, a); err != nil {
+			containerErr = err.Error()
+		}
+	}
 	if err := agentexecution.ValidateLimitsWithPolicy(timeoutSeconds, maxRetries, h.repo.ResourceLimits().Execution); err != nil {
 		containerErr = err.Error()
 	}
@@ -943,8 +957,9 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 			}
 			if s.SortOrder >= newOrder && s.SortOrder < oldOrder {
 				p := db.UpdateStepParams{
-					ID:                   s.ID,
-					Name:                 s.Name,
+					ID:   s.ID,
+					Name: s.Name,
+					Kind: s.Kind, AnsibleJson: s.AnsibleJson,
 					ScriptBody:           s.ScriptBody,
 					SortOrder:            s.SortOrder + 1,
 					TimeoutSeconds:       s.TimeoutSeconds,
@@ -971,8 +986,9 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 			}
 			if s.SortOrder > oldOrder && s.SortOrder <= newOrder {
 				p := db.UpdateStepParams{
-					ID:                   s.ID,
-					Name:                 s.Name,
+					ID:   s.ID,
+					Name: s.Name,
+					Kind: s.Kind, AnsibleJson: s.AnsibleJson,
 					ScriptBody:           s.ScriptBody,
 					SortOrder:            s.SortOrder - 1,
 					TimeoutSeconds:       s.TimeoutSeconds,
@@ -995,8 +1011,9 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = qtx.UpdateStep(r.Context(), db.UpdateStepParams{
-		ID:                   target.ID,
-		Name:                 target.Name,
+		ID:   target.ID,
+		Name: target.Name,
+		Kind: target.Kind, AnsibleJson: target.AnsibleJson,
 		ScriptBody:           target.ScriptBody,
 		SortOrder:            newOrder,
 		TimeoutSeconds:       target.TimeoutSeconds,

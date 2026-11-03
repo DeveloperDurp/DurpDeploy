@@ -1,6 +1,7 @@
 package api
 
 import (
+	"durpdeploy/internal/auth"
 	"net/http"
 
 	"durpdeploy/internal/handler"
@@ -31,6 +32,15 @@ func prepareStepFields(
 	if err := handler.ValidateStepExecutionFields(step); err != nil {
 		RespondError(w, http.StatusBadRequest, err.Error())
 		return step, false
+	}
+	if step.Ansible != nil {
+		projectID, ok := auth.ProjectIDFromContext(r.Context())
+		if ok {
+			if err := repo.ValidateAnsibleReferences(r.Context(), projectID, step.Ansible); err != nil {
+				RespondError(w, http.StatusBadRequest, err.Error())
+				return step, false
+			}
+		}
 	}
 	return step, true
 }

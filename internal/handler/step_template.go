@@ -10,7 +10,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"durpdeploy/internal/db"
-	"durpdeploy/internal/interpreter"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/components"
 	"durpdeploy/views/pages"
@@ -86,7 +85,7 @@ func (h *StepTemplateHandler) CreateTemplate(
 		return
 	}
 	script := r.FormValue("script_body")
-	selectedInterpreter, err := interpreter.Validate(r.FormValue("interpreter"))
+	selectedInterpreter, err := formInterpreter(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		return
@@ -98,7 +97,10 @@ func (h *StepTemplateHandler) CreateTemplate(
 	)
 	if containerErr != "" {
 		tpl := &db.StepTemplate{
-			Name:                 name,
+			Name: name,
+			Kind: r.FormValue(
+				"kind",
+			), AnsibleJson: formStepFields(r).Ansible.JSON(),
 			ScriptBody:           script,
 			Interpreter:          selectedInterpreter,
 			ContainerImage:       containerImage,
@@ -121,7 +123,10 @@ func (h *StepTemplateHandler) CreateTemplate(
 
 	if name == "" {
 		tpl := &db.StepTemplate{
-			Name:                 name,
+			Name: name,
+			Kind: r.FormValue(
+				"kind",
+			), AnsibleJson: formStepFields(r).Ansible.JSON(),
 			ScriptBody:           script,
 			Interpreter:          selectedInterpreter,
 			ContainerImage:       containerImage,
@@ -157,7 +162,10 @@ func (h *StepTemplateHandler) CreateTemplate(
 	if err != nil {
 		if IsUniqueViolation(err) {
 			tplErr := &db.StepTemplate{
-				Name:                 name,
+				Name: name,
+				Kind: r.FormValue(
+					"kind",
+				), AnsibleJson: formStepFields(r).Ansible.JSON(),
 				ScriptBody:           script,
 				Interpreter:          selectedInterpreter,
 				ContainerImage:       containerImage,
@@ -265,7 +273,7 @@ func (h *StepTemplateHandler) UpdateTemplate(
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	script := r.FormValue("script_body")
-	selectedInterpreter, err := interpreter.Validate(r.FormValue("interpreter"))
+	selectedInterpreter, err := formInterpreter(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		return
@@ -277,8 +285,11 @@ func (h *StepTemplateHandler) UpdateTemplate(
 	)
 	if containerErr != "" {
 		tpl := &db.StepTemplate{
-			ID:                   id,
-			Name:                 name,
+			ID:   id,
+			Name: name,
+			Kind: r.FormValue(
+				"kind",
+			), AnsibleJson: formStepFields(r).Ansible.JSON(),
 			ScriptBody:           script,
 			Interpreter:          selectedInterpreter,
 			ContainerImage:       containerImage,
@@ -301,8 +312,11 @@ func (h *StepTemplateHandler) UpdateTemplate(
 
 	if name == "" {
 		tpl := &db.StepTemplate{
-			ID:                   id,
-			Name:                 name,
+			ID:   id,
+			Name: name,
+			Kind: r.FormValue(
+				"kind",
+			), AnsibleJson: formStepFields(r).Ansible.JSON(),
 			ScriptBody:           script,
 			Interpreter:          selectedInterpreter,
 			ContainerImage:       containerImage,
@@ -348,8 +362,11 @@ func (h *StepTemplateHandler) UpdateTemplate(
 	if err != nil {
 		if IsUniqueViolation(err) {
 			tpl := &db.StepTemplate{
-				ID:                   id,
-				Name:                 name,
+				ID:   id,
+				Name: name,
+				Kind: r.FormValue(
+					"kind",
+				), AnsibleJson: formStepFields(r).Ansible.JSON(),
 				ScriptBody:           script,
 				Interpreter:          selectedInterpreter,
 				ContainerImage:       containerImage,
@@ -513,8 +530,9 @@ func (h *StepTemplateHandler) InsertTemplate(
 	}
 
 	params := db.CreateStepParams{
-		ProjectID:            projectID,
-		Name:                 tpl.Name,
+		ProjectID: projectID,
+		Name:      tpl.Name,
+		Kind:      tpl.Kind, AnsibleJson: tpl.AnsibleJson,
 		ScriptBody:           tpl.ScriptBody,
 		Interpreter:          tpl.Interpreter,
 		SortOrder:            sortOrder,
@@ -594,7 +612,8 @@ func (h *StepTemplateHandler) SaveStepAsTemplate(
 	}
 
 	params := db.CreateStepTemplateParams{
-		Name:                 step.Name,
+		Name: step.Name,
+		Kind: step.Kind, AnsibleJson: step.AnsibleJson,
 		ScriptBody:           step.ScriptBody,
 		Interpreter:          step.Interpreter,
 		ContainerImage:       step.ContainerImage,

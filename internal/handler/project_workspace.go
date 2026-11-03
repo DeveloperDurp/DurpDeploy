@@ -168,7 +168,9 @@ func populateStageView(
 ) pages.LifecyclePanelStage {
 	for _, row := range data.deployments[[2]int64{projectID, v.Environment.ID}] {
 		deployment := row.Deployment
-		if deployment.Status == "succeeded" && v.LatestDeployment == nil {
+		if deployment.Status == "succeeded" &&
+			row.IsCheck == 0 &&
+			v.LatestDeployment == nil {
 			v.LatestDeployment = &deployment
 			v.LatestVersion = row.Version
 		}

@@ -40,7 +40,13 @@ export function createStepVariables(focusFormField) {
 				for (const field of ['interpreter', 'execution_target', 'agent_execution_mode', 'variable_names']) {
 					query.set(field, this.form.elements.namedItem(field)?.value || '');
 				}
-				if (query.get('execution_target') === 'local') query.set('agent_execution_mode', 'host');
+				if (this.form.elements.namedItem('kind')?.value === 'ansible') {
+ query.set('kind', 'ansible');
+ query.set('interpreter', 'bash');
+ const mappings = JSON.parse(this.form.elements.namedItem('ansible_extra_vars')?.value || '{}');
+ query.set('variable_names', Object.values(mappings).join(','));
+ }
+ if (query.get('execution_target') === 'local') query.set('agent_execution_mode', 'host');
 			} else {
 				query.set('interpreter', this.interpreter);
 				query.set('execution_target', this.target);

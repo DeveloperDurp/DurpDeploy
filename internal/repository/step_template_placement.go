@@ -33,9 +33,10 @@ func (r *Repository) CreateStepTemplateWithPlacement(
 		version, err := q.CreateStepTemplateVersion(
 			ctx,
 			db.CreateStepTemplateVersionParams{
-				TemplateID:           template.ID,
-				VersionNumber:        1,
-				Name:                 template.Name,
+				TemplateID:    template.ID,
+				VersionNumber: 1,
+				Name:          template.Name,
+				Kind:          template.Kind, AnsibleJson: template.AnsibleJson,
 				ScriptBody:           template.ScriptBody,
 				Interpreter:          template.Interpreter,
 				AgentExecutionMode:   template.AgentExecutionMode,
@@ -94,9 +95,10 @@ func (r *Repository) UpdateStepTemplateWithPlacement(
 		version, err := q.CreateStepTemplateVersion(
 			ctx,
 			db.CreateStepTemplateVersionParams{
-				TemplateID:           template.ID,
-				VersionNumber:        latest + 1,
-				Name:                 template.Name,
+				TemplateID:    template.ID,
+				VersionNumber: latest + 1,
+				Name:          template.Name,
+				Kind:          template.Kind, AnsibleJson: template.AnsibleJson,
 				ScriptBody:           template.ScriptBody,
 				Interpreter:          template.Interpreter,
 				AgentExecutionMode:   template.AgentExecutionMode,

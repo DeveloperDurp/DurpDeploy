@@ -48,8 +48,13 @@ func previewRollback(
 	if err != nil {
 		return RollbackPreview{}, err
 	}
-	if source.Kind != "deployment" || (source.Status != "succeeded" &&
-		source.Status != "failed" && source.Status != "cancelled") {
+	check, err := q.IsAnsibleCheckDeployment(ctx, sourceID)
+	if err != nil {
+		return RollbackPreview{}, err
+	}
+	if check != 0 || source.Kind != "deployment" ||
+		(source.Status != "succeeded" &&
+			source.Status != "failed" && source.Status != "cancelled") {
 		return RollbackPreview{}, ErrRollbackConflict
 	}
 	release, err := q.GetDeploymentRelease(ctx, source.ReleaseID)

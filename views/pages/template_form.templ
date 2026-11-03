@@ -88,7 +88,7 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 		</div>
 		<form
 			id="template-settings-form"
-			x-data={ components.StepPlacementData(db.Step{ExecutionTarget: tpl.ExecutionTarget, AgentExecutionMode: tpl.AgentExecutionMode}, "") }
+			x-data={ components.StepPlacementData(db.Step{Kind: tpl.Kind, ExecutionTarget: tpl.ExecutionTarget, AgentExecutionMode: tpl.AgentExecutionMode}, "") }
 			if isNew {
 				method="post"
 				action="/templates"
@@ -103,11 +103,11 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 			}
 			class="space-y-4"
 		>
-			<div class="form-control">
+			<div class="form-control" x-show="kind !== 'ansible'">
 				<label class="label" for="template-interpreter">
 					<span class="label-text">Interpreter</span>
 				</label>
-				<select id="template-interpreter" name="interpreter" class="select select-bordered">
+				<select id="template-interpreter" name="interpreter" x-bind:disabled="kind === 'ansible'" class="select select-bordered">
 					<option value="bash" selected?={ tpl.Interpreter == "" || tpl.Interpreter == interpreter.Bash }>Bash</option>
 					<option value="pwsh" selected?={ tpl.Interpreter == interpreter.PowerShell }>PowerShell</option>
 					<option value="python3" selected?={ tpl.Interpreter == interpreter.Python }>Python</option>
@@ -122,10 +122,11 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 					<span class="text-error text-sm mt-1" data-form-error role="alert" tabindex="-1">{ errorMsg }</span>
 				}
 			</div>
+			@components.AnsibleFields(tpl.AnsibleJson, 0, "template-ansible")
 			<div class="form-control">
 				<label class="label" for="template-target"><span class="label-text">Run step on</span></label>
 				<select id="template-target" name="execution_target" x-model="executionTarget" class="select select-bordered">
-					<option value="local">Server container</option><option value="agent">Agent</option>
+					<option value="local">Server container</option><option value="agent" x-bind:disabled="kind === 'ansible'">Agent</option>
 				</select>
 			</div>
 			@components.AgentExecutionMode(tpl.AgentExecutionMode, "template-agent-mode")
@@ -145,14 +146,14 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 				/>
 				<label class="label"><span class="label-text-alt">Required for container execution. The image must contain the selected interpreter.</span></label>
 			</div>
-			<div class="form-control">
+			<div class="form-control" x-show="kind !== 'ansible'">
 				<label class="label" for="template-variable-names">
 					<span class="label-text">Limit variables (optional)</span>
 				</label>
 				<input
 					id="template-variable-names"
 					type="text"
-					name="variable_names"
+					name="variable_names" x-bind:disabled="kind === 'ansible'"
 					value={ tplVariableNamesCSV(tpl) }
 					placeholder="comma-separated, e.g. DEPLOY_ENV, API_KEY"
 					class="input input-bordered"
@@ -171,11 +172,11 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 				<select id={ "template-review-format" } name="approval_review_format" class="select select-bordered w-full"><option value="" selected?={ tpl.ApprovalReviewFormat == "" }>No approval gate</option><option value="summary" selected?={ tpl.ApprovalReviewFormat == "summary" }>Action counts</option><option value="terraform" selected?={ tpl.ApprovalReviewFormat == "terraform" }>Terraform show JSON</option></select>
 				<p class="text-sm">Paths are relative to DURPDEPLOY_STAGE_DIR. A gate pauses after this step; subsequent steps use DURPDEPLOY_APPROVED_DIR. Gated deployments require local execution and zero retries.</p>
 			</fieldset>
-			<div class="form-control">
+			<div class="form-control" x-show="kind !== 'ansible'">
 				<label class="label">
 					<span class="label-text">Script</span>
 				</label>
-				<textarea name="script_body" class="textarea textarea-bordered" rows="6">{ tpl.ScriptBody }</textarea>
+				<textarea name="script_body" x-bind:disabled="kind === 'ansible'" class="textarea textarea-bordered" rows="6">{ tpl.ScriptBody }</textarea>
 			</div>
 		</form>
 		if !isNew && CanWrite(ctx) {

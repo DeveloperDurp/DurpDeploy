@@ -2,6 +2,35 @@
 @source "../../views/**/*.templ";
 @source "../js/app.js";
 @source "../js/charts.js";
+@source "../js/deployment-logs.js";
+
+.ansible-log-line {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 0.75rem;
+}
+.ansible-log-line > :last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ansible-log-line > .text-gray-500 {
+  white-space: nowrap;
+  color: var(--color-base-content);
+  opacity: 0.65;
+}
+[data-theme="light"] .ansible-log-line .text-info { color: #075985; }
+[data-theme="light"] .ansible-log-line .text-success { color: #166534; }
+[data-theme="light"] .ansible-log-line .text-warning { color: #854d0e; }
+[data-theme="light"] .ansible-log-line .text-error { color: #991b1b; }
+.ansible-log-blank {
+  height: 0.375rem;
+  overflow: hidden;
+  visibility: hidden;
+}
+.ansible-recap-zero {
+  color: var(--color-base-content);
+  opacity: 0.65;
+}
 
 @theme {
   --color-rosewater: #f5e0dc;

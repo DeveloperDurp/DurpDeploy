@@ -1,6 +1,8 @@
 // allow: SIZE_OK — swagger model definitions for the generated OpenAPI spec.
 package api
 
+import "durpdeploy/internal/stepdefinition"
+
 // --- Database-mirror models returned directly by API handlers ---
 
 // Environment represents a deployment target.
@@ -47,18 +49,20 @@ type swaggerLifecycleStage struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerStep struct {
-	ID                 int64    `json:"id"`
-	ProjectID          int64    `json:"project_id"`
-	Name               string   `json:"name"`
-	ScriptBody         string   `json:"script_body"`
-	Interpreter        string   `json:"interpreter"`
-	SortOrder          int64    `json:"sort_order"`
-	CreatedAt          int64    `json:"created_at"`
-	TimeoutSeconds     int64    `json:"timeout_seconds"`
-	MaxRetries         int64    `json:"max_retries"`
-	ExecutionTarget    string   `json:"execution_target"`
-	AgentExecutionMode string   `json:"agent_execution_mode"`
-	AgentSelectors     []string `json:"agent_selectors"`
+	Kind               string                  `json:"kind"`
+	Ansible            *stepdefinition.Ansible `json:"ansible,omitempty"`
+	ID                 int64                   `json:"id"`
+	ProjectID          int64                   `json:"project_id"`
+	Name               string                  `json:"name"`
+	ScriptBody         string                  `json:"script_body"`
+	Interpreter        string                  `json:"interpreter"`
+	SortOrder          int64                   `json:"sort_order"`
+	CreatedAt          int64                   `json:"created_at"`
+	TimeoutSeconds     int64                   `json:"timeout_seconds"`
+	MaxRetries         int64                   `json:"max_retries"`
+	ExecutionTarget    string                  `json:"execution_target"`
+	AgentExecutionMode string                  `json:"agent_execution_mode"`
+	AgentSelectors     []string                `json:"agent_selectors"`
 	// Container image required for local steps and agent container mode.
 	ContainerImage       string `json:"container_image"`
 	NetworkMode          string `json:"network_mode"`
@@ -74,20 +78,22 @@ type swaggerStep struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerStepTemplate struct {
-	ID                   int64    `json:"id"`
-	Name                 string   `json:"name"`
-	ScriptBody           string   `json:"script_body"`
-	Interpreter          string   `json:"interpreter"`
-	CreatedAt            int64    `json:"created_at"`
-	ExecutionTarget      string   `json:"execution_target"`
-	AgentExecutionMode   string   `json:"agent_execution_mode"`
-	AgentSelectors       []string `json:"agent_selectors"`
-	ContainerImage       string   `json:"container_image"`
-	NetworkMode          string   `json:"network_mode"`
-	ApprovalArtifactPath string   `json:"approval_artifact_path"`
-	ApprovalReviewPath   string   `json:"approval_review_path"`
-	ApprovalReviewFormat string   `json:"approval_review_format"`
-	VariableNames        []string `json:"variable_names"`
+	Kind                 string                  `json:"kind"`
+	Ansible              *stepdefinition.Ansible `json:"ansible,omitempty"`
+	ID                   int64                   `json:"id"`
+	Name                 string                  `json:"name"`
+	ScriptBody           string                  `json:"script_body"`
+	Interpreter          string                  `json:"interpreter"`
+	CreatedAt            int64                   `json:"created_at"`
+	ExecutionTarget      string                  `json:"execution_target"`
+	AgentExecutionMode   string                  `json:"agent_execution_mode"`
+	AgentSelectors       []string                `json:"agent_selectors"`
+	ContainerImage       string                  `json:"container_image"`
+	NetworkMode          string                  `json:"network_mode"`
+	ApprovalArtifactPath string                  `json:"approval_artifact_path"`
+	ApprovalReviewPath   string                  `json:"approval_review_path"`
+	ApprovalReviewFormat string                  `json:"approval_review_format"`
+	VariableNames        []string                `json:"variable_names"`
 }
 
 // StepTemplateVersion is a historical version of a step template.
@@ -95,22 +101,24 @@ type swaggerStepTemplate struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerStepTemplateVersion struct {
-	ID                   int64    `json:"id"`
-	TemplateID           int64    `json:"template_id"`
-	VersionNumber        int64    `json:"version_number"`
-	Name                 string   `json:"name"`
-	ScriptBody           string   `json:"script_body"`
-	Interpreter          string   `json:"interpreter"`
-	CreatedAt            int64    `json:"created_at"`
-	ExecutionTarget      string   `json:"execution_target"`
-	AgentExecutionMode   string   `json:"agent_execution_mode"`
-	AgentSelectors       []string `json:"agent_selectors"`
-	ContainerImage       string   `json:"container_image"`
-	NetworkMode          string   `json:"network_mode"`
-	ApprovalArtifactPath string   `json:"approval_artifact_path"`
-	ApprovalReviewPath   string   `json:"approval_review_path"`
-	ApprovalReviewFormat string   `json:"approval_review_format"`
-	VariableNames        []string `json:"variable_names"`
+	Kind                 string                  `json:"kind"`
+	Ansible              *stepdefinition.Ansible `json:"ansible,omitempty"`
+	ID                   int64                   `json:"id"`
+	TemplateID           int64                   `json:"template_id"`
+	VersionNumber        int64                   `json:"version_number"`
+	Name                 string                  `json:"name"`
+	ScriptBody           string                  `json:"script_body"`
+	Interpreter          string                  `json:"interpreter"`
+	CreatedAt            int64                   `json:"created_at"`
+	ExecutionTarget      string                  `json:"execution_target"`
+	AgentExecutionMode   string                  `json:"agent_execution_mode"`
+	AgentSelectors       []string                `json:"agent_selectors"`
+	ContainerImage       string                  `json:"container_image"`
+	NetworkMode          string                  `json:"network_mode"`
+	ApprovalArtifactPath string                  `json:"approval_artifact_path"`
+	ApprovalReviewPath   string                  `json:"approval_review_path"`
+	ApprovalReviewFormat string                  `json:"approval_review_format"`
+	VariableNames        []string                `json:"variable_names"`
 }
 
 // Release is a refreshable snapshot of project steps and variables.
@@ -133,6 +141,8 @@ type swaggerRelease struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerDeployment struct {
+	// Int64 is 1 for check, 0 for apply. Invalid means legacy step options.
+	AnsibleCheckMode swaggerSQLNullInteger `json:"ansible_check_mode"`
 	// Present on the deployment detail response.
 	Provenance         *swaggerReleaseSource `json:"provenance,omitempty"`
 	QueuePosition      int64                 `json:"queue_position"`
@@ -154,18 +164,19 @@ type swaggerDeployment struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerDeploymentListItem struct {
-	ID              int64   `json:"id"`
-	ReleaseID       int64   `json:"release_id"`
-	EnvironmentID   int64   `json:"environment_id"`
-	Status          string  `json:"status"`
-	StartedAt       *int64  `json:"started_at"`
-	FinishedAt      *int64  `json:"finished_at"`
-	CreatedAt       int64   `json:"created_at"`
-	Forced          int64   `json:"forced"`
-	Note            *string `json:"note"`
-	ProjectName     string  `json:"project_name"`
-	ReleaseVersion  string  `json:"release_version"`
-	EnvironmentName string  `json:"environment_name"`
+	AnsibleCheckMode swaggerSQLNullInteger `json:"ansible_check_mode"`
+	ID               int64                 `json:"id"`
+	ReleaseID        int64                 `json:"release_id"`
+	EnvironmentID    int64                 `json:"environment_id"`
+	Status           string                `json:"status"`
+	StartedAt        *int64                `json:"started_at"`
+	FinishedAt       *int64                `json:"finished_at"`
+	CreatedAt        int64                 `json:"created_at"`
+	Forced           int64                 `json:"forced"`
+	Note             *string               `json:"note"`
+	ProjectName      string                `json:"project_name"`
+	ReleaseVersion   string                `json:"release_version"`
+	EnvironmentName  string                `json:"environment_name"`
 }
 
 // DeploymentListResponse is the paginated envelope for ListDeployments.
@@ -547,15 +558,17 @@ type swaggerReorderStagesRequest struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerStepRequest struct {
-	Name               string   `json:"name"`
-	ScriptBody         string   `json:"script_body"`
-	Interpreter        string   `json:"interpreter"`
-	SortOrder          int64    `json:"sort_order"`
-	TimeoutSeconds     int64    `json:"timeout_seconds"`
-	MaxRetries         int64    `json:"max_retries"`
-	ExecutionTarget    string   `json:"execution_target"`
-	AgentExecutionMode string   `json:"agent_execution_mode"`
-	AgentSelectors     []string `json:"agent_selectors"`
+	Kind               string                  `json:"kind"`
+	Ansible            *stepdefinition.Ansible `json:"ansible,omitempty"`
+	Name               string                  `json:"name"`
+	ScriptBody         string                  `json:"script_body"`
+	Interpreter        string                  `json:"interpreter"`
+	SortOrder          int64                   `json:"sort_order"`
+	TimeoutSeconds     int64                   `json:"timeout_seconds"`
+	MaxRetries         int64                   `json:"max_retries"`
+	ExecutionTarget    string                  `json:"execution_target"`
+	AgentExecutionMode string                  `json:"agent_execution_mode"`
+	AgentSelectors     []string                `json:"agent_selectors"`
 	// Required for local steps and agent container mode; rejected for agent host mode.
 	ContainerImage       string `json:"container_image"`
 	NetworkMode          string `json:"network_mode"`
@@ -580,12 +593,14 @@ type swaggerReorderStepsRequest struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerStepTemplateRequest struct {
-	Name               string   `json:"name"`
-	ScriptBody         string   `json:"script_body"`
-	Interpreter        string   `json:"interpreter"`
-	ExecutionTarget    string   `json:"execution_target"`
-	AgentExecutionMode string   `json:"agent_execution_mode"`
-	AgentSelectors     []string `json:"agent_selectors"`
+	Kind               string                  `json:"kind"`
+	Ansible            *stepdefinition.Ansible `json:"ansible,omitempty"`
+	Name               string                  `json:"name"`
+	ScriptBody         string                  `json:"script_body"`
+	Interpreter        string                  `json:"interpreter"`
+	ExecutionTarget    string                  `json:"execution_target"`
+	AgentExecutionMode string                  `json:"agent_execution_mode"`
+	AgentSelectors     []string                `json:"agent_selectors"`
 	// Required for local steps and agent container mode; rejected for agent host mode.
 	ContainerImage       string `json:"container_image"`
 	NetworkMode          string `json:"network_mode"`
@@ -774,10 +789,12 @@ type swaggerEmptyResponse struct{}
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerDeploymentScheduleRequest struct {
-	ReleaseID     int64  `json:"release_id"`
-	EnvironmentID int64  `json:"environment_id"`
-	Force         bool   `json:"force"`
-	Note          string `json:"note"`
+	// Default false. Applies to Ansible steps only.
+	AnsibleCheckMode bool   `json:"ansible_check_mode,omitempty"`
+	ReleaseID        int64  `json:"release_id"`
+	EnvironmentID    int64  `json:"environment_id"`
+	Force            bool   `json:"force"`
+	Note             string `json:"note"`
 }
 
 // Array response models.
@@ -1031,21 +1048,23 @@ type swaggerAgentLabelRequest struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookStep struct {
-	Name                 string   `json:"name"`
-	ScriptBody           string   `json:"script_body"`
-	Interpreter          string   `json:"interpreter"`
-	SortOrder            int64    `json:"sort_order"`
-	TimeoutSeconds       int64    `json:"timeout_seconds"`
-	MaxRetries           int64    `json:"max_retries"`
-	ExecutionTarget      string   `json:"execution_target"`
-	AgentExecutionMode   string   `json:"agent_execution_mode"`
-	AgentSelectors       []string `json:"agent_selectors"`
-	ContainerImage       string   `json:"container_image"`
-	NetworkMode          string   `json:"network_mode"`
-	ApprovalArtifactPath string   `json:"approval_artifact_path"`
-	ApprovalReviewPath   string   `json:"approval_review_path"`
-	ApprovalReviewFormat string   `json:"approval_review_format"`
-	VariableNames        []string `json:"variable_names"`
+	Kind                 string                  `json:"kind"`
+	Ansible              *stepdefinition.Ansible `json:"ansible,omitempty"`
+	Name                 string                  `json:"name"`
+	ScriptBody           string                  `json:"script_body"`
+	Interpreter          string                  `json:"interpreter"`
+	SortOrder            int64                   `json:"sort_order"`
+	TimeoutSeconds       int64                   `json:"timeout_seconds"`
+	MaxRetries           int64                   `json:"max_retries"`
+	ExecutionTarget      string                  `json:"execution_target"`
+	AgentExecutionMode   string                  `json:"agent_execution_mode"`
+	AgentSelectors       []string                `json:"agent_selectors"`
+	ContainerImage       string                  `json:"container_image"`
+	NetworkMode          string                  `json:"network_mode"`
+	ApprovalArtifactPath string                  `json:"approval_artifact_path"`
+	ApprovalReviewPath   string                  `json:"approval_review_path"`
+	ApprovalReviewFormat string                  `json:"approval_review_format"`
+	VariableNames        []string                `json:"variable_names"`
 }
 
 // swagger:model RunbookSaveRequest
@@ -1099,8 +1118,10 @@ type swaggerRunbookSaveResponse struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookExecuteRequest struct {
-	EnvironmentID int64 `json:"environment_id"`
-	VersionID     int64 `json:"version_id"`
+	// Default false. Retries retain the accepted execution option.
+	AnsibleCheckMode bool  `json:"ansible_check_mode,omitempty"`
+	EnvironmentID    int64 `json:"environment_id"`
+	VersionID        int64 `json:"version_id"`
 }
 
 // swagger:model RunbookExecution
@@ -1108,6 +1129,8 @@ type swaggerRunbookExecuteRequest struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookExecution struct {
+	// Present on execution detail and history responses.
+	AnsibleCheckMode swaggerSQLNullInteger `json:"ansible_check_mode"`
 	ID               int64                 `json:"id"`
 	RunbookVersionID int64                 `json:"runbook_version_id"`
 	DeploymentID     int64                 `json:"deployment_id"`

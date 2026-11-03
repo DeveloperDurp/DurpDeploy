@@ -17,6 +17,18 @@ func runbookEditorSteps(raw string) (string, error) {
 		if step == nil {
 			return "", errors.New("invalid runbook step")
 		}
+		if value, ok := step["ansible"]; ok && string(value) != "null" {
+			var config map[string]json.RawMessage
+			if err := json.Unmarshal(value, &config); err != nil {
+				return "", err
+			}
+			delete(config, "check")
+			encoded, err := json.Marshal(config)
+			if err != nil {
+				return "", err
+			}
+			step["ansible"] = encoded
+		}
 		var retries int64
 		if value, ok := step["max_retries"]; ok {
 			if err := json.Unmarshal(value, &retries); err != nil {
