@@ -11,7 +11,7 @@ import (
 
 func (request localStepAttempt) containerEnvironment() ([]string, []string, error) {
 	if request.step.Kind == "ansible" {
-		return nil, ansibleEnvironmentArgs(), nil
+		return nil, ansibleEnvironmentArgs(request.step.Ansible), nil
 	}
 	variableNames, err := request.executionVariableNames()
 	if err != nil {

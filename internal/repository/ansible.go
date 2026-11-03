@@ -88,8 +88,10 @@ func (r *Repository) ValidateAnsibleReferences(
 	projectID int64,
 	config *stepdefinition.Ansible,
 ) error {
-	if err := r.ValidateAnsibleCredential(ctx, projectID, config.SSHKeyVariable, 0); err != nil {
-		return err
+	if config.Connection != "local" {
+		if err := r.ValidateAnsibleCredential(ctx, projectID, config.SSHKeyVariable, 0); err != nil {
+			return err
+		}
 	}
 	project, err := r.Queries.GetProject(ctx, projectID)
 	if err != nil {
@@ -171,7 +173,8 @@ func validateAnsibleCapturedStep(
 	if err != nil || a == nil {
 		return stepdefinition.ErrInvalidAnsible
 	}
-	if key, exists := global[a.SSHKeyVariable]; !exists || key.Secret == 0 {
+	if key, exists := global[a.SSHKeyVariable]; a.Connection != "local" &&
+		(!exists || key.Secret == 0) {
 		return errors.Join(
 			stepdefinition.ErrInvalidAnsible,
 			errors.New(
@@ -214,8 +217,10 @@ func (r *Repository) validateAnsibleAdmission(
 		if config == nil {
 			return stepdefinition.ErrInvalidAnsible
 		}
-		if err := r.ValidateAnsibleCredential(ctx, projectID, config.SSHKeyVariable, environmentID); err != nil {
-			return err
+		if config.Connection != "local" {
+			if err := r.ValidateAnsibleCredential(ctx, projectID, config.SSHKeyVariable, environmentID); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

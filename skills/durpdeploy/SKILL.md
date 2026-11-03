@@ -579,6 +579,20 @@ Empty mappings pass no user variables.
 Select an enrolled secret SSH credential by name.
 Supply verified `known_hosts` entries.
 Select `network_mode: "bridge"` for SSH access.
+Set `ansible.connection: "local"` to run inside the isolated server execution container.
+Use `inventory: "all: {hosts: {localhost: {}}}"` without host connection options.
+Omit `ssh_key_variable` and `known_hosts` for local connections.
+Mixed local and SSH configuration is invalid.
+Omitted connections and `connection: "ssh"` retain SSH credential and host verification requirements.
+Use `network_mode: "bridge"` for local API access or `"none"` for offline work.
+Local mode preserves container isolation and does not execute on the server host.
+Map `ARTIFACT_PATH` and `DURPDEPLOY_STAGE_DIR` to extra variables for packaged playbooks and generated output.
+Import a packaged playbook with `- ansible.builtin.import_playbook: '{{ package_dir }}/playbooks/export.yml'`.
+Write generated kubeconfig files under the mapped staging directory for subsequent steps.
+Use writable `/tmp` paths for tool caches.
+Replace secret environment lookups with explicit mappings and preserve separate handoff operations.
+Read `docs/ansible.md` for the minimal local API example and complete packaged-playbook example.
+Connection mode persists through releases, runbooks, execution snapshots, retries, and execution check mode.
 Use `POST /api/v1/projects/$PID/ansible/preview` with the Ansible configuration object to preview selected targets.
 The response contains a sorted `targets` array without credential values.
 Omit `script_body`, `interpreter`, and `variable_names` for Ansible steps.

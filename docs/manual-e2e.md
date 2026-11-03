@@ -75,6 +75,38 @@ Keep the example running during manual review.
 
 ## Native Ansible
 
+### Local container connections
+
+Create an Ansible step with Connection set to Local (server container).
+Use `all: {hosts: {localhost: {}}}` as its inventory.
+Leave both SSH fields empty.
+Select Preview targets.
+Confirm that the preview lists `localhost`.
+Save and reopen the step.
+Confirm that Connection remains Local (server container).
+Enter an SSH credential reference.
+Confirm that saving rejects the mixed configuration.
+Clear the reference before saving again.
+
+Follow the packaged-playbook example in [Ansible documentation](ansible.md#packaged-playbooks-and-staging-output).
+Run the release in apply mode.
+Confirm that the subsequent step reads the staged kubeconfig.
+Run the release with Ansible check mode selected.
+Confirm that the history records check mode and the playbook skips the file write.
+Keep subsequent steps compatible with absent output during check mode.
+Leave all test schedules disabled.
+
+Run the isolated API and browser regressions:
+
+```bash
+bash scripts/go_test.sh -tags='e2e packagebrowser' -run TestAnsibleLocal -v -count=1 ./internal/handler/api
+```
+
+These package tests remove their isolated databases and containers.
+Retain running-server examples for manual checks.
+
+### SSH container connections
+
 Read [native Ansible steps](ansible.md) before changing SSH targets or credentials.
 Use a disposable SSH target and a dedicated test key.
 Keep the target, project, environment, releases, and deployments available after testing.

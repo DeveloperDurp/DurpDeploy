@@ -29,7 +29,8 @@ templ AnsibleFields(raw string, projectID int64, prefix string) {
  </div>
  <fieldset x-show="kind === 'ansible'" x-bind:disabled="kind !== 'ansible'" class="space-y-4 xl:col-span-7" data-ansible-fields>
   <p>Run in a server Linux container. Use inline static YAML inventory. Inventory uploads and dynamic inventory are unsupported.</p>
-  <p>Select an image with ansible-playbook, Python, SSH, and the required collections. Select bridge networking for SSH targets.</p>
+  <p>Select an image with ansible-playbook, Python, and the required collections. SSH connections also require OpenSSH.</p>
+  <div class="form-control"><label for={ prefix+"-connection" } class="label">Connection</label><select id={ prefix+"-connection" } name="ansible_connection" class="select select-bordered"><option value="ssh" selected?={ a.Connection != "local" }>SSH</option><option value="local" selected?={ a.Connection == "local" }>Local (server container)</option></select><p>Local connections run inside the execution container. Use localhost inventory and leave SSH fields empty.</p></div>
   <div class="form-control"><label for={ prefix+"-playbook" } class="label">YAML playbook</label><textarea id={ prefix+"-playbook" } name="ansible_playbook" rows="12" spellcheck="false" class="textarea textarea-bordered font-mono">{ a.Playbook }</textarea></div>
   <div class="form-control"><label for={ prefix+"-inventory" } class="label">Static YAML inventory</label><textarea id={ prefix+"-inventory" } name="ansible_inventory" rows="8" spellcheck="false" class="textarea textarea-bordered font-mono">{ a.Inventory }</textarea></div>
   <div class="form-control"><label for={ prefix+"-mappings" } class="label">Extra variable mappings</label><textarea id={ prefix+"-mappings" } name="ansible_extra_vars" rows="4" class="textarea textarea-bordered font-mono">{ ansibleMappings(a) }</textarea><p>Use a JSON object: Ansible variable name to DurpDeploy variable name. Empty mappings pass no user variables.</p></div>
@@ -37,9 +38,9 @@ templ AnsibleFields(raw string, projectID int64, prefix string) {
    if projectID > 0 {
     <datalist id={ prefix+"-credentials" } hx-get={ fmt.Sprintf("/projects/%d/ansible/credentials", projectID) } hx-trigger="load" hx-target="this" hx-swap="innerHTML"></datalist>
    }
-   <p>Select an enrolled secret credential containing an unencrypted SSH private key. Key values stay protected.</p>
+   <p>For SSH connections, select an enrolled secret credential containing an unencrypted SSH private key. Leave empty for local connections.</p>
   </div>
-  <div class="form-control"><label for={ prefix+"-known-hosts" } class="label">SSH known_hosts</label><textarea id={ prefix+"-known-hosts" } name="ansible_known_hosts" rows="4" class="textarea textarea-bordered font-mono">{ a.KnownHosts }</textarea><p>Host verification is required. Verify host keys through a trusted channel.</p></div>
+  <div class="form-control"><label for={ prefix+"-known-hosts" } class="label">SSH known_hosts</label><textarea id={ prefix+"-known-hosts" } name="ansible_known_hosts" rows="4" class="textarea textarea-bordered font-mono">{ a.KnownHosts }</textarea><p>SSH connections require verified host keys. Leave empty for local connections.</p></div>
   <div class="form-control"><label for={ prefix+"-tags" } class="label">Tags</label><input id={ prefix+"-tags" } name="ansible_tags" value={ strings.Join(a.Tags, ", ") } class="input input-bordered"/></div>
   <div class="form-control"><label for={ prefix+"-limit" } class="label">Host limit</label><input id={ prefix+"-limit" } name="ansible_limit" value={ strings.Join(a.Limit, ", ") } class="input input-bordered"/><p>Enter comma-separated inventory hosts or groups. Pattern expressions are unsupported.</p></div>
   if projectID > 0 {

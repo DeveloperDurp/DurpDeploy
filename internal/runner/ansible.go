@@ -20,20 +20,25 @@ const ansibleStagingBytes = 8 << 20
 
 const ansibleSSHArgs = "-F /dev/null -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/ansible/known_hosts -o GlobalKnownHostsFile=/dev/null -o IdentitiesOnly=yes -o IdentityAgent=none -o ForwardAgent=no -o ProxyCommand=none -o ProxyJump=none -o ControlMaster=no"
 
-func ansibleEnvironmentArgs() []string {
-	return []string{
+func ansibleEnvironmentArgs(a *stepdefinition.Ansible) []string {
+	args := []string{
 		"--env=ANSIBLE_CONFIG=/ansible/ansible.cfg",
 		"--env=ANSIBLE_NOCOLOR=1",
-		"--env=ANSIBLE_HOST_KEY_CHECKING=True",
-		"--env=ANSIBLE_PRIVATE_KEY_FILE=/ansible/id_key",
-		"--env=ANSIBLE_SSH_ARGS=" + ansibleSSHArgs,
-		"--env=ANSIBLE_SSH_COMMON_ARGS=",
-		"--env=ANSIBLE_SSH_EXTRA_ARGS=",
 		"--env=ANSIBLE_LOG_PATH=",
 		"--env=SSH_AUTH_SOCK=", "--env=SSH_AGENT_PID=",
 		"--env=HTTP_PROXY=", "--env=HTTPS_PROXY=", "--env=ALL_PROXY=",
 		"--env=http_proxy=", "--env=https_proxy=", "--env=all_proxy=",
 	}
+	if a == nil || a.Connection != "local" {
+		args = append(args,
+			"--env=ANSIBLE_HOST_KEY_CHECKING=True",
+			"--env=ANSIBLE_PRIVATE_KEY_FILE=/ansible/id_key",
+			"--env=ANSIBLE_SSH_ARGS="+ansibleSSHArgs,
+			"--env=ANSIBLE_SSH_COMMON_ARGS=",
+			"--env=ANSIBLE_SSH_EXTRA_ARGS=",
+		)
+	}
+	return args
 }
 
 type ansibleAttempt struct {
@@ -50,10 +55,6 @@ func (r *DeploymentRunner) prepareAnsibleAttempt(
 		return prepared, err
 	}
 	a := request.step.Ansible
-	key, err := r.ansibleSSHKey(ctx, request)
-	if err != nil {
-		return prepared, err
-	}
 	encoded, err := request.ansibleExtraVariables()
 	if err != nil {
 		return prepared, err
@@ -62,8 +63,18 @@ func (r *DeploymentRunner) prepareAnsibleAttempt(
 		"playbook.yml": a.Playbook, "inventory.yml": a.Inventory,
 		"vars.json": string(
 			encoded,
-		), "id_key": key, "known_hosts": a.KnownHosts,
+		),
 		"ansible.cfg": ansibleConfig,
+	}
+	if a.Connection == "local" {
+		files["ansible.cfg"] = ansibleLocalConfig
+	} else {
+		key, err := r.ansibleSSHKey(ctx, request)
+		if err != nil {
+			return prepared, err
+		}
+		files["id_key"] = key
+		files["known_hosts"] = a.KnownHosts
 	}
 	archive, err := ansibleArchive(files)
 	if err != nil {
@@ -105,6 +116,9 @@ func (r *DeploymentRunner) prepareAnsibleAttempt(
 		"@/ansible/vars.json",
 		"--limit",
 		strings.Join(targets, ","),
+	}
+	if a.Connection == "local" {
+		prepared.args = append(prepared.args, "--connection", "local")
 	}
 	if len(a.Tags) != 0 {
 		prepared.args = append(
@@ -276,4 +290,17 @@ display_args_to_stdout = False
 unparsed_is_failed = True
 [ssh_connection]
 ssh_args = ` + ansibleSSHArgs + `
+`
+
+const ansibleLocalConfig = `[defaults]
+inventory = /ansible/inventory.yml
+retry_files_enabled = False
+local_tmp = /tmp/ansible-local
+remote_tmp = /tmp/ansible-remote
+interpreter_python = auto_silent
+nocows = True
+force_color = False
+display_args_to_stdout = False
+[inventory]
+unparsed_is_failed = True
 `

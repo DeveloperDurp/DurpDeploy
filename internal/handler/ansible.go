@@ -18,6 +18,7 @@ func formAnsible(r *http.Request) (*stepdefinition.Ansible, error) {
 		return nil, nil
 	}
 	a := &stepdefinition.Ansible{
+		Connection: r.FormValue("ansible_connection"),
 		Playbook: r.FormValue(
 			"ansible_playbook",
 		), Inventory: r.FormValue("ansible_inventory"),

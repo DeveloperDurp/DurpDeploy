@@ -24,6 +24,9 @@ var ErrInvalidAnsible = errors.New("invalid Ansible configuration")
 // Ansible contains configuration and variable references, never credentials.
 // swagger:model Ansible
 type Ansible struct {
+	// Connection defaults to ssh for existing definitions and snapshots.
+	// Enum: ssh,local
+	Connection     string            `json:"connection,omitempty"`
 	Playbook       string            `json:"playbook"`
 	Inventory      string            `json:"inventory"`
 	ExtraVars      map[string]string `json:"extra_vars"`
@@ -206,7 +209,7 @@ func (a Ansible) Targets() ([]string, error) {
 		return nil, err
 	}
 	groups, hosts := map[string][]string{}, map[string]bool{}
-	if err := inventoryGroups(inventory, groups, hosts, nil); err != nil {
+	if err := a.inventoryGroups(inventory, groups, hosts, nil); err != nil {
 		return nil, err
 	}
 	if err := validateInventoryNames(groups, hosts); err != nil {
@@ -243,16 +246,34 @@ func (a Ansible) validateOptions() error {
 			return errors.New("invalid Ansible variable mapping")
 		}
 	}
-	if !ansibleIdentifier.MatchString(a.SSHKeyVariable) {
-		return errors.New("SSH credential reference is required")
-	}
-	if err := validateKnownHosts(a.KnownHosts); err != nil {
+	if err := a.validateConnection(); err != nil {
 		return err
 	}
 	for _, tag := range a.Tags {
 		if !inventoryIdentifier.MatchString(tag) || len(tag) > 128 {
 			return errors.New("invalid Ansible tag")
 		}
+	}
+	return nil
+}
+
+func (a Ansible) validateConnection() error {
+	switch a.Connection {
+	case "", "ssh":
+		if !ansibleIdentifier.MatchString(a.SSHKeyVariable) {
+			return errors.New("SSH credential reference is required")
+		}
+		if err := validateKnownHosts(a.KnownHosts); err != nil {
+			return err
+		}
+	case "local":
+		if a.SSHKeyVariable != "" || a.KnownHosts != "" {
+			return errors.New(
+				"local connections cannot contain SSH configuration",
+			)
+		}
+	default:
+		return errors.New("connection must be ssh or local")
 	}
 	return nil
 }
@@ -400,7 +421,7 @@ func reservedAnsibleVariable(name string) bool {
 	return false
 }
 
-func inventoryGroups(
+func (a Ansible) inventoryGroups(
 	n *yaml.Node,
 	groups map[string][]string,
 	hosts map[string]bool,
@@ -425,14 +446,14 @@ func inventoryGroups(
 		}
 		groups[name] = nil
 		path := append(slices.Clone(ancestors), name)
-		if err := inventoryGroupBody(body, groups, hosts, path); err != nil {
+		if err := a.inventoryGroupBody(body, groups, hosts, path); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func inventoryGroupBody(
+func (a Ansible) inventoryGroupBody(
 	body *yaml.Node,
 	groups map[string][]string,
 	hosts map[string]bool,
@@ -445,14 +466,14 @@ func inventoryGroupBody(
 		field, value := body.Content[i].Value, body.Content[i+1]
 		switch field {
 		case "hosts":
-			if err := inventoryHosts(value, groups, hosts, path); err != nil {
+			if err := a.inventoryHosts(value, groups, hosts, path); err != nil {
 				return err
 			}
 		case "children":
 			if path[len(path)-1] == "ungrouped" {
 				return errors.New("ungrouped cannot contain child groups")
 			}
-			if err := inventoryGroups(value, groups, hosts, path); err != nil {
+			if err := a.inventoryGroups(value, groups, hosts, path); err != nil {
 				return err
 			}
 		default:
@@ -464,7 +485,7 @@ func inventoryGroupBody(
 	return nil
 }
 
-func inventoryHosts(
+func (a Ansible) inventoryHosts(
 	value *yaml.Node,
 	groups map[string][]string,
 	hosts map[string]bool,
@@ -475,8 +496,15 @@ func inventoryHosts(
 	}
 	for i := 0; i < len(value.Content); i += 2 {
 		host := value.Content[i].Value
-		if !inventoryIdentifier.MatchString(host) || host == "localhost" {
+		if !inventoryIdentifier.MatchString(host) ||
+			(a.Connection != "local" && host == "localhost") ||
+			(a.Connection == "local" && host != "localhost") {
 			return errors.New("invalid inventory host")
+		}
+		if a.Connection == "local" && len(value.Content[i+1].Content) != 0 {
+			return errors.New(
+				"local inventory hosts cannot contain connection options",
+			)
 		}
 		if err := inventoryHostValues(value.Content[i+1]); err != nil {
 			return err

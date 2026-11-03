@@ -68,3 +68,24 @@ func TestAnsibleDoesNotExportEffectiveEnvironment(t *testing.T) {
 		}
 	}
 }
+
+func TestAnsibleLocalEnvironment(t *testing.T) {
+	request := localStepAttempt{
+		step: deploymentStep{
+			Kind:    stepdefinition.AnsibleKind,
+			Ansible: &stepdefinition.Ansible{Connection: "local"},
+		},
+		environment: map[string]string{"UNSELECTED": "secret"},
+	}
+	environment, args, err := request.containerEnvironment()
+	if err != nil || len(environment) != 0 {
+		t.Fatal("local Ansible exported variables", err)
+	}
+	for _, arg := range args {
+		if strings.Contains(arg, "id_key") ||
+			strings.Contains(arg, "ANSIBLE_SSH") ||
+			strings.Contains(arg, "secret") {
+			t.Fatalf("unexpected local environment: %s", arg)
+		}
+	}
+}

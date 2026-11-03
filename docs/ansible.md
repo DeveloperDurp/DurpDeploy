@@ -11,10 +11,10 @@ Remote agents do not support Ansible steps in this version.
 3. Select Ansible in Step type.
 4. Enter a YAML playbook.
 5. Enter static YAML inventory.
-6. Select an execution image with Ansible, Python, OpenSSH, and the required collections.
-7. Select Network enabled for SSH access.
-8. Select an SSH credential reference.
-9. Enter verified SSH host keys in SSH known_hosts.
+6. Select an execution image with Ansible, Python, and the required collections.
+7. Select Connection.
+8. For SSH connections, select Network enabled and an SSH credential reference.
+9. For SSH connections, enter verified SSH host keys in SSH known_hosts.
 10. Enter explicit extra variable mappings.
 11. Select Preview targets.
 12. Save the step.
@@ -23,6 +23,103 @@ The execution image must support user `65534:65534`, a read-only root filesystem
 The image must not require a host runtime socket.
 The server does not install dependencies or provide a host execution fallback.
 Missing executables, collections, and connection tools fail the deployment.
+
+## Local connections
+
+Set `ansible.connection` to `local` for work inside the isolated server execution container.
+Omit `connection` or set it to `ssh` for the existing SSH behavior.
+Local mode keeps the existing UID, read-only root filesystem, image, network selection, and cleanup rules.
+It does not execute on the server host.
+Remote agents remain unsupported.
+
+Use `all: {hosts: {localhost: {}}}` as the local inventory.
+Local inventory permits only `localhost`, without host connection options.
+Omit `ssh_key_variable` and `known_hosts` in local mode.
+The adapter rejects mixed connection settings and skips SSH credential resolution and SSH input staging.
+SSH mode still requires an enrolled credential, verified host keys, and OpenSSH in the execution image.
+
+Use this minimal API step for an API-only playbook:
+
+```json
+{
+  "name": "Local API operations",
+  "kind": "ansible",
+  "execution_target": "local",
+  "container_image": "registry.example/ansible@sha256:REPLACE_WITH_DIGEST",
+  "network_mode": "bridge",
+  "ansible": {
+    "connection": "local",
+    "inventory": "all: {hosts: {localhost: {}}}",
+    "playbook": "- hosts: localhost\n  connection: local\n  gather_facts: false\n  tasks:\n    - ansible.builtin.debug: {msg: ready}\n",
+    "extra_vars": {}
+  }
+}
+```
+
+Select `bridge` when tasks need API network access.
+Select `none` when tasks need no network access.
+Releases, runbooks, execution snapshots, retries, and execution check mode preserve the selected connection.
+
+### Packaged playbooks and staging output
+
+Configure a project package repository containing `playbooks/export.yml`.
+Create a release to capture its package pin.
+Use these fields in the local step:
+
+```json
+{
+  "connection": "local",
+  "inventory": "all: {hosts: {localhost: {}}}",
+  "playbook": "- ansible.builtin.import_playbook: '{{ package_dir }}/playbooks/export.yml'\n",
+  "extra_vars": {
+    "package_dir": "ARTIFACT_PATH",
+    "stage_dir": "DURPDEPLOY_STAGE_DIR",
+    "api_token": "DEPLOY_TOKEN"
+  }
+}
+```
+
+Adapt the packaged playbook to explicit extra variables:
+
+```yaml
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  environment:
+    HOME: /tmp
+    XDG_CACHE_HOME: /tmp/cache
+    HELM_CACHE_HOME: /tmp/helm/cache
+    HELM_CONFIG_HOME: /tmp/helm/config
+    HELM_DATA_HOME: /tmp/helm/data
+  tasks:
+    - ansible.builtin.uri:
+        url: https://api.example/kubeconfig
+        headers:
+          Authorization: "Bearer {{ api_token }}"
+        return_content: true
+      register: kubeconfig_response
+      no_log: true
+    - ansible.builtin.copy:
+        content: '{{ kubeconfig_response.content }}'
+        dest: '{{ stage_dir }}/kubeconfig'
+        mode: '0600'
+      when: not ansible_check_mode
+      no_log: true
+```
+
+Replace the example API URL with your service endpoint.
+Use `no_log` on tasks that handle secrets.
+Use writable `/tmp` paths for Ansible, Helm, and other tool caches.
+Replace project-secret environment lookups with mapped extra variables.
+The adapter does not export all project variables.
+The package mount stays read-only.
+The deployment staging directory accepts generated files.
+
+In a subsequent script step, read `$DURPDEPLOY_STAGE_DIR/kubeconfig` or set `KUBECONFIG` to that path.
+In a subsequent Ansible step, map `DURPDEPLOY_STAGE_DIR` explicitly again.
+Preserve any separate handoff operation after the playbook.
+Check mode can skip API requests and file writes.
+Make subsequent steps tolerate absent output when you use check mode.
 
 Use an image digest when reproducible image contents are required.
 An image tag in a snapshot does not freeze the registry contents behind that tag.

@@ -12396,6 +12396,15 @@
       "type": "object",
       "title": "Ansible contains configuration and variable references, never credentials.",
       "properties": {
+        "connection": {
+          "description": "Connection defaults to ssh for existing definitions and snapshots.",
+          "type": "string",
+          "enum": [
+            "ssh",
+            "local"
+          ],
+          "x-go-name": "Connection"
+        },
         "extra_vars": {
           "type": "object",
           "additionalProperties": {

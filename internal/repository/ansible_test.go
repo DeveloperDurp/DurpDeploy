@@ -14,8 +14,12 @@ import (
 
 func TestAnsibleSnapshotsAcrossDatabases(t *testing.T) {
 	forEachDeploymentCreationEngine(t, func(t *testing.T, name string) {
-		repo := rotationTestRepository(t, name)
-		testAnsibleSnapshotDefinitions(t, repo)
+		for _, connection := range []string{"", "local"} {
+			t.Run("connection="+connection, func(t *testing.T) {
+				repo := rotationTestRepository(t, name)
+				testAnsibleSnapshotDefinitions(t, repo, connection)
+			})
+		}
 	})
 }
 
@@ -41,9 +45,20 @@ func ansibleSnapshotDefinition(t *testing.T) stepdefinition.Definition {
 	}
 }
 
-func testAnsibleSnapshotDefinitions(t *testing.T, repo *Repository) {
+func testAnsibleSnapshotDefinitions(
+	t *testing.T,
+	repo *Repository,
+	connection string,
+) {
 	t.Helper()
 	definition := ansibleSnapshotDefinition(t)
+	if connection == "local" {
+		definition.Ansible.Connection = "local"
+		definition.Ansible.Inventory = "all: {hosts: {localhost: {}}}"
+		definition.Ansible.SSHKeyVariable = ""
+		definition.Ansible.KnownHosts = ""
+		definition.Ansible.Limit = nil
+	}
 	if _, err := repo.CreateCredential(t.Context(), 1, false, CredentialCreateInput{Name: "SSH_KEY", Value: "encrypted-key-capture"}); err != nil {
 		t.Fatal(err)
 	}
