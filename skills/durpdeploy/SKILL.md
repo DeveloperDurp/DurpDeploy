@@ -1,11 +1,24 @@
 ---
 name: durpdeploy
-description: Use when an agent needs to operate a DurpDeploy instance over HTTP — authenticate (API bearer token or web session + CSRF), create projects, steps, variables, and releases, deploy, poll deployment status, read logs, cancel, approve, or verify deploy behavior end to end. Covers the deploy flow, lifecycle and approval gates, status codes, and the CLI. Not for contributing DurpDeploy source code (see its AGENTS.md).
+description: Operate a running DurpDeploy instance with durpdeployctl, with direct HTTP API calls as a fallback. Covers authentication, project authoring, releases, deployment status, logs, cancellation, approvals, and verification. Not for contributing DurpDeploy source code (see its AGENTS.md).
 metadata:
   audience: agents operating a running DurpDeploy server
 ---
 
-# Operating DurpDeploy over HTTP
+# Operating DurpDeploy
+
+## Choose the client
+
+Prefer [durpdeployctl](https://gitlab.durp.info/durfy/apps/durpdeployctl) for remote operations.
+Read its README for installation and its command help for supported flags.
+Use `durpdeployctl --help` and the selected command's `--help` before an unfamiliar operation.
+Check compatibility with the target server before using a command.
+Use the direct HTTP API when the CLI is unavailable or lacks the required operation or server fields.
+The endpoint sections below document this fallback and the server rules that apply to both clients.
+Keep the same instance, identity, token scope, and approval requirements when changing clients.
+Do not switch clients to bypass authorization or validation failures.
+After an uncertain write, inspect server state before any retry through either client.
+A lost response or timeout does not prove that the server rejected the write.
 
 ## Analyze caller-supplied script text
 
@@ -120,13 +133,14 @@ Inspect the exact saved plan before approval.
 The apply step uses only that approved plan and fails if remote state has changed.
 Copying the workflow does not run Terraform or create infrastructure.
 
-DurpDeploy is a single-binary deployment tool that runs ordered script steps
-against environments. It exposes three surfaces an agent may use:
+DurpDeploy runs ordered script steps against environments.
+Agents can use these clients and interfaces:
 
-- **JSON API** at `/api/v1/*` — bearer-token auth, no CSRF. **Prefer this.**
+- **durpdeployctl** — the preferred remote CLI, using the server's bearer-token API.
+- **JSON API** at `/api/v1/*` — direct HTTP fallback, with bearer-token authentication and no CSRF.
 - **Web UI routes** (`/login`, `/projects`, …) — browser forms, session cookies,
   authenticated-write CSRF tokens, and redirect status codes.
-- **CLI subcommands** on the `durpdeploy` binary (user/token admin).
+- **Server CLI subcommands** on the `durpdeploy` binary for host administration.
 
 The endpoint reference is the Swagger UI at `/api/swagger/`
 (no auth) on a running server. Use it alongside this workflow guide.
@@ -259,7 +273,50 @@ Pagination selects projects before the web list adds group headings.
 A group can appear on more than one page.
 Changing a filter starts from the first page.
 
-## CLI
+## Remote CLI: durpdeployctl
+
+Use an installed, verified binary from the [durpdeployctl project](https://gitlab.durp.info/durfy/apps/durpdeployctl).
+Configure the target origin and validate an existing personal access token:
+
+```bash
+durpdeployctl context create dev --server https://durpdeploy.example.com
+durpdeployctl context use dev
+durpdeployctl auth login --context dev
+durpdeployctl auth status --context dev --json
+durpdeployctl projects list --json
+durpdeployctl environments list --json
+```
+
+Login reads hidden terminal input and stores the validated PAT in the OS credential store.
+For automation, supply `DURPDEPLOY_TOKEN` through the environment and use `auth status` without interactive login.
+Keep tokens out of command arguments, context files, and shell tracing.
+Use explicit selectors such as `id:7` or `name:v1.2.3`.
+Select the intended project, release, and environment before submission:
+
+```bash
+durpdeployctl releases list --project id:7 --json
+durpdeployctl releases create v1.2.3 --project id:7 --json
+durpdeployctl deploy --project id:7 --release name:v1.2.3 --environment id:3 \
+  --wait --timeout=10m --json
+durpdeployctl deployments status id:42 --json
+durpdeployctl deployments logs id:42 --json
+durpdeployctl deployments wait id:42 --timeout=10m --json
+```
+
+Release creation snapshots the existing server configuration.
+It does not upload local configuration or refresh an existing release.
+Without `--wait`, deployment success reports acceptance only.
+With `--wait --json`, stdout contains acceptance and final wait results as separate NDJSON records.
+The default wait policy exits with code 4 when approval is required.
+Waiting never grants approval.
+A timeout, interruption, or unknown state leaves the outcome unconfirmed.
+Inspect the deployment before retrying or reporting completion.
+After an explicit cancellation, wait for the terminal state and confirm cleanup.
+Read the CLI's deployment and wait documentation for command-specific exit codes.
+
+If the CLI cannot perform an operation, use the bearer-token helpers and endpoint reference below.
+
+## Server CLI: host administration
 
 Run on the host with the server's database (matching `DURPDEPLOY_DB`):
 
@@ -279,7 +336,7 @@ Use the complete token: `ddp_pat_` followed by exactly 64 hexadecimal characters
 Malformed tokens return HTTP 401 before a credential lookup, including on API log and event streams.
 Token expiry and revocation remain checked on each request and during open streams.
 
-Mint a token on the server host with the CLI above, or in the web UI at
+Mint a token on the server host with the server CLI above, or in the web UI at
 `/settings/tokens` if scripting: POST the form `name=<label>&csrf_token=$CSRF`,
 then GET the redirect Location (an opaque single-use flash reference,
 `/settings/tokens?flash=<id>` — never the token itself) and take the plaintext
@@ -1310,6 +1367,7 @@ Later step edits do not change a stored release until refresh.
 ## Getting help
 
 - Swagger: `https://<your-host>/api/swagger/` — full request/response shapes.
+- Remote CLI: <https://gitlab.durp.info/durfy/apps/durpdeployctl> — installation, command help, compatibility, and examples.
 - Server docs: <https://github.com/DeveloperDurp/durpdeploy>.
 ## Passing files between deployment steps
 
