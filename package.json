@@ -4,7 +4,7 @@
     "esbuild": "^0.28.1",
     "playwright": "^1.61.1",
     "swagger-ui-dist": "^5.20.0",
-    "tailwindcss": "4.3.3",
+    "tailwindcss": "4.3.4",
     "@tailwindcss/cli": "4.3.3"
   },
   "dependencies": {
