@@ -42,7 +42,7 @@ func assertRemotePrefixSplit(
 ) {
 	t.Helper()
 	scrubber := logscrub.New(nil)
-	var pending []RemoteLogEvent
+	var pending *remoteLogBuffer
 	var emitted string
 	last := int64(-1)
 	collect := func(events []RemoteLogEvent) {
@@ -70,13 +70,17 @@ func assertRemotePrefixSplit(
 	if flush {
 		ready, remaining, err := prepareRemoteLogEvents(
 			pending, nil, last, scrubber, true)
-		if err != nil || len(remaining) != 0 {
-			t.Fatalf("flush remaining=%d error=%v", len(remaining), err)
+		if err != nil || pendingEventCount(remaining) != 0 {
+			t.Fatalf(
+				"flush remaining=%d error=%v",
+				pendingEventCount(remaining),
+				err,
+			)
 		}
 		collect(ready)
 		pending = remaining
 	}
-	if len(pending) != 0 {
+	if pendingEventCount(pending) != 0 {
 		t.Fatal("terminated credential did not drain")
 	}
 	if want := scrubber.Scrub(text); emitted != want {

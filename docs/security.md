@@ -495,6 +495,23 @@ values:
   If an agent is lost, revoked, or times out before completing a buffered
   fragment, DurpDeploy discards that incomplete fragment instead of publishing
   ambiguous plaintext.
+- **Remote receipt limits:** The server stores durable receipt progress separately from redaction readiness.
+  Hidden secret literals do not control acknowledgment acceptance.
+  Published log text escapes NUL characters before database insertion.
+  Remote step metadata uses the same scrubbed label at claim start and publication.
+  Long labels are shortened to fit 255 UTF-16 units.
+  Each log line retains its authenticated agent identity.
+  Unresolved sequence gaps retain independent raw count, byte, and distance limits.
+  If the encrypted redaction tail exceeds its remaining capacity, the server publishes masked placeholders.
+  It then masks all later output from that claim, including otherwise safe text.
+  This suppression survives retries and restarts until terminal completion.
+  Terminal completion commits logs and clears receipt state in one transaction.
+  The transport and existing agent binaries remain compatible.
+  Do not run mixed server versions.
+  Drain active claims before downgrading the server.
+  Older binaries reject retained version 2 buffers and can block claims.
+  Recover affected claims with the fixed server.
+  Reverting the fix restores secret-dependent acknowledgment behavior.
 - **Best-effort:** this catches known secret values and a handful of common
   token shapes. The security contract is protection against accidental
   plaintext exposure, not intentional exfiltration by an agent that encodes,

@@ -340,7 +340,8 @@ The image retains wheel license notices in `/opt/ansible-notices/THIRD_PARTY_NOT
 | MarkupSafe | 3.0.4 | BSD-3-Clause |
 | pycparser | 3.12 | BSD-3-Clause |
 
-OpenSSH `10.3_p1-r1` and libedit `20260508.3.1-r1` use permissive BSD-compatible licenses.
+OpenSSH `10.3_p1-r2` uses SSH-OpenSSH terms.
+libedit `20260508.3.1-r1` uses BSD-3-Clause terms.
 The base image contains Python under PSF terms and Alpine packages under their individual open-source licenses.
 The test image is built locally and is not published by this change.
 Retain required license notices and corresponding-source obligations when distributing derived images.

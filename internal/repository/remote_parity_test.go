@@ -34,6 +34,20 @@ func TestDispatchDatabaseParity(t *testing.T) {
 			runRemoteStepStartEligibility(t, r)
 			runProjectMembershipIntegerContract(t, r)
 			runStagingStorageParity(t, r)
+			// Use a fresh migrated database for receipt state and suppression.
+			receiptDSN := repository.RepositoryDatabaseDSN(t, backend)
+			receiptDB, err := migrate.Run(receiptDSN)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				if err := receiptDB.Close(); err != nil {
+					t.Error(err)
+				}
+			})
+			receipts := repository.New(receiptDB)
+			seedRemoteFixture(t, receipts)
+			runRemoteLogReceiptParity(t, receipts)
 		})
 	}
 }

@@ -8,6 +8,13 @@ import (
 	"durpdeploy/internal/logscrub"
 )
 
+func pendingEventCount(state *remoteLogBuffer) int {
+	if state == nil {
+		return 0
+	}
+	return len(state.Events.Tail) + len(state.Events.Gaps)
+}
+
 func TestPrepareRemoteLogEventsAcceptsInitialSequenceZero(t *testing.T) {
 	ready, pending, err := prepareRemoteLogEvents(
 		nil,
@@ -16,7 +23,7 @@ func TestPrepareRemoteLogEventsAcceptsInitialSequenceZero(t *testing.T) {
 		logscrub.New([]string{"top-secret"}),
 		false,
 	)
-	if err != nil || len(ready) != 1 || len(pending) != 0 {
+	if err != nil || len(ready) != 1 || pendingEventCount(pending) != 0 {
 		t.Fatalf("ready=%+v pending=%+v error=%v", ready, pending, err)
 	}
 }
@@ -32,7 +39,7 @@ func TestPrepareRemoteLogEventsHoldsRetransmittedInitialGapUntilFlush(
 		scrubber,
 		false,
 	)
-	if err != nil || len(ready) != 0 || len(pending) != 1 {
+	if err != nil || len(ready) != 0 || pendingEventCount(pending) != 1 {
 		t.Fatalf("first ready=%+v pending=%+v error=%v", ready, pending, err)
 	}
 	ready, pending, err = prepareRemoteLogEvents(
@@ -42,13 +49,13 @@ func TestPrepareRemoteLogEventsHoldsRetransmittedInitialGapUntilFlush(
 		scrubber,
 		false,
 	)
-	if err != nil || len(ready) != 0 || len(pending) != 1 {
+	if err != nil || len(ready) != 0 || pendingEventCount(pending) != 1 {
 		t.Fatalf("retry ready=%+v pending=%+v error=%v", ready, pending, err)
 	}
 	ready, pending, err = prepareRemoteLogEvents(
 		pending, nil, -1, scrubber, true,
 	)
-	if err != nil || len(ready) != 1 || len(pending) != 0 {
+	if err != nil || len(ready) != 1 || pendingEventCount(pending) != 0 {
 		t.Fatalf("flush ready=%+v pending=%+v error=%v", ready, pending, err)
 	}
 }
@@ -62,7 +69,7 @@ func TestPrepareRemoteLogEventsRedactsSplitCommonPattern(t *testing.T) {
 		scrubber,
 		false,
 	)
-	if err != nil || len(ready) != 0 || len(pending) != 1 {
+	if err != nil || len(ready) != 0 || pendingEventCount(pending) != 1 {
 		t.Fatalf("first ready=%+v pending=%+v error=%v", ready, pending, err)
 	}
 	ready, pending, err = prepareRemoteLogEvents(
@@ -72,7 +79,7 @@ func TestPrepareRemoteLogEventsRedactsSplitCommonPattern(t *testing.T) {
 		scrubber,
 		false,
 	)
-	if err != nil || len(ready) != 2 || len(pending) != 0 ||
+	if err != nil || len(ready) != 2 || pendingEventCount(pending) != 0 ||
 		ready[0].Line+ready[1].Line != "[REDACTED]" {
 		t.Fatalf("second ready=%+v pending=%+v error=%v", ready, pending, err)
 	}
@@ -87,7 +94,7 @@ func TestPrepareRemoteLogEventsRedactsSplitConfiguredPattern(t *testing.T) {
 		scrubber,
 		false,
 	)
-	if err != nil || len(ready) != 0 || len(pending) != 1 {
+	if err != nil || len(ready) != 0 || pendingEventCount(pending) != 1 {
 		t.Fatalf("first ready=%+v pending=%+v error=%v", ready, pending, err)
 	}
 	ready, pending, err = prepareRemoteLogEvents(
@@ -97,7 +104,7 @@ func TestPrepareRemoteLogEventsRedactsSplitConfiguredPattern(t *testing.T) {
 		scrubber,
 		false,
 	)
-	if err != nil || len(ready) != 2 || len(pending) != 0 ||
+	if err != nil || len(ready) != 2 || pendingEventCount(pending) != 0 ||
 		ready[0].Line+ready[1].Line != "[REDACTED]\n" {
 		t.Fatalf("second ready=%+v pending=%+v error=%v", ready, pending, err)
 	}
@@ -122,7 +129,7 @@ func TestPrepareRemoteLogEventsDrainsAfterConfiguredMatch(t *testing.T) {
 		scrubber,
 		false,
 	)
-	if err != nil || len(ready) != 2 || len(pending) != 0 {
+	if err != nil || len(ready) != 2 || pendingEventCount(pending) != 0 {
 		t.Fatalf("match ready=%+v pending=%+v error=%v", ready, pending, err)
 	}
 	line := strings.Repeat("x", 1024) + "\n"
@@ -134,12 +141,12 @@ func TestPrepareRemoteLogEventsDrainsAfterConfiguredMatch(t *testing.T) {
 			scrubber,
 			false,
 		)
-		if err != nil || len(ready) != 1 || len(pending) != 0 {
+		if err != nil || len(ready) != 1 || pendingEventCount(pending) != 0 {
 			t.Fatalf(
 				"sequence=%d ready=%d pending=%d error=%v",
 				sequence,
 				len(ready),
-				len(pending),
+				pendingEventCount(pending),
 				err,
 			)
 		}
@@ -158,7 +165,7 @@ func TestPrepareRemoteLogEventsHoldsFromFirstConfiguredPrefix(t *testing.T) {
 		scrubber,
 		false,
 	)
-	if err != nil || len(ready) != 0 || len(pending) != 2 {
+	if err != nil || len(ready) != 0 || pendingEventCount(pending) != 2 {
 		t.Fatalf("ready=%+v pending=%+v error=%v", ready, pending, err)
 	}
 }
@@ -171,7 +178,7 @@ func TestPrepareRemoteLogEventsBoundsSequenceGap(t *testing.T) {
 		logscrub.New(nil),
 		false,
 	)
-	if err != nil || len(pending) != 1 {
+	if err != nil || pendingEventCount(pending) != 1 {
 		t.Fatalf("initial pending=%+v error=%v", pending, err)
 	}
 	_, _, err = prepareRemoteLogEvents(
@@ -195,7 +202,7 @@ func TestPrepareRemoteLogEventsHoldsUnboundedTokenUntilFlush(t *testing.T) {
 		scrubber,
 		false,
 	)
-	if err != nil || len(pending) != 1 {
+	if err != nil || pendingEventCount(pending) != 1 {
 		t.Fatalf("first pending=%+v error=%v", pending, err)
 	}
 	_, pending, err = prepareRemoteLogEvents(
@@ -205,13 +212,13 @@ func TestPrepareRemoteLogEventsHoldsUnboundedTokenUntilFlush(t *testing.T) {
 		scrubber,
 		false,
 	)
-	if err != nil || len(pending) != 2 {
+	if err != nil || pendingEventCount(pending) != 2 {
 		t.Fatalf("second pending=%+v error=%v", pending, err)
 	}
 	ready, pending, err := prepareRemoteLogEvents(
 		pending, nil, -1, scrubber, true,
 	)
-	if err != nil || len(pending) != 0 || len(ready) != 2 ||
+	if err != nil || pendingEventCount(pending) != 0 || len(ready) != 2 ||
 		ready[0].Line+ready[1].Line != "[REDACTED]" {
 		t.Fatalf("flush ready=%+v pending=%+v error=%v", ready, pending, err)
 	}
@@ -226,7 +233,7 @@ func TestPrepareRemoteLogEventsRedactsSplitAssignmentName(t *testing.T) {
 		scrubber,
 		false,
 	)
-	if err != nil || len(pending) != 1 {
+	if err != nil || pendingEventCount(pending) != 1 {
 		t.Fatalf("first pending=%+v error=%v", pending, err)
 	}
 	_, pending, err = prepareRemoteLogEvents(
@@ -236,7 +243,7 @@ func TestPrepareRemoteLogEventsRedactsSplitAssignmentName(t *testing.T) {
 		scrubber,
 		false,
 	)
-	if err != nil || len(pending) != 2 {
+	if err != nil || pendingEventCount(pending) != 2 {
 		t.Fatalf("second pending=%+v error=%v", pending, err)
 	}
 	ready, _, err := prepareRemoteLogEvents(

@@ -59,8 +59,8 @@ func (r *Repository) StartRemoteStep(
 				db.CreateStepDeploymentLogParams{
 					DeploymentID: run.DeploymentID,
 					StepName: sql.NullString{
-						String: scrubber.Scrub(
-							steps[run.StepIndex].Name + " @ " + run.AgentID,
+						String: remoteStepLogName(
+							steps[run.StepIndex].Name, run.AgentID, scrubber,
 						),
 						Valid: true,
 					},

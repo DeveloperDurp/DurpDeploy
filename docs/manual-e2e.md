@@ -1891,6 +1891,34 @@ Use a viewer account and confirm that write controls remain hidden.
 
 ## Populated demo
 
+### Remote log receipt regression
+
+Run the synthetic receipt and existing split-secret checks from the worktree:
+
+```bash
+bash scripts/go_test.sh -race -count=1 -timeout=10m -run 'TestRemoteLogAcknowledgmentsIndependentOfHiddenSecretsAPIE2E|TestSplitCredentialRedactionAPIWebE2E' ./internal/agentserver
+bash scripts/go_test.sh -race -count=1 -timeout=20m -run 'RemoteLogReceipt|DispatchDatabaseParity|AgentTerminal|AgentDelete' ./internal/repository ./internal/agentserver
+```
+
+The HTTP fixture provisions resources through public APIs with a harmless variable allowlist.
+It reconstructs durable legacy claims to test the older ingestion path.
+The dispatched payload must exclude the synthetic hidden secret.
+Matched and unmatched hidden literals must produce identical acknowledgment status, body, and relevant headers.
+The checks cover raw count, byte, and sequence-gap limits.
+Retries and restarts must preserve receipt progress and suppression.
+Terminal completion must clear encrypted receipt state.
+Public logs must retain ordering, masking, and authenticated attribution.
+PostgreSQL and SQL Server fixtures must pass without skipped backend checks.
+
+Use the retained demo deployment links for manual log replay and exports.
+Expect masked placeholders after retention overflow, including for later safe text.
+Keep test schedules disabled.
+Do not run mixed server versions.
+Drain active claims before downgrade.
+Older binaries reject retained version 2 buffers and restore the vulnerability.
+
+### Launch the populated demo
+
 For a complete local demo, run `make demo` (or ask a coding agent to run it).
 The launcher builds the server, serves `https://citadel.durp.loc:<random-port>`
 through Caddy with a certificate for that hostname, pairs a

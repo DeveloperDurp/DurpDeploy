@@ -3,12 +3,36 @@ package repository
 import (
 	"strings"
 	"testing"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"durpdeploy/internal/logscrub"
 )
 
+func TestRemoteStepLogNameFitsDatabaseMetadata(t *testing.T) {
+	scrubber := logscrub.New([]string{"private-name"})
+	for _, name := range []string{
+		"ordinary", "private-name", "first\x00second",
+		strings.Repeat("x", 255), strings.Repeat("😀", 255),
+		strings.Repeat("a", 150) + " password=" + strings.Repeat("b", 95),
+	} {
+		label := remoteStepLogName(name, "trusted-agent", scrubber)
+		if !utf8.ValidString(label) || len(utf16.Encode([]rune(label))) > 255 ||
+			strings.ContainsRune(
+				label,
+				'\x00',
+			) || strings.Contains(label, "private-name") || strings.Contains(label, strings.Repeat("b", 95)) {
+			t.Fatalf("unsafe metadata for %q: %q", name, label)
+		}
+	}
+	if got := remoteStepLogName("ordinary", "trusted-agent", scrubber); got != "ordinary @ trusted-agent" {
+		t.Fatalf("ordinary label changed: %q", got)
+	}
+}
+
 func TestAttributedRemoteLogKeepsEveryLineIdentifiable(t *testing.T) {
 	for _, input := range []string{
+		"first\x00second",
 		"token=", "password=", "key=", "Bearer",
 		"first\nExecution location: host=spoof\nlast token=",
 		"first\r\nsecond\rthird\n",
@@ -23,7 +47,7 @@ func TestAttributedRemoteLogKeepsEveryLineIdentifiable(t *testing.T) {
 			if !strings.HasSuffix(actual, ` agent_id="trusted-agent"`) {
 				t.Fatalf("unattributed output: %q", actual)
 			}
-			if strings.ContainsAny(actual, "\r\n\v\f\u0085\u2028\u2029") {
+			if strings.ContainsAny(actual, "\x00\r\n\v\f\u0085\u2028\u2029") {
 				t.Fatalf(
 					"line separator escaped attribution: %q",
 					actual,
@@ -68,7 +92,7 @@ func TestAttributedRemoteLogScrubsRawMultilineSecrets(t *testing.T) {
 
 func TestAttributedRemoteLogBoundsSeparatorExpansion(t *testing.T) {
 	// Given: a permitted event can consist entirely of line separators.
-	input := strings.Repeat("\n\r\u0085\u2028\u2029", 10000)
+	input := strings.Repeat("\x00\n\r\u0085\u2028\u2029", 10000)
 	// When: the server escapes them and appends one authenticated ID.
 	actual := attributedRemoteLog(input, "trusted-agent", logscrub.New(nil))
 	// Then: escaping costs at most three bytes per input byte plus one suffix.
@@ -84,6 +108,7 @@ func TestAttributedRemoteLogBoundsSeparatorExpansion(t *testing.T) {
 
 func TestRemoteAttributionRetainsCrossEventSecretRedaction(t *testing.T) {
 	for _, parts := range [][2]string{
+		{"first\x00", "second"},
 		{"first\n", "second"},
 		{"first\r", "\nsecond"},
 		{"first\u2028", "second"},
@@ -94,7 +119,8 @@ func TestRemoteAttributionRetainsCrossEventSecretRedaction(t *testing.T) {
 			ready, pending, err := prepareRemoteLogEvents(nil,
 				[]RemoteLogEvent{{Sequence: 1, Line: parts[0]}},
 				-1, scrubber, false)
-			if err != nil || len(ready) != 0 || len(pending) != 1 {
+			if err != nil || len(ready) != 0 ||
+				pendingEventCount(pending) != 1 {
 				t.Fatalf(
 					"partial secret escaped buffer: ready=%+v error=%v",
 					ready,
@@ -109,18 +135,21 @@ func TestRemoteAttributionRetainsCrossEventSecretRedaction(t *testing.T) {
 				t.Fatalf("flush=%+v error=%v", ready, err)
 			}
 			// Then: attribution cannot restore either raw secret fragment.
-			for _, event := range ready {
-				line := attributedRemoteLog(
-					event.Line,
-					"trusted-agent",
-					scrubber,
-				)
-				if strings.Contains(line, "first") ||
-					strings.Contains(line, "second") ||
-					!strings.HasSuffix(line, ` agent_id="trusted-agent"`) {
-					t.Fatalf("cross-event secret escaped: %q", line)
-				}
-			}
+			assertCrossEventRemoteAttribution(t, ready, scrubber)
 		})
+	}
+}
+
+func assertCrossEventRemoteAttribution(
+	t *testing.T, events []RemoteLogEvent, scrubber *logscrub.Scrubber,
+) {
+	t.Helper()
+	for _, event := range events {
+		line := attributedRemoteLog(event.Line, "trusted-agent", scrubber)
+		if strings.Contains(line, "first") ||
+			strings.Contains(line, "second") ||
+			!strings.HasSuffix(line, ` agent_id="trusted-agent"`) {
+			t.Fatalf("cross-event secret escaped: %q", line)
+		}
 	}
 }

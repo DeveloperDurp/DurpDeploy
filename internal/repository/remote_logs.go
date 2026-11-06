@@ -17,6 +17,7 @@ type RemoteLogEvent struct {
 }
 
 var remoteLogLineEscaper = strings.NewReplacer(
+	"\x00", `\0`,
 	"\n", `\n`, "\r", `\r`, "\v", `\v`, "\f", `\f`,
 	"\u0085", `\u0085`, "\u2028", `\u2028`, "\u2029", `\u2029`,
 )
@@ -66,6 +67,9 @@ func (r *Repository) appendRemoteDeploymentLogs(
 	if err != nil {
 		return nil, err
 	}
+	if flush && !remoteLogTerminal(claim.State) {
+		return nil, ErrRemoteLifecycleConflict
+	}
 	now, err := q.CurrentUnixTime(ctx)
 	if err != nil {
 		return nil, err
@@ -74,12 +78,15 @@ func (r *Repository) appendRemoteDeploymentLogs(
 		(claim.State != "started" && claim.State != "cancel_requested")) {
 		return nil, ErrRemoteLifecycleConflict
 	}
-	pending, err := r.decodeRemoteLogBuffer(claim.LogBufferCiphertext)
+	lastSequence, err := q.GetLastRemoteDeploymentLogSequence(
+		ctx, identity.DeploymentID,
+	)
 	if err != nil {
 		return nil, err
 	}
-	lastSequence, err := q.GetLastRemoteDeploymentLogSequence(
-		ctx, identity.DeploymentID,
+	pending, err := r.decodeRemoteLogBuffer(
+		claim.LogBufferCiphertext,
+		lastSequence,
 	)
 	if err != nil {
 		return nil, err

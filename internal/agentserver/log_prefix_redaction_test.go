@@ -125,14 +125,16 @@ func assertSplitCredentialIngress(
 		t.Fatalf("pending buffer not encrypted: error=%v", err)
 	}
 	var pending struct {
-		Events []struct {
-			Sequence int64
-			Line     string
+		Events struct {
+			Tail []struct {
+				Sequence int64
+				Line     string
+			}
 		}
 	}
 	if err := json.Unmarshal([]byte(plaintext), &pending); err != nil ||
-		len(pending.Events) != 1 || pending.Events[0].Sequence != 1 ||
-		pending.Events[0].Line != text[:4] {
+		len(pending.Events.Tail) != 1 || pending.Events.Tail[0].Sequence != 1 ||
+		pending.Events.Tail[0].Line != text[:4] {
 		t.Fatalf("encrypted buffer lost the pending event: error=%v", err)
 	}
 	// Retry after a listener restart, then continue and replay the whole batch.

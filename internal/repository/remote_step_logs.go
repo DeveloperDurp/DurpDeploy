@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
+	"unicode/utf16"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/logscrub"
@@ -50,13 +52,12 @@ func (r *Repository) appendRemoteStepLogs(
 	if !flush && run.State != "started" && run.State != "cancel_requested" {
 		return nil, ErrRemoteLifecycleConflict
 	}
+	if flush && !remoteLogTerminal(run.State) {
+		return nil, ErrRemoteLifecycleConflict
+	}
 	steps, err := q.ListDeploymentSteps(ctx, run.DeploymentID)
 	if err != nil || run.StepIndex < 0 || run.StepIndex >= int64(len(steps)) {
 		return nil, transitionError(err)
-	}
-	pending, err := r.decodeRemoteLogBuffer(run.LogBufferCiphertext)
-	if err != nil {
-		return nil, err
 	}
 	lastSequence, err := q.GetLastRemoteStepLogSequence(
 		ctx,
@@ -65,6 +66,13 @@ func (r *Repository) appendRemoteStepLogs(
 			StepIndex:    run.StepIndex,
 			AgentID:      run.AgentID,
 		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	pending, err := r.decodeRemoteLogBuffer(
+		run.LogBufferCiphertext,
+		lastSequence,
 	)
 	if err != nil {
 		return nil, err
@@ -104,8 +112,10 @@ func (r *Repository) appendRemoteStepLogs(
 			db.CreateStepDeploymentLogParams{
 				DeploymentID: run.DeploymentID,
 				StepName: sql.NullString{
-					String: steps[run.StepIndex].Name + " @ " + run.AgentID,
-					Valid:  true,
+					String: remoteStepLogName(
+						steps[run.StepIndex].Name, run.AgentID, scrubber,
+					),
+					Valid: true,
 				},
 				Line:      line,
 				StepIndex: sql.NullInt64{Int64: run.StepIndex, Valid: true},
@@ -143,6 +153,24 @@ func (r *Repository) appendRemoteStepLogs(
 		return nil, transitionError(err)
 	}
 	return inserted, nil
+}
+
+func remoteStepLogName(
+	name, agentID string,
+	scrubber *logscrub.Scrubber,
+) string {
+	label := scrubber.Scrub(name + " @ " + agentID)
+	label = scrubber.Scrub(strings.ReplaceAll(label, "\x00", `\0`))
+	// SQL Server stores this display label in NVARCHAR(255). The log line
+	// and sequence scope retain the authenticated agent identity separately.
+	remaining := 255
+	for offset, character := range label {
+		remaining -= utf16.RuneLen(character)
+		if remaining < 0 {
+			return label[:offset]
+		}
+	}
+	return label
 }
 
 func (r *Repository) FlushRemoteStepLogs(

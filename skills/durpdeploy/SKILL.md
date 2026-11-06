@@ -1180,7 +1180,14 @@ Execution location entries appear in the existing `line` field before script out
 Server container attempts identify the physical host, runtime, container name, image reference, interpreter, and attempt number.
 Remote steps also record the selected agent name and ID.
 Remote log entries include the authenticated `agent_id` to distinguish interleaved fan-out output.
-Embedded line separators appear as escaped text.
+Remote log acknowledgments track durable receipt separately from redaction readiness.
+If redaction retention exceeds capacity, the server masks the remaining output for that claim.
+This suppression survives restarts and can hide otherwise safe text.
+Sequence gaps remain subject to independent raw storage and distance limits.
+Embedded NUL characters and line separators appear as escaped text.
+Remote step log labels apply the same masking as claim-start labels.
+Long labels are shortened to fit database limits.
+Each log line retains its authenticated `agent_id`.
 Agent attempts distinguish `container` from `host/shell` and record each retry and fan-out target.
 
 Unavailable physical hostnames appear as `unknown`.
