@@ -49,7 +49,7 @@ func TestArtifactGateBrowserE2E(t *testing.T) {
 		)
 		browser.wait(
 			t,
-			`document.querySelector('#home-waiting')?.innerText.includes('awaiting_artifact_approval') &&
+			`document.querySelector('#home-attention')?.innerText.includes('awaiting_artifact_approval') &&
 			 !document.querySelector('#home-running')?.innerText.includes('awaiting_artifact_approval')`,
 		)
 		if string(

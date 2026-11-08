@@ -249,9 +249,7 @@ html { scrollbar-gutter: stable; }
 
 html:has(#home-deployments) { view-transition-name: none; }
 #home-running { view-transition-name: home-running; }
-#home-waiting { view-transition-name: home-waiting; }
-#home-latest { view-transition-name: home-latest; }
-#home-recent { view-transition-name: home-recent; }
+#home-attention { view-transition-name: home-attention; }
 html:has(#home-deployments)::view-transition-group(*) {
   animation-duration: 200ms;
   animation-timing-function: ease-in-out;

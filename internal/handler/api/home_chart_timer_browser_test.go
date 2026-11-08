@@ -25,7 +25,7 @@ func TestHomeChartTimerBrowserE2E(t *testing.T) {
  };
 })()`,
 	}, &struct{}{})
-	b.navigateBackTest(t, f.baseURL+"/")
+	b.navigateBackTest(t, f.baseURL+"/statistics")
 	b.wait(
 		t,
 		`chartRequests === 1 && chartTimers.size === 1 && Alpine.$data(document.querySelector('[data-home-charts]')).empty`,
@@ -50,14 +50,14 @@ func TestHomeChartTimerBrowserE2E(t *testing.T) {
 	b.wait(t, `location.pathname === '/projects' && chartTimers.size === 0`)
 	b.wait(
 		t,
-		`document.querySelector('#app-navbar a[href="/"]').getAttribute('hx-boost') === 'true' && !document.querySelector('.htmx-settling')`,
+		`document.querySelector('#app-navbar a[href="/statistics"]').getAttribute('hx-boost') === 'true' && !document.querySelector('.htmx-settling')`,
 	)
 	b.evaluate(
 		t,
-		`document.querySelector('#app-navbar a[href="/"]').click(); true`,
+		`document.querySelector('#app-navbar a[href="/statistics"]').click(); true`,
 	)
 	b.wait(
 		t,
-		`location.pathname === '/' && chartTimers.size === 1 && chartRequests === 3`,
+		`location.pathname === '/statistics' && chartTimers.size === 1 && chartRequests === 3`,
 	)
 }

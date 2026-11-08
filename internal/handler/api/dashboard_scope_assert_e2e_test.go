@@ -17,6 +17,28 @@ func assertDashboardRows(
 	wanted map[string]map[int64]string,
 ) {
 	t.Helper()
+	empty := true
+	for _, expected := range wanted {
+		if len(expected) > 0 {
+			empty = false
+			break
+		}
+	}
+	if empty {
+		// Visibility for nothing renders the all-clear card instead of the
+		// attention/running sections.
+		sections := dashboardElements(document, "id", "home-deployments")
+		if len(sections) != 1 {
+			t.Fatal("expected one dashboard panel")
+		}
+		if !strings.Contains(
+			dashboardText(sections[0]),
+			"All clear",
+		) || strings.Contains(dashboardText(sections[0]), "/deployments/") {
+			t.Fatalf("empty dashboard shows rows or lost the all-clear summary")
+		}
+		return
+	}
 	for sectionID, expected := range wanted {
 		sections := dashboardElements(document, "id", sectionID)
 		if len(sections) != 1 {

@@ -336,10 +336,10 @@ func TestRunningServerBrowserE2E(t *testing.T) {
 	}
 	for _, path := range []string{
 		"/", "/projects", "/environments", "/lifecycles", "/templates",
-		"/deployments",
+		"/deployments", "/statistics",
 	} {
 		b.navigateBackTest(t, base+path)
-		if path == "/" {
+		if path == "/statistics" {
 			b.wait(
 				t,
 				`window.DashboardChart && Object.keys(DashboardChart.instances).length === 2`,

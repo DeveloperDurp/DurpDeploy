@@ -3,7 +3,6 @@ package handler_test
 import (
 	"context"
 	"database/sql"
-	"durpdeploy/internal/testutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,9 +13,14 @@ import (
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/testutil"
 )
 
-func TestIndex_DashboardMetrics(t *testing.T) {
+// Seed one succeeded row (dashboard-invisible history), one unresolved
+// failed row (attention), one newer pending approval that takes the failed
+// row's place under the project+environment takeover rule, and one running
+// row (in-flight section).
+func TestIndex_DashboardSections(t *testing.T) {
 	dbConn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -53,40 +57,24 @@ func TestIndex_DashboardMetrics(t *testing.T) {
 		t.Fatalf("create release: %v", err)
 	}
 
-	// 1 running + 2 succeeded
-	if _, err := q.CreateDeployment(ctx, db.CreateDeploymentParams{
-		ReleaseID:     release.ID,
-		EnvironmentID: env.ID,
-		Status:        "running",
-		StartedAt:     sql.NullInt64{Int64: 1, Valid: true},
-		FinishedAt:    sql.NullInt64{Valid: false},
-		Forced:        0,
-		Note:          sql.NullString{Valid: false},
-	}); err != nil {
-		t.Fatalf("create running deployment: %v", err)
+	seed := func(status string, note sql.NullString) {
+		t.Helper()
+		if _, err := q.CreateDeployment(ctx, db.CreateDeploymentParams{
+			ReleaseID:     release.ID,
+			EnvironmentID: env.ID,
+			Status:        status,
+			StartedAt:     sql.NullInt64{Int64: 1, Valid: true},
+			FinishedAt:    sql.NullInt64{Valid: false},
+			Forced:        0,
+			Note:          note,
+		}); err != nil {
+			t.Fatalf("create %s deployment: %v", status, err)
+		}
 	}
-	if _, err := q.CreateDeployment(ctx, db.CreateDeploymentParams{
-		ReleaseID:     release.ID,
-		EnvironmentID: env.ID,
-		Status:        "succeeded",
-		StartedAt:     sql.NullInt64{Int64: 2, Valid: true},
-		FinishedAt:    sql.NullInt64{Int64: 3, Valid: true},
-		Forced:        0,
-		Note:          sql.NullString{Valid: false},
-	}); err != nil {
-		t.Fatalf("create succeeded deployment #1: %v", err)
-	}
-	if _, err := q.CreateDeployment(ctx, db.CreateDeploymentParams{
-		ReleaseID:     release.ID,
-		EnvironmentID: env.ID,
-		Status:        "succeeded",
-		StartedAt:     sql.NullInt64{Int64: 4, Valid: true},
-		FinishedAt:    sql.NullInt64{Int64: 5, Valid: true},
-		Forced:        0,
-		Note:          sql.NullString{Valid: false},
-	}); err != nil {
-		t.Fatalf("create succeeded deployment #2: %v", err)
-	}
+	seed("succeeded", sql.NullString{Valid: false})
+	seed("failed", sql.NullString{String: "first run", Valid: true})
+	seed("pending_approval", sql.NullString{String: "Re-run", Valid: true})
+	seed("running", sql.NullString{Valid: false})
 
 	h := handler.NewIndexHandler(repo)
 
@@ -101,18 +89,32 @@ func TestIndex_DashboardMetrics(t *testing.T) {
 
 	body := rec.Body.String()
 	mustContain := []string{
-		"demo",               // project name appears in running + latest-per rows
-		"1.0.0",              // release version
-		"staging",            // environment name
-		"Currently running",  // section title
-		"Latest per release", // section title
-		"Deployments today",  // stat title
+		"demo", // project name in attention + running rows
+		"1.0.0",
+		"staging",
+		"Needs attention",
+		"Running",
+		"pending_approval",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(body, want) {
 			t.Errorf("body missing %q", want)
 		}
 	}
+	hidden := []string{
+		"Deployments today", // stat cards live on /statistics now
+		"Latest per release",
+		"Recent deployments",
+		"id=\"home-latest\"",
+		"id=\"home-recent\"",
+		"data-home-charts", // charts live on /statistics now
+	}
+	for _, unwanted := range hidden {
+		if strings.Contains(body, unwanted) {
+			t.Errorf("body contains %q", unwanted)
+		}
+	}
+
 	rec = httptest.NewRecorder()
 	h.RefreshDeployments(
 		rec,
@@ -130,7 +132,13 @@ func TestIndex_DashboardMetrics(t *testing.T) {
 		)
 	}
 	fragment := rec.Body.String()
-	for _, want := range []string{"demo", `hx-trigger="every 5s"`, `id="home-latest"`, `id="home-recent"`, `hx-swap-oob="innerHTML:#home-running-count .stat-value"`, `hx-swap-oob="innerHTML:#home-today-count .stat-value"`} {
+	for _, want := range []string{
+		"demo",
+		`id="home-deployments"`,
+		`id="home-attention"`,
+		`id="home-running"`,
+		`hx-trigger="every 5s, home-deployments-refreshed from:body"`,
+	} {
 		if !strings.Contains(fragment, want) {
 			t.Errorf("running refresh missing %q", want)
 		}
@@ -138,5 +146,38 @@ func TestIndex_DashboardMetrics(t *testing.T) {
 	if strings.Contains(fragment, "<html") ||
 		strings.Contains(fragment, "data-home-charts") {
 		t.Fatal("running refresh rendered the full page")
+	}
+}
+
+func TestStatisticsPage(t *testing.T) {
+	dbConn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	defer testutil.Close(t, dbConn)
+
+	h := handler.NewIndexHandler(repository.New(dbConn))
+	req := httptest.NewRequest(http.MethodGet, "/statistics", nil)
+	req = auth.SetUser(req, &db.User{ID: 1, Role: "admin"})
+	rec := httptest.NewRecorder()
+	h.Statistics(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf(
+			"expected 200, got %d (body=%q)",
+			rec.Code,
+			rec.Body.String(),
+		)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		"Statistics",
+		"Projects",
+		"Environments",
+		"Deployments today",
+		"data-home-charts",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("statistics body missing %q", want)
+		}
 	}
 }

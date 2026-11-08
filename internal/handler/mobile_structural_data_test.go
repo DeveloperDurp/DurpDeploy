@@ -111,6 +111,20 @@ func newMobileStructuralData(
 			},
 		)),
 	)
+	// Pending approval row keeps the dashboard's attention table rendered
+	// (a succeeded deployment alone is intentionally invisible there).
+	attention := mustMobileStructural(
+		t,
+		mobileStructuralQuery(repo.Queries.CreateDeployment(
+			ctx,
+			db.CreateDeploymentParams{
+				ReleaseID:     release.ID,
+				EnvironmentID: environment.ID,
+				Status:        "pending_approval",
+			},
+		)),
+	)
+	_ = attention
 	template := mustMobileStructural(
 		t,
 		mobileStructuralQuery(repo.Queries.CreateStepTemplate(

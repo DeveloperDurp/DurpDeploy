@@ -80,7 +80,7 @@ func TestMobile_Navbar_keeps_account_controls_in_right_aligned_menu(
 	requireHTMLPattern(
 		t,
 		adminBody,
-		`(?s)<div class="ml-auto hidden min-w-0 flex-none items-center `+
+		`(?s)<div class="ml-auto hidden min-w-0 items-center `+
 			`justify-end gap-2 xl:flex">.*?`+
 			`<summary class="btn btn-ghost btn-sm">Admin</summary>.*?`+
 			`data-account-menu`,

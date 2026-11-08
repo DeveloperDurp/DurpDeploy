@@ -5,8 +5,6 @@ package api_test
 import (
 	"encoding/json"
 	"reflect"
-	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -113,23 +111,20 @@ func TestDashboardProjectScopeAPIWebE2E(t *testing.T) {
 			allowed := make(map[int64]string)
 			wantedStatus := make(map[string]int)
 			wantedRows := map[string]map[int64]string{
-				"home-running": {}, "home-waiting": {},
-				"home-latest": {}, "home-recent": {},
+				"home-attention": {}, "home-running": {},
 			}
-			var recentIDs []int64
 			for _, i := range visible {
-				for j, deployment := range deployments[i] {
+				for _, deployment := range deployments[i] {
 					allowed[deployment.ID] = deployment.Status
 					wantedStatus[deployment.Status]++
-					recentIDs = append(recentIDs, deployment.ID)
-					section := []string{"home-running", "home-waiting", "home-latest"}[j]
-					wantedRows[section][deployment.ID] = deployment.Status
+					switch deployment.Status {
+					case "queued", "pending", "running", "publishing_artifact":
+						wantedRows["home-running"][deployment.ID] = deployment.Status
+					case "pending_approval", "awaiting_artifact_approval",
+						"failed", "expired", "cleanup_unconfirmed":
+						wantedRows["home-attention"][deployment.ID] = deployment.Status
+					}
 				}
-			}
-			slices.Sort(recentIDs)
-			slices.Reverse(recentIDs)
-			for _, id := range recentIDs[:min(5, len(recentIDs))] {
-				wantedRows["home-recent"][id] = allowed[id]
 			}
 			if listed.Total != len(allowed) ||
 				len(listed.Data) != len(allowed) {
@@ -156,43 +151,6 @@ func TestDashboardProjectScopeAPIWebE2E(t *testing.T) {
 			}
 			assertDashboardRows(t, page, wantedRows)
 			assertDashboardRows(t, refresh, wantedRows)
-			for _, metric := range []struct {
-				id    string
-				count int
-			}{
-				{"home-running-count", len(visible)},
-				{"home-today-count", len(allowed)},
-			} {
-				container := dashboardElements(page, "id", metric.id)
-				if len(container) != 1 {
-					t.Fatalf("missing metric %s", metric.id)
-				}
-				want := strconv.Itoa(metric.count)
-				if dashboardCount(
-					t,
-					dashboardElements(container[0], "class", "stat-value"),
-				) != want ||
-					dashboardCount(t, dashboardElements(refresh, "hx-swap-oob",
-						"innerHTML:#"+metric.id+" .stat-value")) != want {
-					t.Fatalf(
-						"initial/refresh metric %s differs from %s",
-						metric.id,
-						want,
-					)
-				}
-			}
-			summary := dashboardElements(page, "data-home-summary", "")
-			if len(summary) != 1 {
-				t.Fatal("dashboard summary missing")
-			}
-			counts := dashboardElements(summary[0], "class", "stat-value")
-			if len(counts) != 4 ||
-				dashboardText(counts[0]) != strconv.Itoa(len(visible)) ||
-				dashboardText(counts[1]) != "1" {
-				t.Fatal(
-					"project count must be scoped and the shared environment count must remain global",
-				)
-			}
 		})
 	}
 }

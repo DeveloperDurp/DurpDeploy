@@ -616,6 +616,12 @@ func (h *DeploymentHandler) ApproveDeployment(
 	}
 	h.startLocalDeployment(result)
 
+	if r.FormValue("stay") == "1" {
+		// Dashboard initiated: stay on the list and refresh it.
+		w.Header().Set("HX-Trigger", "home-deployments-refreshed")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set(
 			"HX-Redirect",
@@ -750,6 +756,12 @@ func (h *DeploymentHandler) RedeployDeployment(
 
 	h.startLocalDeployment(result)
 
+	if r.FormValue("stay") == "1" {
+		// Dashboard initiated: stay on the list and refresh it.
+		w.Header().Set("HX-Trigger", "home-deployments-refreshed")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	if r.Header.Get("HX-Request") == "true" {
 		// HX-Redirect (not 303) so the client does a full-page nav; a
 		// body swap would clobber the nav bar's Alpine.js state.

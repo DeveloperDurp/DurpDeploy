@@ -61,7 +61,7 @@ func TestHomeMobileBrowserE2E(t *testing.T) {
 	b.navigateBackTest(t, f.baseURL+"/")
 	b.wait(
 		t,
-		`document.querySelector('[data-home-charts]') && Alpine.$data(document.querySelector('[data-home-charts]')).empty`,
+		`document.querySelector('#home-deployments') && document.body.innerText.includes('All clear')`,
 	)
 	b.captureNavigation(t, "home-empty-deployments")
 	var release db.Release
@@ -104,46 +104,36 @@ func TestHomeMobileBrowserE2E(t *testing.T) {
 		t.Fatalf("public activity API lost approval states: %+v", activity)
 	}
 	b.navigateBackTest(t, f.baseURL+"/")
-	b.wait(
-		t,
-		`window.DashboardChart && document.querySelectorAll('[data-home-charts] canvas').length === 2 && [...document.querySelectorAll('[data-home-charts] canvas')].every(c => DashboardChart.getChart(c)?.width > 0)`,
-	)
+	b.wait(t, `(() => {
+ const attention = [...document.querySelectorAll('#home-attention .badge')].map(el => el.textContent);
+ const running = [...document.querySelectorAll('#home-running .badge')].map(el => el.textContent);
+ return attention.length === 2 && attention.includes('pending_approval') &&
+  attention.includes('awaiting_artifact_approval') && running.length === 2 &&
+  running.includes('running') && running.includes('queued');
+})()`)
 	b.captureNavigation(t, "home-populated", func() {
 		b.wait(t, `(() => {
- const section = document.querySelector('[data-home-charts]');
- const ink = getComputedStyle(section).color;
- return [...section.querySelectorAll('canvas')].every(canvas => {
-  const chart = DashboardChart.getChart(canvas);
-  return chart && chart.options.color === ink && chart.width <= canvas.parentElement.clientWidth &&
-   chart.data.datasets.flatMap(d => d.data).reduce((a,b) => a+b, 0) === 6;
- }) && section.querySelectorAll('[data-chart-totals] dd').length === 6;
+ const tables = [...document.querySelectorAll('[data-home-deployments]')];
+ const buttons = [...document.querySelectorAll('#home-attention .btn')];
+ return tables.length === 2 && buttons.length > 0 &&
+  buttons.every(btn => !btn.disabled && btn.getBoundingClientRect().width > 0) &&
+  tables.every(table => [...table.tBodies[0].rows].every(row => {
+  const link = row.querySelector('a');
+  const box = row.getBoundingClientRect();
+  const target = link?.getBoundingClientRect();
+  return link?.getAttribute('href').startsWith('/deployments/') && !link.classList.contains('btn') &&
+   Math.abs(target.width - box.width) < 2 && Math.abs(target.height - box.height) < 2 &&
+   getComputedStyle(row).borderRadius === (innerWidth < 768 ? getComputedStyle(link).borderRadius : '0px') &&
+   (innerWidth < 768 ? getComputedStyle(row).display === 'grid' && row.querySelector('span.md\\:hidden') :
+    getComputedStyle(row).display === 'table-row' && table.tHead.getClientRects().length);
+ })) && buttons.every(btn => !btn.disabled && btn.getBoundingClientRect().width > 0);
 })()`)
 		if string(b.evaluate(t, `(() => {
  const tables = [...document.querySelectorAll('[data-home-deployments]')];
- const summary = document.querySelector('[data-home-summary]');
- const columns = getComputedStyle(summary).gridTemplateColumns.split(' ').length;
- const waiting = [...document.querySelectorAll('#home-waiting .badge')].map(el => el.textContent);
- const running = [...document.querySelectorAll('#home-running .badge')].map(el => el.textContent);
- return !document.querySelector('[data-home-charts] details') && document.querySelector('#home-daily-counts').classList.contains('sr-only') &&
- waiting.length === 3 && waiting.includes('queued') && waiting.includes('pending_approval') && waiting.includes('awaiting_artifact_approval') &&
- running.length === 1 && running[0] === 'running' && document.querySelector('#home-running-count .stat-value').textContent === '1' &&
- tables.length === 4 && columns === (innerWidth < 1024 ? 2 : 4) &&
- tables.every(table => [...table.tBodies[0].rows].every(row => {
- const link = row.querySelector('a');
- const box = row.getBoundingClientRect();
- const target = link?.getBoundingClientRect();
- return link?.getAttribute('href').startsWith('/deployments/') && !link.classList.contains('btn') &&
- Math.abs(target.width - box.width) < 2 && Math.abs(target.height - box.height) < 2 &&
- getComputedStyle(row).borderRadius === (innerWidth < 768 ? getComputedStyle(link).borderRadius : '0px');
- })) &&
- tables.every(table => [...table.tBodies[0].rows].every(row =>
- innerWidth < 768 ? getComputedStyle(row).display === 'grid' && row.cells.length === 5 &&
- getComputedStyle(row).borderRadius !== '0px' && parseFloat(getComputedStyle(row).marginBottom) >= 12 &&
- getComputedStyle(row).backgroundColor !== 'rgba(0, 0, 0, 0)' &&
- [...row.cells].every(cell => cell.getClientRects().length && cell.scrollWidth <= cell.clientWidth) &&
- row.querySelectorAll('span.md\\:hidden').length === 5 :
- getComputedStyle(row).display === 'table-row' && table.tHead.getClientRects().length)) &&
- !document.querySelector('main a[href="/projects/new"], main a[href="/environments/new"]');
+ return tables.every(table => [...table.tBodies[0].rows].every(row =>
+ innerWidth < 768 ? getComputedStyle(row).display === 'grid' &&
+  [...row.cells].every(cell => cell.getClientRects().length && cell.scrollWidth <= cell.clientWidth) :
+  table.tHead.getClientRects().length));
 })()`)) != "true" {
 			b.screenshot(t, "home-mobile-layout-failure")
 			t.Fatal(
@@ -157,7 +147,7 @@ func TestHomeMobileBrowserE2E(t *testing.T) {
 		X, Y float64
 	}
 	decodeStepLogTest(t, b.evaluate(t, `(() => {
- const row = document.querySelector('#home-recent tbody tr');
+ const row = document.querySelector('#home-running tbody tr');
  const cell = row.cells[4].getBoundingClientRect();
  window.rowNavigationSentinel = true;
  return {Href:row.querySelector('a').getAttribute('href'),X:cell.x+cell.width/2,Y:cell.y+cell.height/2};
@@ -165,10 +155,10 @@ func TestHomeMobileBrowserE2E(t *testing.T) {
 	f.api(t, "GET", "/api/v1"+target.Href, nil, 200)
 	b.evaluate(
 		t,
-		`document.querySelector('#home-recent tbody tr').scrollIntoView(); true`,
+		`document.querySelector('#home-running tbody tr').scrollIntoView(); true`,
 	)
 	decodeStepLogTest(t, b.evaluate(t, `(() => {
- const row = document.querySelector('#home-recent tbody tr');
+ const row = document.querySelector('#home-running tbody tr');
  const cell = row.cells[4].getBoundingClientRect();
  return {Href:row.querySelector('a').getAttribute('href'),X:cell.x+cell.width/2,Y:cell.y+cell.height/2};
 })()`), &target)
@@ -176,17 +166,17 @@ func TestHomeMobileBrowserE2E(t *testing.T) {
 		"type": "mouseMoved", "x": target.X, "y": target.Y,
 	}, &struct{}{})
 	b.wait(t, `(() => {
- const link = document.querySelector('#home-recent tbody tr a');
+ const link = document.querySelector('#home-running tbody tr a');
  const style = getComputedStyle(link);
  return link.matches(':hover') && style.cursor === 'pointer' &&
- style.backgroundColor !== 'rgba(0, 0, 0, 0)' && style.boxShadow !== 'none' &&
- document.getAnimations().every(a => a.playState !== 'running');
+  style.backgroundColor !== 'rgba(0, 0, 0, 0)' && style.boxShadow !== 'none' &&
+  document.getAnimations().every(a => a.playState !== 'running');
 })()`)
 	b.screenshot(t, "home-deployment-row-highlight")
 	// Capturing the full page restores scroll to the top. Locate the row
 	// again before sending viewport coordinates for the actual click.
 	decodeStepLogTest(t, b.evaluate(t, `(() => {
- const row = document.querySelector('#home-recent tbody tr');
+ const row = document.querySelector('#home-running tbody tr');
  row.scrollIntoView();
  const cell = row.cells[4].getBoundingClientRect();
  return {Href:row.querySelector('a').getAttribute('href'),X:cell.x+cell.width/2,Y:cell.y+cell.height/2};
@@ -207,19 +197,31 @@ func TestHomeMobileBrowserE2E(t *testing.T) {
 	b.navigateBackTest(t, f.baseURL+"/")
 	b.evaluate(
 		t,
-		`document.querySelector('#home-recent tbody tr a').focus(); true`,
+		`document.querySelector('#home-running tbody tr a').focus(); true`,
 	)
 	b.call(t, "Input.dispatchKeyEvent", map[string]any{
 		"type": "keyDown", "key": "Enter", "code": "Enter",
 		"windowsVirtualKeyCode": 13,
 	}, &struct{}{})
 	b.wait(t, fmt.Sprintf(`location.pathname === %q`, target.Href))
-	b.navigateBackTest(t, f.baseURL+"/")
+	// The charts live on the statistics page: fresh pair on the visit,
+	// destroyed on HTMX navigation, re-created on return.
+	b.navigateBackTest(t, f.baseURL+"/statistics")
 	b.wait(
 		t,
-		`window.DashboardChart && Object.keys(DashboardChart.instances).length === 2`,
+		`window.DashboardChart && document.querySelectorAll('[data-home-charts] canvas').length === 2 && [...document.querySelectorAll('[data-home-charts] canvas')].every(c => DashboardChart.getChart(c)?.width > 0)`,
 	)
-	// HTMX navigation destroys old charts and creates one fresh pair on return.
+	b.captureNavigation(t, "statistics-populated", func() {
+		b.wait(t, `(() => {
+ const section = document.querySelector('[data-home-charts]');
+ const ink = getComputedStyle(section).color;
+ return [...section.querySelectorAll('canvas')].every(canvas => {
+  const chart = DashboardChart.getChart(canvas);
+  return chart && chart.options.color === ink && chart.width <= canvas.parentElement.clientWidth &&
+   chart.data.datasets.flatMap(d => d.data).reduce((a,b) => a+b, 0) === 6;
+ }) && section.querySelectorAll('[data-chart-totals] dd').length === 6;
+})()`)
+	})
 	b.evaluate(
 		t,
 		`window.oldHomeCharts = [...document.querySelectorAll('[data-home-charts] canvas')].map(c => DashboardChart.getChart(c)); document.querySelector('#app-navbar a[href="/projects"]').click(); true`,
@@ -238,11 +240,11 @@ func TestHomeMobileBrowserE2E(t *testing.T) {
 	)
 	b.evaluate(
 		t,
-		`document.querySelector('#app-navbar a[href="/"]').click(); true`,
+		`document.querySelector('#app-navbar a[href="/statistics"]').click(); true`,
 	)
 	b.wait(
 		t,
-		`location.pathname === '/' && window.DashboardChart && Object.keys(DashboardChart.instances).length === 2`,
+		`location.pathname === '/statistics' && window.DashboardChart && Object.keys(DashboardChart.instances).length === 2`,
 	)
 }
 
@@ -256,11 +258,11 @@ func TestHomeRunningPollBrowserE2E(t *testing.T) {
 	b.navigateBackTest(t, f.baseURL+"/")
 	b.wait(
 		t,
-		`window.htmx && document.querySelector('#home-running').textContent.includes('No deployments in progress.')`,
+		`window.htmx && document.querySelector('#home-deployments') && document.body.innerText.includes('All clear')`,
 	)
 	b.evaluate(
 		t,
-		`window.originalMain = document.querySelector('#page-content'); window.originalCharts = document.querySelector('[data-home-charts]'); window.originalSummaryCards = [...document.querySelector('[data-home-summary]').children]; true`,
+		`window.originalMain = document.querySelector('#page-content'); true`,
 	)
 	b.evaluate(t, `(() => {
  const start = document.startViewTransition.bind(document);
@@ -297,20 +299,13 @@ func TestHomeRunningPollBrowserE2E(t *testing.T) {
 	)
 	b.wait(
 		t,
-		`document.querySelector('#home-running').textContent.includes('live-home') && document.querySelector('#home-running-count .stat-value').textContent === '1'`,
+		`(() => {
+ const section = document.querySelector('#home-running');
+ return section && section.textContent.includes('live-home') &&
+  [...section.querySelectorAll('.badge')].some(el => el.textContent === 'running');
+})()`,
 	)
 	b.wait(t, `!document.querySelector('#home-deployments.htmx-settling')`)
-	// Charts have their own 30-second cadence. Refresh explicitly while
-	// checking the faster deployment panel transitions.
-	b.evaluate(t, `Alpine.$data(originalCharts).load().then(() => true)`)
-	b.wait(
-		t,
-		`window.DashboardChart && document.querySelector('#home-latest .badge').textContent === 'running' && document.querySelector('#home-recent .badge').textContent === 'running' && document.querySelector('#home-today-count .stat-value').textContent === '1' && Object.keys(DashboardChart.instances).length === 2`,
-	)
-	b.evaluate(
-		t,
-		`window.originalChartInstances = [...document.querySelectorAll('[data-home-charts] canvas')].map(c => DashboardChart.getChart(c)); true`,
-	)
 	b.screenshot(t, "home-running-poll-375")
 	f.completion(t, deployment.ID, events.DeploymentSucceeded)
 	var stored db.Deployment
@@ -330,38 +325,17 @@ func TestHomeRunningPollBrowserE2E(t *testing.T) {
 	}
 	b.wait(
 		t,
-		`document.querySelector('#home-running').textContent.includes('No deployments in progress.') && document.querySelector('#home-running-count .stat-value').textContent === '0'`,
-	)
-	b.evaluate(t, `Alpine.$data(originalCharts).load().then(() => true)`)
-	b.wait(
-		t,
-		`document.querySelector('#home-latest .badge').textContent === 'succeeded' && document.querySelector('#home-recent .badge').textContent === 'succeeded' && Alpine.$data(originalCharts).totals.some(item => item.status === 'succeeded' && item.count === 1) && !Alpine.$data(originalCharts).totals.some(item => item.status === 'running')`,
+		`document.body.innerText.includes('All clear') && !document.querySelector('#home-running .badge')`,
 	)
 	b.screenshot(t, "home-completed-poll-375")
-	if string(b.evaluate(t, `(async () => {
- await Alpine.nextTick();
- let updates = 0;
- const originals = originalChartInstances.map(chart => chart.update);
- originalChartInstances.forEach(chart => {
-  chart.update = function(...args) { updates++; return originals[originalChartInstances.indexOf(chart)].apply(this, args); };
- });
- try {
-  await Alpine.$data(originalCharts).load();
-  return updates === 0;
- } finally {
-  originalChartInstances.forEach((chart, index) => { chart.update = originals[index]; });
- }
-})()`)) != "true" {
-		t.Fatal("unchanged activity repainted the charts")
-	}
 	if string(
 		b.evaluate(
 			t,
-			`originalMain === document.querySelector('#page-content') && originalCharts === document.querySelector('[data-home-charts]') && originalSummaryCards.every(c => c.isConnected) && originalChartInstances.every(c => c.ctx !== null && DashboardChart.getChart(c.canvas) === c) && document.querySelector('#home-deployments').getAttribute('hx-trigger') === 'every 5s'`,
+			`originalMain === document.querySelector('#page-content') && document.querySelector('#home-deployments').getAttribute('hx-trigger') === 'every 5s, home-deployments-refreshed from:body'`,
 		),
 	) != "true" {
 		t.Fatal(
-			"running refresh replaced the page/charts or changed its interval",
+			"running refresh replaced the page or changed its interval",
 		)
 	}
 	// Approval waits appear on the next poll without counting as running.
@@ -395,9 +369,19 @@ func TestHomeRunningPollBrowserE2E(t *testing.T) {
 	}
 	b.wait(
 		t,
-		`document.querySelector('#home-waiting .badge')?.textContent === 'pending_approval' && document.querySelector('#home-running-count .stat-value').textContent === '0'`,
+		`document.querySelector('#home-attention .badge')?.textContent === 'pending_approval' && !document.querySelector('#home-running .badge')`,
 	)
 	b.screenshot(t, "home-waiting-approval-375")
+	// While sections are present, confirm the scoped view transition and
+	// the dashboard root stay isolated from page-wide transitions.
+	if string(
+		b.evaluate(
+			t,
+			`homeTransitionCount > 0 && getComputedStyle(document.documentElement).viewTransitionName === 'none' && getComputedStyle(document.querySelector('#home-attention')).viewTransitionName === 'home-attention'`,
+		),
+	) != "true" {
+		t.Fatal("dashboard refresh did not use scoped view transitions")
+	}
 	f.api(
 		t,
 		"POST",
@@ -407,21 +391,13 @@ func TestHomeRunningPollBrowserE2E(t *testing.T) {
 	)
 	b.wait(
 		t,
-		`!document.querySelector('#home-waiting .badge') && document.querySelector('#home-running .badge')?.textContent === 'running' && document.querySelector('#home-running-count .stat-value').textContent === '1'`,
+		`!document.querySelector('#home-attention .badge') && document.querySelector('#home-running .badge')?.textContent === 'running'`,
 	)
 	f.completion(t, waiting.ID, events.DeploymentSucceeded)
 	b.wait(
 		t,
-		`!document.querySelector('#home-waiting .badge') && !document.querySelector('#home-running .badge') && document.querySelector('#home-running-count .stat-value').textContent === '0'`,
+		`!document.querySelector('#home-attention .badge') && !document.querySelector('#home-running .badge') && document.body.innerText.includes('All clear')`,
 	)
-	if string(
-		b.evaluate(
-			t,
-			`homeTransitionCount > 0 && getComputedStyle(document.documentElement).viewTransitionName === 'none' && getComputedStyle(document.querySelector('#home-waiting')).viewTransitionName === 'home-waiting'`,
-		),
-	) != "true" {
-		t.Fatal("dashboard refresh did not use scoped view transitions")
-	}
 	b.call(t, "Emulation.setEmulatedMedia", map[string]any{
 		"features": []map[string]string{
 			{"name": "prefers-reduced-motion", "value": "reduce"},

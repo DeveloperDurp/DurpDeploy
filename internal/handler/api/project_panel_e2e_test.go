@@ -191,8 +191,9 @@ func (p projectPanelFixture) checkAPIWeb(
 	p.checkDetail(t)
 	p.checkCards(t)
 	home := f.web(t, "GET", "/", nil, 200)
-	if !strings.Contains(home, "own-success") ||
-		!strings.Contains(home, "own-attempt") {
+	if !strings.Contains(home, "own-attempt") ||
+		strings.Contains(home, "own-success") ||
+		strings.Contains(home, "foreign-version") {
 		t.Fatal("dashboard disagrees with retained project history")
 	}
 	f.api(

@@ -200,6 +200,7 @@ func newRouter(
 		pr.Get("/dashboard/deployments", indexHandler.RefreshDeployments)
 		pr.Get("/dashboard/activity",
 			api.NewDeploymentHandler(repo, rnr).DeploymentActivity)
+		pr.Get("/statistics", indexHandler.Statistics)
 		pr.Post("/logout", authHandler.LogoutPost)
 
 		envHandler := handler.NewEnvironmentHandler(repo)

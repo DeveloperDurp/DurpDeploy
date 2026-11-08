@@ -122,7 +122,7 @@ templ Base(title string, currentPath string) {
 								@PrimaryNavLinks(currentPath)
 							</ul>
 						</div>
-						<div class="ml-auto hidden min-w-0 flex-none items-center justify-end gap-2 xl:flex">
+						<div class="ml-auto hidden min-w-0 items-center justify-end gap-2 xl:flex">
 							@ThemeToggle("btn btn-ghost btn-sm")
 							if user := auth.UserFromContext(ctx); user != nil && user.Role == "admin" {
 								<details data-focus-menu class="dropdown dropdown-end shrink-0 self-center">
@@ -179,6 +179,7 @@ templ PrimaryNavLinks(currentPath string) {
 	<li><a href="/environments" class={ activeClass(currentPath, "/environments") }>Environments</a></li>
 	<li><a href="/lifecycles" class={ activeClass(currentPath, "/lifecycles") }>Lifecycles</a></li>
 	<li><a href="/deployments" class={ activeClass(currentPath, "/deployments") }>Deployments</a></li>
+	<li><a href="/statistics" class={ activeClass(currentPath, "/statistics") }>Statistics</a></li>
 	<li><a href="/templates" class={ activeClass(currentPath, "/templates") }>Templates</a></li>
 }
 

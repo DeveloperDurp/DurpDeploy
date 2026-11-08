@@ -88,11 +88,25 @@ func assertAnsibleHistoryPanels(
 	rows, err := repo.Queries.ListDashboardDeployments(
 		t.Context(),
 		db.ListDashboardDeploymentsParams{
-			IsAdmin: 1, Section: "latest", RowLimit: 20,
+			IsAdmin: 1, Section: "attention", RowLimit: 20,
 		},
 	)
-	if err != nil || len(rows) != 1 || rows[0].ID != applyID {
-		t.Fatal("check hid actual deployment from dashboard", rows, err)
+	if err != nil {
+		t.Fatal("attention rows", err)
+	}
+	active, err := repo.Queries.ListDashboardDeployments(
+		t.Context(),
+		db.ListDashboardDeploymentsParams{
+			IsAdmin: 1, Section: "active", RowLimit: 20,
+		},
+	)
+	if err != nil {
+		t.Fatal("active rows", err)
+	}
+	for _, row := range append(rows, active...) {
+		if row.ID == checkID {
+			t.Fatal("check surfaced on dashboard", row.ID)
+		}
 	}
 	if _, err := repo.PreviewRollback(t.Context(), checkID); !errors.Is(
 		err,

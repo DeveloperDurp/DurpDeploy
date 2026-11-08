@@ -9,6 +9,10 @@ import (
 	"durpdeploy/views/pages"
 )
 
+// dashboardRowCap limits attention and in-flight sections. The handler
+// fetches one extra row to detect overflow.
+const dashboardRowCap = 15
+
 type IndexHandler struct{ repo *repository.Repository }
 
 func NewIndexHandler(
@@ -43,6 +47,37 @@ func (h *IndexHandler) Index(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Statistics renders the volume overview: counts and the 14-day charts.
+func (h *IndexHandler) Statistics(w http.ResponseWriter, r *http.Request) {
+	admin, userID := dashboardScope(r)
+	projects, err := h.repo.Queries.CountDashboardProjects(
+		r.Context(),
+		db.CountDashboardProjectsParams{IsAdmin: admin, UserID: userID},
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	envs, err := h.repo.Queries.CountEnvironments(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	today, err := h.repo.Queries.CountDashboardDeploymentsToday(
+		r.Context(),
+		db.CountDashboardDeploymentsTodayParams{IsAdmin: admin, UserID: userID},
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := pages.StatisticsPage(
+		r.URL.Path, int(projects), int(envs), today,
+	).Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func (h *IndexHandler) RefreshDeployments(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -53,8 +88,7 @@ func (h *IndexHandler) RefreshDeployments(
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("HX-Trigger-After-Swap", "home-deployments-refreshed")
-	if err := pages.HomeDeploymentsRefresh(data).
+	if err := pages.HomeDeploymentSections(data).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -74,23 +108,23 @@ func dashboardScope(r *http.Request) (int64, int64) {
 func (h *IndexHandler) dashboardRows(
 	r *http.Request,
 	section string,
-) ([]pages.DeploymentListItem, error) {
+) ([]pages.DeploymentListItem, bool, error) {
 	admin, userID := dashboardScope(r)
-	limit := int64(2147483647)
-	if section == "recent" {
-		limit = 5
-	}
 	rows, err := h.repo.Queries.ListDashboardDeployments(
 		r.Context(),
 		db.ListDashboardDeploymentsParams{
 			IsAdmin:  admin,
 			UserID:   userID,
 			Section:  section,
-			RowLimit: limit,
+			RowLimit: dashboardRowCap + 1,
 		},
 	)
 	if err != nil {
-		return nil, err
+		return nil, false, err
+	}
+	capped := len(rows) > dashboardRowCap
+	if capped {
+		rows = rows[:dashboardRowCap]
 	}
 	items := make([]pages.DeploymentListItem, len(rows))
 	for i, row := range rows {
@@ -112,7 +146,7 @@ func (h *IndexHandler) dashboardRows(
 			EnvironmentName: row.EnvironmentName,
 		}
 	}
-	return items, nil
+	return items, capped, nil
 }
 
 func (h *IndexHandler) deployments(
@@ -120,30 +154,10 @@ func (h *IndexHandler) deployments(
 ) (pages.HomeDeploymentsView, error) {
 	var data pages.HomeDeploymentsView
 	var err error
-	admin, userID := dashboardScope(r)
-	data.Today, err = h.repo.Queries.CountDashboardDeploymentsToday(
-		r.Context(),
-		db.CountDashboardDeploymentsTodayParams{IsAdmin: admin, UserID: userID},
-	)
+	data.Attention, data.AttentionCapped, err = h.dashboardRows(r, "attention")
 	if err != nil {
 		return data, err
 	}
-	data.Recent, err = h.dashboardRows(r, "recent")
-	if err != nil {
-		return data, err
-	}
-	active, err := h.dashboardRows(r, "active")
-	if err != nil {
-		return data, err
-	}
-	for _, item := range active {
-		switch item.Deployment.Status {
-		case "queued", "pending_approval", "awaiting_artifact_approval":
-			data.Waiting = append(data.Waiting, item)
-		default:
-			data.Running = append(data.Running, item)
-		}
-	}
-	data.Latest, err = h.dashboardRows(r, "latest")
+	data.Running, data.RunningCapped, err = h.dashboardRows(r, "active")
 	return data, err
 }
