@@ -89,7 +89,7 @@ default:
   variables:
     CI_GO_CACHE_ENABLED: "true"
   cache:
-    key: go-v1-linux-amd64-$CI_PROJECT_ID-source-$CI_MERGE_REQUEST_SOURCE_PROJECT_ID-mr-$CI_MERGE_REQUEST_IID
+    key: go-v1-linux-amd64-$CI_PROJECT_ID-source-$CI_MERGE_REQUEST_SOURCE_PROJECT_ID-mr-$CI_MERGE_REQUEST_IID-ref-$CI_COMMIT_REF_SLUG-protected-$CI_COMMIT_REF_PROTECTED
     paths: [.cache/ci-go/]
     policy: pull
   needs:

@@ -235,21 +235,59 @@ func TestSonarRequiresEveryCoverageReport(t *testing.T) {
 	script := strings.Join(pipeline(t)["sonarcloud"].Script, "\n")
 	path := fixtureCommand(t, "sonar-scanner",
 		"printf '%s\\n' \"$@\" > \"$SCANNER_ARGS\"\n")
-	for _, missing := range append([]string{""}, shards...) {
-		t.Run("missing="+missing, func(t *testing.T) {
-			dir := t.TempDir()
-			coverageReportFixture(t, dir, shards, missing)
-			args := filepath.Join(dir, "scanner-args")
-			cmd := exec.Command("bash", "-euo", "pipefail", "-c", script)
-			cmd.Dir = dir
-			cmd.Env = append(os.Environ(), "PATH="+path+":"+os.Getenv("PATH"),
-				"SCANNER_ARGS="+args, "SONAR_TOKEN=cicontract-fixture",
-				"CI_MERGE_REQUEST_IID=64",
-				"CI_MERGE_REQUEST_SOURCE_BRANCH_NAME=improvement/gitlab-ci",
-				"CI_MERGE_REQUEST_TARGET_BRANCH_NAME=main")
-			output, err := cmd.CombinedOutput()
-			checkSonarReportResult(t, missing, args, output, err, shards)
-		})
+	for _, source := range []string{"push", "merge_request_event"} {
+		for _, missing := range append([]string{""}, shards...) {
+			t.Run(source+"/missing="+missing, func(t *testing.T) {
+				dir := t.TempDir()
+				coverageReportFixture(t, dir, shards, missing)
+				args := filepath.Join(dir, "scanner-args")
+				cmd := exec.Command("bash", "-euo", "pipefail", "-c", script)
+				cmd.Dir = dir
+				cmd.Env = append(
+					metadataEnvironment(),
+					"PATH="+path+":"+os.Getenv("PATH"),
+					"SCANNER_ARGS="+args,
+					"SONAR_TOKEN=cicontract-fixture",
+					"CI_PIPELINE_SOURCE="+source,
+					"CI_COMMIT_BRANCH=main",
+					"CI_MERGE_REQUEST_IID=64",
+					"CI_MERGE_REQUEST_SOURCE_BRANCH_NAME=improvement/gitlab-ci",
+					"CI_MERGE_REQUEST_TARGET_BRANCH_NAME=main",
+				)
+				output, err := cmd.CombinedOutput()
+				checkSonarReportResult(t, missing, args, output, err, shards)
+				if missing == "" {
+					checkSonarAnalysisMode(t, source, args)
+				}
+			})
+		}
+	}
+}
+
+func checkSonarAnalysisMode(t *testing.T, source, args string) {
+	t.Helper()
+	data, err := os.ReadFile(args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	arguments := strings.Split(strings.TrimSpace(string(data)), "\n")
+	want := []string{"-Dsonar.branch.name=main"}
+	forbidden := "sonar.pullrequest."
+	if source == "merge_request_event" {
+		want = []string{
+			"-Dsonar.pullrequest.key=gitlab-64",
+			"-Dsonar.pullrequest.branch=improvement/gitlab-ci",
+			"-Dsonar.pullrequest.base=main",
+		}
+		forbidden = "sonar.branch.name"
+	}
+	for _, argument := range want {
+		if !slices.Contains(arguments, argument) {
+			t.Errorf("missing %s: %s", argument, data)
+		}
+	}
+	if strings.Contains(string(data), forbidden) {
+		t.Fatalf("unexpected %s: %s", forbidden, data)
 	}
 }
 

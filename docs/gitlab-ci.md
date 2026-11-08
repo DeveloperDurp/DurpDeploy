@@ -15,6 +15,9 @@ Local verification uses the same regression with rootless Podman.
 
 Merge requests run lint, Go tests, API tests, browser tests, database parity, and security checks.
 Main pushes, tags, manual pipelines, and scheduled pipelines run the shared build and security checks.
+Normal default-branch pushes in `durfy/apps/durpdeploy` also run the Go cache producer, six coverage shards, and SonarCloud.
+These eight jobs used about 86 runner-minutes in merge request pipeline 2532.
+Cache availability and runner queue time affect the elapsed time.
 Protected main pushes, protected tags, and protected manual pipelines can publish verified images and charts.
 Scheduled pipelines never publish.
 Feature branch pushes do not create duplicate pipelines.
@@ -40,7 +43,7 @@ It excludes dependency objects already present in the helper image.
 Test jobs download these objects through the shared GitLab cache.
 Each test job restores these objects into its private `/opt/go-build` directory.
 All test commands still execute their selected tests with `-count=1`.
-The producer restores and uploads a GitLab cache scoped to the project and merge request.
+The producer restores and uploads a GitLab cache scoped to the project, source project, merge request, branch, and protection status.
 Consumers use the same cache key with `policy: pull` after the producer finishes.
 Consumers do not upload the cache or download a separate build-cache artifact.
 Protected pipelines do not import merge request caches.
@@ -360,8 +363,20 @@ It removes inherited publication credentials before commands outside the product
 
 SonarCloud waits for its quality gate and fails the pipeline when the gate fails.
 Analysis keys use `gitlab-<merge-request-number>` to separate them from historical GitHub pull requests.
+Default-branch push analysis sets `sonar.branch.name` and omits all `sonar.pullrequest.*` parameters.
+Fork merge requests cannot select the SonarCloud job in the target project.
+Fork default-branch pushes cannot select the added coverage, Go cache, or SonarCloud jobs.
+Tag, manual, scheduled, transport-only, and cache-cleanup pipelines retain their existing selection rules.
 Self-managed GitLab supports SonarCloud analysis without native merge request decoration.
 Read findings with `make sonar-issues MR=<merge-request-number>` and a local `SONAR_TOKEN`.
+
+After the first merge, inspect the default-branch push pipeline and its SonarCloud job.
+Confirm that SonarCloud records the merged commit as the latest main analysis.
+Then rerun affected merge request analysis against the current baseline.
+A current baseline does not guarantee that existing findings or quality gate failures disappear.
+Keep valid findings and quality gate thresholds unchanged.
+If recovery is required, revert the CI change through a new merge request.
+The revert restores job selection but does not remove analysis already stored in SonarCloud.
 
 Bundled PowerShell and Python templates run through deployment API tests in separate processes.
 These processes do not emit coverage for the Go reports.

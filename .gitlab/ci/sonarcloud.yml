@@ -1,5 +1,8 @@
 coverage:
   extends: .mr-test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PROJECT_PATH == "durfy/apps/durpdeploy"'
   timeout: 45 minutes
   parallel:
     matrix:
@@ -44,14 +47,22 @@ sonarcloud:
     action: prepare
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID == $CI_PROJECT_ID'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PROJECT_PATH == "durfy/apps/durpdeploy"'
   script:
     - test -n "$SONAR_TOKEN"
     - |-
       for shard in api-1 api-2 handlers repository migrations core; do
         test -s "artifacts/coverage/$shard.out"
       done
+      if [[ $CI_PIPELINE_SOURCE == merge_request_event ]]; then
+        analysis=(
+          -Dsonar.pullrequest.key="gitlab-$CI_MERGE_REQUEST_IID"
+          -Dsonar.pullrequest.branch="$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"
+          -Dsonar.pullrequest.base="$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+        )
+      else
+        analysis=(-Dsonar.branch.name="$CI_COMMIT_BRANCH")
+      fi
       sonar-scanner -Dsonar.qualitygate.wait=true \
         -Dsonar.go.coverage.reportPaths=artifacts/coverage/api-1.out,artifacts/coverage/api-2.out,artifacts/coverage/handlers.out,artifacts/coverage/repository.out,artifacts/coverage/migrations.out,artifacts/coverage/core.out \
-        -Dsonar.pullrequest.key="gitlab-$CI_MERGE_REQUEST_IID" \
-        -Dsonar.pullrequest.branch="$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" \
-        -Dsonar.pullrequest.base="$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+        "${analysis[@]}"

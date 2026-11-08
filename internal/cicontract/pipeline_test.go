@@ -253,13 +253,24 @@ func TestMergeRequestJobsBlockPipeline(t *testing.T) {
 		if parent == "" {
 			continue
 		}
-		if (name != "agent-container-podman" && current.allowsFailure()) ||
-			len(current.Rules) != 1 ||
-			current.Rules[0].If !=
-				`$CI_PIPELINE_SOURCE == "merge_request_event"` ||
-			!current.needs("lint") {
-			t.Errorf("%s must be a blocking MR test after lint", name)
+		checkMergeRequestJob(t, name, current)
+	}
+}
+
+func checkMergeRequestJob(t *testing.T, name string, current job) {
+	t.Helper()
+	if name == "coverage" {
+		if current.allowsFailure() || !current.needs("lint") {
+			t.Fatal("coverage must block pipeline success after lint")
 		}
+		return
+	}
+	if (name != "agent-container-podman" && current.allowsFailure()) ||
+		len(current.Rules) != 1 ||
+		current.Rules[0].If !=
+			`$CI_PIPELINE_SOURCE == "merge_request_event"` ||
+		!current.needs("lint") {
+		t.Errorf("%s must be a blocking MR test after lint", name)
 	}
 }
 
@@ -439,6 +450,7 @@ func TestGoCacheHasOneWriterAndPullOnlyConsumers(t *testing.T) {
 	for _, variable := range []string{
 		"$CI_PROJECT_ID", "$CI_MERGE_REQUEST_SOURCE_PROJECT_ID",
 		"$CI_MERGE_REQUEST_IID",
+		"$CI_COMMIT_REF_SLUG", "$CI_COMMIT_REF_PROTECTED",
 	} {
 		if !strings.Contains(cache.Key, variable) {
 			t.Errorf("cache key does not isolate %s", variable)
@@ -509,9 +521,8 @@ func checkGoCacheConsumer(
 	}
 	if consumer.Policy != "pull" || consumer.Key != expected.Key ||
 		!slices.Equal(consumer.Paths, expected.Paths) ||
-		!current.needs("go-test-cache") || len(current.Rules) != 1 ||
-		current.Rules[0].If != `$CI_PIPELINE_SOURCE == "merge_request_event"` {
-		t.Errorf("%s must only pull its MR cache after the producer", name)
+		!current.needs("go-test-cache") {
+		t.Errorf("%s must only pull its cache after the producer", name)
 	}
 }
 

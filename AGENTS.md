@@ -132,6 +132,8 @@ See `docs/gitlab-ci.md` for the AMD64 Kubernetes runner and credential setup.
 ## SonarCloud and Codex
 
 SonarCloud and the main Go/E2E suites run on merge requests.
+Normal default-branch pushes also run the six Go coverage shards and SonarCloud.
+The main analysis uses branch parameters and keeps the existing quality gate.
 Security scans also run on main pushes, tags, configured schedules, and manual pipelines.
 The targeted API-token test runs on merge requests.
 SonarCloud reports Go coverage and waits for the Quality Gate.
