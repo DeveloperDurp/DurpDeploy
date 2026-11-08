@@ -1,3 +1,23 @@
 {
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json"
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "packageRules": [
+    {
+      "matchFileNames": ["Dockerfile.transport-security"],
+      "matchDatasources": ["deb"],
+      "matchPackageNames": ["chromium-headless-shell"],
+      "registryUrls": [
+        "https://security.debian.org/debian-security?suite=trixie-security&components=main&binaryArch=amd64"
+      ]
+    },
+    {
+      "matchFileNames": ["Dockerfile.transport-security"],
+      "matchDatasources": ["deb"],
+      "matchPackageNames": ["busybox-static"],
+      "registryUrls": [
+        "https://archive.ubuntu.com/ubuntu?suite=resolute&components=main&binaryArch=amd64",
+        "https://archive.ubuntu.com/ubuntu?suite=resolute-updates&components=main&binaryArch=amd64",
+        "https://security.ubuntu.com/ubuntu?suite=resolute-security&components=main&binaryArch=amd64"
+      ]
+    }
+  ]
 }

@@ -1,13 +1,25 @@
-# Use the repository's existing browser runtime and its system OpenSSL.
-FROM harbor.durp.info/microsoft/playwright@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
+# Run the open-source Chromium headless shell with system OpenSSL.
+FROM harbor.durp.info/dockerhub/library/ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # BusyBox supplies hexdump and nslookup under GPL-2.0. Keep package notices.
 # testssl.sh v3.2.4, GPL-2.0. Keep the complete source and license notices.
 # Run with system OpenSSL, without the bundled third-party executable files.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends --no-upgrade \
-      busybox-static=1:1.36.1-6ubuntu3.1 && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --no-upgrade \
+      busybox-static=1:1.37.0-7ubuntu1 ca-certificates curl debian-archive-keyring && \
+    printf 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] %s %s main\n' \
+      'https://deb.debian.org/debian' trixie \
+      'https://security.debian.org/debian-security' trixie-security \
+      > /etc/apt/sources.list.d/debian.list && \
+    printf '%s\n' \
+      'Package: *' 'Pin: origin deb.debian.org' 'Pin-Priority: 100' '' \
+      'Package: *' 'Pin: origin security.debian.org' 'Pin-Priority: 100' \
+      > /etc/apt/preferences.d/debian && \
+    apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --no-upgrade \
+      chromium-headless-shell=156.0.8078.79-1~deb13u1 && \
+    rm /etc/apt/sources.list.d/debian.list /etc/apt/preferences.d/debian && \
     ln -s /bin/busybox /usr/local/bin/hexdump && \
     ln -s /bin/busybox /usr/local/bin/nslookup && \
     rm -rf /var/lib/apt/lists/* && \
@@ -19,7 +31,8 @@ RUN apt-get update && \
       /tmp/testssl.tar.gz | sha256sum --check - && \
     mkdir /opt/testssl && \
     tar -xzf /tmp/testssl.tar.gz --strip-components=1 -C /opt/testssl && \
-    rm -rf /tmp/testssl.tar.gz /opt/testssl/bin
+    rm -rf /tmp/testssl.tar.gz /opt/testssl/bin && \
+    useradd --create-home --uid 1001 pwuser
 ENV OPENSSL=/usr/bin/openssl
 COPY scripts/transport_testssl_report.sh /opt/testssl-report.sh
 COPY scripts/transport_browser.sh /opt/transport-browser.sh

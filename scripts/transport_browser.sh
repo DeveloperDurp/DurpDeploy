@@ -38,7 +38,7 @@ finish() {
 trap finish EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
-/ms-playwright/chromium-*/chrome-linux*/chrome --headless --no-sandbox \
+/usr/bin/chromium-headless-shell --headless --no-sandbox \
     --disable-dev-shm-usage --disable-background-networking --no-first-run \
     --remote-debugging-address=127.0.0.1 --remote-debugging-port=0 \
     --user-data-dir=/tmp/browser --ignore-certificate-errors-spki-list="$3" \
