@@ -3698,3 +3698,20 @@ DURPDEPLOY_CONTAINER_RUNTIME=podman bash scripts/ci_browser_shard.sh -- \
   bash scripts/go_test.sh -tags=e2e,packagebrowser \
   -run '^TestCredential' ./internal/handler/api
 ```
+
+## Public static assets
+
+Use the thread stack URL from its `connection.json` file.
+Request `/static/`, `/static/css/`, and `/static/swagger-ui/` without authentication.
+Expect HTTP 404 for each request.
+Repeat directory requests without the final slash.
+Expect HTTP 404 without a redirect.
+Request `/static/css/tailwind.min.css` and `/static/js/app.bundle.js`.
+Expect HTTP 200 and `Cache-Control: no-cache`.
+Use the versioned asset URLs from the login page.
+Expect immutable caching and an ETag.
+Send the ETag with `If-None-Match` and expect HTTP 304.
+Replace the version query with `v=old-build` and expect HTTP 404 with `Cache-Control: no-store`.
+Open the dashboard, projects, environments, and `/api/swagger/` in a browser.
+Confirm that styles and scripts load.
+These checks create no records or schedules.

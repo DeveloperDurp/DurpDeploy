@@ -20,6 +20,24 @@ func TestStaticAssetCachingHTTP(t *testing.T) {
 		NewRouter(h.repo, h.runner, h.parser, h.authHandler),
 	)
 	defer s.Close()
+	client := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	for _, path := range []string{
+		"/static/", "/static/css", "/static/css/",
+		"/static/swagger-ui", "/static/swagger-ui/",
+	} {
+		response, err := client.Get(s.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != http.StatusNotFound {
+			t.Fatalf("directory %s: status=%d", path, response.StatusCode)
+		}
+	}
 	for _, name := range []string{"css/tailwind.min.css", "js/app.bundle.js"} {
 		t.Run(name, func(t *testing.T) {
 			// When a client fetches the versioned asset.

@@ -4,7 +4,9 @@ import (
 	"crypto/sha256"
 	"embed"
 	"fmt"
+	"io/fs"
 	"net/http"
+	"path"
 	"strings"
 )
 
@@ -39,6 +41,14 @@ func Handler() http.Handler {
 	return http.StripPrefix(
 		"/static/",
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
+			if name == "" {
+				name = "."
+			}
+			if info, err := fs.Stat(Assets, name); err == nil && info.IsDir() {
+				http.NotFound(w, r)
+				return
+			}
 			if version := versions[strings.TrimPrefix(r.URL.Path, "/")]; version != "" {
 				w.Header().Set("Cache-Control", "no-cache")
 				w.Header().Set("ETag", `"`+version+`"`)
