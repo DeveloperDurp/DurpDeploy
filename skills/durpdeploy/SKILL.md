@@ -147,6 +147,10 @@ The endpoint reference is the Swagger UI at `/api/swagger/`
 Swagger requests use the current instance's host, port, and scheme.
 Check **API target** before you authorize a token.
 
+Invalid, revoked, expired, or invalid-scope bearer tokens return `401`.
+Token lookup infrastructure failures return `503` with `{"error":"internal server error"}`.
+These failures do not grant access or indicate token revocation.
+
 ## Base URL
 
 Use the configured HTTPS origin for remote connections.

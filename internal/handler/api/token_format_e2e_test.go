@@ -127,6 +127,8 @@ func tokenFormatResponse(
 	}
 	defer response.Body.Close()
 	body, err := io.ReadAll(response.Body)
+	t.Logf("GET %s status=%d Content-Type=%q body=%s",
+		path, response.StatusCode, response.Header.Get("Content-Type"), body)
 	if err != nil || response.StatusCode != status || !json.Valid(body) {
 		t.Fatalf("status=%d error=%v body=%s", response.StatusCode, err, body)
 	}

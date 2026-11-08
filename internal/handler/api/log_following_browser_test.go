@@ -334,9 +334,10 @@ tallRow.scrollIntoView({block:'start',behavior:'instant'}); window.scrollBy(0,20
 		t,
 		`followState.followingLogs && tallRow.getBoundingClientRect().bottom > 0 && tallRow.getBoundingClientRect().bottom <= innerHeight + 2`,
 	)
-	b.wait(
+	b.waitFor(
 		t,
 		`followState.source === null && followRoot.textContent.includes('final-follow-marker')`,
+		time.Minute,
 	)
 	b.wait(
 		t,

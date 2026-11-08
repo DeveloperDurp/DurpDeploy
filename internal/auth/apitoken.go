@@ -3,8 +3,10 @@ package auth
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -121,7 +123,7 @@ func servePasswordChangeWrite(
 
 // ApiTokenMiddleware reads a Bearer token from the Authorization header,
 // validates it against stored API token hashes, and injects the user into the
-// request context. Any failure returns 401 JSON.
+// request context. Invalid credentials return 401; infrastructure errors return 503.
 func ApiTokenMiddleware(
 	repo *repository.Repository,
 ) func(http.Handler) http.Handler {
@@ -159,6 +161,12 @@ func ApiTokenMiddleware(
 
 			row, grant, err := loadTokenAccess(r.Context(), repo, hash)
 			if err != nil {
+				if !errors.Is(err, sql.ErrNoRows) &&
+					!errors.Is(err, repository.ErrTokenScope) {
+					RenderJSONError(w, http.StatusServiceUnavailable,
+						"internal server error")
+					return
+				}
 				RenderJSONError(
 					w,
 					http.StatusUnauthorized,

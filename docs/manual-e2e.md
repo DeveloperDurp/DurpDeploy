@@ -3715,3 +3715,18 @@ Replace the version query with `v=old-build` and expect HTTP 404 with `Cache-Con
 Open the dashboard, projects, environments, and `/api/swagger/` in a browser.
 Confirm that styles and scripts load.
 These checks create no records or schedules.
+
+## API token lookup failures
+
+Run the isolated authentication and HTTP regression checks:
+
+```bash
+bash scripts/go_test.sh -run '^TestApiTokenMiddleware' ./internal/auth
+bash scripts/go_test.sh -tags=e2e -run '^TestToken(InfrastructureAPIE2E|FormatAPIWebE2E)$' ./internal/handler/api
+```
+
+The infrastructure check holds an exclusive SQLite lock in a test-owned database.
+Valid tokens receive HTTP 503 with `{"error":"internal server error"}` during the lock.
+The same tokens succeed after the check releases the lock.
+Unknown, revoked, expired, and invalid-scope tokens retain HTTP 401.
+The checks do not change a running server or create schedules.
