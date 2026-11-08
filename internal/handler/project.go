@@ -189,6 +189,10 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		r.Context(), params, ProjectCatalogAccess(r), groupID,
 	)
 	if err != nil {
+		if errors.Is(err, repository.ErrProjectName) {
+			h.renderNewProjectForm(w, r, submitted, err.Error())
+			return
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			h.renderNewProjectForm(w, r, submitted, "Select an available group")
 			return
@@ -422,7 +426,11 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusForbidden)
 			return
 		}
-		if IsUniqueViolation(err) {
+		if IsUniqueViolation(err) || errors.Is(err, repository.ErrProjectName) {
+			message := projectNameConflict
+			if errors.Is(err, repository.ErrProjectName) {
+				message = err.Error()
+			}
 			project := db.Project{ID: id, Name: name}
 			project.Description = params.Description
 			if lifecycleID, parseErr := strconv.ParseInt(
@@ -443,7 +451,7 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 				pages.ProjectForm(
 					project,
 					true,
-					projectNameConflict,
+					message,
 					lifecycles,
 					nil,
 					members, available, canManage,
@@ -451,7 +459,7 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 				pages.ProjectFormPage(
 					project,
 					true,
-					projectNameConflict,
+					message,
 					lifecycles,
 					nil,
 					members, available, canManage,

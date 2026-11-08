@@ -209,6 +209,12 @@ Each project response includes a nullable `group_id`.
 Existing projects remain in Ungrouped until assigned.
 
 Create a grouped project with `POST /api/v1/projects` and `{"name":"my-app","group_id":12}`.
+
+Project names contain 1 to 255 UTF-16 code units after trimming.
+Characters outside the Basic Multilingual Plane use two units each.
+Overlong names return `422` on project creation, updates, and creation from project templates.
+Empty names retain `400` on ordinary API creation and updates.
+Descriptions and notes keep their existing limits.
 Omit `group_id` or send `null` to create an ungrouped project.
 Use a positive integer to select a visible group.
 Invalid field types return `400`.

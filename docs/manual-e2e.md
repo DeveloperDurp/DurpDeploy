@@ -1,5 +1,29 @@
 # Manual checks after `make e2e-test`
 
+## Project name limits and referrer policy (#194)
+
+Sign in and open New Project.
+Submit a name containing 256 ASCII characters.
+Confirm that the form shows the 255 UTF-16 code unit limit.
+Confirm that the form keeps the submitted description.
+Correct the name and create the project.
+Repeat the rejection and correction from Edit Project.
+
+Create and update projects through `POST /api/v1/projects` and `PUT /api/v1/projects/{id}`.
+Confirm that 255 ASCII characters or 255 accented characters succeed.
+Confirm that 128 emoji or a 100 KB name returns `422`.
+Confirm that rejected updates preserve the stored name and description.
+Repeat the name checks when creating a project from a project template.
+
+Inspect authenticated responses for Projects, API Tokens, and Security Settings.
+Confirm that each response has `Referrer-Policy: no-referrer` and `Cache-Control: no-store`.
+Keep the corrected projects for repeat checks.
+Leave schedules disabled.
+
+Run `TestProjectNamesAPIWebE2E` with the `e2e` build tag for HTTP coverage.
+Run `TestProjectNamesBrowserE2E` with the `e2e packagebrowser` build tags for browser coverage.
+Run `TestProjectNameBackendParity` for SQLite, PostgreSQL, and SQL Server coverage.
+
 ## Navigation loading feedback
 
 Sign in and open the home page.

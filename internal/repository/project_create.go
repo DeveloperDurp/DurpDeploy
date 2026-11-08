@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 
 	"durpdeploy/internal/db"
 )
@@ -14,6 +15,10 @@ func (r *Repository) CreateProject(
 	access ProjectCatalogAccess,
 	groupID *int64,
 ) (project db.Project, err error) {
+	params.Name = strings.TrimSpace(params.Name)
+	if err := validateProjectName(params.Name); err != nil {
+		return project, err
+	}
 	err = withSQLiteBusyRetry(ctx, func() error {
 		return r.WithTx(ctx, func(q *db.Queries) error {
 			group, err := accessibleProjectGroup(ctx, q, access, groupID)

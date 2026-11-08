@@ -94,6 +94,7 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
       '^TestReleaseProvenance.*E2E$'
       '^TestProjectGroups.*E2E$'
       '^TestProjectTemplates.*(APIWeb|Browser)E2E$'
+      '^Test(ProjectNames(APIWeb|Browser)|AuthenticatedReferrerPolicy)E2E$'
       '^TestPromotionGuidance(APIWeb|Browser)E2E$'
       '^TestRunbookRetryVersion(APIWeb|Browser)E2E$'
       '^TestRunbookHistoryPhone(APIWeb|Browser)E2E$'

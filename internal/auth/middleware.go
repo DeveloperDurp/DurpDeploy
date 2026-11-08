@@ -46,6 +46,7 @@ func AuthMiddleware(
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Referrer-Policy", "no-referrer")
 			w.Header().
 				Add("Vary", "HX-Request, HX-Boosted, HX-History-Restore-Request")
 			cookie, err := r.Cookie("session")

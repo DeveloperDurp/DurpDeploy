@@ -203,6 +203,10 @@ Browsers permit same-origin frames and block cross-origin frames, including pare
 The policy also covers login, errors, and responses forwarded through the supported Caddy proxy.
 This framing policy does not restrict scripts or replace authentication, CSRF checks, or cookie protections.
 
+Authenticated browser responses also set `Referrer-Policy: no-referrer` and retain `Cache-Control: no-store`.
+Project names contain at most 255 UTF-16 code units after trimming, including projects created from templates.
+Descriptions and notes keep their existing limits.
+
 ## Secret variable exports
 
 Secret variable exports require the global `admin` role and fresh authentication for each export.

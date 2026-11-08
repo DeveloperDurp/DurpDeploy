@@ -225,6 +225,10 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		r.Context(), params, handler.ProjectCatalogAccess(r), req.GroupID,
 	)
 	if err != nil {
+		if errors.Is(err, repository.ErrProjectName) {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, 404, "group not found")
 			return
@@ -321,6 +325,7 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
 //	  403: body:ForbiddenError
+//	  422: body:ValidationError
 //	  409: body:ConflictError
 //	  500: body:ServerError
 func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
@@ -358,6 +363,10 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		req.LifecycleID,
 	)
 	if err != nil {
+		if errors.Is(err, repository.ErrProjectName) {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
 		if errors.Is(err, handler.ErrLifecycleAssignmentForbidden) ||
 			errors.Is(err, handler.ErrLifecycleRemovalForbidden) {
 			RespondError(w, http.StatusForbidden, err.Error())

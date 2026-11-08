@@ -346,10 +346,8 @@ func (r *Repository) CreateProjectFromTemplate(
 		return db.Project{}, ErrProjectTemplateAccess
 	}
 	input.Name = strings.TrimSpace(input.Name)
-	if input.Name == "" || utf8.RuneCountInString(input.Name) > 255 {
-		return db.Project{}, templateInvalid(
-			"project name must contain 1 to 255 characters",
-		)
+	if err := validateProjectName(input.Name); err != nil {
+		return db.Project{}, templateInvalid(err.Error())
 	}
 	if !input.Reviewed {
 		return db.Project{}, templateInvalid(

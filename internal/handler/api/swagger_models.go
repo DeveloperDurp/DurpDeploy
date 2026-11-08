@@ -499,6 +499,7 @@ type swaggerCreateProjectRequest struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerProjectRequest struct {
+	// Use 1 to 255 UTF-16 code units after trimming. Overlong names return 422.
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	LifecycleID int64  `json:"lifecycle_id"`
