@@ -291,6 +291,40 @@ func TestRunTokensCreate_success(t *testing.T) {
 	}
 }
 
+func TestRunTokensCreateRoleCeiling(t *testing.T) {
+	dsn := tempDSN(t)
+	t.Setenv("DURPDEPLOY_DB", dsn)
+	conn, err := migrate.Run(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testutil.Close(t, conn)
+	repo := repository.New(conn)
+	user, err := repo.Queries.CreateUser(t.Context(), db.CreateUserParams{
+		Email: "mint-cli@example.test", Name: "Mint", PasswordHash: "unused",
+		Role: "maintainer",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range []string{"admin", "maintainer", "deployer", "viewer"} {
+		out := captureStdout(t, func() {
+			code := runTokens([]string{"create", "--user", user.Email,
+				"--name", role, "--scope", "global", "--role", role})
+			if (code == 0) != (role != "admin") {
+				t.Fatalf("role=%s exit=%d", role, code)
+			}
+		})
+		if role == "admin" && out != "" {
+			t.Fatal("rejected mint printed a credential")
+		}
+	}
+	rows, err := repo.Queries.ListApiTokensByUser(t.Context(), user.ID)
+	if err != nil || len(rows) != 3 {
+		t.Fatalf("token count=%d error=%v", len(rows), err)
+	}
+}
+
 func TestRunTokensCreate_missingFlags(t *testing.T) {
 	t.Setenv("DURPDEPLOY_DB", tempDSN(t))
 	cases := []struct {

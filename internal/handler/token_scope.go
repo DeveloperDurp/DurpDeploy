@@ -105,6 +105,9 @@ func (h *TokensHandler) renderScopeError(
 ) {
 	missing := errors.Is(err, repository.ErrTokenProjectsRequired)
 	message := "Select a valid role and accessible projects"
+	if errors.Is(err, repository.ErrTokenRoleCeiling) {
+		message = "Token role exceeds owner permissions"
+	}
 	if missing {
 		message = "Select at least one project"
 	}

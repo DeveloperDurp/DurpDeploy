@@ -1,5 +1,33 @@
 # Manual checks after `make e2e-test`
 
+## Token mint ceilings (#186)
+
+Run `make e2e-test` against the thread-owned stack.
+Use the retained `e2e-mint-<run>@test.local` account and project links from the output.
+Reset this account's password through administrator settings before manual sign-in.
+Keep the account, projects, and token metadata for repeat checks.
+This scenario creates no schedules.
+
+Sign in as the retained Maintainer.
+Open `/settings/tokens`.
+Create a global token with an `admin` ceiling.
+Confirm HTTP 422 and `Token role exceeds owner permissions`.
+Confirm that the list contains no new token.
+Repeat with `maintainer`, `deployer`, and `viewer` ceilings.
+Confirm that each token succeeds.
+Dismiss each plaintext token banner before capturing screenshots.
+
+Create a scoped `admin` token for the retained project with Admin membership.
+Confirm that creation succeeds.
+Add the retained project with Viewer membership to the selection.
+Confirm that creation returns HTTP 422 and stores no token.
+Repeat through `POST /api/v1/tokens` with an unrestricted global owner token.
+Confirm the JSON error `token role exceeds owner permissions`.
+
+Existing tokens retain their stored ceilings.
+The owner's current permissions continue to limit token use.
+Token scope edits retain their existing validation.
+
 ## Project name limits and referrer policy (#194)
 
 Sign in and open New Project.

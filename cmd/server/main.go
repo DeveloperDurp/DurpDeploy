@@ -984,13 +984,14 @@ func runTokens(args []string) int {
 			return 1
 		}
 
-		grant, err := repo.ValidateTokenScope(ctx, user, repository.TokenScope{
+		grant, err := repo.ValidateTokenMint(ctx, user, repository.TokenScope{
 			Scope: *scope, Role: *role, ProjectIDs: projectIDs,
 		})
 		if err != nil {
 			fmt.Fprintln(
 				os.Stderr,
-				"error: select a valid scope, role, and accessible projects",
+				"error: select a valid scope, role, and accessible projects:",
+				err,
 			)
 			return 1
 		}

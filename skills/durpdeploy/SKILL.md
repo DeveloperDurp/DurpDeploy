@@ -342,6 +342,15 @@ durpdeploy audit prune --days 180
 
 ### API tokens (recommended for agents)
 
+Create tokens with `POST /api/v1/tokens`, the web form, or the server CLI.
+New global ceilings cannot exceed the owner's global role.
+New scoped ceilings cannot exceed the owner's authority in any selected project.
+Global Maintainers with Admin membership in every selected project can mint scoped `admin` tokens for delegated member management.
+Global administrators bypass project membership checks.
+The API and web form return HTTP 422 when a ceiling exceeds owner permissions.
+Rejected creation stores no token.
+Existing tokens keep their stored ceilings and remain limited by current owner permissions.
+
 Use the complete token: `ddp_pat_` followed by exactly 64 hexadecimal characters.
 Malformed tokens return HTTP 401 before a credential lookup, including on API log and event streams.
 Token expiry and revocation remain checked on each request and during open streams.

@@ -136,6 +136,10 @@ func apiTokenFromAdminUserPaginatedRow(
 //
 // Create a new API token.
 //
+// New ceilings must fit the owner's global or selected-project authority.
+// Scoped admin delegation remains available to authorized project administrators.
+// Excessive ceilings return 422 without creating a token.
+//
 //	Consumes:
 //	- application/json
 //
@@ -178,8 +182,12 @@ func (h *APITokenHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusUnprocessableEntity, "invalid token scope")
 		return
 	}
-	grant, err := h.repo.ValidateTokenScope(ctx, *user, requested)
+	grant, err := h.repo.ValidateTokenMint(ctx, *user, requested)
 	if err != nil {
+		if errors.Is(err, repository.ErrTokenRoleCeiling) {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
 		if errors.Is(err, repository.ErrTokenProjectsRequired) {
 			RespondError(w, http.StatusUnprocessableEntity,
 				repository.ErrTokenProjectsRequired.Error())

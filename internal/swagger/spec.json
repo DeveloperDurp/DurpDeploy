@@ -11889,6 +11889,7 @@
         ]
       },
       "post": {
+        "description": "New ceilings must fit the owner's global or selected-project authority.\nScoped admin delegation remains available to authorized project administrators.\nExcessive ceilings return 422 without creating a token.",
         "consumes": [
           "application/json"
         ],

@@ -22,6 +22,45 @@ type TokenScope struct {
 
 var ErrTokenScope = errors.New("invalid token scope")
 var ErrTokenProjectsRequired = errors.New("select at least one project")
+var ErrTokenRoleCeiling = errors.New("token role exceeds owner permissions")
+
+// ValidateTokenMint checks new ceilings without changing stored-token edits.
+func (r *Repository) ValidateTokenMint(
+	ctx context.Context, user db.User, request TokenScope,
+) (TokenScope, error) {
+	grant, err := r.ValidateTokenScope(ctx, user, request)
+	if err != nil || grant.Role == "" {
+		return grant, err
+	}
+	if grant.Scope == "global" {
+		if !roles.AtLeast(user.Role, grant.Role) {
+			return grant, ErrTokenRoleCeiling
+		}
+		return grant, nil
+	}
+	if user.Role == "admin" {
+		return grant, nil
+	}
+	for _, id := range grant.ProjectIDs {
+		member, err := r.Queries.GetProjectMember(ctx,
+			db.GetProjectMemberParams{ProjectID: id, UserID: user.ID})
+		if err != nil {
+			return grant, ErrTokenScope
+		}
+		authority := user.Role
+		if roles.Rank(member.Role) < roles.Rank(authority) {
+			authority = member.Role
+		}
+		// Project admins with global authoring can delegate member management.
+		if member.Role == "admin" && roles.AtLeast(user.Role, "maintainer") {
+			authority = "admin"
+		}
+		if !roles.AtLeast(authority, grant.Role) {
+			return grant, ErrTokenRoleCeiling
+		}
+	}
+	return grant, nil
+}
 
 // ReplaceTokenScope returns the grants replaced by this committed edit.
 func (r *Repository) ReplaceTokenScope(

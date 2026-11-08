@@ -365,6 +365,9 @@ Project-scoped bearer tokens intersect selected projects, a token role, and the 
 Global administrators remain subject to token scope and its role ceiling.
 All-project tokens can also apply a permission ceiling to the owner's current permissions.
 Tokens with an explicit permission ceiling cannot manage API tokens or remove that ceiling themselves.
+API and web token creation reject ceilings above the owner's current global or selected-project authority with HTTP 422.
+Scoped `admin` ceilings preserve delegated member management for global Maintainers with Admin membership in every selected project.
+This validation does not modify existing tokens or add token-list flags.
 Scoped tokens cannot manage tokens, create projects, or use instance administration.
 Resource-ID routes resolve the owning project before they return data.
 Aggregate queries filter rows and totals to the same authorized projects.

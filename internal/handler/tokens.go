@@ -132,7 +132,7 @@ func (h *TokensHandler) MyTokensPost(w http.ResponseWriter, r *http.Request) {
 		h.renderCreateError(w, r, "Select valid projects")
 		return
 	}
-	grant, err := h.repo.ValidateTokenScope(r.Context(), *user, request)
+	grant, err := h.repo.ValidateTokenMint(r.Context(), *user, request)
 	if err != nil {
 		h.renderScopeError(w, r, err)
 		return

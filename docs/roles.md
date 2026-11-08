@@ -121,6 +121,12 @@ Scoped tokens require one or more selected projects.
 The server checks the owner's current permissions for every request.
 A token cannot increase the owner's permissions.
 
+New global ceilings cannot exceed the owner's global role.
+New scoped ceilings cannot exceed the owner's authority in any selected project.
+Global Maintainers with project Admin membership can mint scoped `admin` tokens for delegated member management.
+Global administrators bypass project membership checks.
+Existing tokens retain their stored ceilings and remain limited by the owner's current permissions.
+
 Legacy global tokens without a ceiling inherit the owner's current permissions.
 Name-only creation through the API, CLI, or legacy web form retains this behavior.
 The token settings page defaults to all accessible projects and a `viewer` ceiling.
