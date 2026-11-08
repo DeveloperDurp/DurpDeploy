@@ -73,6 +73,23 @@ func TestAnsibleDefinition(t *testing.T) {
 	}
 }
 
+func TestAnsibleKnownHostsCompatibility(t *testing.T) {
+	for name, newline := range map[string]string{"LF": "\n", "CRLF": "\r\n"} {
+		for delimiter, separator := range map[string]string{"space": " ", "tab": "\t"} {
+			t.Run(name+"/"+delimiter, func(t *testing.T) {
+				a := testAnsible(t)
+				key := strings.TrimSpace(a.KnownHosts)
+				key = strings.Replace(key, " ", separator, 1)
+				a.KnownHosts = "# deployment host" + newline +
+					key + " deployment comment" + newline
+				if _, err := a.Targets(); err != nil {
+					t.Fatalf("conventional known_hosts rejected: %v", err)
+				}
+			})
+		}
+	}
+}
+
 func TestAnsibleKindBoundaries(t *testing.T) {
 	a := testAnsible(t)
 	valid := Definition{

@@ -64,7 +64,8 @@ LABEL org.opencontainers.image.version=$BUILD_VERSION \
 # Install runtime essentials and socket clients. su-exec changes from the
 # short-lived entrypoint identity to the stable non-root application user.
 # hadolint ignore=DL3018
-RUN apk add --no-cache bash ca-certificates docker-cli podman-remote su-exec && \
+RUN apk add --no-cache bash ca-certificates docker-cli \
+	'musl-utils>=1.2.5-r4' 'musl>=1.2.5-r4' podman-remote su-exec && \
 	adduser -D -u 10001 durpdeploy && \
 	ln -s /usr/bin/podman-remote /usr/bin/podman
 
@@ -80,6 +81,7 @@ VOLUME ["/data"]
 # Copy the binary from the builder. Keep it owned by root so it cannot be
 # tampered with at runtime, and make it world-executable.
 COPY --from=builder /out/durpdeploy /usr/local/bin/durpdeploy
+COPY LICENSE.go-authors /usr/share/licenses/durpdeploy/LICENSE.go-authors
 COPY container-entrypoint.sh /usr/local/bin/container-entrypoint
 RUN chmod 0755 /usr/local/bin/durpdeploy /usr/local/bin/container-entrypoint
 

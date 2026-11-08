@@ -21,6 +21,19 @@ func TestHashPassword_BasicRoundTrip(t *testing.T) {
 	}
 }
 
+func TestVerifyPassword_PreUpgradeHash(t *testing.T) {
+	// Generated with golang.org/x/crypto v0.57.0 before the upgrade.
+	const hash = "$argon2id$v=19$m=65536,t=2,p=2$" +
+		"ZHVycDE5Ny1zYWx0LTAxIQ$" +
+		"o7q62R7zzYTZCQ5GMxbnyeGv1vN927XpY88emjKnbhI"
+	if !auth.VerifyPassword(hash, "legacy-password-197") {
+		t.Fatal("pre-upgrade password hash no longer verifies")
+	}
+	if auth.VerifyPassword(hash, "wrong-password") {
+		t.Fatal("pre-upgrade hash accepted the wrong password")
+	}
+}
+
 func TestHashPassword_DifferentSalts(t *testing.T) {
 	h1, err := auth.HashPassword("same")
 	if err != nil {
