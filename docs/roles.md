@@ -78,6 +78,22 @@ Lifecycle assignment can expose shared secrets.
 Only global administrators create or change lifecycle assignments.
 Authorized project administrators can retain or remove an existing assignment.
 
+## Shared directory and environment names
+
+Environment names are shared instance metadata.
+Every authenticated browser user can list all environment names at `/environments`, without project membership.
+Global bearer tokens have the same visibility at `/api/v1/environments`.
+Project-scoped tokens list environments eligible through selected projects, their lifecycles, or execution history.
+An accessible selected project without a lifecycle makes all environments eligible.
+
+Global administrators and project administrators with global Maintainer permission can see all user names and emails in the member picker.
+Project members can read roster names, emails, and project roles.
+Non-members without global administrator permission cannot open the project member page.
+The separate `/admin/users` page and `/api/v1/admin/users` endpoint require a global administrator.
+
+This shared-infrastructure model does not provide tenant isolation for environment names or member-picker directory data.
+Directory visibility does not grant project access or member management permission.
+
 ## Project groups
 
 Project groups organize the project list without changing project permissions.

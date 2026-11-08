@@ -299,6 +299,21 @@ Restricted global users cannot gain authoring permission through an administrato
 The handlers enforce member management checks.
 The UI uses the same permission check to hide member controls.
 
+### Shared directory and environment names
+
+Every authenticated browser user can list all environment names at `/environments`, without project membership.
+Global bearer tokens have the same visibility at `/api/v1/environments`.
+Project-scoped tokens list environments eligible through selected projects, their lifecycles, or execution history.
+An accessible selected project without a lifecycle makes all environments eligible.
+Environment names are shared instance metadata in the shared-infrastructure model.
+
+Global administrators and project administrators with global Maintainer permission can see all user names and emails in the member picker.
+Project members can read roster names, emails, and project roles.
+Non-members without global administrator permission cannot open the project member page.
+The separate `/admin/users` page and `/api/v1/admin/users` endpoint require a global administrator.
+Directory visibility does not grant project access or member management permission.
+See [roles](roles.md#shared-directory-and-environment-names) for the existing visibility model.
+
 ### Admin-only routes
 
 Routes in `/admin/users/*` are gated by `RequireRole("admin")`. The
