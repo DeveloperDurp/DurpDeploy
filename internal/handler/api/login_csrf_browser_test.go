@@ -35,7 +35,7 @@ func TestLoginCrossOriginBrowserE2E(t *testing.T) {
 	t.Cleanup(upstream.Close)
 	direct := httptest.NewTLSServer(observed)
 	t.Cleanup(direct.Close)
-	proxy := startBodyCaddy(t, upstream, direct.TLS.Certificates[0])
+	proxy := startBodyCaddy(t, upstream, direct.TLS.Certificates[0], false)
 	attacker := httptest.NewServer(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")

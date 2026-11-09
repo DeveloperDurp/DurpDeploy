@@ -19,6 +19,8 @@ Fixtures exercise RSA-2048 and ECDSA P-256 public keys.
 Wrong-name and untrusted-CA controls must fail.
 
 Caddy sends `Strict-Transport-Security: max-age=86400` only over HTTPS.
+The public demo uses the same policy, while loopback demos and development proxies omit HSTS.
+Read [browser security](security.md#browser-framing) for hostname-wide effects, certificate trust, and cached-policy recovery.
 Browsers retain this HTTPS requirement for one day.
 The policy does not include subdomains or preload registration.
 The application sends `X-Content-Type-Options: nosniff` for API and web responses.

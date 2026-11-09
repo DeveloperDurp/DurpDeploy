@@ -42,7 +42,7 @@ func TestProxyBodyAPIWebE2E(t *testing.T) {
 	direct.EnableHTTP2 = true
 	direct.StartTLS()
 	t.Cleanup(direct.Close)
-	proxy := startBodyCaddy(t, f.server, direct.TLS.Certificates[0])
+	proxy := startBodyCaddy(t, f.server, direct.TLS.Certificates[0], false)
 	for mode, base := range map[string]string{"direct": direct.URL, "proxy": proxy} {
 		for _, protocol := range []int{1, 2} {
 			client := bodyProxyClient(t, direct.Certificate(), protocol)
@@ -299,6 +299,7 @@ func startBodyCaddy(
 	t *testing.T,
 	upstream *httptest.Server,
 	certificate tls.Certificate,
+	demoPolicy bool,
 ) string {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -309,15 +310,17 @@ func startBodyCaddy(
 	if err := listener.Close(); err != nil {
 		t.Fatal(err)
 	}
-	config, err := exec.CommandContext(
-		t.Context(),
-		"bash",
+	args := []string{
 		"../../../scripts/https_proxy_config.sh",
-		":"+port,
+		":" + port,
 		"/demo/cert.pem",
 		"/demo/key.pem",
 		upstream.URL,
-	).Output()
+	}
+	if demoPolicy {
+		args = append(args, port, "1")
+	}
+	config, err := exec.CommandContext(t.Context(), "bash", args...).Output()
 	if err != nil {
 		t.Fatal(err)
 	}

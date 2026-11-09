@@ -18,7 +18,7 @@ func TestLoginCrossOriginAPIWebE2E(t *testing.T) {
 	f := newConfiguredBodyFixture(t, config.Defaults().Limits.HTTP)
 	direct := httptest.NewTLSServer(f.server.Config.Handler)
 	t.Cleanup(direct.Close)
-	proxy := startBodyCaddy(t, f.server, direct.TLS.Certificates[0])
+	proxy := startBodyCaddy(t, f.server, direct.TLS.Certificates[0], false)
 	attacker := seedAPIUser(t, f.h.repo, "attacker@example.test", "viewer")
 	for mode, base := range map[string]string{"direct": direct.URL, "caddy": proxy} {
 		t.Run(mode, func(t *testing.T) {

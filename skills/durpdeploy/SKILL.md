@@ -156,6 +156,11 @@ These failures do not grant access or indicate token revocation.
 Use the configured HTTPS origin for remote connections.
 The supported Caddy proxy requires TLS 1.2 or TLS 1.3.
 It sends `Strict-Transport-Security: max-age=86400` only over HTTPS.
+The public demo proxy sends the same header, including authenticated API responses.
+Loopback demos and development proxies omit HSTS.
+HSTS affects every port on the hostname and requires trusted HTTPS for policy updates.
+Removing the header does not clear cached policy.
+Use trusted HTTPS with `max-age=0`, or wait for expiry after the last accepted policy response.
 API and web responses send `X-Content-Type-Options: nosniff`.
 Browser session cookies use Secure, HttpOnly, and SameSite=Lax on configured HTTPS origins.
 Intentional loopback HTTP development omits Secure and HSTS.

@@ -198,6 +198,20 @@ browser ceremony end-to-end proof is tracked separately from this document.
 
 ## Browser framing
 
+The production Caddy sample and public demo proxy send `Strict-Transport-Security: max-age=86400` only over HTTPS.
+The policy lasts one day and omits `includeSubDomains` and `preload`.
+This limited period reduces recovery time compared with a one-year policy.
+Browsers apply HSTS to the hostname across all ports, including other demos on `citadel.durp.loc`.
+Use a separate browser profile and scope certificate trust to that profile.
+Untrusted certificates cannot establish HSTS, and cached HSTS prevents certificate-error bypasses.
+Loopback demo mode and development proxies do not add HSTS.
+Direct local HTTP remains supported, but cached hostname policy can upgrade browser HTTP requests.
+
+To remove cached HSTS, serve `max-age=0` through trusted HTTPS and revisit the hostname in each affected profile.
+If trusted HTTPS is unavailable, wait until the cached policy expires after the last accepted HSTS response.
+Reverting configuration or removing the header does not clear existing browser policy.
+Keep trusted HTTPS available during recovery.
+
 The shared HTTP server sets `Content-Security-Policy: frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN`.
 Browsers permit same-origin frames and block cross-origin frames, including parents on a different port of the same site.
 The policy also covers login, errors, and responses forwarded through the supported Caddy proxy.

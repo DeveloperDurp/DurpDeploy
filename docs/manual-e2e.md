@@ -3014,6 +3014,19 @@ bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m \
 ```
 
 The demo and development proxies use `scripts/https_proxy_config.sh`.
+Public demos send `Strict-Transport-Security: max-age=86400` without subdomain coverage or preload registration.
+Loopback demos and development proxies omit this header.
+The bootstrap proxy suppresses `Alt-Svc` until the launcher discovers the published port.
+The final proxy advertises that public port, while its internal listener remains `:8443`.
+The override preserves HTTP/3 configuration and existing port publications.
+Run `make demo-test` for bootstrap, final configuration, and loopback policy checks.
+Run `TestDemoProxyHeadersAPIWebE2E` with the `e2e` tag for real-proxy HTTP/1.1 and HTTP/2 header checks.
+Start an owned populated demo for public-port mapping verification.
+Use its certificate with `curl --cacert` to inspect `/login`, authenticated `/projects`, and authenticated `/api/v1/projects`.
+Expect one HSTS header and one `Alt-Svc` header containing the published HTTPS port.
+Compare the final `tls/Caddyfile` with the running Caddy configuration and the runtime port mapping.
+Keep schedules disabled and retain the demo examples after verification.
+Read [browser security](security.md#browser-framing) before testing HSTS or replacing certificates.
 If a demo is running, use `make demo-refresh-full DEMO_DIR=/absolute/demo/path` to replace its proxy.
 Restart the development server to load changed proxy settings.
 The transport waits one second for a backend continue response before sending a body with `Expect: 100-continue`.

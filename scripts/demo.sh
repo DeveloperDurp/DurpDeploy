@@ -168,7 +168,7 @@ openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 7 \
     -subj "/CN=$public_host" -addext "subjectAltName=$certificate_san" \
     -keyout "$directory/tls/key.pem" -out "$directory/tls/cert.pem" \
     >>"$directory/bootstrap.log" 2>&1
-printf ':8443 {\n tls /demo/cert.pem /demo/key.pem\n respond "Demo starting" 503\n}\n' \
+printf ':8443 {\n tls /demo/cert.pem /demo/key.pem\n header -Alt-Svc\n respond "Demo starting" 503\n}\n' \
     >"$directory/tls/Caddyfile"
 network_args=(--add-host=host.containers.internal:host-gateway)
 http_host=127.0.0.1
@@ -232,7 +232,8 @@ with open(sys.argv[1]) as log:
     print(next(json.loads(line)["addr"] for line in log if "\"msg\":\"server starting\"" in line))' "$directory/server.log")
 http_port=${address##*:}
 bash "$ROOT/scripts/https_proxy_config.sh" :8443 /demo/cert.pem /demo/key.pem \
-    "host.containers.internal:$http_port" >"$directory/tls/Caddyfile"
+    "host.containers.internal:$http_port" "${https_address##*:}" \
+    "$((1 - local_only))" >"$directory/tls/Caddyfile"
 "$engine" exec "$proxy" caddy reload --config /demo/Caddyfile --adapter caddyfile \
     >>"$directory/proxy.log" 2>&1
 export DURPDEPLOY_BASE_URL="$DURPDEPLOY_URL"

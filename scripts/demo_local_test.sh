@@ -6,6 +6,19 @@ trap 'rm -rf -- "$fixture"' EXIT
 mkdir -p "$fixture/scripts" "$fixture/tools"
 export DEMO_TEST_STATE="$fixture"
 
+for port in 0 65536 01 -1 '1234\nheader injected yes'; do
+    if bash "$root/scripts/https_proxy_config.sh" :8443 cert key backend "$port" \
+        >"$fixture/config" 2>"$fixture/error"; then
+        echo 'FAIL: invalid public port accepted' >&2; exit 1
+    fi
+    [[ ! -s "$fixture/config" ]]
+done
+if bash "$root/scripts/https_proxy_config.sh" :8443 cert key backend 12345 invalid \
+    >"$fixture/config" 2>"$fixture/error"; then
+    echo 'FAIL: invalid HSTS option accepted' >&2; exit 1
+fi
+[[ ! -s "$fixture/config" ]]
+
 # Run the launcher through server startup without real containers or builds.
 # A missing mock runtime socket stops it before pairing and population.
 sed "s|/usr/local/libexec/durpdeploy-demo-firewall|$fixture/helper|g" \
@@ -45,6 +58,8 @@ case "$1" in
             printf '%s\n' "$DEMO_TEST_STATE/missing.sock"
         fi ;;
     port) printf '%s\n' 127.0.0.1:34567 ;;
+    run) cp "$DEMO_TEST_STATE"/tmp/demo.*/tls/Caddyfile "$DEMO_TEST_STATE/bootstrap.Caddyfile" ;;
+    exec) cp "$DEMO_TEST_STATE"/tmp/demo.*/tls/Caddyfile "$DEMO_TEST_STATE/final.Caddyfile" ;;
 esac
 PODMAN
 for tool in make curl sqlite3; do
@@ -81,6 +96,9 @@ grep -Fxq http=127.0.0.1:0 "$fixture/settings"
 grep -Eq '^agent=127\.0\.0\.1:[0-9]+$' "$fixture/settings"
 grep -Fxq url=https://127.0.0.1:34567 "$fixture/settings"
 [[ ! -e "$fixture/firewall-called" ]]
+grep -Fq 'header -Alt-Svc' "$fixture/bootstrap.Caddyfile"
+grep -Fq 'h3=\":34567\"' "$fixture/final.Caddyfile"
+! grep -Fq Strict-Transport-Security "$fixture/final.Caddyfile"
 certificate=("$fixture"/tmp/demo.*/tls/cert.pem)
 openssl x509 -in "${certificate[0]}" -noout -checkip 127.0.0.1 \
     | grep -q 'does match certificate'
@@ -94,4 +112,7 @@ grep -q -- '--publish :8443' "$fixture/commands"
 grep -Eq '^agent=0\.0\.0\.0:[0-9]+$' "$fixture/settings"
 grep -Fxq url=https://citadel.durp.loc:34567 "$fixture/settings"
 [[ -e "$fixture/firewall-called" ]]
+grep -Fq 'header -Alt-Svc' "$fixture/bootstrap.Caddyfile"
+grep -Fq 'h3=\":34567\"' "$fixture/final.Caddyfile"
+grep -Fq 'Strict-Transport-Security "max-age=86400"' "$fixture/final.Caddyfile"
 printf 'Demo loopback launcher checks: PASS\n'
