@@ -591,6 +591,19 @@ func TestRecoverPendingDeploymentsFailsOrphanedRunningDeployment(t *testing.T) {
 	if deployment.Status != "failed" || !deployment.FinishedAt.Valid {
 		t.Fatalf("orphaned deployment=%+v", deployment)
 	}
+	if deployment.Note.String != repository.RecoveryOrphanFailed {
+		t.Fatalf("missing recovery note: %+v", deployment.Note)
+	}
+	recoverPendingDeployments(
+		ctx,
+		runner.New(repo, runner.NewLogBroker()),
+		repo,
+	)
+	logs, err := repo.Queries.ListDeploymentLogsByDeployment(ctx, deployment.ID)
+	if err != nil || len(logs) != 1 ||
+		logs[0].Line != repository.RecoveryOrphanFailed {
+		t.Fatalf("repeated startup recovery logs=%+v error=%v", logs, err)
+	}
 }
 
 func TestStartupRecoveryBlocksLocalRetryWhenPodmanSweepFails(t *testing.T) {
@@ -641,7 +654,8 @@ esac
 		t.Fatal(err)
 	}
 	localRelease, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
-		ProjectID: project.ID, Version: "local",
+		ProjectID: project.ID,
+		Version:   "local",
 		StepsJson: `[{"name":"local","container_image":"harbor.durp.info/dockerhub/library/alpine:3.20"}]`,
 	})
 	if err != nil {
@@ -739,6 +753,9 @@ esac
 	stored, err := repo.Queries.GetDeployment(ctx, local.Deployment.ID)
 	if err != nil || stored.Status != "cleanup_unconfirmed" {
 		t.Fatalf("local status = %+v: %v", stored, err)
+	}
+	if stored.Note.String != repository.RecoveryCleanupUnconfirmed {
+		t.Fatalf("missing unconfirmed cleanup reason: %+v", stored.Note)
 	}
 	withoutNamespace, err := repo.Queries.GetDeployment(
 		ctx,

@@ -35,7 +35,7 @@ func (q *Queries) CancelOrphanedRemoteStepRuns(ctx context.Context, now int64) (
 	return result.RowsAffected()
 }
 
-const confirmContainerCleanup = `-- name: ConfirmContainerCleanup :execrows
+const confirmContainerCleanup = `-- name: ConfirmContainerCleanup :many
 UPDATE deployments SET status = CASE WHEN EXISTS (
     SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = deployments.id
       AND s.state = 'cleanup_unconfirmed'
@@ -43,6 +43,7 @@ UPDATE deployments SET status = CASE WHEN EXISTS (
     container_namespace = NULL, finished_at = COALESCE(finished_at, ?1)
 WHERE status IN ('running', 'publishing_artifact', 'cleanup_unconfirmed')
   AND container_namespace = ?2
+RETURNING id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot, ansible_check_mode
 `
 
 type ConfirmContainerCleanupParams struct {
@@ -50,12 +51,43 @@ type ConfirmContainerCleanupParams struct {
 	Namespace sql.NullString `json:"namespace"`
 }
 
-func (q *Queries) ConfirmContainerCleanup(ctx context.Context, arg ConfirmContainerCleanupParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, confirmContainerCleanup, arg.Now, arg.Namespace)
+func (q *Queries) ConfirmContainerCleanup(ctx context.Context, arg ConfirmContainerCleanupParams) ([]Deployment, error) {
+	rows, err := q.db.QueryContext(ctx, confirmContainerCleanup, arg.Now, arg.Namespace)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected()
+	defer rows.Close()
+	var items []Deployment
+	for rows.Next() {
+		var i Deployment
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReleaseID,
+			&i.EnvironmentID,
+			&i.Status,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.Forced,
+			&i.Note,
+			&i.AssignedAgentID,
+			&i.Kind,
+			&i.ContainerNamespace,
+			&i.CleanupConfirmedAt,
+			&i.EnvironmentNameSnapshot,
+			&i.AnsibleCheckMode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const confirmRemoteDeploymentLocalCleanup = `-- name: ConfirmRemoteDeploymentLocalCleanup :exec
@@ -277,22 +309,53 @@ func (q *Queries) FailDeploymentsWithTerminalRemoteStepRuns(ctx context.Context,
 	return result.RowsAffected()
 }
 
-const failOrphanedDeployments = `-- name: FailOrphanedDeployments :execrows
+const failOrphanedDeployments = `-- name: FailOrphanedDeployments :many
 UPDATE deployments SET status = 'failed', finished_at = ?1
 WHERE status IN ('running', 'publishing_artifact') AND assigned_agent_id IS NULL
   AND NOT EXISTS (
       SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id
         AND r.state = 'cancel_requested'
-  )
+  ) RETURNING id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot, ansible_check_mode
 `
 
-func (q *Queries) FailOrphanedDeployments(ctx context.Context, now sql.NullInt64) (int64, error) {
-	result, err := q.db.ExecContext(ctx, failOrphanedDeployments, now)
+func (q *Queries) FailOrphanedDeployments(ctx context.Context, now sql.NullInt64) ([]Deployment, error) {
+	rows, err := q.db.QueryContext(ctx, failOrphanedDeployments, now)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected()
+	defer rows.Close()
+	var items []Deployment
+	for rows.Next() {
+		var i Deployment
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReleaseID,
+			&i.EnvironmentID,
+			&i.Status,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.Forced,
+			&i.Note,
+			&i.AssignedAgentID,
+			&i.Kind,
+			&i.ContainerNamespace,
+			&i.CleanupConfirmedAt,
+			&i.EnvironmentNameSnapshot,
+			&i.AnsibleCheckMode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getDeployment = `-- name: GetDeployment :one
@@ -1042,7 +1105,7 @@ func (q *Queries) ListRecentDeploymentsForProjectEnv(ctx context.Context, arg Li
 	return items, nil
 }
 
-const markUnreconciledLocalDeployments = `-- name: MarkUnreconciledLocalDeployments :execrows
+const markUnreconciledLocalDeployments = `-- name: MarkUnreconciledLocalDeployments :many
 UPDATE deployments SET status = 'cleanup_unconfirmed',
     finished_at = COALESCE(finished_at, ?1)
 WHERE status IN ('running', 'publishing_artifact') AND assigned_agent_id IS NULL
@@ -1054,14 +1117,46 @@ WHERE status IN ('running', 'publishing_artifact') AND assigned_agent_id IS NULL
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id
         AND r.state IN ('claimed', 'started', 'cancel_requested'))
+RETURNING id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot, ansible_check_mode
 `
 
-func (q *Queries) MarkUnreconciledLocalDeployments(ctx context.Context, now sql.NullInt64) (int64, error) {
-	result, err := q.db.ExecContext(ctx, markUnreconciledLocalDeployments, now)
+func (q *Queries) MarkUnreconciledLocalDeployments(ctx context.Context, now sql.NullInt64) ([]Deployment, error) {
+	rows, err := q.db.QueryContext(ctx, markUnreconciledLocalDeployments, now)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected()
+	defer rows.Close()
+	var items []Deployment
+	for rows.Next() {
+		var i Deployment
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReleaseID,
+			&i.EnvironmentID,
+			&i.Status,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.Forced,
+			&i.Note,
+			&i.AssignedAgentID,
+			&i.Kind,
+			&i.ContainerNamespace,
+			&i.CleanupConfirmedAt,
+			&i.EnvironmentNameSnapshot,
+			&i.AnsibleCheckMode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const recordContainerNamespace = `-- name: RecordContainerNamespace :execrows
@@ -1126,6 +1221,20 @@ func (q *Queries) UpdateDeployment(ctx context.Context, arg UpdateDeploymentPara
 		&i.AnsibleCheckMode,
 	)
 	return i, err
+}
+
+const updateDeploymentRecoveryNote = `-- name: UpdateDeploymentRecoveryNote :exec
+UPDATE deployments SET note = ? WHERE id = ?
+`
+
+type UpdateDeploymentRecoveryNoteParams struct {
+	Note sql.NullString `json:"note"`
+	ID   int64          `json:"id"`
+}
+
+func (q *Queries) UpdateDeploymentRecoveryNote(ctx context.Context, arg UpdateDeploymentRecoveryNoteParams) error {
+	_, err := q.db.ExecContext(ctx, updateDeploymentRecoveryNote, arg.Note, arg.ID)
+	return err
 }
 
 const updateDeploymentStatus = `-- name: UpdateDeploymentStatus :exec

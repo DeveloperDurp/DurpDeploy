@@ -419,7 +419,9 @@ Each attempt runs as non-root with a read-only root filesystem, no network by
 default (`network_mode: "bridge"` explicitly enables networking for local steps),
 no capabilities, no new privileges, a bounded process count, and no
 host mounts. A 64 MiB temporary filesystem at `/tmp` supplies its writable
-home; artifact-gated steps use 364 MiB to preserve provider context.
+home by default. Set `limits.container.tmpfs_bytes` to change this capacity.
+Approval generation and approved-context execution add `limits.artifact.download_bytes` to this capacity.
+The default combined capacity is 364 MiB.
 DurpDeploy imposes no per-step RAM ceiling or CPU quota, including on attempts
 sharing `/stage`. Applicable host/runtime limits still govern execution;
 operators must account for scripts consuming more host RAM and CPU. Limits on
@@ -578,6 +580,19 @@ leaked API tokens separately. Remove the temporary recovery account afterward.
 Deleting and recreating the original user loses memberships and token records.
 
 ### Graceful shutdown and terminal results
+
+Startup recovery appends a reason to the deployment note and persists the same reason in deployment logs.
+The server emits one `startup recovery: reconciled deployment` warning for each committed recovery transition.
+Each warning includes `deployment_id`, `status`, and `reason`.
+Successful runtime reconciliation reports confirmed local container cleanup.
+Unresolved local cleanup reports `cleanup_unconfirmed` and keeps retries blocked.
+Other interrupted executions report failure after server restart.
+
+These records do not confirm remote cleanup or restart interrupted steps.
+Repeated startup does not repeat a completed transition.
+
+Read the note through `GET /api/v1/deployments/{id}`.
+Read recovery events through `GET /api/v1/deployments/{id}/logs/page`.
 
 Shutdown closes runner admission and drains local cleanup before the database closes.
 Shutdown also joins terminal-status retries admitted before shutdown starts.

@@ -79,6 +79,16 @@ material, certificate bodies, or secret values.
 
 ## Bounds and timing
 
+Server and agent workload containers use separate startup configurations.
+Both default to a 64 MiB `/tmp` filesystem through `limits.container.tmpfs_bytes`.
+Configure matching policies before remote execution.
+The server rejects incompatible agent policies before issuing work.
+Server approval generation and approved-context execution add the artifact download budget to `/tmp` capacity.
+
+Host-mode agent scripts do not receive a container tmpfs limit.
+Supervisor `/tmp` mounts do not set the capacity of sibling workload containers.
+Read [configuration](configuration.md#resource-settings) for supported server settings.
+
 Deployment staging uses an optional capability within the existing protocols.
 
 Each remote step permits 64 producer outputs and 2 GiB of canonical archives, including the base and duplicate outputs.

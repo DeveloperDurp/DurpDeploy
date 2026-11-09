@@ -1168,8 +1168,22 @@ Pass a nonzero `next_before` as `?before=ID` to retrieve the preceding page.
 A zero `next_before` means no older page remains.
 Explicit zero, negative, malformed, or overflowing cursors return `400`.
 Resume structured streams after `last_id`.
+
 The existing `/logs` endpoints retain their complete JSON arrays.
+Query `limit` does not bound these arrays or override page budgets.
+Deployment `/logs` places unscoped rows first, then legacy remote rows, then scoped step rows.
+Unscoped and scoped step rows use `created_at` descending, then persisted ID descending.
+Legacy remote rows use producer sequence order.
+
+Use `/logs/page` for increasing persisted IDs and bounded responses.
+The `before` cursor is exclusive.
 Runbooks also support `/logs.txt` for complete text export.
+
+Startup recovery appends its reason to deployment notes and persists a deployment-log event.
+Read the note through `GET /api/v1/deployments/$DID`.
+Server warnings include the deployment ID, resulting status, and recovery reason.
+Confirmed local cleanup does not confirm remote cleanup.
+Unconfirmed cleanup keeps retries blocked.
 
 Deployment and runbook pages use the captured row and byte budgets for history and live retention.
 Defaults are 500 displayed entries and 1 MiB of previews.

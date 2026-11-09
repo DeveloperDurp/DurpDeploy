@@ -6,7 +6,7 @@ ORDER BY CASE
     WHEN s.step_index IS NULL AND s.attempt IS NULL THEN 0 ELSE 1
 END,
 CASE
-    WHEN s.step_index IS NULL AND s.attempt IS NULL THEN s.sequence
+    WHEN s.step_index IS NULL AND s.attempt IS NULL THEN COALESCE(s.sequence, -1)
 END,
 l.created_at DESC, l.id DESC;
 

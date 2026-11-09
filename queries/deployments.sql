@@ -14,14 +14,15 @@ UPDATE deployments SET release_id = ?, environment_id = ?, status = ?, started_a
 -- name: UpdateDeploymentStatus :exec
 UPDATE deployments SET status = ?, started_at = ?, finished_at = ? WHERE id = ?;
 
--- name: ConfirmContainerCleanup :execrows
+-- name: ConfirmContainerCleanup :many
 UPDATE deployments SET status = CASE WHEN EXISTS (
     SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = deployments.id
       AND s.state = 'cleanup_unconfirmed'
 ) THEN status ELSE 'failed' END,
     container_namespace = NULL, finished_at = COALESCE(finished_at, sqlc.arg(now))
 WHERE status IN ('running', 'publishing_artifact', 'cleanup_unconfirmed')
-  AND container_namespace = sqlc.arg(namespace);
+  AND container_namespace = sqlc.arg(namespace)
+RETURNING *;
 
 -- name: ConfirmRemoteDeploymentLocalCleanup :exec
 UPDATE deployments SET container_namespace = NULL WHERE id = ?
@@ -51,7 +52,7 @@ UPDATE deployments SET container_namespace = sqlc.arg(namespace)
 WHERE id = sqlc.arg(deployment_id) AND status = 'running'
   AND (container_namespace IS NULL OR container_namespace = sqlc.arg(namespace));
 
--- name: MarkUnreconciledLocalDeployments :execrows
+-- name: MarkUnreconciledLocalDeployments :many
 UPDATE deployments SET status = 'cleanup_unconfirmed',
     finished_at = COALESCE(finished_at, sqlc.arg(now))
 WHERE status IN ('running', 'publishing_artifact') AND assigned_agent_id IS NULL
@@ -62,7 +63,8 @@ WHERE status IN ('running', 'publishing_artifact') AND assigned_agent_id IS NULL
       WHERE v.deployment_id = deployments.id AND v.type = 'bash'))
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id
-        AND r.state IN ('claimed', 'started', 'cancel_requested'));
+        AND r.state IN ('claimed', 'started', 'cancel_requested'))
+RETURNING *;
 
 -- name: ListDeployments :many
 SELECT * FROM deployments WHERE kind = 'deployment' ORDER BY created_at DESC;
@@ -169,14 +171,17 @@ WHERE state IN ('waiting', 'claimed', 'started', 'cancel_requested')
       WHERE status = 'running' AND assigned_agent_id IS NULL
   );
 
--- name: FailOrphanedDeployments :execrows
+-- name: FailOrphanedDeployments :many
 UPDATE deployments SET status = 'failed', finished_at = sqlc.arg(now)
 WHERE status IN ('running', 'publishing_artifact') AND assigned_agent_id IS NULL
   AND NOT EXISTS (
       SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id
         AND r.state = 'cancel_requested'
-  );
+  ) RETURNING *;
+
+-- name: UpdateDeploymentRecoveryNote :exec
+UPDATE deployments SET note = ? WHERE id = ?;
 
 -- name: FailDeploymentsWithTerminalRemoteStepRuns :execrows
 UPDATE deployments SET status = CASE WHEN EXISTS (

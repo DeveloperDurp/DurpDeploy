@@ -190,6 +190,20 @@ esac
 	if err != nil || stored.Status != "failed" || !stored.FinishedAt.Valid {
 		t.Fatalf("confirmed status = %+v: %v", stored, err)
 	}
+	if stored.Note.String != repository.RecoveryCleanupConfirmed {
+		t.Fatalf("missing recovery note: %+v", stored.Note)
+	}
+	if err := r.reconcileAttempts(); err != nil {
+		t.Fatal(err)
+	}
+	logs, err := repo.Queries.ListDeploymentLogsByDeployment(
+		t.Context(),
+		uncertain.ID,
+	)
+	if err != nil || len(logs) != 1 ||
+		logs[0].Line != repository.RecoveryCleanupConfirmed {
+		t.Fatalf("repeated sweep logs=%+v error=%v", logs, err)
+	}
 	untouched, err := repo.Queries.GetDeployment(t.Context(), other.ID)
 	if err != nil || untouched.Status != "succeeded" {
 		t.Fatalf("other status = %+v: %v", untouched, err)

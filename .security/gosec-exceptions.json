@@ -182,8 +182,8 @@
   {
     "rule": "G118",
     "file": "cmd/server/main.go",
-    "line": "462",
-    "source_sha256": "d23604fa2c058748012f724585582f41ce881619d93b0de5b9cdb4bf000cc33c",
+    "line": "474",
+    "source_sha256": "f3772d4ce8be09bad88669956a44d365582eb58b6defb7c9af3b902982e56120",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
@@ -318,7 +318,7 @@
     "rule": "G204",
     "file": "internal/runner/podman.go",
     "line": "197",
-    "source_sha256": "b8c1fa2d17050d072dea9bb979154259947317f111ab8a020882b719d0d290b7",
+    "source_sha256": "65eb7cf2fcbdc2412da7126a847679a05bb5eb126d169d9ecee86ec000636fa0",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Startup-resolved docker/podman binary with separate argv; validated image and sandbox flags; script passed via stdin, no host shell. Operator PATH is trusted. Evidence: local_step.go, podman.go, podman_test.go."

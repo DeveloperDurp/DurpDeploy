@@ -26,7 +26,8 @@ func TestOtherNamespaceSweepKeepsRunbookExecutionBlocked(t *testing.T) {
 		t.Fatal(err)
 	}
 	book, version, err := repo.SaveRunbook(ctx, repository.RunbookSave{
-		ProjectID: project.ID, Name: "maintenance",
+		ProjectID: project.ID,
+		Name:      "maintenance",
 		StepsJSON: `[{"name":"check","container_image":"harbor.durp.info/dockerhub/library/alpine:3"}]`,
 	})
 	if err != nil {
@@ -89,8 +90,12 @@ func TestOtherNamespaceSweepKeepsRunbookExecutionBlocked(t *testing.T) {
 			Now:       sql.NullInt64{Int64: 200, Valid: true},
 			Namespace: sql.NullString{String: "replacement", Valid: true},
 		})
-	if err != nil || confirmed != 0 {
-		t.Fatalf("wrong namespace confirmed %d records: %v", confirmed, err)
+	if err != nil || len(confirmed) != 0 {
+		t.Fatalf(
+			"wrong namespace confirmed %d records: %v",
+			len(confirmed),
+			err,
+		)
 	}
 
 	// Then: the next scheduled run waits and deletion preserves the evidence.

@@ -3872,3 +3872,61 @@ Valid tokens receive HTTP 503 with `{"error":"internal server error"}` during th
 The same tokens succeed after the check releases the lock.
 Unknown, revoked, expired, and invalid-scope tokens retain HTTP 401.
 The checks do not change a running server or create schedules.
+
+## Restart recovery diagnostics (#196)
+
+### Log ordering and paging
+
+Read `GET /api/v1/deployments/{id}/logs` repeatedly after execution stops.
+Expect the same row IDs in the same order.
+Unscoped rows appear first by `created_at` descending, then persisted ID descending.
+Legacy remote rows follow in producer sequence order.
+Scoped step rows follow by `created_at` descending, then persisted ID descending.
+
+Add `?limit=100` to the full-list route.
+Expect the same complete array, including more than 100 rows when available.
+Use `/logs/page` for configured row and byte limits.
+Expect increasing persisted IDs within each page.
+Pass `next_before` as `?before=ID` for the preceding page.
+Expect an exclusive cursor, no duplicate rows, and zero `next_before` at the oldest page.
+
+### Restart during a local step
+
+Use an owned isolated stack for this check.
+Keep retained examples outside the thread teardown registration.
+Do not kill a shared demo or production server.
+
+Create a local Bash step through `POST /api/v1/projects/{id}/steps`.
+Use a supported container image and a script that prints a marker before `sleep 300`.
+Create a release and deploy it through the public API.
+Wait for the marker through `GET /api/v1/deployments/{id}/logs/page`.
+Confirm that the owned workload container is running.
+
+Kill only the recorded app container with `podman kill --signal=KILL APP`.
+Start that container with `podman start APP`.
+Read `GET /api/v1/deployments/{id}` after startup.
+Expect `failed` after confirmed local cleanup.
+Expect the note to contain `Reconciled after server restart: local container cleanup confirmed.`
+Expect existing operator note text to remain.
+
+Expect the same reason in deployment logs and one server warning for that transition.
+Expect the warning to include `deployment_id`, `status`, and `reason`.
+Confirm that the owned workload container was removed.
+Restart the app again and confirm that it adds no duplicate event.
+
+If cleanup fails, expect `cleanup_unconfirmed` and an unconfirmed cleanup reason.
+Confirm that retries remain blocked until cleanup succeeds.
+Do not remove runtime or database state to bypass that block.
+
+The retained issue 196 example is [deployment 4](https://durpdeploy-dev-813cb2a2b60c9dd050f31194.localhost:33601/deployments/4).
+Its state directory is `/home/user/.local/state/durpdeploy/issue196-retained-20261109`.
+Read `connection.json` for its certificate and runtime resources.
+Read the private `issue196-credentials.json` file for its generated test login.
+This fixture has no schedules.
+Use the retained release to repeat deployment before restarting the app.
+
+Stop it with `make dev-stack ACTION=down STATE=/home/user/.local/state/durpdeploy/issue196-retained-20261109`.
+
+The retained probe also attempted a 70 MiB write to ordinary workload `/tmp`.
+The write failed at the default 64 MiB bound.
+Supervisor mounts and host-mode scripts have separate resource boundaries.

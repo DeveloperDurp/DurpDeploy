@@ -11,6 +11,7 @@ import (
 // Defaults are 500 rows, 1 MiB per page, and 16 KiB per text field.
 // Read limit, byte_limit, and line_byte_limit for effective budgets.
 // Use next_before for older rows. Full exports preserve complete output.
+// The before cursor is exclusive. Query limit does not override server budgets.
 //
 // Responses:
 // 200: body:LogPage

@@ -2588,13 +2588,14 @@
     },
     "/deployments/{id}/logs": {
       "get": {
+        "description": "Unscoped rows come first by created_at descending, then id descending.\nLegacy remote rows follow in producer sequence order, then scoped step rows\nby created_at descending, then id descending. This is not global ID order.\nQuery parameters, including limit, do not bound this route.\nUse /deployments/{id}/logs/page for bounded previews and ID cursors.",
         "produces": [
           "application/json"
         ],
         "tags": [
           "deployments"
         ],
-        "summary": "List deployment step logs.",
+        "summary": "List all deployment logs as a complete JSON array.",
         "operationId": "listDeploymentLogs",
         "parameters": [
           {
@@ -2710,7 +2711,7 @@
     },
     "/deployments/{id}/logs/page": {
       "get": {
-        "description": "Defaults are 500 rows, 1 MiB per page, and 16 KiB per text field.\nRead limit, byte_limit, and line_byte_limit for effective budgets.\nUse next_before for older rows. Full exports preserve complete output.",
+        "description": "Defaults are 500 rows, 1 MiB per page, and 16 KiB per text field.\nRead limit, byte_limit, and line_byte_limit for effective budgets.\nUse next_before for older rows. Full exports preserve complete output.\nThe before cursor is exclusive. Query limit does not override server budgets.",
         "tags": [
           "logs"
         ],

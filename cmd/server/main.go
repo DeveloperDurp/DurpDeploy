@@ -312,7 +312,11 @@ func runServer() {
 		"addr",
 		agentRuntime.listener.Addr().String(),
 	)
-	if err := maintenance.StartLitestreamCheckWithConfig(ctx, bus, startup.backup); err != nil {
+	if err := maintenance.StartLitestreamCheckWithConfig(
+		ctx,
+		bus,
+		startup.backup,
+	); err != nil {
 		log.Fatalf("backup health check: %v", err)
 	}
 	r := server.NewRouterWithAgentManagement(
@@ -387,7 +391,7 @@ func recoverPendingDeployments(
 	rnr *runner.DeploymentRunner,
 	repo *repository.Repository,
 ) {
-	var failed int64
+	var failed, unconfirmed []db.Deployment
 	err := repo.WithQueueMaintenanceTx(
 		ctx,
 		func(ctx context.Context, q *db.Queries) error {
@@ -399,14 +403,23 @@ func recoverPendingDeployments(
 			if _, err := q.CancelOrphanedRemoteStepRuns(ctx, now); err != nil {
 				return err
 			}
-			if _, err := q.MarkUnreconciledLocalDeployments(
+			unconfirmed, err = q.MarkUnreconciledLocalDeployments(
 				ctx,
 				timestamp,
-			); err != nil {
+			)
+			if err != nil {
+				return err
+			}
+			if err := repository.RecordStartupRecovery(ctx, q, unconfirmed,
+				repository.RecoveryCleanupUnconfirmed); err != nil {
 				return err
 			}
 			failed, err = q.FailOrphanedDeployments(ctx, timestamp)
 			if err != nil {
+				return err
+			}
+			if err := repository.RecordStartupRecovery(ctx, q, failed,
+				repository.RecoveryOrphanFailed); err != nil {
 				return err
 			}
 			if err := q.CancelTerminalArtifactGates(ctx); err != nil {
@@ -417,12 +430,11 @@ func recoverPendingDeployments(
 	)
 	if err != nil {
 		slog.Error("startup recovery: fail orphaned deployments", "err", err)
-	} else if failed > 0 {
-		slog.Warn(
-			"startup recovery: failed orphaned deployments",
-			"count",
-			failed,
-		)
+	} else {
+		repository.WarnStartupRecovery(unconfirmed,
+			repository.RecoveryCleanupUnconfirmed)
+		repository.WarnStartupRecovery(failed,
+			repository.RecoveryOrphanFailed)
 	}
 	if err := repo.ReconcileDeploymentQueues(ctx); err != nil {
 		slog.Error("startup recovery: reconcile deployment queues", "err", err)
@@ -632,7 +644,9 @@ func runAudit(args []string) int {
 			return 1
 		}
 		// Fall back to env, then to the hard-coded default.
-		if envDays, _ := settings.LookupEnv("DURPDEPLOY_AUDIT_RETENTION_DAYS"); envDays != "" {
+		if envDays, _ := settings.LookupEnv(
+			"DURPDEPLOY_AUDIT_RETENTION_DAYS",
+		); envDays != "" {
 			n, err := fmt.Sscanf(envDays, "%d", &days)
 			if err != nil || n != 1 || days <= 0 {
 				fmt.Fprintln(

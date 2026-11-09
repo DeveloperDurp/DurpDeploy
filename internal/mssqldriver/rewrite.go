@@ -109,6 +109,29 @@ func isSQLIdentifier(value byte) bool {
 		value >= 'A' && value <= 'Z' || value >= 'a' && value <= 'z'
 }
 
+func updateWhereIndex(query string) int {
+	depth := 0
+	for i := 0; i < len(query); i++ {
+		if end, ok := quotedEnd(query, i); ok {
+			i = end - 1
+			continue
+		}
+		switch query[i] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		}
+		if depth == 0 && i+5 <= len(query) &&
+			strings.EqualFold(query[i:i+5], "WHERE") &&
+			(i == 0 || !isSQLIdentifier(query[i-1])) &&
+			(i+5 == len(query) || !isSQLIdentifier(query[i+5])) {
+			return i
+		}
+	}
+	return -1
+}
+
 func rewriteReturning(query string) (string, error) {
 	start := keywordIndexOutsideQuotes(query, "RETURNING")
 	if start < 0 {
@@ -151,7 +174,7 @@ func rewriteReturning(query string) (string, error) {
 		}
 		return statement[:insertAt] + " OUTPUT " + output + statement[insertAt:] + trailing, nil
 	case containsOutsideQuotes(statement, "UPDATE"):
-		whereIndex := keywordIndexOutsideQuotes(statement, "WHERE")
+		whereIndex := updateWhereIndex(statement)
 		if whereIndex < 0 {
 			return "", ErrMalformedReturning
 		}

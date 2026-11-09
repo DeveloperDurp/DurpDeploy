@@ -12,9 +12,12 @@ func TestVerificationNeverDecryptedInLegacyAgentPayload(t *testing.T) {
 	repo, _ := openDeploymentCreationEngine(t,
 		newDeploymentCreationEngine(t, "SQLite"))
 	deployment := createLegacyRemoteDeployment(t, repo)
-	if _, err := repo.Queries.AddAgentInterpreter(t.Context(), db.AddAgentInterpreterParams{
-		AgentID: "race-agent", Interpreter: "bash",
-	}); err != nil {
+	if _, err := repo.Queries.AddAgentInterpreter(
+		t.Context(),
+		db.AddAgentInterpreterParams{
+			AgentID: "race-agent", Interpreter: "bash",
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	box, err := secret.NewBox(make([]byte, 32))
@@ -72,10 +75,10 @@ func TestVerificationNeverDecryptedInLegacyAgentPayload(t *testing.T) {
 	}
 	marked, err := repo.Queries.MarkUnreconciledLocalDeployments(t.Context(),
 		sql.NullInt64{Int64: 100, Valid: true})
-	if err != nil || marked != 1 {
+	if err != nil || len(marked) != 1 {
 		t.Fatalf(
 			"unreconciled verification containers=%d error=%v",
-			marked,
+			len(marked),
 			err,
 		)
 	}

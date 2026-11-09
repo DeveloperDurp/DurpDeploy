@@ -1,5 +1,16 @@
 # DurpDeploy agent operator runbook
 
+Server and agent workload containers default to 64 MiB of private `/tmp` capacity.
+Each process reads its own `limits.container.tmpfs_bytes` startup setting.
+Use `DURPDEPLOY_LIMITS_CONTAINER_TMPFS_BYTES` for the server environment setting.
+Use `DURPDEPLOY_AGENT_LIMITS_CONTAINER_TMPFS_BYTES` for the agent environment setting.
+Configure matching server and agent resource policies before remote execution.
+
+Supervisor container limits do not automatically constrain workload containers.
+Host-mode scripts use the agent operator's host resources.
+
+Read [agent protocol bounds](agent-protocol.md#bounds-and-timing) for the execution boundaries.
+
 This runbook configures a server and a remote agent. Paired runtime traffic is
 outbound; initial pairing uses a temporary agent listener.
 It covers the server listener, admin pairing, agent installation, routing,

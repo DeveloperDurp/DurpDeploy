@@ -314,20 +314,31 @@ func (r *DeploymentRunner) reconcileAttempts() error {
 		}
 	}
 	if r.repo != nil {
-		if err := r.repo.WithQueueMaintenanceTx(ctx, func(ctx context.Context, q *db.Queries) error {
-			_, err := q.ConfirmContainerCleanup(ctx,
-				db.ConfirmContainerCleanupParams{
-					Now: sql.NullInt64{
-						Int64: time.Now().Unix(), Valid: true,
-					},
-					Namespace: sql.NullString{
-						String: r.engine.scope(), Valid: true,
-					},
-				})
-			return err
-		}); err != nil {
+		var recovered []db.Deployment
+		if err := r.repo.WithQueueMaintenanceTx(
+			ctx,
+			func(ctx context.Context, q *db.Queries) error {
+				var err error
+				recovered, err = q.ConfirmContainerCleanup(ctx,
+					db.ConfirmContainerCleanupParams{
+						Now: sql.NullInt64{
+							Int64: time.Now().Unix(), Valid: true,
+						},
+						Namespace: sql.NullString{
+							String: r.engine.scope(), Valid: true,
+						},
+					})
+				if err != nil {
+					return err
+				}
+				return repository.RecordStartupRecovery(ctx, q, recovered,
+					repository.RecoveryCleanupConfirmed)
+			},
+		); err != nil {
 			return fmt.Errorf("confirm container cleanup: %w", err)
 		}
+		repository.WarnStartupRecovery(recovered,
+			repository.RecoveryCleanupConfirmed)
 	}
 	return nil
 }

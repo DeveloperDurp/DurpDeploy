@@ -4,6 +4,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestRewriteSQL(t *testing.T) {
@@ -13,6 +15,15 @@ func TestRewriteSQL(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
+		{
+			name: "places recovery output after nested status expression",
+			query: "UPDATE deployments SET status = CASE WHEN EXISTS (" +
+				"SELECT 1 FROM remote_step_runs WHERE state = 'WHERE') " +
+				"THEN status ELSE 'failed' END WHERE id = ? RETURNING *;",
+			want: "UPDATE deployments SET status = CASE WHEN EXISTS (" +
+				"SELECT 1 FROM remote_step_runs WHERE state = 'WHERE') " +
+				"THEN status ELSE 'failed' END OUTPUT INSERTED.* WHERE id = @p1;",
+		},
 		{
 			name:  "renumbers source placeholders in argument order",
 			query: "UPDATE projects SET lifecycle_id = ? WHERE id = ?;",
@@ -257,28 +268,20 @@ func TestRewriteSQL(t *testing.T) {
 
 			// Then
 			if tc.wantErr {
-				if err == nil {
-					t.Fatalf(
-						"RewriteSQL(%q) error = nil, want an error",
-						tc.query,
-					)
-				}
+				require.Error(t, err, "RewriteSQL(%q)", tc.query)
 				return
 			}
-			if err != nil {
-				t.Fatalf("RewriteSQL(%q) error = %v, want nil", tc.query, err)
-			}
-			if strings.Contains(tc.name, "project member conflict") &&
-				!strings.HasSuffix(got, ";") {
-				t.Fatalf(
+			require.NoError(t, err, "RewriteSQL(%q)", tc.query)
+			if strings.Contains(tc.name, "project member conflict") {
+				require.True(
+					t,
+					strings.HasSuffix(got, ";"),
 					"RewriteSQL(%q) = %q, want trailing semicolon",
 					tc.query,
 					got,
 				)
 			}
-			if got != tc.want {
-				t.Errorf("RewriteSQL(%q) = %q, want %q", tc.query, got, tc.want)
-			}
+			require.Equal(t, tc.want, got, "RewriteSQL(%q)", tc.query)
 		})
 	}
 }

@@ -883,7 +883,12 @@ func (h *DeploymentHandler) startLocalDeployment(
 
 // swagger:route GET /deployments/{id}/logs deployments listDeploymentLogs
 //
-// List deployment step logs.
+// List all deployment logs as a complete JSON array.
+// Unscoped rows come first by created_at descending, then id descending.
+// Legacy remote rows follow in producer sequence order, then scoped step rows
+// by created_at descending, then id descending. This is not global ID order.
+// Query parameters, including limit, do not bound this route.
+// Use /deployments/{id}/logs/page for bounded previews and ID cursors.
 //
 //	Produces:
 //	- application/json
