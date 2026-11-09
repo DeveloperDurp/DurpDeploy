@@ -704,8 +704,8 @@ its behavior does not match the checkout.
 
 The agent rejects an unpinned or changed certificate. For an unexpected change,
 stop the agent. Investigate the server identity through a trusted channel.
-Then do the controlled re-pair or planned rotation procedure below. Do not
-use trust-all TLS or accept a fingerprint copied from an untrusted connection.
+After you confirm the replacement identity, follow the controlled re-pair procedure below.
+Do not use trust-all TLS or accept a fingerprint from an untrusted connection.
 
 ### Expired or reused pairing code
 
@@ -754,14 +754,56 @@ For a lost or compromised host:
 5. Use **Re-pair** on the revoked agent and pair the replacement. Update only
    the replacement local listener configuration.
 
-For planned server certificate rotation, keep the current server identity and
-fingerprint working first. The server can advertise the old and pending pins
-through an authenticated heartbeat. Agents stage `[old, pending]`, connect to
-the pending certificate, and remove the old pin only after that verified
-connection succeeds. Do not delete the old server identity or pin until all
-agents have promoted the pending pin. If rotation is interrupted, restore the
-old listener identity and complete the staged process rather than replacing
-the state file by guesswork.
+### Replace the server listener identity
+
+Server listener identity rotation requires operator repair of existing agent pairings.
+Seamless staged server-pin rotation is not supported.
+The server advertises only its current certificate fingerprint in deployment heartbeats.
+It also checks that each durable pairing references its current server fingerprint.
+Replacing the identity prevents existing agents from polling successfully until operators re-pair them.
+Agent support for staged pins does not provide a server rotation workflow.
+
+Plan a fleet maintenance window before replacing the identity.
+Coordinate a freeze on deployment and runbook submissions from UI, API, CI, and external automation.
+Keep deployment and runbook schedules disabled throughout maintenance.
+Allow only controlled verification deployments that target repaired agents during the freeze.
+
+Re-pairing clears the agent's drain flag and starts polling automatically.
+New submissions or later steps can dispatch immediately after repair.
+Revocation can fail waiting remote work.
+Do not rely on draining or revocation to preserve queued work through identity replacement.
+
+1. Finish existing deployments and runbook executions before draining agents.
+2. If work cannot finish, cancel it through the API or UI.
+3. Confirm that no active, queued, or approval-pending execution remains.
+4. Resolve uncertain cancellation or cleanup outcomes before continuing.
+5. Drain the affected agents.
+6. Stop the affected agent services and the server.
+7. Back up the database, encryption key, server identity directory, and affected agent state directories privately.
+8. Configure `DURPDEPLOY_AGENT_IDENTITY_DIR` to use a new private directory.
+9. Start the server with the existing database and encryption key.
+10. Verify the new listener identity through a trusted operator channel.
+11. For each affected agent, revoke its old registration through **Admin, Agents**.
+12. Start its local pairing listener with a new private agent state directory.
+13. Compare the agent fingerprint through a trusted channel.
+14. Use **Retry pairing** on the revoked registration with the new listener details.
+15. Confirm that the Agent ID and routing labels remain correct.
+16. Verify successful polling and a harmless deployment that targets only repaired agents.
+17. End the submission freeze only after all required agents pass verification.
+18. Re-enable only the schedules required for normal operation.
+
+The API equivalents are `POST /api/v1/admin/agents/{id}/revoke` and `POST /api/v1/admin/agents/{id}/retry-pair`.
+The retry request uses `address`, `code`, and the independently verified agent `fingerprint`.
+Keep pairing codes and private keys out of logs and tickets.
+Do not edit stored pins or pairing records to bypass repair.
+Use the [manual identity replacement check](manual-e2e.md#server-listener-identity-replacement-181) for isolated verification.
+
+Before any agent is re-paired, restoring an uncompromised old server identity can restore its unchanged pairing.
+Revoked registrations remain revoked after an identity rollback.
+After partial repair, agents trust different server identities.
+Keep schedules disabled and complete controlled re-pairing against the selected trusted identity.
+Do not restore a compromised identity or an old database over newer deployment history.
+Reverting the server binary does not restore agent trust.
 
 ## Upgrades, rollback, and backup scope
 

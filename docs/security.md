@@ -42,6 +42,29 @@ lost after 45 seconds. A cancel needs an agent acknowledgement within 30
 seconds, otherwise the result is `cancel_unconfirmed` and requires host
 inspection before a new deployment.
 
+### Agent listener identity replacement
+
+Server listener identity rotation requires controlled re-pairing of existing agents.
+Seamless staged server-pin rotation is not supported.
+Replacing the certificate causes existing agent connections to fail closed.
+The server also rejects pairings that reference a different server fingerprint.
+Preserve the listener identity during ordinary restarts and upgrades.
+
+Plan a maintenance window and follow the [identity replacement procedure](agents.md#replace-the-server-listener-identity).
+Keep schedules disabled until affected agents pass verification.
+Freeze deployment and runbook submissions from UI, API, CI, and external automation.
+Finish or cancel unfinished work before draining agents.
+Allow only controlled verification deployments that target repaired agents.
+Re-pairing clears the drain flag and starts polling automatically.
+
+Do not bypass certificate checks or edit stored pins to restore connectivity.
+After partial re-pairing, complete recovery against one verified server identity.
+Restoring an old identity does not repair agents that now trust its replacement.
+Never restore a compromised identity.
+
+The listener certificate and private key are separate from `DURPDEPLOY_SECRET_KEY`.
+The encryption-key rotation command does not rotate the listener identity or repair agent trust.
+
 ### OIDC boundary
 
 OIDC adds browser sign-in; local password login and bearer API authentication

@@ -1,5 +1,50 @@
 # Manual checks after `make e2e-test`
 
+## Server listener identity replacement (#181)
+
+Use a dedicated disposable instance with two test agents and isolated private identity directories.
+Keep this retained instance outside the thread teardown registration.
+Do not replace another demo's identity.
+Keep all deployment and runbook schedules disabled.
+
+Freeze deployment and runbook submissions from UI, API, CI, and external automation during identity replacement.
+Allow only controlled verification deployments that target repaired agents during the freeze.
+Finish or cancel unfinished work before draining agents.
+Confirm that no active, queued, or approval-pending execution remains before replacement.
+
+1. Pair both agents through the administrator pairing flow.
+2. Add test routing labels to each agent.
+3. Confirm successful polling and a harmless remote deployment.
+4. Record each Agent ID and deployment history link.
+5. Follow the [server identity replacement procedure](agents.md#replace-the-server-listener-identity) through server restart.
+6. Attempt a connection with an agent that still trusts the old server identity.
+7. Expect certificate rejection before an authenticated heartbeat can deliver a replacement pin.
+8. Restart that agent with its original state directory.
+9. Confirm that the restart does not repair its server trust.
+10. Before revoking either agent, restore the uncompromised old server identity.
+11. Confirm that both unchanged pairings can poll again.
+12. Restore the new server identity and stop both agents.
+13. Revoke one agent and re-pair it with a fresh private state directory.
+14. Confirm that its Agent ID, labels, and deployment history remain available.
+15. Confirm automatic polling, the cleared drain flag, and a harmless deployment that targets only the repaired agent.
+16. Confirm that the second agent still cannot connect with its old pins.
+17. Restart the server and repaired agent without changing their identity directories.
+18. Confirm that the repaired agent still polls successfully.
+19. Complete controlled re-pairing for the second agent.
+20. Confirm automatic polling and harmless verification deployments that target only repaired agents.
+
+For API checks, use an administrator bearer token with the existing agent endpoints.
+Revoke through `POST /api/v1/admin/agents/{id}/revoke`.
+Submit `address`, `code`, and the independently verified agent `fingerprint` to `POST /api/v1/admin/agents/{id}/retry-pair`.
+Expect HTTP `204` for revocation and HTTP `201` with the same Agent ID for successful re-pairing.
+Use `GET /api/v1/admin/agents/{id}` to check status, labels, and health.
+Do not save bearer tokens or pairing codes in captured HTTP artifacts.
+
+Retain both repaired agents, private identity backups, and deployment history for manual review.
+Record the instance URL, agent links, certificate path, and stop command in private local evidence.
+Leave schedules disabled after testing.
+After fleet verification, use each schedule's enable control to restore only the schedules required for normal operation.
+
 ## Foreign key validation (#189)
 
 Run `make e2e-test` against a running instance.

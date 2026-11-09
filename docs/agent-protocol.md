@@ -44,11 +44,14 @@ values, malformed JSON, and every other protocol value. Pairing remains
 | `POST /agent/v1/pairings/server-init` | `PairRequest` | Server-initiated pairing completion on the agent's temporary mTLS listener. The first call uses `completion_ack: false`; after durable confirmation the same request is retried with `completion_ack: true` to perform listener cleanup. |
 | `POST /agent/v1/poll` | `PollRequest` | Version 1 sends protocol and agent version and is recorded as Bash-only. Version 2 also requires `supported_interpreters`, containing only `bash`, `pwsh`, or `python3`. A no-work response has no deployment payload. |
 | `POST /agent/v1/deployments/{id}/start` | `StartRequest` | Acknowledges that the claimed work started. |
-| `POST /agent/v1/deployments/{id}/heartbeat` | `HeartbeatRequest` | Response carries cancellation state and staged server fingerprints. |
+| `POST /agent/v1/deployments/{id}/heartbeat` | `HeartbeatRequest` | Response carries cancellation state and only the current server fingerprint. |
 | `POST /agent/v1/deployments/{id}/logs` | `LogBatchRequest` | Ordered line events. |
 | `POST /agent/v1/deployments/{id}/result` | `ResultRequest` | Result is `succeeded` or `failed`; v3 also accepts `cleanup_unconfirmed`. |
 | `POST /agent/v1/deployments/{id}/cancelled` | `CancelledRequest` | Cancellation acknowledgement is distinct from a normal result. |
 | `POST /agent/v1/deployments/{id}/artifact` | Object containing `claim_token` | Claim-bound ZIP download for package-capable agents on the mTLS listener. No `protocol` field. |
+
+Seamless staged server-pin rotation is not supported.
+Use the [controlled re-pair procedure](agents.md#replace-the-server-listener-identity) after replacing the server listener identity.
 
 Version 3 polls require all four capability arrays:
 `supported_interpreters`, `execution_modes`, `container_runtimes`, and
@@ -229,4 +232,5 @@ capabilities have changed receives no work and must poll again.
 Agents initiate the connection. Both sides use self-signed X.509 identities
 and pin the peer's SHA-256 certificate fingerprint directly. This has no
 central CA, no trust-on-first-use mode, and no certificate-verification bypass.
-Fingerprint rotation is staged over an already authenticated connection.
+Server listener identity replacement requires controlled re-pairing.
+Seamless staged server-pin rotation is not supported.
