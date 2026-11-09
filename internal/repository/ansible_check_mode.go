@@ -17,3 +17,18 @@ func AnsibleCheckMode(enabled bool) sql.NullInt64 {
 	}
 	return mode
 }
+
+func validateAnsibleCheckMode(
+	mode int64,
+	steps []DeploymentStepSnapshot,
+) error {
+	if mode != 1 {
+		return nil
+	}
+	for _, step := range steps {
+		if step.Kind == "ansible" {
+			return nil
+		}
+	}
+	return ErrAnsibleCheckMode
+}

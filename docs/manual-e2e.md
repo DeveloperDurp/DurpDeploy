@@ -1,5 +1,27 @@
 # Manual checks after `make e2e-test`
 
+## Foreign key validation (#189)
+
+Run `make e2e-test` against a running instance.
+Use the printed foreign key validation project and lifecycle links.
+Keep this retained stack outside the thread teardown registration.
+The regression creates no schedules.
+
+Open the retained environment edit page.
+Select `Delete environment` and confirm deletion.
+Expect a toast with the lifecycle stage count.
+Confirm that the environment remains available.
+
+Remove the lifecycle stage through its lifecycle page.
+Delete the environment again.
+Expect successful deletion.
+Use a disposable environment for this check.
+
+Post a project variable with an unused positive `environment_id`.
+Expect `422` with an environment validation message.
+Post a deployment with a valid release and an unused environment ID.
+Expect `404` from the API and `422` from the web form.
+
 ## Passkey counter warnings (#190)
 
 Create a dedicated stack outside the thread teardown registration.

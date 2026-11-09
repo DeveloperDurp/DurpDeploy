@@ -1430,7 +1430,8 @@ source "$SCRIPT_DIR/running_features_e2e.sh"
 # Retain the pending artifact example last: it owns this project's dev slot
 # until approved, rejected, expired, or cancelled.
 source "$SCRIPT_DIR/terraform_approval_e2e.sh"
-[[ "$(db_query "SELECT COUNT(*) FROM environments WHERE name NOT IN ('dev','test','prod') AND id NOT IN (${IDENTITY_ENV_IDS[0]},${IDENTITY_ENV_IDS[1]},$BODY_MEDIA_ID);")" == "$OTHER_ENV_COUNT" ]] || {
+FOREIGN_KEY_ENV_IDS=$(paste -sd, "$TMP/foreign-key-environments")
+[[ "$(db_query "SELECT COUNT(*) FROM environments WHERE name NOT IN ('dev','test','prod') AND id NOT IN (${IDENTITY_ENV_IDS[0]},${IDENTITY_ENV_IDS[1]},$BODY_MEDIA_ID,${FOREIGN_KEY_ENV_IDS:-0});")" == "$OTHER_ENV_COUNT" ]] || {
     echo "FAIL: E2E left extra temporary environments behind"; exit 1;
 }
 echo "  Shared environments and identity examples retained; temporary environments removed: OK"

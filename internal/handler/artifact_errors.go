@@ -29,6 +29,10 @@ func ArtifactErrorStatus(err error) int {
 		errors.Is(err, artifact.ErrChecksum),
 		errors.Is(err, repository.ErrArtifactPathReserved):
 		return http.StatusUnprocessableEntity
+	case errors.Is(err, repository.ErrVariableParent):
+		return http.StatusUnprocessableEntity
+	case errors.Is(err, repository.ErrDeploymentParent):
+		return http.StatusConflict
 	case errors.Is(err, repository.ErrArtifactRepositoryPinned):
 		return http.StatusConflict
 	case errors.Is(err, artifact.ErrFetch):
@@ -43,7 +47,9 @@ func writeArtifactError(w http.ResponseWriter, err error) bool {
 	if status == 0 {
 		return false
 	}
-	if errors.Is(err, repository.ErrVariableName) {
+	if errors.Is(err, repository.ErrVariableName) ||
+		errors.Is(err, repository.ErrVariableParent) ||
+		errors.Is(err, repository.ErrDeploymentParent) {
 		SetToastError(w, err.Error())
 	}
 	http.Error(w, err.Error(), status)

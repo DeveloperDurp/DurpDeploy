@@ -14,7 +14,7 @@ import (
 	"durpdeploy/internal/server"
 )
 
-func TestDeploymentReturnsNotFoundWhenReleaseDisappearsAtLock(t *testing.T) {
+func TestDeploymentHandlesReleaseDisappearingAtLock(t *testing.T) {
 	h := newAPIHarness(t)
 	user := seedAPIUser(t, h.repo, "deleted-release@example.com", "admin")
 	_, token := seedAPIToken(t, h.repo, user.ID)
@@ -47,19 +47,22 @@ END`); err != nil {
 	router := server.NewRouter(h.repo, h.runner,
 		cron.NewParser(cron.Minute|cron.Hour|cron.Dom|cron.Month|cron.Dow),
 		handler.NewAuthHandler(h.repo))
-	for _, test := range []struct{ path, body string }{
+	for _, test := range []struct {
+		path, body string
+		status     int
+	}{
 		{fmt.Sprintf("/api/v1/projects/%d/deployments", project.ID),
-			fmt.Sprintf(`{"release_id":%d,"environment_id":%d}`, release.ID, env.ID)},
-		{fmt.Sprintf("/api/v1/deployments/%d/redeploy", source.ID), "{}"},
-		{fmt.Sprintf("/api/v1/deployments/%d/retry", source.ID), "{}"},
+			fmt.Sprintf(`{"release_id":%d,"environment_id":%d}`, release.ID, env.ID), http.StatusConflict},
+		{fmt.Sprintf("/api/v1/deployments/%d/redeploy", source.ID), "{}", http.StatusConflict},
+		{fmt.Sprintf("/api/v1/deployments/%d/retry", source.ID), "{}", http.StatusConflict},
 		{fmt.Sprintf("/api/v1/projects/%d/releases/%d/refresh",
-			project.ID, release.ID), "{}"},
+			project.ID, release.ID), "{}", http.StatusNotFound},
 		{fmt.Sprintf("/api/v1/projects/%d/schedules", project.ID),
 			fmt.Sprintf(`{"release_id":%d,"environment_id":%d,"cron":"0 9 * * *"}`,
-				release.ID, env.ID)},
+				release.ID, env.ID), http.StatusNotFound},
 		{fmt.Sprintf("/api/v1/projects/%d/schedules/%d", project.ID, schedule.ID),
 			fmt.Sprintf(`{"release_id":%d,"environment_id":%d,"cron":"0 9 * * *"}`,
-				release.ID, env.ID)},
+				release.ID, env.ID), http.StatusNotFound},
 	} {
 		t.Run(test.path, func(t *testing.T) {
 			method := http.MethodPost
@@ -75,7 +78,7 @@ END`); err != nil {
 			req.Header.Set("Authorization", "Bearer "+token)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, req)
-			if response.Code != http.StatusNotFound {
+			if response.Code != test.status {
 				t.Fatalf(
 					"status=%d body=%s",
 					response.Code,

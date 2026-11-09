@@ -9,7 +9,7 @@ import (
 	"durpdeploy/internal/db"
 )
 
-func TestDeploymentReturnsNotFoundWhenReleaseDisappearsAtLock(t *testing.T) {
+func TestDeploymentHandlesReleaseDisappearingAtLock(t *testing.T) {
 	h := newHarness(t)
 	project, err := h.repo.Queries.CreateProject(t.Context(),
 		db.CreateProjectParams{Name: "deleted-release"})
@@ -50,17 +50,20 @@ BEFORE UPDATE OF version ON releases BEGIN
 END`); err != nil {
 		t.Fatal(err)
 	}
-	for _, test := range []struct{ path, body string }{
+	for _, test := range []struct {
+		path, body string
+		status     int
+	}{
 		{fmt.Sprintf("/projects/%d/deploy", project.ID),
-			fmt.Sprintf("release_id=%d&environment_id=%d", release.ID, env.ID)},
-		{fmt.Sprintf("/deployments/%d/redeploy", source.ID), ""},
-		{fmt.Sprintf("/projects/%d/releases/%d/refresh", project.ID, release.ID), ""},
+			fmt.Sprintf("release_id=%d&environment_id=%d", release.ID, env.ID), http.StatusConflict},
+		{fmt.Sprintf("/deployments/%d/redeploy", source.ID), "", http.StatusConflict},
+		{fmt.Sprintf("/projects/%d/releases/%d/refresh", project.ID, release.ID), "", http.StatusNotFound},
 		{fmt.Sprintf("/projects/%d/schedules", project.ID),
 			fmt.Sprintf("release_id=%d&environment_id=%d&cron=0+9+*+*+*",
-				release.ID, env.ID)},
+				release.ID, env.ID), http.StatusNotFound},
 		{fmt.Sprintf("/projects/%d/schedules/%d", project.ID, schedule.ID),
 			fmt.Sprintf("release_id=%d&environment_id=%d&cron=0+9+*+*+*",
-				release.ID, env.ID)},
+				release.ID, env.ID), http.StatusNotFound},
 	} {
 		t.Run(test.path, func(t *testing.T) {
 			method := http.MethodPost
@@ -82,7 +85,7 @@ END`); err != nil {
 				t.Fatal(err)
 			}
 			defer response.Body.Close()
-			if response.StatusCode != http.StatusNotFound {
+			if response.StatusCode != test.status {
 				t.Fatalf("status=%d", response.StatusCode)
 			}
 		})

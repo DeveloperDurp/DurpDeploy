@@ -254,57 +254,13 @@ func (h *DeploymentHandler) ScheduleDeployment(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	projectID, err := parseProjectID(r)
-	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+	project, release, environmentID, ok := h.deploymentSelection(w, r)
+	if !ok {
 		return
 	}
-
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	releaseID, err := strconv.ParseInt(r.FormValue("release_id"), 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid release ID", http.StatusBadRequest)
-		return
-	}
-
-	environmentID, err := strconv.ParseInt(
-		r.FormValue("environment_id"),
-		10,
-		64,
-	)
-	if err != nil {
-		http.Error(w, "Invalid environment ID", http.StatusBadRequest)
-		return
-	}
-
 	force := isTruthy(r.FormValue("force"))
 	note := r.FormValue("note")
 	noteParam := sql.NullString{String: note, Valid: note != ""}
-
-	release, err := h.repo.Queries.GetDeploymentRelease(r.Context(), releaseID)
-	if err != nil {
-		http.Error(w, "Release not found", http.StatusBadRequest)
-		return
-	}
-
-	if release.ProjectID != projectID {
-		http.Error(
-			w,
-			"Release does not belong to this project",
-			http.StatusBadRequest,
-		)
-		return
-	}
-
-	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
-	if err != nil {
-		http.Error(w, "Project not found", http.StatusBadRequest)
-		return
-	}
 
 	violation, blocked := h.checkPromotionGate(
 		r,
@@ -361,7 +317,7 @@ func (h *DeploymentHandler) ScheduleDeployment(
 	result, err := h.repo.CreateDeployment(
 		r.Context(),
 		db.CreateDeploymentParams{
-			ReleaseID:     releaseID,
+			ReleaseID:     release.ID,
 			EnvironmentID: environmentID,
 			Status:        initialStatus,
 			StartedAt:     sql.NullInt64{},
@@ -374,22 +330,7 @@ func (h *DeploymentHandler) ScheduleDeployment(
 		},
 	)
 	if err != nil {
-		if writeArtifactError(w, err) {
-			return
-		}
-		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "Release not found", http.StatusNotFound)
-			return
-		}
-		if errors.Is(err, repository.ErrLegacyServerStep) {
-			http.Error(
-				w,
-				repository.ErrLegacyServerStep.Error(),
-				http.StatusConflict,
-			)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeDeploymentCreationError(w, err)
 		return
 	}
 
@@ -401,6 +342,104 @@ func (h *DeploymentHandler) ScheduleDeployment(
 		fmt.Sprintf("/deployments/%d", result.Deployment.ID),
 		http.StatusSeeOther,
 	)
+}
+
+func (h *DeploymentHandler) deploymentSelection(
+	w http.ResponseWriter,
+	r *http.Request,
+) (db.Project, db.Release, int64, bool) {
+	projectID, err := parseProjectID(r)
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return db.Project{}, db.Release{}, 0, false
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return db.Project{}, db.Release{}, 0, false
+	}
+
+	releaseID, err := strconv.ParseInt(r.FormValue("release_id"), 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid release ID", http.StatusBadRequest)
+		return db.Project{}, db.Release{}, 0, false
+	}
+
+	environmentID, err := strconv.ParseInt(
+		r.FormValue("environment_id"),
+		10,
+		64,
+	)
+	if err != nil {
+		http.Error(w, "Invalid environment ID", http.StatusBadRequest)
+		return db.Project{}, db.Release{}, 0, false
+	}
+
+	if _, err := h.repo.Queries.GetEnvironment(
+		r.Context(),
+		environmentID,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			SetToastError(w, "Environment not found")
+			http.Error(
+				w,
+				"Environment not found",
+				http.StatusUnprocessableEntity,
+			)
+			return db.Project{}, db.Release{}, 0, false
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return db.Project{}, db.Release{}, 0, false
+	}
+
+	release, err := h.repo.Queries.GetDeploymentRelease(r.Context(), releaseID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "Release not found", http.StatusBadRequest)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return db.Project{}, db.Release{}, 0, false
+	}
+
+	if release.ProjectID != projectID {
+		http.Error(
+			w,
+			"Release does not belong to this project",
+			http.StatusBadRequest,
+		)
+		return db.Project{}, db.Release{}, 0, false
+	}
+
+	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "Project not found", http.StatusBadRequest)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return db.Project{}, db.Release{}, 0, false
+	}
+	return project, release, environmentID, true
+}
+
+func writeDeploymentCreationError(w http.ResponseWriter, err error) {
+	if writeArtifactError(w, err) {
+		return
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "Release not found", http.StatusNotFound)
+		return
+	}
+	if errors.Is(err, repository.ErrLegacyServerStep) {
+		http.Error(
+			w,
+			repository.ErrLegacyServerStep.Error(),
+			http.StatusConflict,
+		)
+		return
+	}
+	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
 
 // renderDeployGateError renders a 422 with the deploy page re-shown and

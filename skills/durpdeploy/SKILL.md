@@ -464,6 +464,13 @@ Scoped project lists, deployment lists, activity, and totals exclude unrelated p
 Shared lifecycle reads require assignment to a selected project.
 Environment reads follow selected projects' lifecycle eligibility and historical usage.
 Projects without a lifecycle retain access to all environments.
+Scoped variables require an existing environment, including projects without a lifecycle.
+Invalid environment selections return `422`.
+If a parent disappears during a variable write, the API returns `422`.
+Deployment creation returns `404` for missing release or environment selections.
+If a parent disappears during deployment admission, the API returns `409`.
+Environment deletion returns `409` with a lifecycle stage count when stages reference the environment.
+Remove those references before retrying deletion.
 Global templates, shared lifecycle variable administration, and shared-resource writes are unavailable to scoped tokens.
 Inherited project variables retain existing secret masking.
 

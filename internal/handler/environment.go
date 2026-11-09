@@ -290,7 +290,9 @@ func (h *EnvironmentHandler) DeleteEnvironment(
 	}
 
 	if err := h.Repo.DeleteEnvironment(r.Context(), id); err != nil {
-		if errors.Is(err, repository.ErrEnvironmentHasActiveDeployment) {
+		if errors.Is(err, repository.ErrEnvironmentHasActiveDeployment) ||
+			errors.Is(err, repository.ErrEnvironmentReferenced) {
+			SetToastError(w, err.Error())
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}

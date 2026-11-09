@@ -50,6 +50,7 @@ func deploymentIDFromRequest(r *http.Request) (int64, error) {
 // swagger:route POST /projects/{id}/deployments deployments createDeployment
 //
 // Start a deployment.
+// Missing parents return 404. Parents removed during admission return 409.
 //
 //	Consumes:
 //	- application/json

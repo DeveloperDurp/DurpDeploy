@@ -125,7 +125,7 @@ func TestDeploymentRetryAndRedeployCreationFailures(t *testing.T) {
 		}{
 			{"missing at lock", `CREATE TRIGGER disappear_at_release_lock
 BEFORE UPDATE OF version ON releases BEGIN SELECT RAISE(IGNORE); END`,
-				"Release or source deployment not found", http.StatusNotFound},
+				"create deployment from deployment: " + repository.ErrDeploymentParent.Error(), http.StatusConflict},
 			{"insert failure", `CREATE TRIGGER reject_deployment
 BEFORE INSERT ON deployments BEGIN SELECT RAISE(ABORT,'injected failure'); END`,
 				"injected failure", http.StatusInternalServerError},

@@ -112,7 +112,7 @@ func InternalErrorMiddleware(next http.Handler) http.Handler {
 
 		slog.Error(
 			"internal request error",
-			"error", strings.TrimSpace(ww.body.String()),
+			"error", internalErrorDetail(ww.body.Bytes()),
 			"request_id", middleware.GetReqID(r.Context()),
 			"method", r.Method,
 			"path", r.URL.Path,
@@ -134,6 +134,16 @@ func InternalErrorMiddleware(next http.Handler) http.Handler {
 		w.WriteHeader(ww.status)
 		_, _ = w.Write([]byte(internalErrorMessage + "\n"))
 	})
+}
+
+func internalErrorDetail(body []byte) string {
+	var response struct {
+		Error string `json:"error"`
+	}
+	if json.Unmarshal(body, &response) == nil && response.Error != "" {
+		return response.Error
+	}
+	return strings.TrimSpace(string(body))
 }
 
 func IsUniqueViolation(err error) bool {

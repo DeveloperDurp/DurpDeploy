@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"database/sql"
 	"durpdeploy/internal/testutil"
 	"errors"
 	"testing"
@@ -120,7 +119,7 @@ func TestReleaseDeleteSerializesCreationAcrossDatabases(t *testing.T) {
 			_, err = second.CreateDeployment(ctx, db.CreateDeploymentParams{
 				ReleaseID: 1, EnvironmentID: 1, Status: "pending",
 			})
-			if !errors.Is(err, sql.ErrNoRows) {
+			if !errors.Is(err, ErrDeploymentParent) {
 				t.Fatalf("creation after deletion=%v", err)
 			}
 		})

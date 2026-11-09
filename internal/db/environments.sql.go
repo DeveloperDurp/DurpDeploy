@@ -10,6 +10,17 @@ import (
 	"database/sql"
 )
 
+const countEnvironmentReferences = `-- name: CountEnvironmentReferences :one
+SELECT COUNT(*) FROM lifecycle_stages WHERE environment_id = ?
+`
+
+func (q *Queries) CountEnvironmentReferences(ctx context.Context, environmentID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countEnvironmentReferences, environmentID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countEnvironments = `-- name: CountEnvironments :one
 SELECT COUNT(*) FROM environments
 `

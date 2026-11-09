@@ -50,7 +50,7 @@ func (h *VariableHandler) variableEnvironmentScope(
 	}
 	if !allowed {
 		RespondError(w, http.StatusUnprocessableEntity,
-			"Environment is not in project lifecycle")
+			"Environment does not exist or is not in project lifecycle")
 		return scope, false
 	}
 	return scope, true
@@ -203,6 +203,7 @@ func (h *VariableHandler) ListVariables(
 // swagger:route POST /projects/{id}/variables variables createVariable
 //
 // Create a project variable.
+// Unknown environment scopes return 422, including projects without a lifecycle.
 //
 //	Consumes:
 //	- application/json

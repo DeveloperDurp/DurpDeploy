@@ -3702,7 +3702,7 @@
         ]
       },
       "delete": {
-        "description": "Delete an environment.",
+        "description": "Delete an environment.\nReferenced lifecycle stages block deletion with 409 and a stage count.",
         "tags": [
           "environments"
         ],
@@ -6930,6 +6930,7 @@
         ]
       },
       "post": {
+        "description": "Missing parents return 404. Parents removed during admission return 409.",
         "consumes": [
           "application/json"
         ],
@@ -10849,6 +10850,7 @@
         ]
       },
       "post": {
+        "description": "Unknown environment scopes return 422, including projects without a lifecycle.",
         "consumes": [
           "application/json"
         ],

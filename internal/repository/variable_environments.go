@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"durpdeploy/internal/db"
 )
@@ -39,7 +40,7 @@ func (r *Repository) VariableEnvironments(
 }
 
 // VariableEnvironmentAllowed checks a scope at the HTTP write boundary.
-// NULL is Unscoped and projects without a lifecycle retain their old policy.
+// NULL is Unscoped. Scoped variables require an existing environment.
 func (r *Repository) VariableEnvironmentAllowed(
 	ctx context.Context,
 	projectID int64,
@@ -47,6 +48,12 @@ func (r *Repository) VariableEnvironmentAllowed(
 ) (bool, error) {
 	if !environmentID.Valid {
 		return true, nil
+	}
+	if _, err := r.Queries.GetEnvironment(ctx, environmentID.Int64); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
 	}
 	project, err := r.Queries.GetProject(ctx, projectID)
 	if err != nil {

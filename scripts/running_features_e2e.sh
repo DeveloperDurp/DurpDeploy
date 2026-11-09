@@ -196,17 +196,19 @@ source "$SCRIPT_DIR/project_tokens_e2e.sh"
 source "$SCRIPT_DIR/project_templates_e2e.sh"
 source "$SCRIPT_DIR/template_library_e2e.sh"
 source "$SCRIPT_DIR/permission_roles_e2e.sh"
-browser_command=(go test -tags=e2e,packagebrowser -count=1 -timeout=5m
-    -v -run '^Test(RunningServer|RunbookDeletion|ProjectTokens|LogFollowing)BrowserE2E$' ./internal/handler/api)
+browser_command=(bash "$SCRIPT_DIR/go_test.sh" -tags=e2e,packagebrowser -count=1 -timeout=5m
+    -v -run '^(Test(RunningServer|RunbookDeletion|ProjectTokens|LogFollowing|ForeignKeyFeedback)BrowserE2E|TestForeignKeyValidationAPIWebE2E)$' ./internal/handler/api)
 if [[ ${GITLAB_CI:-} == true ]]; then
     browser_command=(bash "$SCRIPT_DIR/ci_browser_shard.sh" -- "${browser_command[@]}")
 fi
 DURPDEPLOY_LIVE_BASE="$BASE" \
+DURPDEPLOY_FOREIGN_KEY_ENV_RECORD="$TMP/foreign-key-environments" \
 DURPDEPLOY_LIVE_TOKEN_PROJECTS="$PROJECT_TOKEN_BROWSER_IDS" \
 DURPDEPLOY_LIVE_LIFECYCLE="/lifecycles/$SHARED_LC_ID" \
 DURPDEPLOY_LIVE_INHERITED="/projects/${SHARED_PROJECT_IDS[0]}/variables" \
 DURPDEPLOY_LIVE_SESSION="$SESSION_ID" \
 DURPDEPLOY_LIVE_API_TOKEN="$API_TOKEN" \
+DURPDEPLOY_LIVE_CSRF="$CSRF" \
 DURPDEPLOY_LIVE_ENV_ID="$API_ENV_ID" \
 DURPDEPLOY_LIVE_RUNBOOK_EDITOR="/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/edit" \
 DURPDEPLOY_LIVE_RUNBOOK_DELETE="$RUNBOOK_DELETE_BROWSER_PATH" \

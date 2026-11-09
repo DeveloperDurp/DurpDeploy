@@ -145,6 +145,9 @@ func (r *Repository) CreateVariable(
 	arg.Value = enc
 	v, err := r.Queries.CreateVariable(ctx, arg)
 	if err != nil {
+		if isForeignKeyViolation(err) {
+			return db.Variable{}, ErrVariableParent
+		}
 		return db.Variable{}, err
 	}
 	return r.decryptVariable(v)
@@ -173,6 +176,9 @@ func (r *Repository) UpdateVariable(
 	arg.Value = enc
 	v, err := r.Queries.UpdateVariable(ctx, arg)
 	if err != nil {
+		if isForeignKeyViolation(err) {
+			return db.Variable{}, ErrVariableParent
+		}
 		return db.Variable{}, err
 	}
 	return r.decryptVariable(v)
@@ -202,6 +208,9 @@ func (r *Repository) UpdateVariableKeepValue(
 		var err error
 		v, err = q.UpdateVariableKeepValue(ctx, arg)
 		if err != nil {
+			if isForeignKeyViolation(err) {
+				return ErrVariableParent
+			}
 			return err
 		}
 		v, err = r.decryptVariable(v)

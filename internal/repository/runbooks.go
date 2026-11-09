@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"durpdeploy/internal/db"
 )
@@ -26,14 +27,26 @@ var ErrEnvironmentHasActiveDeployment = errors.New(
 )
 
 func (r *Repository) DeleteEnvironment(ctx context.Context, id int64) error {
-	return withSQLiteBusyRetry(ctx, func() error {
+	err := withSQLiteBusyRetry(ctx, func() error {
 		return r.WithTx(ctx, func(q *db.Queries) error {
+			if _, err := q.LockDeploymentEnvironment(ctx, id); err != nil {
+				return err
+			}
 			active, err := q.HasActiveEnvironmentDeployment(ctx, id)
 			if err != nil {
 				return err
 			}
 			if active != 0 {
 				return ErrEnvironmentHasActiveDeployment
+			}
+			refs, err := q.CountEnvironmentReferences(ctx, id)
+			if err != nil {
+				return err
+			}
+			if refs != 0 {
+				return fmt.Errorf(
+					"%w by %d lifecycle stages; remove these references first",
+					ErrEnvironmentReferenced, refs)
 			}
 			deployments, err := q.ListEnvironmentDeploymentIDs(ctx, id)
 			if err != nil {
@@ -51,6 +64,11 @@ func (r *Repository) DeleteEnvironment(ctx context.Context, id int64) error {
 			return q.DeleteEnvironment(ctx, id)
 		})
 	})
+	if isForeignKeyViolation(err) {
+		return fmt.Errorf("%w; remove dependent references and try again",
+			ErrEnvironmentReferenced)
+	}
+	return err
 }
 
 func (r *Repository) DeleteProject(ctx context.Context, projectID int64) error {

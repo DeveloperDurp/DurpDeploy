@@ -380,6 +380,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 // Global admin only; deletion also removes scoped shared variables.
 //
 // Delete an environment.
+// Referenced lifecycle stages block deletion with 409 and a stage count.
 //
 //	Security:
 //	  bearer:
@@ -403,7 +404,8 @@ func (h *EnvironmentHandler) DeleteEnvironment(
 	}
 
 	if err := h.repo.DeleteEnvironment(r.Context(), id); err != nil {
-		if errors.Is(err, repository.ErrEnvironmentHasActiveDeployment) {
+		if errors.Is(err, repository.ErrEnvironmentHasActiveDeployment) ||
+			errors.Is(err, repository.ErrEnvironmentReferenced) {
 			RespondError(w, http.StatusConflict, err.Error())
 			return
 		}

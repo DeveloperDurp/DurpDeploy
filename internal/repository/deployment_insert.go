@@ -15,13 +15,18 @@ func (r *Repository) createDeploymentFromDeployment(
 	ctx context.Context, q *db.Queries, arg db.CreateDeploymentParams,
 	sourceDeploymentID int64,
 ) (DeploymentResult, error) {
-	if _, err := q.LockDeploymentEnvironment(
+	if rows, err := q.LockDeploymentEnvironment(
 		ctx,
 		arg.EnvironmentID,
 	); err != nil {
 		return DeploymentResult{}, err
+	} else if rows == 0 {
+		return DeploymentResult{}, ErrDeploymentParent
 	}
 	if err := lockRelease(ctx, q, arg.ReleaseID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return DeploymentResult{}, ErrDeploymentParent
+		}
 		return DeploymentResult{}, err
 	}
 	source, err := q.GetDeployment(ctx, sourceDeploymentID)
@@ -87,13 +92,18 @@ func (r *Repository) createDeployment(
 	if !arg.AnsibleCheckMode.Valid {
 		arg.AnsibleCheckMode = AnsibleCheckMode(false)
 	}
-	if _, err := q.LockDeploymentEnvironment(
+	if rows, err := q.LockDeploymentEnvironment(
 		ctx,
 		arg.EnvironmentID,
 	); err != nil {
 		return DeploymentResult{}, err
+	} else if rows == 0 {
+		return DeploymentResult{}, ErrDeploymentParent
 	}
 	if err := lockRelease(ctx, q, arg.ReleaseID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return DeploymentResult{}, ErrDeploymentParent
+		}
 		return DeploymentResult{}, err
 	}
 	release, err := q.GetRelease(ctx, arg.ReleaseID)
@@ -127,14 +137,11 @@ func (r *Repository) createDeploymentWithSteps(
 	steps []DeploymentStepSnapshot,
 	stepsJSON string,
 ) (DeploymentResult, error) {
-	if arg.AnsibleCheckMode.Int64 == 1 {
-		found := false
-		for _, step := range steps {
-			found = found || step.Kind == "ansible"
-		}
-		if !found {
-			return DeploymentResult{}, ErrAnsibleCheckMode
-		}
+	if err := validateAnsibleCheckMode(
+		arg.AnsibleCheckMode.Int64,
+		steps,
+	); err != nil {
+		return DeploymentResult{}, err
 	}
 	releaseKind, err := q.GetRelease(ctx, arg.ReleaseID)
 	if err != nil {
@@ -142,7 +149,12 @@ func (r *Repository) createDeploymentWithSteps(
 	}
 	txRepo := *r
 	txRepo.Queries = q
-	if err := txRepo.validateAnsibleAdmission(ctx, releaseKind.ProjectID, arg.EnvironmentID, steps); err != nil {
+	if err := txRepo.validateAnsibleAdmission(
+		ctx,
+		releaseKind.ProjectID,
+		arg.EnvironmentID,
+		steps,
+	); err != nil {
 		return DeploymentResult{}, err
 	}
 	variables, err := q.ListReleaseVariablesByRelease(ctx, arg.ReleaseID)
@@ -165,12 +177,19 @@ func (r *Repository) createDeploymentWithSteps(
 	}
 	deployment, err := q.CreateDeployment(ctx, arg)
 	if err != nil {
+		if isForeignKeyViolation(err) {
+			return DeploymentResult{}, ErrDeploymentParent
+		}
 		return DeploymentResult{}, fmt.Errorf("insert deployment: %w", err)
 	}
 	if err := r.snapshotDeploymentVariables(ctx, q, deployment); err != nil {
 		return DeploymentResult{}, err
 	}
-	if err := txRepo.validateAnsibleCapturedVariables(ctx, deployment, steps); err != nil {
+	if err := txRepo.validateAnsibleCapturedVariables(
+		ctx,
+		deployment,
+		steps,
+	); err != nil {
 		return DeploymentResult{}, err
 	}
 	if gated {

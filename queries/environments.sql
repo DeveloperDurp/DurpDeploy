@@ -36,6 +36,9 @@ WHERE id = sqlc.arg(id) RETURNING *;
 -- name: DeleteEnvironment :exec
 DELETE FROM environments WHERE id = ?;
 
+-- name: CountEnvironmentReferences :one
+SELECT COUNT(*) FROM lifecycle_stages WHERE environment_id = ?;
+
 -- name: ListEnvironmentDeploymentIDs :many
 SELECT id FROM deployments WHERE environment_id = ?;
 

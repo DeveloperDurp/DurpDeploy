@@ -55,9 +55,13 @@ func (h *VariableHandler) variableEnvironmentScope(
 		return environmentID, false
 	}
 	if !allowed {
+		SetToastError(
+			w,
+			"Environment does not exist or is not in project lifecycle",
+		)
 		http.Error(
 			w,
-			"Environment is not in project lifecycle",
+			"Environment does not exist or is not in project lifecycle",
 			http.StatusUnprocessableEntity,
 		)
 		return environmentID, false

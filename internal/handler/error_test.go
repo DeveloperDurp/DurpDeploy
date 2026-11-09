@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -40,6 +41,18 @@ func TestIsUniqueViolation(t *testing.T) {
 				t.Fatal("wrapped error classified differently")
 			}
 		})
+	}
+}
+
+func TestInternalErrorDetail(t *testing.T) {
+	for _, tc := range []struct{ body, want string }{
+		{`{"error":"insert deployment: constraint failed"}`, "insert deployment: constraint failed"},
+		{"plain failure\n", "plain failure"},
+		{`{"error":42}`, `{"error":42}`},
+	} {
+		if got := internalErrorDetail([]byte(tc.body)); got != tc.want {
+			t.Fatalf("got %q, want %q", got, tc.want)
+		}
 	}
 }
 
@@ -86,6 +99,10 @@ func TestInternalErrorMiddlewareSanitizesWebResponseAndLogsDetail(
 }
 
 func TestInternalErrorMiddlewareUsesStableAPIContract(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
 	h := InternalErrorMiddleware(http.HandlerFunc(
 		func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -102,6 +119,13 @@ func TestInternalErrorMiddlewareUsesStableAPIContract(t *testing.T) {
 	}
 	if rec.Body.String() != `{"error":"internal server error"}`+"\n" {
 		t.Fatalf("body = %q, want stable JSON error", rec.Body.String())
+	}
+	var entry struct{ Error string }
+	if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
+		t.Fatal(err)
+	}
+	if entry.Error != "cipher: invalid ciphertext" {
+		t.Fatalf("double-encoded diagnostic: %q", entry.Error)
 	}
 }
 
