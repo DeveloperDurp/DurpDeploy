@@ -35,8 +35,9 @@ func NewRunbookHandler(
 //
 // Responses:
 // 200: body:RunbookListResponse
+// 404: body:NotFoundError
 func (h *RunbookHandler) List(w http.ResponseWriter, r *http.Request) {
-	projectID, ok := requireProjectFromContext(w, r)
+	projectID, ok := requireExistingProject(w, r, h.repo)
 	if !ok {
 		return
 	}

@@ -62,6 +62,7 @@ func TestAgentPairingFailureKeepsProtectedValuesPrivate(t *testing.T) {
 			}
 			request := httptest.NewRequest(http.MethodPost,
 				"/api/v1/admin/agents/pair", bytes.NewReader(body))
+			request.Header.Set("Content-Type", "application/json")
 			recorder := httptest.NewRecorder()
 
 			// When: the API handles a failed pairing transport.

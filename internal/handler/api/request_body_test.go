@@ -60,6 +60,7 @@ func TestAPI_RequestBodyRejectsInvalidInputBeforeMutation(t *testing.T) {
 							strings.NewReader(tc.body),
 						)
 						req.Header.Set("Authorization", "Bearer "+token)
+						req.Header.Set("Content-Type", "application/json")
 						if unknownLength {
 							req.ContentLength = -1
 						}
@@ -125,6 +126,7 @@ func TestAPI_RequestBodyScriptBoundaryAndRejectedUpdate(t *testing.T) {
 			strings.NewReader(prefix+script+strings.Repeat("a", delta)+suffix))
 		req.ContentLength = -1
 		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 		// When
 		router.ServeHTTP(rec, req)
@@ -163,6 +165,7 @@ func TestAPI_RequestBodyScriptBoundaryAndRejectedUpdate(t *testing.T) {
 			strings.NewReader(tc.body),
 		)
 		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 		if rec.Code != tc.status {
@@ -215,6 +218,7 @@ func TestAPI_RequestBodyNestedAndBodylessContracts(t *testing.T) {
 			strings.NewReader(tc.body),
 		)
 		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 		// When
 		router.ServeHTTP(rec, req)

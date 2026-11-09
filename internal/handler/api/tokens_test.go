@@ -85,7 +85,7 @@ func seedToken(
 }
 
 func withUser(r *http.Request, u *db.User) *http.Request {
-	return auth.SetUser(r, u)
+	return withAPIUser(r, u)
 }
 
 func withURLParam(r *http.Request, key, value string) *http.Request {

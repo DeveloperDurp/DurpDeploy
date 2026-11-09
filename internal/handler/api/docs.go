@@ -3,6 +3,9 @@
 // JSON request bodies are limited to 4 MiB of encoded bytes and must contain
 // exactly one object matching the endpoint schema. Unknown fields, null, and
 // trailing data return 400. Oversized bodies return 413 before mutation.
+// JSON-body endpoints require Content-Type: application/json.
+// Valid media-type parameters are accepted. Missing, malformed, or other
+// media types return 415. Browser form parsing remains separate.
 // Control actions accept an empty body or an empty JSON object.
 // Caller-text lint has smaller fixed ceilings documented at POST /lint.
 // Its strict schema also rejects duplicate fields and invalid Unicode.

@@ -139,6 +139,11 @@ func TestRunningServerBrowserE2E(t *testing.T) {
 			b.evaluate(t, fmt.Sprintf(`(() => {
  const root = document.querySelector('#project-edit-content');
  root.querySelector('[name=name]').value = %q;
+ const projectForm = root.querySelector('form[hx-post="/projects"]');
+ if (projectForm) {
+   projectForm.setAttribute('hx-post', '/projects?q=' + encodeURIComponent(root.querySelector('[name=name]').value));
+   htmx.process(projectForm);
+ }
  const image = root.querySelector('[name=container_image]');
  const script = root.querySelector('[name=script_body]');
  if (image) image.value = 'harbor.durp.info/dockerhub/library/bash:5.2';

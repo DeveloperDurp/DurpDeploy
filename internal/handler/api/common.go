@@ -1,7 +1,8 @@
 package api
 
 import (
-	"durpdeploy/internal/roles"
+	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,6 +11,8 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/handler"
+	"durpdeploy/internal/repository"
+	"durpdeploy/internal/roles"
 )
 
 func readJSONBool(w http.ResponseWriter, r *http.Request, v any) bool {
@@ -69,6 +72,27 @@ func requireProjectFromContext(
 		return 0, false
 	}
 	return pid, true
+}
+
+func requireExistingProject(
+	w http.ResponseWriter,
+	r *http.Request,
+	repo *repository.Repository,
+) (int64, bool) {
+	id, ok := requireProjectFromContext(w, r)
+	if !ok {
+		return 0, false
+	}
+	_, err := repo.Queries.GetProject(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		RespondError(w, http.StatusNotFound, "Project not found")
+		return 0, false
+	}
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "Cannot read project")
+		return 0, false
+	}
+	return id, true
 }
 
 // MethodNotAllowedJSON is a chi-compatible 405 handler that returns JSON.

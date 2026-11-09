@@ -274,10 +274,14 @@ func (h *ProjectTemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 //
 //	200: body:ProjectTemplateListResponse
 //	403: body:ForbiddenError
+//	404: body:NotFoundError
 func (h *ProjectTemplateHandler) ListForProject(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	if _, ok := requireExistingProject(w, r, h.repo); !ok {
+		return
+	}
 	h.List(w, r)
 }
 

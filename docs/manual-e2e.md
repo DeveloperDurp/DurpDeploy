@@ -3757,6 +3757,31 @@ Open the dashboard, projects, environments, and `/api/swagger/` in a browser.
 Confirm that styles and scripts load.
 These checks create no records or schedules.
 
+## JSON media types and missing project parents
+
+Send an authenticated JSON-body request with `Content-Type: application/json; charset=utf-8`.
+Expect the endpoint's normal success response.
+Repeat the request without `Content-Type`, with `text/plain`, and with a malformed media type.
+Expect HTTP 415 without a record change.
+Send an empty-body control action without `Content-Type`.
+Expect the action's normal response.
+
+Request variables, steps, runbooks, and project templates for a missing project with a global administrator token.
+Expect HTTP 404 for each list.
+Repeat with non-administrator global tokens and expect HTTP 404.
+Scoped tokens retain HTTP 403 for projects outside their selection.
+
+Run the isolated API contract and parser checks:
+
+```bash
+bash scripts/go_test.sh -tags=e2e -run '^TestAPIConsistencyE2E$' ./internal/handler/api
+bash scripts/go_test.sh -run '^TestReadJSONContentType' ./internal/handler
+```
+
+Run `make e2e-test` against the thread stack for retained API and browser examples.
+The media-type checks retain an environment named `body-content-type-<run-id>`.
+These checks do not create schedules.
+
 ## Security consistency checks
 
 Use the thread stack URL from its `connection.json` file.

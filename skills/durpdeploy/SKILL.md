@@ -20,6 +20,13 @@ Do not switch clients to bypass authorization or validation failures.
 After an uncertain write, inspect server state before any retry through either client.
 A lost response or timeout does not prove that the server rejected the write.
 
+Send `Content-Type: application/json` to JSON-body endpoints under `/api/v1`.
+Valid media-type parameters, including `charset=utf-8`, remain accepted.
+Missing, malformed, or non-JSON media types return `415` before mutation.
+Empty-body control actions do not require this header.
+Missing project parents return `404` from variable, step, runbook, and project-template lists after authorization checks.
+Scoped tokens still receive `403` for projects outside their selection.
+
 ## Analyze caller-supplied script text
 
 Send `POST /api/v1/lint` with a valid PAT and an `application/json` body.

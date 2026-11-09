@@ -162,6 +162,10 @@ func seedDeployment(
 }
 
 func withAPIUser(r *http.Request, u *db.User) *http.Request {
+	if r.Body != nil && r.Body != http.NoBody &&
+		r.Header.Get("Content-Type") == "" {
+		r.Header.Set("Content-Type", "application/json")
+	}
 	return auth.SetUser(r, u)
 }
 

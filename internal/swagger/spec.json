@@ -7,7 +7,7 @@
   ],
   "swagger": "2.0",
   "info": {
-    "description": "JSON request bodies are limited to 4 MiB of encoded bytes and must contain\nexactly one object matching the endpoint schema. Unknown fields, null, and\ntrailing data return 400. Oversized bodies return 413 before mutation.\nControl actions accept an empty body or an empty JSON object.\nCaller-text lint has smaller fixed ceilings documented at POST /lint.\nIts strict schema also rejects duplicate fields and invalid Unicode.\n\nPermission order: viewer \u003c deployer \u003c maintainer \u003c admin.\nDeployers can start existing releases, retry, re-run, and cancel deployments.\nMaintainers can author content and execute runbooks within admin boundaries.\nProject membership and token ceilings also limit each operation.\nExplicit-role tokens cannot manage API tokens.\nUnrestricted global tokens can change their owner's local password with\ncurrent-password verification, including for Viewer and Deployer owners.\n\nRequests use the host, port, and scheme that serve this specification.",
+    "description": "JSON request bodies are limited to 4 MiB of encoded bytes and must contain\nexactly one object matching the endpoint schema. Unknown fields, null, and\ntrailing data return 400. Oversized bodies return 413 before mutation.\nJSON-body endpoints require Content-Type: application/json.\nValid media-type parameters are accepted. Missing, malformed, or other\nmedia types return 415. Browser form parsing remains separate.\nControl actions accept an empty body or an empty JSON object.\nCaller-text lint has smaller fixed ceilings documented at POST /lint.\nIts strict schema also rejects duplicate fields and invalid Unicode.\n\nPermission order: viewer \u003c deployer \u003c maintainer \u003c admin.\nDeployers can start existing releases, retry, re-run, and cancel deployments.\nMaintainers can author content and execute runbooks within admin boundaries.\nProject membership and token ceilings also limit each operation.\nExplicit-role tokens cannot manage API tokens.\nUnrestricted global tokens can change their owner's local password with\ncurrent-password verification, including for Viewer and Deployer owners.\n\nRequests use the host, port, and scheme that serve this specification.",
     "title": "durpdeploy REST API.",
     "version": "1.0.0"
   },
@@ -7889,6 +7889,12 @@
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
             }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
           }
         },
         "security": [
@@ -9024,6 +9030,12 @@
             "schema": {
               "$ref": "#/definitions/RunbookListResponse"
             }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
           }
         }
       },
@@ -10081,6 +10093,12 @@
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -10809,6 +10827,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {

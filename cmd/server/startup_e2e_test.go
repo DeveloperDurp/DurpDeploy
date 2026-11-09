@@ -306,6 +306,7 @@ func assertStartupBodyLimit(t *testing.T, base, token string, override bool) {
 			t.Fatal(err)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
 		response, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)

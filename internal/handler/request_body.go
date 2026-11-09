@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"strings"
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/config"
@@ -96,8 +98,19 @@ func decodeJSONBody(body []byte, v any) error {
 }
 
 // ReadJSON requires one bounded, closed-schema JSON object.
+// Public API requests must declare application/json, with optional parameters.
 func ReadJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	body, err := ReadRequestBody(w, r, RequestBodyLimits(r).JSONBytes)
+	if err == nil && strings.HasPrefix(r.URL.Path, "/api/v1/") {
+		mediaType, _, mediaErr := mime.ParseMediaType(
+			r.Header.Get("Content-Type"),
+		)
+		if mediaErr != nil || mediaType != "application/json" {
+			auth.RenderJSONError(w, http.StatusUnsupportedMediaType,
+				"Content-Type must be application/json")
+			return false
+		}
+	}
 	if err == nil {
 		err = decodeJSONBody(body, v)
 	}

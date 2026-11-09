@@ -32,6 +32,16 @@ assert len(body) == limit
 PY
 
 BODY_COUNT_BEFORE=$(api_get "$BASE/api/v1/environments" | python3 -c 'import sys,json;print(json.load(sys.stdin)["total"])')
+for BODY_TYPE in '' text/plain application/x-www-form-urlencoded 'application/json; charset'; do
+    CODE=$(curl -sS -H "Authorization: Bearer $API_TOKEN" \
+        -H "Content-Type: $BODY_TYPE" --data-binary '{"name":"body-rejected"}' \
+        -o /dev/null -w '%{http_code}' "$BASE/api/v1/environments")
+    [[ "$CODE" == 415 ]] || { echo "FAIL: JSON media type '$BODY_TYPE' got $CODE"; exit 1; }
+done
+for BODY_PARENT_LIST in variables steps runbooks project-templates; do
+    CODE=$(api_get_code "$BASE/api/v1/projects/9223372036854775806/$BODY_PARENT_LIST")
+    [[ "$CODE" == 404 ]] || { echo "FAIL: missing project $BODY_PARENT_LIST got $CODE"; exit 1; }
+done
 for BODY_JSON in \
     '{"name":"body-rejected","extra":true}' \
     '{"name":"body-rejected"} {}' \
@@ -78,6 +88,14 @@ PY
 done
 BODY_COUNT_AFTER=$(api_get "$BASE/api/v1/environments" | python3 -c 'import sys,json;print(json.load(sys.stdin)["total"])')
 [[ "$BODY_COUNT_AFTER" == "$BODY_COUNT_BEFORE" ]] || { echo "FAIL: rejected bodies mutated environments"; exit 1; }
+
+CODE=$(curl -sS -H "Authorization: Bearer $API_TOKEN" \
+    -H 'Content-Type: application/json; charset=utf-8' \
+    --data-binary "{\"name\":\"body-content-type-${E2E_RUN_ID:-${TMP##*/}}\"}" \
+    -o "$BODY_DIR/media-type.json" -w '%{http_code}' "$BASE/api/v1/environments")
+[[ "$CODE" == 201 ]] || { echo "FAIL: parameterized JSON got $CODE"; exit 1; }
+BODY_MEDIA_ID=$(python3 -c 'import json,sys;print(int(json.load(open(sys.argv[1]))["id"]))' "$BODY_DIR/media-type.json")
+echo "  Parameterized JSON example: $BASE/environments/$BODY_MEDIA_ID/edit"
 
 for BODY_TOKEN_SOURCE in form header; do
     BODY_HEADERS=()

@@ -110,14 +110,14 @@ func toVariableResponse(v db.Variable) variableResponse {
 //	  200: body:VariableListResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
+//	  404: body:NotFoundError
 //	  500: body:ServerError
 func (h *VariableHandler) ListVariables(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	projectID, ok := auth.ProjectIDFromContext(r.Context())
+	projectID, ok := requireExistingProject(w, r, h.repo)
 	if !ok {
-		RespondError(w, http.StatusBadRequest, "Invalid project ID")
 		return
 	}
 	limit, offset, ok := parsePagination(w, r)

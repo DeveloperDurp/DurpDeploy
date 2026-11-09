@@ -40,11 +40,11 @@ type reorderStepsRequest struct {
 //	  200: body:StepListResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
+//	  404: body:NotFoundError
 //	  500: body:ServerError
 func (h *StepHandler) ListSteps(w http.ResponseWriter, r *http.Request) {
-	projectID, ok := auth.ProjectIDFromContext(r.Context())
+	projectID, ok := requireExistingProject(w, r, h.repo)
 	if !ok {
-		RespondError(w, http.StatusBadRequest, "Invalid project ID")
 		return
 	}
 	limit, offset, ok := parsePagination(w, r)
