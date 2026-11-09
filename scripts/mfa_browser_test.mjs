@@ -479,6 +479,47 @@ async function passkeyLogin(page, url) {
 	await page.waitForURL(`${url}/`);
 }
 
+async function passkeyCounterWarningContract(page, adminPage, app, authenticator, ownerToken, adminToken, artifactDir) {
+	const { credentials } = await authenticator.cdp.send("WebAuthn.getCredentials", {
+		authenticatorId: authenticator.authenticatorId,
+	});
+	check(credentials.length === 1 && credentials[0].signCount > 0, "counter fixture lacks one active credential");
+	const credential = credentials[0];
+	await authenticator.cdp.send("WebAuthn.removeCredential", {
+		authenticatorId: authenticator.authenticatorId, credentialId: credential.credentialId,
+	});
+	// Chrome increments before signing. Rewind once to sign a fresh challenge
+	// with the same nonzero count as the server's last successful assertion.
+	await authenticator.cdp.send("WebAuthn.addCredential", {
+		authenticatorId: authenticator.authenticatorId,
+		credential: { ...credential, signCount: credential.signCount - 1 },
+	});
+	await passkeyLogin(page, app.url);
+	await page.goto(`${app.url}/settings/security`);
+	await page.locator("[data-passkey-counter-warning]").waitFor({ state: "visible" });
+	await page.screenshot({ path: join(artifactDir, "passkey-counter-warning.png") });
+	const rows = await page.evaluate(async (token) => {
+		const response = await fetch("/api/v1/security/passkeys", { headers: { Authorization: `Bearer ${token}` } });
+		if (response.status !== 200) throw new Error("owner passkey API failed");
+		return response.json();
+	}, ownerToken);
+	check(rows.length === 1 && rows[0].clone_warning === true, "owner API lost warning state");
+	const events = await adminPage.evaluate(async (token) => {
+		const response = await fetch("/api/v1/admin/audit?action=mfa_passkey_clone_warning", { headers: { Authorization: `Bearer ${token}` } });
+		if (response.status !== 200) throw new Error("warning audit API failed");
+		return response.json();
+	}, adminToken);
+	check(events.items.length === 1, "equal-counter login did not emit exactly one warning event");
+	check(JSON.parse(events.items[0].details.String).purpose === "login", "warning event lost ceremony attribution");
+	await adminPage.goto(`${app.url}/admin/audit?action=mfa_passkey_clone_warning`);
+	await adminPage.getByText("mfa_passkey_clone_warning", { exact: true }).first().waitFor({ state: "visible" });
+	await adminPage.screenshot({ path: join(artifactDir, "passkey-counter-audit.png") });
+	await passkeyLogin(page, app.url);
+	await page.goto(`${app.url}/settings/security`);
+	await page.locator("[data-passkey-counter-warning]").waitFor({ state: "visible" });
+	emitScenario("passkey-counter-warning");
+}
+
 async function configuredPasskeyContract(page, url, artifactDir) {
 	await reauthenticate(page, url);
 	const rename = page.locator('form[action="/settings/security/passkeys/rename"]').first();
@@ -637,7 +678,7 @@ async function run() {
 		}, { url: app.url, token: adminToken, id: deployer.id, name: longDeployerName });
 		await passwordLogin(deployerPage, app.url, "deployer@mfa.test", passwords.deployer);
 		await accountContract(deployerPage, app.url, "deployer", false, artifactDir);
-		await addAuthenticator(deployerContext, deployerPage);
+		const deployerAuthenticator = await addAuthenticator(deployerContext, deployerPage);
 		await enrollPasskey(
 			deployerPage,
 			app.url,
@@ -645,6 +686,7 @@ async function run() {
 			null,
 			artifactDir,
 		);
+		await passkeyCounterWarningContract(deployerPage, adminPage, app, deployerAuthenticator, deployerToken, adminToken, artifactDir);
 		await fallbackContract(browser, app.url, "cancel", browserErrors);
 		await fallbackContract(browser, app.url, "unsupported", browserErrors);
 		await passkeyLogin(deployerPage, app.url);

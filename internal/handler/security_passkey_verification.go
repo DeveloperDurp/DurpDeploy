@@ -132,6 +132,7 @@ func (h *AuthHandler) SecurityPasskeyTestFinishPost(
 		h.writePasskeyError(w, err)
 		return
 	}
+	h.auditPasskeyCloneWarning(r, activation.Credential, "activation")
 	h.clearBrowserSessionCookie(w)
 	h.clearPasskeyVerificationCookies(w)
 	w.Header().Set("Content-Type", "application/json")

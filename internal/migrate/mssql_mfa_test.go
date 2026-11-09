@@ -91,6 +91,14 @@ func TestMSSQL_MFASchemaParity(t *testing.T) {
 	if updatedCredential.SignCount != 7 || updatedCredential.CloneWarning != 1 {
 		t.Fatalf("updated WebAuthn credential = %#v", updatedCredential)
 	}
+	updatedCredential, err = queries.UpdateWebAuthnCredentialCounter(ctx,
+		db.UpdateWebAuthnCredentialCounterParams{
+			CredentialID: credentialID, SignCount: 8, CloneWarning: 0,
+		})
+	requireNoError(t, err, "preserve WebAuthn warning")
+	if updatedCredential.CloneWarning != 1 || updatedCredential.SignCount != 8 {
+		t.Fatalf("warning did not persist: %#v", updatedCredential)
+	}
 	_, err = queries.CreateWebAuthnCredential(ctx, credential)
 	if err == nil {
 		t.Fatal("duplicate WebAuthn credential succeeded")

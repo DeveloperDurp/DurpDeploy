@@ -688,6 +688,8 @@ func newRouter(
 		ar.MethodNotAllowed(api.MethodNotAllowedJSON)
 
 		tokensH := api.NewAPITokenHandler(repo)
+		passkeysH := api.NewSecurityPasskeysHandler(repo)
+		ar.Get("/security/passkeys", passkeysH.List)
 		ar.Get("/version", api.EmptyBody(api.Version))
 
 		// Admin-only sub-group.

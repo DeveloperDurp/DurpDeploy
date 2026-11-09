@@ -189,16 +189,16 @@ func (h *AuthHandler) completeSecurityReauthentication(
 	r *http.Request,
 	binding mfa.ChallengeBinding,
 	verify func(context.Context, *db.Queries) error,
-) {
+) bool {
 	_, session, ok := h.securityIdentity(r)
 	if !ok {
 		http.Error(w, "unauthenticated", http.StatusUnauthorized)
-		return
+		return false
 	}
 	exportID, err := h.secretExportForMFA(r, binding.Token)
 	if err != nil {
 		secretExportError(w, r, err)
-		return
+		return false
 	}
 	if err := h.challengeService().ConsumeWith(r.Context(), binding, func(
 		ctx context.Context,
@@ -208,9 +208,10 @@ func (h *AuthHandler) completeSecurityReauthentication(
 		return verify(ctx, queries)
 	}); err != nil {
 		h.recordSecurityFailure(w, r, binding)
-		return
+		return false
 	}
 	h.finishSecurityReauthentication(w, r, session, exportID)
+	return true
 }
 
 func (h *AuthHandler) recordSecurityFailure(

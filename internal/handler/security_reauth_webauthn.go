@@ -141,12 +141,14 @@ func (h *AuthHandler) SecurityReauthWebAuthnFinish(
 		h.writeSecurityChallengeError(w, err)
 		return
 	}
-	h.completeSecurityReauthentication(
+	var updated db.WebauthnCredential
+	if h.completeSecurityReauthentication(
 		w,
 		r,
 		state.Binding,
 		func(ctx context.Context, queries *db.Queries) error {
-			_, err := factors.UpdateCredentialCounterWith(
+			var err error
+			updated, err = factors.UpdateCredentialCounterWith(
 				ctx,
 				queries,
 				credential.ID,
@@ -155,5 +157,7 @@ func (h *AuthHandler) SecurityReauthWebAuthnFinish(
 			)
 			return err
 		},
-	)
+	) {
+		h.auditPasskeyCloneWarning(r, updated, "reauthentication")
+	}
 }

@@ -36,10 +36,10 @@ func (h *AuthHandler) completeMFAJSON(
 	w http.ResponseWriter,
 	r *http.Request,
 	completion mfaCompletion,
-) {
+) bool {
 	if err := h.completeMFAChallenge(w, r, completion); err != nil {
 		h.writeMFAJSONError(w, r, err)
-		return
+		return false
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).
@@ -48,6 +48,7 @@ func (h *AuthHandler) completeMFAJSON(
 		}); err != nil {
 		h.writeMFAJSONError(w, r, err)
 	}
+	return true
 }
 
 func (h *AuthHandler) completeMFAChallenge(

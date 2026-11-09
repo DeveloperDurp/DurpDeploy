@@ -1,5 +1,34 @@
 # Manual checks after `make e2e-test`
 
+## Passkey counter warnings (#190)
+
+Create a dedicated stack outside the thread teardown registration.
+Run the live browser check against its connection record.
+
+```bash
+make dev-stack STATE=/absolute/path/to/retained-stack
+node scripts/passkey_warning_live_test.mjs /absolute/path/to/retained-stack/connection.json artifacts/passkey-warning
+```
+
+The check retains the account, enrolled virtual passkey, warning, and audit history.
+The stack directory contains `passkey-warning-identity.json` with the account password and private virtual passkey.
+Keep that file private.
+Do not upload it with screenshots.
+The check creates no schedules.
+
+Repeat the browser command to authenticate against a fresh challenge with an equal nonzero counter.
+Confirm that authentication succeeds.
+Open the retained `/settings/security` page with the test account.
+Confirm that the affected passkey shows `Counter warning` and explains that this does not prove cloning.
+As an administrator, open `/admin/audit?action=mfa_passkey_clone_warning`.
+Confirm that each successful flagged ceremony adds one attributed warning event.
+Use the owner API and audit API responses in `api.json` to repeat the read checks.
+Confirm that a later successful assertion keeps the warning visible.
+
+Use the printed URL and generated identity file for account details.
+Use the stack's `tls/ca.pem` for scoped certificate trust.
+After manual review, stop the retained stack with `make dev-stack ACTION=down STATE=/absolute/path/to/retained-stack`.
+
 ## Token mint ceilings (#186)
 
 Run `make e2e-test` against the thread-owned stack.

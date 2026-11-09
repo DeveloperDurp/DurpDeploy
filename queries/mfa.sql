@@ -43,8 +43,8 @@ SELECT * FROM webauthn_credentials WHERE user_id = ? ORDER BY created_at, name;
 
 -- name: UpdateWebAuthnCredentialCounter :one
 UPDATE webauthn_credentials
-SET sign_count = ?, clone_warning = ?, updated_at = unixepoch()
-WHERE credential_id = ? RETURNING *;
+SET sign_count = sqlc.arg(sign_count), clone_warning = CASE WHEN clone_warning = 1 THEN 1 ELSE sqlc.arg(clone_warning) END, updated_at = unixepoch()
+WHERE credential_id = sqlc.arg(credential_id) RETURNING *;
 
 -- name: DeleteWebAuthnCredential :exec
 DELETE FROM webauthn_credentials WHERE credential_id = ?;

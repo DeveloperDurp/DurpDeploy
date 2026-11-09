@@ -200,4 +200,5 @@ func TestSecurity_ReauthPasskeyFinishRefreshesSessionAndRecordsCloneWarning(
 			credential.CloneWarning,
 		)
 	}
+	assertPasskeyWarningAudit(t, h, current.user.ID, "reauthentication", 1)
 }

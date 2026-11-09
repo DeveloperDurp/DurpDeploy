@@ -164,6 +164,11 @@ func TestFactorStore_CredentialLoadAndCounterUpdate_roundTrip(t *testing.T) {
 	if updated.SignCount != 7 || updated.CloneWarning != 1 {
 		t.Fatalf("updated credential = %#v", updated)
 	}
+	// A later assertion loaded before detection must not clear the warning.
+	updated, err = store.UpdateCredentialCounter(ctx, credentialID, 8, 0)
+	if err != nil || updated.CloneWarning != 1 || updated.SignCount != 8 {
+		t.Fatalf("warning was cleared by a stale update: %#v, %v", updated, err)
+	}
 }
 
 func TestFactorStore_ConcurrentRegeneration_persistsOneCompleteReplacement(

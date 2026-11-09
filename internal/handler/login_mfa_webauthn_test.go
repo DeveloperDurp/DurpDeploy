@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
@@ -21,6 +22,18 @@ import (
 )
 
 func TestLogin_WebAuthnCompletesPendingChallenge(t *testing.T) {
+	for _, counter := range []int64{0, 1, 2} {
+		t.Run(fmt.Sprint(counter), func(t *testing.T) {
+			checkPasskeyLoginCounter(t, counter, false)
+		})
+	}
+	t.Run("audit failure", func(t *testing.T) {
+		checkPasskeyLoginCounter(t, 1, true)
+	})
+}
+
+func checkPasskeyLoginCounter(t *testing.T, counter int64, auditFailure bool) {
+	t.Helper()
 	// Given
 	h := newAuthHarness(t)
 	configureMFA(t, h, mfa.Config{WebAuthn: mfa.WebAuthnConfig{
@@ -45,6 +58,7 @@ func TestLogin_WebAuthnCompletesPendingChallenge(t *testing.T) {
 			Name:           "test credential",
 			PublicKey:      publicKey,
 			TransportsJson: "[]",
+			SignCount:      counter,
 			Flags: int64(protocol.FlagUserPresent | protocol.FlagUserVerified |
 				protocol.FlagBackupEligible | protocol.FlagBackupState),
 			AttestationType:   "none",
@@ -96,6 +110,12 @@ func TestLogin_WebAuthnCompletesPendingChallenge(t *testing.T) {
 	); err != nil {
 		t.Fatalf("replace assertion ceremony: %v", err)
 	}
+	if auditFailure {
+		if _, err := h.repo.DB.ExecContext(context.Background(),
+			"DROP TABLE audit_log"); err != nil {
+			t.Fatal(err)
+		}
+	}
 	finish, err := http.NewRequest(
 		http.MethodPost,
 		h.server+"/login/mfa/webauthn/finish",
@@ -132,6 +152,40 @@ func TestLogin_WebAuthnCompletesPendingChallenge(t *testing.T) {
 	if sessionCount(t, h, user.ID) != 1 {
 		t.Fatal("WebAuthn completion did not create one final session")
 	}
+	stored, err := h.repo.Queries.GetWebAuthnCredentialByID(
+		context.Background(), credentialID)
+	if err != nil || (stored.CloneWarning == 1) != (counter > 0) {
+		t.Fatalf(
+			"unexpected persisted warning state: %v, %v",
+			stored.CloneWarning,
+			err,
+		)
+	}
+	if auditFailure {
+		return
+	}
+	expected := 0
+	if counter > 0 {
+		expected = 1
+	}
+	assertPasskeyWarningAudit(t, h, user.ID, "login", expected)
+	// Reusing the consumed challenge must not emit another warning event.
+	replay, err := http.NewRequest(http.MethodPost,
+		h.server+"/login/mfa/webauthn/finish", bytes.NewReader(assertion))
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay.Header.Set("Content-Type", "application/json")
+	replay.Header.Set("X-CSRF-Token", pending.csrf)
+	response, err := pending.client.Do(replay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode < 400 {
+		t.Fatal("consumed challenge accepted")
+	}
+	assertPasskeyWarningAudit(t, h, user.ID, "login", expected)
 }
 
 func TestLogin_WebAuthnAndDialogBindingsAreDelegated(t *testing.T) {

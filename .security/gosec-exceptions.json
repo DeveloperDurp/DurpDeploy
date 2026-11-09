@@ -606,7 +606,7 @@
     "rule": "G710",
     "file": "internal/handler/login_mfa_completion.go",
     "line": "32",
-    "source_sha256": "c6d35e64bce7c6c4941131a10250fdd8fa881b32cb491f81209dde2aab10d43e",
+    "source_sha256": "ec70269c7891980a920144a9f576f500d4b355e8ab2886d28d6193e4a59fcb98",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "MFA redirects only after atomic factor and session completion through takeLoginDestination. This helper bounds and decodes the cookie, then SafeLoginDestination accepts only validated local paths and queries. Evidence: internal/auth/login_destination_test.go; internal/handler/login_destination_test.go; TOTP, recovery, and WebAuthn completion tests."

@@ -207,6 +207,11 @@ func TestWebAuthn_CounterMappingPersistsIncreaseAndCloneWarnings(t *testing.T) {
 	}
 
 	// When: the upstream authenticator counter increases, equals, and decreases.
+	zero := webauthn.Authenticator{}
+	zero.UpdateCounter(0)
+	if zero.CloneWarning {
+		t.Fatal("two zero counters triggered a warning")
+	}
 	credential.Authenticator.UpdateCounter(1)
 	increased, err := CredentialToDB(credential, user.ID, "vector")
 	if err != nil {

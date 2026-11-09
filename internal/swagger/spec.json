@@ -11364,6 +11364,60 @@
         ]
       }
     },
+    "/security/passkeys": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "security"
+        ],
+        "summary": "List the token owner's passkey warning state. Project-scoped tokens are rejected.",
+        "operationId": "listOwnPasskeys",
+        "responses": {
+          "200": {
+            "description": "Owned passkey warning metadata",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "credential_id",
+                  "name",
+                  "clone_warning"
+                ],
+                "properties": {
+                  "clone_warning": {
+                    "type": "boolean"
+                  },
+                  "credential_id": {
+                    "description": "Base64url credential identifier without padding",
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Token is restricted to selected projects"
+          },
+          "500": {
+            "description": "Could not load passkeys"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/template-library": {
       "get": {
         "tags": [

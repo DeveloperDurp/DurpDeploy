@@ -117,6 +117,13 @@ phishing-resistant. Passkeys are bound to the single origin and RP ID derived
 from `DURPDEPLOY_URL`. Changing its hostname or origin invalidates the stored
 credential relationship and requires passkey re-enrollment.
 
+Passkey counter warnings use a warn, flag, and audit policy without blocking otherwise valid authentication.
+Non-increasing counters trigger the library warning when either counter is nonzero.
+Two zero counters alone do not trigger a warning, and synced authenticators require operator review rather than assumptions about cloning.
+Warnings persist until credential deletion and appear on the owner's Security page and `GET /api/v1/security/passkeys`.
+Each committed flagged login, reauthentication, or activation records `mfa_passkey_clone_warning`, including later uses of an already flagged credential.
+The existing audit policy logs insertion failures without blocking authentication, so an audit failure can leave a persisted warning without an event.
+
 Passkey names must contain 1 to 255 UTF-16 code units after whitespace trimming.
 Registration, credential storage, and renaming use the same limit.
 The server removes expired ordinary MFA challenges during periodic maintenance.

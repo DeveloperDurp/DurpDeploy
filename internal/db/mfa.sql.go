@@ -866,8 +866,8 @@ func (q *Queries) UpdateTOTP(ctx context.Context, arg UpdateTOTPParams) (MfaTotp
 
 const updateWebAuthnCredentialCounter = `-- name: UpdateWebAuthnCredentialCounter :one
 UPDATE webauthn_credentials
-SET sign_count = ?, clone_warning = ?, updated_at = unixepoch()
-WHERE credential_id = ? RETURNING credential_id, user_id, name, public_key, aaguid, transports_json, flags, sign_count, clone_warning, attachment, created_at, updated_at, attestation_type, attestation_format, attestation_client_data_json, attestation_client_data_hash, attestation_authenticator_data, attestation_public_key_algorithm, attestation_object
+SET sign_count = ?1, clone_warning = CASE WHEN clone_warning = 1 THEN 1 ELSE ?2 END, updated_at = unixepoch()
+WHERE credential_id = ?3 RETURNING credential_id, user_id, name, public_key, aaguid, transports_json, flags, sign_count, clone_warning, attachment, created_at, updated_at, attestation_type, attestation_format, attestation_client_data_json, attestation_client_data_hash, attestation_authenticator_data, attestation_public_key_algorithm, attestation_object
 `
 
 type UpdateWebAuthnCredentialCounterParams struct {

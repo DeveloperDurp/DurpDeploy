@@ -144,11 +144,13 @@ func (h *AuthHandler) LoginMFAWebAuthnFinish(
 		h.writeMFAJSONError(w, r, err)
 		return
 	}
-	h.completeMFAJSON(w, r, mfaCompletion{
+	var updated db.WebauthnCredential
+	if h.completeMFAJSON(w, r, mfaCompletion{
 		Binding: state.Binding,
 		Factor:  finalLoginPasskey,
 		Mutate: func(ctx context.Context, queries *db.Queries) error {
-			_, err := factors.UpdateCredentialCounterWith(
+			var err error
+			updated, err = factors.UpdateCredentialCounterWith(
 				ctx,
 				queries,
 				credential.ID,
@@ -157,5 +159,7 @@ func (h *AuthHandler) LoginMFAWebAuthnFinish(
 			)
 			return err
 		},
-	})
+	}) {
+		h.auditPasskeyCloneWarning(r, updated, "login")
+	}
 }

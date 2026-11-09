@@ -160,6 +160,12 @@ templ SecurityPasskeys(credentials []db.WebauthnCredential, hasPasskeys bool, fa
 			<div class="space-y-4">
 				for _, credential := range credentials {
 					<div class="flex flex-wrap items-end gap-2 rounded-box border border-base-300 p-4">
+						if credential.CloneWarning == 1 {
+							<div class="w-full space-y-1" data-passkey-counter-warning>
+								<span class="badge badge-warning badge-outline">Counter warning</span>
+								<p class="text-sm">This passkey reported a counter anomaly. This does not prove cloning. Ask your administrator to review the security audit.</p>
+							</div>
+						}
 						<form method="post" action="/settings/security/passkeys/rename" class="flex min-w-0 flex-1 flex-wrap items-end gap-2">
 							<input type="hidden" name="credential_id" value={ securityCredentialID(credential.CredentialID) }/>
 							<div class="form-control min-w-0 flex-1">

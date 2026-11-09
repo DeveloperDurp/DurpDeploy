@@ -43,6 +43,7 @@ func TestSecurity_PasskeyVerificationActivatesOnlyAfterValidAssertion(
 			Name:           "staged passkey",
 			PublicKey:      publicKey,
 			TransportsJson: "[]",
+			SignCount:      1,
 			Flags: int64(protocol.FlagUserPresent | protocol.FlagUserVerified |
 				protocol.FlagBackupEligible | protocol.FlagBackupState),
 			AttestationType:   "none",
@@ -152,6 +153,7 @@ func TestSecurity_PasskeyVerificationActivatesOnlyAfterValidAssertion(
 		)
 	}
 	assertVerifiedPasskeyAudit(t, h, token, current.user.ID, pending.Token)
+	assertPasskeyWarningAudit(t, h, current.user.ID, "activation", 1)
 }
 
 func assertVerifiedPasskeyAudit(

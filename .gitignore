@@ -45,6 +45,7 @@ tmp/
 static/swagger-ui/
 
 # OpenCode session state
+.opencode/
 .omo/
 .codegraph
 .local/

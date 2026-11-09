@@ -61,6 +61,19 @@ For SSO-only accounts, use **Use single sign-on** without a local password.
 Keep the Authentik session active when you confirm another export.
 If confirmation fails immediately after an Authentik sign-in, wait two seconds and start a new confirmation.
 If local MFA is enabled, complete the required factor check.
+
+Use `GET /api/v1/security/passkeys` to read the token owner's passkey warning state.
+The response contains `credential_id`, `name`, and boolean `clone_warning` for each passkey.
+The credential identifier uses base64url without padding.
+Project-scoped tokens cannot use this endpoint.
+The endpoint never returns public keys or assertions.
+
+Counter warnings persist until credential deletion and do not block otherwise valid authentication.
+As an administrator, use `GET /api/v1/admin/audit?action=mfa_passkey_clone_warning` to review flagged ceremonies.
+The event details identify the credential and ceremony purpose.
+Later uses of a flagged credential also emit events.
+Audit insertion failures are logged without blocking authentication.
+Treat counter warnings as anomalies that require operator review, not proven cloning.
 Each export requires a new confirmation.
 
 Send `POST /api/v1/admin/secret-exports/{id}/download` with `{"claim_token":"<claim_token>"}` and the original bearer token.

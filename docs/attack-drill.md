@@ -1,5 +1,21 @@
 # DurpDeploy — Attack drill
 
+## Passkey counter warnings
+
+Use a disposable enrolled account and a fresh challenge for each assertion.
+Submit a correctly signed assertion with an equal nonzero counter.
+Confirm that authentication succeeds and Security shows `Counter warning` for that passkey.
+As an administrator, filter `/admin/audit` by `mfa_passkey_clone_warning`.
+Confirm that the event identifies the verified user, credential identifier, and ceremony purpose.
+Use `GET /api/v1/admin/audit?action=mfa_passkey_clone_warning` for the same operator check.
+
+The warning indicates a counter anomaly, not proven cloning.
+Two zero counters alone do not trigger it, and synced authenticators require operator review.
+Warnings persist until credential deletion, and each successful flagged ceremony emits an event.
+Repeated consumed challenges do not emit additional warning events.
+Audit insertion failures appear in server logs and do not block authentication.
+Review unexpected warnings with the account owner before replacing a passkey through the existing factor controls.
+
 Five-minute hands-on walkthrough of the most likely attacks against
 the deployed instance, with the expected failure mode for each. Run this
 after every deploy to a new VM, and again quarterly, to confirm the

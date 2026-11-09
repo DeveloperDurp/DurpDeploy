@@ -83,6 +83,13 @@ func TestPostgres_WebAuthnCredentialCRUD(t *testing.T) {
 	if err != nil || updated.SignCount != 8 || updated.CloneWarning != 1 {
 		t.Fatalf("updated WebAuthn credential = %#v, error = %v", updated, err)
 	}
+	updated, err = queries.UpdateWebAuthnCredentialCounter(ctx,
+		generated.UpdateWebAuthnCredentialCounterParams{
+			CredentialID: credentialID, SignCount: 9, CloneWarning: 0,
+		})
+	if err != nil || updated.CloneWarning != 1 || updated.SignCount != 9 {
+		t.Fatalf("warning did not persist: %#v, error = %v", updated, err)
+	}
 	if err := queries.DeleteWebAuthnCredential(ctx, credentialID); err != nil {
 		t.Fatalf("delete WebAuthn credential: %v", err)
 	}
