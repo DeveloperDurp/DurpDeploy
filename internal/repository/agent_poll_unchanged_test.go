@@ -61,6 +61,10 @@ BEGIN SELECT RAISE(ABORT, 'unchanged capability write'); END`,
 	report.SupportedInterpreters[0], report.SupportedInterpreters[1] =
 		report.SupportedInterpreters[1], report.SupportedInterpreters[0]
 	report.Staging = false
+	before, err := repo.Queries.CurrentUnixTime(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
 	changed, err := repo.RecordAgentPollCapabilities(
 		t.Context(),
 		heartbeat,
@@ -72,7 +76,13 @@ BEGIN SELECT RAISE(ABORT, 'unchanged capability write'); END`,
 		t.Fatalf("unchanged poll: rows=%d error=%v", changed, err)
 	}
 	updated, err := repo.Queries.GetAgent(t.Context(), "a")
-	if err != nil || updated.LastHeartbeatAt != heartbeat.Now {
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := repo.Queries.CurrentUnixTime(t.Context())
+	if err != nil || !updated.LastHeartbeatAt.Valid ||
+		updated.LastHeartbeatAt.Int64 < before ||
+		updated.LastHeartbeatAt.Int64 > after {
 		t.Fatalf("heartbeat=%v error=%v", updated.LastHeartbeatAt, err)
 	}
 }

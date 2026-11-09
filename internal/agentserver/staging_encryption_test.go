@@ -36,7 +36,7 @@ func stagingEncryptionSpools() map[string]int64 {
 	for _, entry := range entries {
 		path := filepath.Join("/proc/self/fd", entry.Name())
 		name, err := os.Readlink(path)
-		if err != nil || !strings.Contains(name, "durpdeploy-gate-") {
+		if err != nil || !strings.Contains(name, "durpdeploy-artifact-gate-") {
 			continue
 		}
 		if info, err := os.Stat(path); err == nil {

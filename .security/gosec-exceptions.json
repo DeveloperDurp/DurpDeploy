@@ -92,8 +92,8 @@
   {
     "rule": "G101",
     "file": "internal/audit/routes.go",
-    "line": "6-233",
-    "source_sha256": "db936aa044fcf52a4e9c00aa4b2f6cfb26f5f2ef1c046a95e2a6e456c47e1426",
+    "line": "6-232",
+    "source_sha256": "b43596ab1919522607f0f6c3ee1ff497abebeed6f20c8f0434b610749c477331",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie name or audit action/route metadata, not a credential value. Evidence: passkey binding readers/setters or internal/audit/audit.go consumers."
@@ -299,8 +299,8 @@
   {
     "rule": "G120",
     "file": "internal/server/request_body_limit.go",
-    "line": "72",
-    "source_sha256": "30cb9ef315a5ee4915b9ff9655f74b07973fcd34b29e7c05780423165306a746",
+    "line": "71",
+    "source_sha256": "0bda7d405f2c2ada6222a36f52547de8201f24150fba6cfab5b4189679d4b420",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "The validated startup form policy caps the entire encoded body before ParseMultipartForm, including unknown lengths. Temporary files are removed. Evidence: server/request_body_limit.go and configured_body_e2e_test.go."
@@ -318,7 +318,7 @@
     "rule": "G204",
     "file": "internal/runner/podman.go",
     "line": "197",
-    "source_sha256": "bc371aadea80ae7d06044828d8229ece04ad9ed47df00dfd432bdebb464e4fde",
+    "source_sha256": "b8c1fa2d17050d072dea9bb979154259947317f111ab8a020882b719d0d290b7",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Startup-resolved docker/podman binary with separate argv; validated image and sandbox flags; script passed via stdin, no host shell. Operator PATH is trusted. Evidence: local_step.go, podman.go, podman_test.go."
@@ -345,7 +345,7 @@
     "rule": "G110",
     "file": "internal/handler/artifact_gate_download.go",
     "line": "120",
-    "source_sha256": "601db185294dc5b2d24ec138cdd216f0001f4c5908b5e46832830afaeddf9b5a",
+    "source_sha256": "3fb67ea097a6bf42c339d7e753ab30fffcdeae3b77e95b911c3f143e50f31b56",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "This uncompressed tar comes from an authenticated canonical spool with a verified checksum. Capture rejects links, special files, and unsafe paths. tar.Reader restricts reads to each entry. Evidence: repository/artifact_gate_storage.go, artifact/gate_bundle.go and artifact_gate_failures_e2e_test.go."
@@ -354,7 +354,7 @@
     "rule": "G110",
     "file": "internal/handler/artifact_gate_download.go",
     "line": "94-97",
-    "source_sha256": "601db185294dc5b2d24ec138cdd216f0001f4c5908b5e46832830afaeddf9b5a",
+    "source_sha256": "3fb67ea097a6bf42c339d7e753ab30fffcdeae3b77e95b911c3f143e50f31b56",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "This uncompressed tar comes from an authenticated canonical spool with a verified checksum. Capture rejects links, special files, and unsafe paths. tar.Reader restricts reads to each entry. Evidence: repository/artifact_gate_storage.go, artifact/gate_bundle.go and artifact_gate_failures_e2e_test.go."

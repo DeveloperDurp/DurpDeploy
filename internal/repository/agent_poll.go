@@ -59,7 +59,11 @@ func (r *Repository) RecordAgentPollCapabilities(
 		ctx,
 		func(ctx context.Context, q *db.Queries) error {
 			changed = 0
-			var err error
+			now, err := q.CurrentUnixTime(ctx)
+			if err != nil {
+				return fmt.Errorf("read agent heartbeat clock: %w", err)
+			}
+			heartbeat.Now = sql.NullInt64{Int64: now, Valid: true}
 			changed, err = q.HeartbeatAgent(ctx, heartbeat)
 			if err != nil {
 				return fmt.Errorf("record agent heartbeat: %w", err)

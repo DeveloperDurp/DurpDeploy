@@ -169,7 +169,7 @@ func (s *Server) UploadStaging(w http.ResponseWriter, r *http.Request) {
 			slog.WarnContext(r.Context(), "finish staging transfer", "err", err)
 		}
 	}()
-	file, err := artifact.OpenGateSpool()
+	file, err := artifact.OpenGateSpool(s.repository.ArtifactClient.TempDir)
 	if err != nil {
 		writeStagingError(w, err)
 		return

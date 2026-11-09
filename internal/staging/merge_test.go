@@ -14,7 +14,7 @@ import (
 
 func newMergeFixture(t *testing.T, base Snapshot) (*Merger, *os.File) {
 	t.Helper()
-	file, err := artifact.OpenGateSpool()
+	file, err := artifact.OpenGateSpool(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

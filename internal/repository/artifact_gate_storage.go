@@ -41,7 +41,7 @@ func (r *Repository) SaveArtifactGate(
 	if err := r.validateArtifactGateBundleSize(gate.BundleSize); err != nil {
 		return err
 	}
-	spool, err := artifact.OpenGateSpool()
+	spool, err := artifact.OpenGateSpool(r.ArtifactClient.TempDir)
 	if err != nil {
 		return err
 	}

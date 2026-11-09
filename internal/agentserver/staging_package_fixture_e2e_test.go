@@ -73,6 +73,8 @@ func (s *stagingE2E) packageSource(
 			t.Error(err)
 		}
 	})
+	previous := s.f.repo.ArtifactClient
+	t.Cleanup(func() { s.f.repo.ArtifactClient = previous })
 	s.f.repo.ArtifactClient = &artifact.Client{
 		HTTP:    upstream.Client(),
 		TempDir: workspace.Directory,

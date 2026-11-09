@@ -24,11 +24,30 @@ func TestPollPayloadRoundTrip(t *testing.T) {
 	fixture := newAgentFixture(t)
 	deploymentID := seedPollPayload(t, fixture, "pending", "test-agent")
 
+	before, err := fixture.repo.Queries.CurrentUnixTime(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
 	response := postAgent(t, fixture, agentproto.PollPath, pollBody)
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("status=%d want=%d", response.StatusCode, http.StatusOK)
 	}
 	poll := decodePollResponse(t, response)
+	agent, err := fixture.repo.Queries.GetAgent(t.Context(), "test-agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := fixture.repo.Queries.CurrentUnixTime(t.Context())
+	if err != nil || !agent.LastHeartbeatAt.Valid ||
+		agent.LastHeartbeatAt.Int64 < before || agent.LastHeartbeatAt.Int64 > after {
+		t.Fatalf(
+			"poll heartbeat=%v database interval=[%d,%d] err=%v",
+			agent.LastHeartbeatAt,
+			before,
+			after,
+			err,
+		)
+	}
 	if int64(poll.DeploymentID) != deploymentID {
 		t.Fatalf("deployment=%d want=%d", poll.DeploymentID, deploymentID)
 	}

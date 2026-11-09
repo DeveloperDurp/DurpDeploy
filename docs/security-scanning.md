@@ -289,6 +289,13 @@ Only the standard-library regular expression compiler creates their instruction 
 The prefix-buffering fix leaves those conversions unchanged.
 The updated source hashes retain the existing reasons, owner, and expiration.
 
+Issue #180 re-reviewed five entries after changing four excepted files.
+The audit map contains route names and action names, not credentials.
+Web body parsing still follows the validated body limit and removes multipart files.
+Container commands still use a startup-resolved binary and separate arguments.
+Artifact downloads still read authenticated, checksum-verified canonical TAR data through `tar.Reader`.
+The refreshed entries retain their rules, reasons, owners, and expiration dates.
+
 The split-prefix tests use fixed, inert AWS-format and Slack-format canaries.
 Their exceptions require the exact rule, test path, and literal or complete source line.
 The Slack rule extracts only part of the canary, so its exceptions match complete source lines.

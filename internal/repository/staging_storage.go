@@ -41,7 +41,7 @@ func (r *Repository) SaveStaging(
 	if err != nil {
 		return err
 	}
-	canonical, err := artifact.OpenGateSpool()
+	canonical, err := artifact.OpenGateSpool(r.ArtifactClient.TempDir)
 	if err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func (r *Repository) SaveStaging(
 	}
 	key := request.Key
 	checksum := hex.EncodeToString(hash.Sum(nil))
-	encrypted, err := artifact.OpenGateSpool()
+	encrypted, err := artifact.OpenGateSpool(r.ArtifactClient.TempDir)
 	if err != nil {
 		return err
 	}
@@ -195,7 +195,7 @@ func (r *Repository) LoadStagingSnapshot(
 	if err != nil {
 		return nil, staging.Snapshot{}, err
 	}
-	file, err := artifact.OpenGateSpool()
+	file, err := artifact.OpenGateSpool(r.ArtifactClient.TempDir)
 	if err != nil {
 		return nil, staging.Snapshot{}, err
 	}

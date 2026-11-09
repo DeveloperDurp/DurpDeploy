@@ -9,8 +9,8 @@ import (
 
 // OpenGateSpool removes the directory entry before sensitive bytes are written.
 // Closing the descriptor, including on process exit, releases the artifact.
-func OpenGateSpool() (*os.File, error) {
-	file, err := os.CreateTemp("", "durpdeploy-gate-*")
+func OpenGateSpool(directory string) (*os.File, error) {
+	file, err := os.CreateTemp(directory, "durpdeploy-artifact-gate-*")
 	if err != nil {
 		return nil, err
 	}

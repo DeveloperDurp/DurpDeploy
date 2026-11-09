@@ -199,7 +199,10 @@ func (p containerEndpoint) command(
 	for _, entry := range os.Environ() {
 		name, _, _ := strings.Cut(entry, "=")
 		switch name {
-		case "DOCKER_CONTEXT", "DOCKER_HOST", "CONTAINER_CONNECTION",
+		case "DOCKER_CONFIG",
+			"DOCKER_CONTEXT",
+			"DOCKER_HOST",
+			"CONTAINER_CONNECTION",
 			"CONTAINER_HOST":
 			continue
 		}

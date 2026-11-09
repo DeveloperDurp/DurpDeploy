@@ -14,7 +14,7 @@ func TestConfiguredMergeEntryVisits(t *testing.T) {
 	base := snapshotFixture(t, map[string]string{"file": "data"})
 	for _, visits := range []int64{1, 2, 3, 4} {
 		t.Run(fmt.Sprint(visits), func(t *testing.T) {
-			content, err := artifact.OpenGateSpool()
+			content, err := artifact.OpenGateSpool(t.TempDir())
 			require.NoError(t, err)
 			defer testutil.Close(t, content)
 			limits := config.Defaults().Limits

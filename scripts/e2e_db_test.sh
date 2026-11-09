@@ -6,6 +6,17 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 BASE="${DURPDEPLOY_BASE_URL:-http://localhost:8080}"
 BASE="${BASE%/}"
 readonly FAILED_STATUS='failed'
+readonly SUCCEEDED_STATUS='succeeded'
+readonly JSON_CONTENT_TYPE='Content-Type: application/json'
+readonly HTTP_CODE_FORMAT='%{http_code}'
+readonly DEPLOYMENT_ID_PATTERN='/deployments/\K[0-9]+'
+readonly TERMINAL_STATUS_PATTERN='failed|succeeded|cancelled'
+readonly LOCATION_HEADER_PATTERN='^location:'
+readonly AWK_SECOND_FIELD='{print $2}'
+readonly PROJECT_LINK_PREFIX='href="/projects/'
+readonly RELEASE_ID_SUFFIX='/releases/\K[0-9]+'
+readonly JSON_ID_EXPR='import sys,json; print(json.load(sys.stdin)["id"])'
+readonly JSON_STATUS_EXPR='import sys,json; print(json.load(sys.stdin)["status"])'
 curl_options=()
 if [[ "$BASE" == https://* ]]; then
     if [[ -n "${DURPDEPLOY_E2E_CA_FILE:-}" ]]; then
@@ -188,14 +199,17 @@ ensure_test_admin "admin@durp.info" "password" "configured durp admin"
 # to the form data so every write satisfies CSRFMiddleware. DELETEs
 # pass the token via the X-CSRF-Token header instead — Go's stdlib
 # does not parse form bodies for DELETE, so form data would 403.
-curl_silent() { curl -s -b "$COOKIES" -o /dev/null -w "%{http_code}" "$@"; }
+curl_silent() { curl -s -b "$COOKIES" -o /dev/null -w "$HTTP_CODE_FORMAT" "$@"; }
 curl_body() { curl -s -b "$COOKIES" "$@"; }
-do_delete() { curl -s -b "$COOKIES" -H "X-CSRF-Token: $CSRF" -o /dev/null -w "%{http_code}" -X DELETE "$1"; }
+do_delete() {
+    local target=$1
+    curl -s -b "$COOKIES" -H "X-CSRF-Token: $CSRF" -o /dev/null -w "$HTTP_CODE_FORMAT" -X DELETE "$target"
+}
 
 # Log in. Captures the session cookie into $COOKIES and pulls the CSRF
 # token out of the DB. Asserts a 303 redirect (success).
 echo "=== F0: Login ==="
-CODE=$(curl -s -c "$COOKIES" -o /dev/null -w "%{http_code}" \
+CODE=$(curl -s -c "$COOKIES" -o /dev/null -w "$HTTP_CODE_FORMAT" \
     -X POST -d "email=$ADMIN_EMAIL&password=$ADMIN_PASS" "$BASE/login")
 [[ "$CODE" == "303" ]] || { echo "FAIL: login got $CODE, want 303"; exit 1; }
 SESSION_ID=$(awk '$6 == "session" { print $7 }' "$COOKIES")
@@ -206,12 +220,12 @@ CSRF=$(db_query "SELECT LTRIM(RTRIM(csrf_token)) FROM sessions WHERE id='$SESSIO
 echo "  Login + CSRF retrieved: OK"
 
 # A request with no cookie must redirect to /login.
-CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/")
+CODE=$(curl -s -o /dev/null -w "$HTTP_CODE_FORMAT" "$BASE/")
 [[ "$CODE" == "303" ]] || { echo "FAIL: unauth GET / got $CODE, want 303"; exit 1; }
 echo "  Unauth redirect: OK"
 
 # A request with the session cookie but no CSRF on a POST must 403.
-CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "%{http_code}" \
+CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "$HTTP_CODE_FORMAT" \
     -X POST -d "name=NoCSRF" "$BASE/projects")
 [[ "$CODE" == "403" ]] || { echo "FAIL: POST without CSRF got $CODE, want 403"; exit 1; }
 echo "  CSRF gate: OK"
@@ -256,20 +270,20 @@ CODE=$(curl_silent -X POST -d "name=VAR1&value=hello&environment_id=$ENV_ID&csrf
 
 CODE=$(curl_silent -X POST -d "version=1.0.0&release_notes=first&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/releases")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create release got $CODE"; exit 1; }
-RELEASE_ID=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP 'href="/projects/'$PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
+RELEASE_ID=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP "$PROJECT_LINK_PREFIX"$PROJECT_ID"$RELEASE_ID_SUFFIX" | sort -n | tail -1)
 echo "Release ID: $RELEASE_ID"
 
-DEP_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$RELEASE_ID&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
-DEP_ID=$(echo "$DEP_URL" | grep -oP '/deployments/\K[0-9]+')
+DEP_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$RELEASE_ID&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy" | grep -i "$LOCATION_HEADER_PATTERN" | awk "$AWK_SECOND_FIELD" | tr -d '\r')
+DEP_ID=$(echo "$DEP_URL" | grep -oP "$DEPLOYMENT_ID_PATTERN")
 [[ -n "$DEP_ID" ]] || { echo "FAIL: create deployment did not redirect"; exit 1; }
 echo "Deployment ID: $DEP_ID"
 
 for i in {1..100}; do
   DEP_STATUS=$(curl_body "$BASE/deployments/$DEP_ID/status")
-  echo "$DEP_STATUS" | grep -qE 'failed|succeeded|cancelled' && break
+  echo "$DEP_STATUS" | grep -qE "$TERMINAL_STATUS_PATTERN" && break
   sleep 0.2
 done
-echo "$DEP_STATUS" | grep -q succeeded || {
+echo "$DEP_STATUS" | grep -q "$SUCCEEDED_STATUS" || {
     echo "FAIL: default-variable deployment did not succeed"; exit 1;
 }
 curl_body "$BASE/deployments/$DEP_ID/logs.txt" | \
@@ -302,14 +316,33 @@ FIRST_PAGE=$(curl_body "$BASE/deployments/$DEP_ID")
 echo "$FIRST_PAGE" | grep -q "smoke-test-audit" && { echo "FAIL: first deployment should not have note text"; exit 1; } || true
 echo "  First deployment lacks note: OK"
 
+# Wait for the note deployment to release the environment queue slot.
+NOTE_DEADLINE=$((SECONDS + 60))
+NOTE_STATE=unknown
+while ((SECONDS < NOTE_DEADLINE)); do
+  NOTE_STATUS=$(curl_body --max-time 5 "$BASE/deployments/$NOTE_DEP/status")
+  NOTE_STATE=$(printf '%s' "$NOTE_STATUS" | \
+      grep -oP 'data-deployment-status="\K[a-z_]+' | head -1 || true)
+  [[ "$NOTE_STATE" == "$SUCCEEDED_STATUS" ]] && break
+  case "$NOTE_STATE" in
+    failed|cancelled|rejected) break ;;
+    *) ;;
+  esac
+  sleep 0.2
+done
+[[ "$NOTE_STATE" == "$SUCCEEDED_STATUS" ]] || {
+  echo "FAIL: note deployment did not succeed (last state=$NOTE_STATE)" >&2
+  exit 1
+}
+
 echo "=== F3.2: Cancel Path ==="
 curl -s -b "$COOKIES" -o /dev/null -X POST -d "name=LongStep&script_body=sleep+10&container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps"
 curl -s -b "$COOKIES" -o /dev/null -X POST -d "version=1.0.1&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/releases"
-CANCEL_REL=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP 'href="/projects/'$PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
+CANCEL_REL=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP "$PROJECT_LINK_PREFIX"$PROJECT_ID"$RELEASE_ID_SUFFIX" | sort -n | tail -1)
 echo "Cancel Release ID: $CANCEL_REL"
 
-CANCEL_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$CANCEL_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
-CANCEL_DEP=$(echo "$CANCEL_URL" | grep -oP '/deployments/\K[0-9]+')
+CANCEL_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$CANCEL_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy" | grep -i "$LOCATION_HEADER_PATTERN" | awk "$AWK_SECOND_FIELD" | tr -d '\r')
+CANCEL_DEP=$(echo "$CANCEL_URL" | grep -oP "$DEPLOYMENT_ID_PATTERN")
 [[ -n "$CANCEL_DEP" ]] || { echo "FAIL: cancel deployment did not redirect"; exit 1; }
 echo "Cancel Deployment ID: $CANCEL_DEP"
 
@@ -357,18 +390,18 @@ CODE=$(curl_silent -X POST -d "name=TimeoutStep&script_body=sleep+10&timeout_sec
 
 CODE=$(curl_silent -X POST -d "version=1.0.2&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/releases")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create timeout release got $CODE"; exit 1; }
-TIMEOUT_REL=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP 'href="/projects/'$PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
+TIMEOUT_REL=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP "$PROJECT_LINK_PREFIX"$PROJECT_ID"$RELEASE_ID_SUFFIX" | sort -n | tail -1)
 echo "Timeout Release ID: $TIMEOUT_REL"
 
-TIMEOUT_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$TIMEOUT_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
-TIMEOUT_DEP=$(echo "$TIMEOUT_URL" | grep -oP '/deployments/\K[0-9]+')
+TIMEOUT_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$TIMEOUT_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy" | grep -i "$LOCATION_HEADER_PATTERN" | awk "$AWK_SECOND_FIELD" | tr -d '\r')
+TIMEOUT_DEP=$(echo "$TIMEOUT_URL" | grep -oP "$DEPLOYMENT_ID_PATTERN")
 [[ -n "$TIMEOUT_DEP" ]] || { echo "FAIL: timeout deployment did not redirect"; exit 1; }
 echo "Timeout Deployment ID: $TIMEOUT_DEP"
 
 START=$(date +%s)
 for i in {1..100}; do
   STATUS_BODY=$(curl_body "$BASE/deployments/$TIMEOUT_DEP/status")
-  if echo "$STATUS_BODY" | grep -qE 'failed|succeeded|cancelled'; then break; fi
+  if echo "$STATUS_BODY" | grep -qE "$TERMINAL_STATUS_PATTERN"; then break; fi
   sleep 0.2
 done
 END=$(date +%s)
@@ -388,8 +421,8 @@ echo "  Per-step timeout killed long sleep: OK (failed in ${ELAPSED}s)"
 echo "=== F3.2c: Re-run ==="
 # Re-run the failed timeout deployment. The endpoint bypasses the gate and
 # creates a new deployment with the same release + env.
-REDIR=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "csrf_token=$CSRF" "$BASE/deployments/$TIMEOUT_DEP/redeploy" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
-NEW_DEP=$(echo "$REDIR" | grep -oP '/deployments/\K[0-9]+')
+REDIR=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "csrf_token=$CSRF" "$BASE/deployments/$TIMEOUT_DEP/redeploy" | grep -i "$LOCATION_HEADER_PATTERN" | awk "$AWK_SECOND_FIELD" | tr -d '\r')
+NEW_DEP=$(echo "$REDIR" | grep -oP "$DEPLOYMENT_ID_PATTERN")
 [[ -n "$NEW_DEP" ]] || { echo "FAIL: redeploy did not redirect"; exit 1; }
 [[ "$NEW_DEP" != "$TIMEOUT_DEP" ]] || { echo "FAIL: redeploy returned same deployment ID $NEW_DEP"; exit 1; }
 echo "Re-run Deployment ID: $NEW_DEP"
@@ -398,7 +431,7 @@ echo "Re-run Deployment ID: $NEW_DEP"
 # step, so it will also fail).
 for i in {1..100}; do
   RERUN_STATUS=$(curl_body "$BASE/deployments/$NEW_DEP/status")
-  if echo "$RERUN_STATUS" | grep -qE 'failed|succeeded|cancelled'; then break; fi
+  if echo "$RERUN_STATUS" | grep -qE "$TERMINAL_STATUS_PATTERN"; then break; fi
   sleep 0.2
 done
 echo "$RERUN_STATUS" | grep -q "$FAILED_STATUS" || { echo "FAIL: re-run deploy did not fail, got status: $RERUN_STATUS"; exit 1; }
@@ -423,17 +456,17 @@ CODE=$(curl_silent -X POST -d "name=RetryStep&script_body=exit+1&max_retries=2&c
 
 CODE=$(curl_silent -X POST -d "version=1.0.4&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/releases")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create retry release got $CODE"; exit 1; }
-RETRY_REL=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP 'href="/projects/'$PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
+RETRY_REL=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP "$PROJECT_LINK_PREFIX"$PROJECT_ID"$RELEASE_ID_SUFFIX" | sort -n | tail -1)
 echo "Retry Release ID: $RETRY_REL"
 
-RETRY_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$RETRY_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
-RETRY_DEP=$(echo "$RETRY_URL" | grep -oP '/deployments/\K[0-9]+')
+RETRY_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$RETRY_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy" | grep -i "$LOCATION_HEADER_PATTERN" | awk "$AWK_SECOND_FIELD" | tr -d '\r')
+RETRY_DEP=$(echo "$RETRY_URL" | grep -oP "$DEPLOYMENT_ID_PATTERN")
 [[ -n "$RETRY_DEP" ]] || { echo "FAIL: retry deployment did not redirect"; exit 1; }
 echo "Retry Deployment ID: $RETRY_DEP"
 
 for i in {1..100}; do
   RETRY_STATUS=$(curl_body "$BASE/deployments/$RETRY_DEP/status")
-  if echo "$RETRY_STATUS" | grep -qE 'failed|succeeded|cancelled'; then break; fi
+  if echo "$RETRY_STATUS" | grep -qE "$TERMINAL_STATUS_PATTERN"; then break; fi
   sleep 0.2
 done
 echo "$RETRY_STATUS" | grep -q "$FAILED_STATUS" || { echo "FAIL: retry deploy did not fail, got status: $RETRY_STATUS"; exit 1; }
@@ -452,7 +485,7 @@ RETRY_STEP_ID=$(db_query "SELECT id FROM steps WHERE project_id=$PROJECT_ID AND 
 do_delete "$BASE/projects/$PROJECT_ID/steps/$RETRY_STEP_ID" >/dev/null
 curl -s -b "$COOKIES" -o /dev/null -X POST --data-urlencode 'name=StepMissing' --data-urlencode 'script_body=test -z "${MISSING:-}" && echo missing-variable-empty' -d "container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps"
 curl -s -b "$COOKIES" -o /dev/null -X POST -d "version=2.0.0&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/releases"
-NEW_REL=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP 'href="/projects/'$PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
+NEW_REL=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP "$PROJECT_LINK_PREFIX"$PROJECT_ID"$RELEASE_ID_SUFFIX" | sort -n | tail -1)
 MISSING_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$NEW_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy" | awk 'tolower($1)=="location:" {gsub("\r", "", $2); print $2}')
 for _ in {1..100}; do
   MISSING_STATUS=$(curl_body "$BASE$MISSING_URL/status")
@@ -502,24 +535,24 @@ CODE=$(curl_silent -X POST -d "name=step1&script_body=exit+0&container_image=$BA
 [[ "$CODE" == "200" ]] || { echo "FAIL: create step got $CODE"; exit 1; }
 CODE=$(curl_silent -X POST -d "version=1.0.0&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/releases")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create release got $CODE"; exit 1; }
-LC_REL_ID=$(curl_body "$BASE/projects/$LC_PROJECT_ID/releases" | grep -oP 'href="/projects/'$LC_PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
+LC_REL_ID=$(curl_body "$BASE/projects/$LC_PROJECT_ID/releases" | grep -oP "$PROJECT_LINK_PREFIX"$LC_PROJECT_ID"$RELEASE_ID_SUFFIX" | sort -n | tail -1)
 echo "LC Release ID: $LC_REL_ID"
 
 # Deploy v1 to Dev -> 303
 CODE=$(curl -s -b "$COOKIES" -D "$TMP/lc-dev-headers" -o /dev/null \
-  -w '%{http_code}' -X POST \
+  -w "$HTTP_CODE_FORMAT" -X POST \
   -d "release_id=$LC_REL_ID&environment_id=$LC_DEV_ID&csrf_token=$CSRF" \
   "$BASE/projects/$LC_PROJECT_ID/deploy")
 [[ "$CODE" == "303" ]] || { echo "FAIL: deploy v1 to dev got $CODE, want 303"; exit 1; }
-LC_DEV_URL=$(grep -i '^location:' "$TMP/lc-dev-headers" | awk '{print $2}' | tr -d '\r')
-LC_DEV_DEP=$(echo "$LC_DEV_URL" | grep -oP '/deployments/\K[0-9]+')
+LC_DEV_URL=$(grep -i "$LOCATION_HEADER_PATTERN" "$TMP/lc-dev-headers" | awk "$AWK_SECOND_FIELD" | tr -d '\r')
+LC_DEV_DEP=$(echo "$LC_DEV_URL" | grep -oP "$DEPLOYMENT_ID_PATTERN")
 [[ -n "$LC_DEV_DEP" ]] || { echo "FAIL: deploy v1 to dev did not redirect"; exit 1; }
 for i in {1..200}; do
   LC_DEV_STATUS=$(curl_body "$BASE/deployments/$LC_DEV_DEP/status")
-  echo "$LC_DEV_STATUS" | grep -qE 'failed|succeeded|cancelled' && break
+  echo "$LC_DEV_STATUS" | grep -qE "$TERMINAL_STATUS_PATTERN" && break
   sleep 0.1
 done
-echo "$LC_DEV_STATUS" | grep -q succeeded || {
+echo "$LC_DEV_STATUS" | grep -q "$SUCCEEDED_STATUS" || {
   echo "FAIL: lifecycle dev deployment did not succeed"; exit 1;
 }
 
@@ -530,19 +563,19 @@ echo "  Dev->Prod skip blocked: OK (422)"
 
 # Deploy v1 to Test -> 303
 CODE=$(curl -s -b "$COOKIES" -D "$TMP/lc-test-headers" -o /dev/null \
-  -w '%{http_code}' -X POST \
+  -w "$HTTP_CODE_FORMAT" -X POST \
   -d "release_id=$LC_REL_ID&environment_id=$LC_TEST_ID&csrf_token=$CSRF" \
   "$BASE/projects/$LC_PROJECT_ID/deploy")
 [[ "$CODE" == "303" ]] || { echo "FAIL: deploy v1 to test got $CODE, want 303"; exit 1; }
-LC_TEST_URL=$(grep -i '^location:' "$TMP/lc-test-headers" | awk '{print $2}' | tr -d '\r')
-LC_TEST_DEP=$(echo "$LC_TEST_URL" | grep -oP '/deployments/\K[0-9]+')
+LC_TEST_URL=$(grep -i "$LOCATION_HEADER_PATTERN" "$TMP/lc-test-headers" | awk "$AWK_SECOND_FIELD" | tr -d '\r')
+LC_TEST_DEP=$(echo "$LC_TEST_URL" | grep -oP "$DEPLOYMENT_ID_PATTERN")
 [[ -n "$LC_TEST_DEP" ]] || { echo "FAIL: deploy v1 to test did not redirect"; exit 1; }
 for i in {1..200}; do
   LC_TEST_STATUS=$(curl_body "$BASE/deployments/$LC_TEST_DEP/status")
-  echo "$LC_TEST_STATUS" | grep -qE 'failed|succeeded|cancelled' && break
+  echo "$LC_TEST_STATUS" | grep -qE "$TERMINAL_STATUS_PATTERN" && break
   sleep 0.1
 done
-echo "$LC_TEST_STATUS" | grep -q succeeded || {
+echo "$LC_TEST_STATUS" | grep -q "$SUCCEEDED_STATUS" || {
   echo "FAIL: lifecycle test deployment did not succeed"; exit 1;
 }
 
@@ -554,7 +587,7 @@ echo "  Full Dev->Test->Prod chain: OK (303)"
 # Now create v2 release, attempt to deploy to Prod without going through Dev/Test -> 422
 CODE=$(curl_silent -X POST -d "version=2.0.0&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/releases")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create v2 got $CODE"; exit 1; }
-V2_REL_ID=$(curl_body "$BASE/projects/$LC_PROJECT_ID/releases" | grep -oP 'href="/projects/'$LC_PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
+V2_REL_ID=$(curl_body "$BASE/projects/$LC_PROJECT_ID/releases" | grep -oP "$PROJECT_LINK_PREFIX"$LC_PROJECT_ID"$RELEASE_ID_SUFFIX" | sort -n | tail -1)
 CODE=$(curl_silent -X POST -d "release_id=$V2_REL_ID&environment_id=$LC_PROD_ID&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/deploy")
 [[ "$CODE" == "422" ]] || { echo "FAIL: deploy v2 to prod (no chain) got $CODE, want 422"; exit 1; }
 echo "  New version without chain: blocked (422)"
@@ -595,40 +628,40 @@ CODE=$(curl_silent -X POST -d "name=app-step&script_body=exit+0&container_image=
 [[ "$CODE" == "200" ]] || { echo "FAIL: create app step got $CODE"; exit 1; }
 CODE=$(curl_silent -X POST -d "version=1.0.0&csrf_token=$CSRF" "$BASE/projects/$APP_PROJ_ID/releases")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create app release got $CODE"; exit 1; }
-APP_REL_ID=$(curl_body "$BASE/projects/$APP_PROJ_ID/releases" | grep -oP 'href="/projects/'$APP_PROJ_ID'/releases/\K[0-9]+' | sort -n | tail -1)
+APP_REL_ID=$(curl_body "$BASE/projects/$APP_PROJ_ID/releases" | grep -oP "$PROJECT_LINK_PREFIX"$APP_PROJ_ID"$RELEASE_ID_SUFFIX" | sort -n | tail -1)
 echo "App Release ID: $APP_REL_ID"
 
 # Deploy to dev -> should succeed
-DEV_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$APP_REL_ID&environment_id=$APP_DEV_ID&csrf_token=$CSRF" "$BASE/projects/$APP_PROJ_ID/deploy" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
-DEV_DEP=$(echo "$DEV_URL" | grep -oP '/deployments/\K[0-9]+')
+DEV_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$APP_REL_ID&environment_id=$APP_DEV_ID&csrf_token=$CSRF" "$BASE/projects/$APP_PROJ_ID/deploy" | grep -i "$LOCATION_HEADER_PATTERN" | awk "$AWK_SECOND_FIELD" | tr -d '\r')
+DEV_DEP=$(echo "$DEV_URL" | grep -oP "$DEPLOYMENT_ID_PATTERN")
 [[ -n "$DEV_DEP" ]] || { echo "FAIL: dev deployment did not redirect"; exit 1; }
 echo "Dev Deployment ID: $DEV_DEP"
 for i in {1..200}; do
-  if curl_body "$BASE/deployments/$DEV_DEP/status" | grep -q 'succeeded'; then break; fi
+  if curl_body "$BASE/deployments/$DEV_DEP/status" | grep -q "$SUCCEEDED_STATUS"; then break; fi
   sleep 0.1
 done
-curl_body "$BASE/deployments/$DEV_DEP/status" | grep -q 'succeeded' || {
+curl_body "$BASE/deployments/$DEV_DEP/status" | grep -q "$SUCCEEDED_STATUS" || {
   echo "FAIL: approval lifecycle dev deployment did not succeed"; exit 1;
 }
 echo "  Dev deploy succeeded: OK"
 
 # Deploy to staging -> should succeed
-STAGING_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$APP_REL_ID&environment_id=$APP_STAGING_ID&csrf_token=$CSRF" "$BASE/projects/$APP_PROJ_ID/deploy" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
-STAGING_DEP=$(echo "$STAGING_URL" | grep -oP '/deployments/\K[0-9]+')
+STAGING_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$APP_REL_ID&environment_id=$APP_STAGING_ID&csrf_token=$CSRF" "$BASE/projects/$APP_PROJ_ID/deploy" | grep -i "$LOCATION_HEADER_PATTERN" | awk "$AWK_SECOND_FIELD" | tr -d '\r')
+STAGING_DEP=$(echo "$STAGING_URL" | grep -oP "$DEPLOYMENT_ID_PATTERN")
 [[ -n "$STAGING_DEP" ]] || { echo "FAIL: staging deployment did not redirect"; exit 1; }
 echo "Staging Deployment ID: $STAGING_DEP"
 for i in {1..200}; do
-  if curl_body "$BASE/deployments/$STAGING_DEP/status" | grep -q 'succeeded'; then break; fi
+  if curl_body "$BASE/deployments/$STAGING_DEP/status" | grep -q "$SUCCEEDED_STATUS"; then break; fi
   sleep 0.1
 done
-curl_body "$BASE/deployments/$STAGING_DEP/status" | grep -q 'succeeded' || {
+curl_body "$BASE/deployments/$STAGING_DEP/status" | grep -q "$SUCCEEDED_STATUS" || {
   echo "FAIL: approval lifecycle staging deployment did not succeed"; exit 1;
 }
 echo "  Staging deploy succeeded: OK"
 
 # Deploy to prod -> should be pending_approval
-PROD_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$APP_REL_ID&environment_id=$APP_PROD_ID&csrf_token=$CSRF" "$BASE/projects/$APP_PROJ_ID/deploy" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
-PROD_DEP=$(echo "$PROD_URL" | grep -oP '/deployments/\K[0-9]+')
+PROD_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$APP_REL_ID&environment_id=$APP_PROD_ID&csrf_token=$CSRF" "$BASE/projects/$APP_PROJ_ID/deploy" | grep -i "$LOCATION_HEADER_PATTERN" | awk "$AWK_SECOND_FIELD" | tr -d '\r')
+PROD_DEP=$(echo "$PROD_URL" | grep -oP "$DEPLOYMENT_ID_PATTERN")
 [[ -n "$PROD_DEP" ]] || { echo "FAIL: prod deployment did not redirect"; exit 1; }
 echo "Prod Deployment ID: $PROD_DEP"
 
@@ -642,10 +675,10 @@ CODE=$(curl_silent -X POST -d "approved_by=alice&csrf_token=$CSRF" "$BASE/deploy
 
 for i in {1..100}; do
   PROD_STATUS=$(curl_body "$BASE/deployments/$PROD_DEP/status")
-  if echo "$PROD_STATUS" | grep -qE 'failed|succeeded|cancelled'; then break; fi
+  if echo "$PROD_STATUS" | grep -qE "$TERMINAL_STATUS_PATTERN"; then break; fi
   sleep 0.2
 done
-echo "$PROD_STATUS" | grep -q 'succeeded' || { echo "FAIL: prod deploy did not succeed after approval, got status: $PROD_STATUS"; exit 1; }
+echo "$PROD_STATUS" | grep -q "$SUCCEEDED_STATUS" || { echo "FAIL: prod deploy did not succeed after approval, got status: $PROD_STATUS"; exit 1; }
 echo "  Prod deploy succeeded after approval: OK"
 
 db_query "SELECT approved_by FROM deployment_approvals WHERE deployment_id=$PROD_DEP;" | grep -q "$ADMIN_EMAIL" || { echo "FAIL: approval not recorded"; exit 1; }
@@ -655,7 +688,7 @@ echo "=== F3.6: Force Deploy ==="
 # Create v3 release, deploy directly to Prod with force=true -> 303
 CODE=$(curl_silent -X POST -d "version=3.0.0&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/releases")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create v3 got $CODE"; exit 1; }
-V3_REL_ID=$(curl_body "$BASE/projects/$LC_PROJECT_ID/releases" | grep -oP 'href="/projects/'$LC_PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
+V3_REL_ID=$(curl_body "$BASE/projects/$LC_PROJECT_ID/releases" | grep -oP "$PROJECT_LINK_PREFIX"$LC_PROJECT_ID"$RELEASE_ID_SUFFIX" | sort -n | tail -1)
 CODE=$(curl_silent -X POST -d "release_id=$V3_REL_ID&environment_id=$LC_PROD_ID&force=true&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/deploy")
 [[ "$CODE" == "303" ]] || { echo "FAIL: force deploy v3 to prod got $CODE, want 303"; exit 1; }
 echo "  Force deploy to prod: OK (303)"
@@ -750,7 +783,7 @@ for i in {1..200}; do
     [[ "$SCHEDULED_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
     sleep 0.1
 done
-[[ "$SCHEDULED_STATUS" == "succeeded" ]] || {
+[[ "$SCHEDULED_STATUS" == "$SUCCEEDED_STATUS" ]] || {
     echo "FAIL: scheduled deployment status=$SCHEDULED_STATUS"; exit 1;
 }
 echo "  Scheduled deployment finished before later write contracts: OK"
@@ -782,19 +815,19 @@ NEW_EMAIL="e2e-newdeployer-$E2E_RUN_ID@test.local"
 NEW_PASS="newdeployer-pass-1234"
 REDIR=$(curl -s -b "$COOKIES" -D - -o /dev/null \
     -X POST -d "email=$NEW_EMAIL&name=NewDeployer&role=deployer&password=$NEW_PASS&password_confirmation=$NEW_PASS&csrf_token=$CSRF" \
-    "$BASE/admin/users" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+    "$BASE/admin/users" | grep -i "$LOCATION_HEADER_PATTERN" | awk "$AWK_SECOND_FIELD" | tr -d '\r')
 [[ "$REDIR" == /admin/users ]] || { echo "FAIL: create user redirect = $REDIR, want /admin/users"; exit 1; }
 echo "  POST /admin/users created user without exposing password: OK"
 
 # The new user can log in with the chosen password.
 NEW_LOGIN=$(mktemp)
-CODE=$(curl -s -c "$NEW_LOGIN" -o /dev/null -w "%{http_code}" \
+CODE=$(curl -s -c "$NEW_LOGIN" -o /dev/null -w "$HTTP_CODE_FORMAT" \
     -X POST -d "email=$NEW_EMAIL&password=$NEW_PASS" "$BASE/login")
 [[ "$CODE" == "303" ]] || { echo "FAIL: new user login got $CODE, want 303"; exit 1; }
 echo "  New user can log in: OK"
 
 # The freshly-created deployer cannot access /admin/users.
-CODE=$(curl -s -b "$NEW_LOGIN" -o /dev/null -w "%{http_code}" "$BASE/admin/users")
+CODE=$(curl -s -b "$NEW_LOGIN" -o /dev/null -w "$HTTP_CODE_FORMAT" "$BASE/admin/users")
 [[ "$CODE" == "403" ]] || { echo "FAIL: non-admin GET /admin/users got $CODE, want 403"; exit 1; }
 echo "  Non-admin gets 403 on /admin/users: OK"
 
@@ -805,7 +838,7 @@ ADMIN_CSRF=$(db_query "SELECT csrf_token FROM sessions WHERE id='$ADMIN_SESSION_
 
 # Promote the new user to admin via PUT /admin/users/{id}.
 NEW_USER_ID=$(db_query "SELECT id FROM users WHERE email='$NEW_EMAIL';")
-CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "%{http_code}" \
+CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "$HTTP_CODE_FORMAT" \
     -H "X-CSRF-Token: $ADMIN_CSRF" \
     -X PUT -d "name=NewDeployer&role=admin" \
     "$BASE/admin/users/$NEW_USER_ID")
@@ -822,19 +855,19 @@ echo "  Role change invalidated new user's session: OK"
 
 # Admin cannot delete themselves.
 ADMIN_ID=$(db_query "SELECT id FROM users WHERE email='$ADMIN_EMAIL';")
-CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "%{http_code}" \
+CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "$HTTP_CODE_FORMAT" \
     -H "X-CSRF-Token: $ADMIN_CSRF" \
     -X DELETE "$BASE/admin/users/$ADMIN_ID")
 [[ "$CODE" == "422" ]] || { echo "FAIL: self-delete got $CODE, want 422"; exit 1; }
 echo "  Self-delete rejected: OK"
 
 # Demote the new user back to deployer and delete them (no project membership).
-CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "%{http_code}" \
+CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "$HTTP_CODE_FORMAT" \
     -H "X-CSRF-Token: $ADMIN_CSRF" \
     -X PUT -d "name=NewDeployer&role=deployer" \
     "$BASE/admin/users/$NEW_USER_ID")
 [[ "$CODE" == "303" || "$CODE" == "200" ]] || { echo "FAIL: demote got $CODE, want 303/200"; exit 1; }
-CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "%{http_code}" \
+CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "$HTTP_CODE_FORMAT" \
     -H "X-CSRF-Token: $ADMIN_CSRF" \
     -X DELETE "$BASE/admin/users/$NEW_USER_ID")
 [[ "$CODE" == "303" || "$CODE" == "200" ]] || { echo "FAIL: delete got $CODE, want 303/200"; exit 1; }
@@ -855,22 +888,33 @@ echo "=== API tests ==="
 # surface with Bearer authentication.
 
 api_get() { curl -s -H "Authorization: Bearer $API_TOKEN" "$@"; }
-api_get_code() { curl -s -H "Authorization: Bearer $API_TOKEN" -o /dev/null -w "%{http_code}" "$@"; }
+api_get_code() { curl -s -H "Authorization: Bearer $API_TOKEN" -o /dev/null -w "$HTTP_CODE_FORMAT" "$@"; }
 api_post() {
-    local payload=$1
-    if [[ "$2" == "$BASE/api/v1/projects" ]]; then
+    local payload=$1 target=$2
+    if [[ "$target" == "$BASE/api/v1/projects" ]]; then
         payload=$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); d["description"]="Managed by make e2e-test. " + d.get("description", ""); print(json.dumps(d))' "$payload")
     fi
-    curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X POST -d "$payload" "$2";
+    curl -s -H "Authorization: Bearer $API_TOKEN" -H "$JSON_CONTENT_TYPE" -X POST -d "$payload" "$target";
 }
-api_put() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X PUT -d "$1" "$2"; }
-api_post_code() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X POST -d "$1" -o /dev/null -w "%{http_code}" "$2"; }
-api_post_noauth() { curl -s -H "Content-Type: application/json" -X POST -d "$1" -o /dev/null -w "%{http_code}" "$2"; }
+api_put() {
+    local payload=$1 target=$2
+    curl -s -H "Authorization: Bearer $API_TOKEN" -H "$JSON_CONTENT_TYPE" -X PUT -d "$payload" "$target"
+}
+api_post_code() {
+    local payload=$1 target=$2
+    curl -s -H "Authorization: Bearer $API_TOKEN" -H "$JSON_CONTENT_TYPE" -X POST -d "$payload" -o /dev/null -w "$HTTP_CODE_FORMAT" "$target"
+}
+api_post_noauth() {
+    local payload=$1 target=$2
+    curl -s -H "$JSON_CONTENT_TYPE" -X POST -d "$payload" -o /dev/null -w "$HTTP_CODE_FORMAT" "$target"
+}
 csrf_from_cookies() {
-    curl -s -b "$1" "$BASE/" | grep -oP '<meta name="csrf-token" content="\K[^"]+' | head -1
+    local jar=$1
+    curl -s -b "$jar" "$BASE/" | grep -oP '<meta name="csrf-token" content="\K[^"]+' | head -1
 }
 api_item_id_by_name() {
-    api_get "$1?limit=1000" | python3 -c 'import sys,json; print(next(item["id"] for item in json.load(sys.stdin)["items"] if item["name"] == sys.argv[1]))' "$2"
+    local target=$1 name=$2
+    api_get "$target?limit=1000" | python3 -c 'import sys,json; print(next(item["id"] for item in json.load(sys.stdin)["items"] if item["name"] == sys.argv[1]))' "$name"
 }
 
 # mint_web_token creates an API token via the web form and prints the
@@ -881,7 +925,7 @@ mint_web_token() {
     local jar=$1 name=$2 csrf=$3 redirect
     redirect=$(curl -s -b "$jar" -D - -o /dev/null \
         -X POST -d "name=$name&csrf_token=$csrf" \
-        "$BASE/settings/tokens" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+        "$BASE/settings/tokens" | grep -i "$LOCATION_HEADER_PATTERN" | awk "$AWK_SECOND_FIELD" | tr -d '\r')
     case "$redirect" in
         /settings/tokens?flash=*) ;;
         *) return 1 ;;
@@ -897,9 +941,9 @@ API_TOKEN=$(mint_web_token "$COOKIES" e2e-api "$CSRF") \
 echo "  API token minted via /settings/tokens: OK"
 
 # A2: Health check is public; authenticated call also succeeds.
-CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/v1/healthz")
+CODE=$(curl -s -o /dev/null -w "$HTTP_CODE_FORMAT" "$BASE/api/v1/healthz")
 [[ "$CODE" == "200" ]] || { echo "FAIL: public health check got $CODE, want 200"; exit 1; }
-CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -o /dev/null -w "%{http_code}" "$BASE/api/v1/healthz")
+CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -o /dev/null -w "$HTTP_CODE_FORMAT" "$BASE/api/v1/healthz")
 [[ "$CODE" == "200" ]] || { echo "FAIL: authenticated health check got $CODE, want 200"; exit 1; }
 echo "  Health check: OK"
 
@@ -908,7 +952,7 @@ source "$(dirname -- "${BASH_SOURCE[0]}")/deployment_staging_e2e.sh"
 # A3: Project CRUD.
 API_PROJECT_NAME="e2e-api-project"
 API_PROJECT=$(api_post "{\"name\":\"$API_PROJECT_NAME\"}" "$BASE/api/v1/projects")
-API_PROJECT_ID=$(echo "$API_PROJECT" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+API_PROJECT_ID=$(echo "$API_PROJECT" | python3 -c "$JSON_ID_EXPR")
 [[ -n "$API_PROJECT_ID" ]] || { echo "FAIL: create project did not return id: $API_PROJECT"; exit 1; }
 CODE=$(api_get_code "$BASE/api/v1/projects")
 [[ "$CODE" == "200" ]] || { echo "FAIL: list projects got $CODE, want 200"; exit 1; }
@@ -924,7 +968,7 @@ CRUD_ENV=$(api_post "{\"name\":\"environment-crud-$E2E_RUN_ID\"}" "$BASE/api/v1/
 CRUD_ENV_ID=$(echo "$CRUD_ENV" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
 api_get "$BASE/api/v1/environments/$CRUD_ENV_ID" | python3 -c 'import json,sys; assert json.load(sys.stdin)["id"] == int(sys.argv[1])' "$CRUD_ENV_ID"
 api_put "{\"name\":\"environment-crud-$E2E_RUN_ID\",\"description\":\"Updated by E2E\"}" "$BASE/api/v1/environments/$CRUD_ENV_ID" >/dev/null
-CODE=$(curl -sS -H "Authorization: Bearer $API_TOKEN" -X DELETE -o /dev/null -w '%{http_code}' "$BASE/api/v1/environments/$CRUD_ENV_ID")
+CODE=$(curl -sS -H "Authorization: Bearer $API_TOKEN" -X DELETE -o /dev/null -w "$HTTP_CODE_FORMAT" "$BASE/api/v1/environments/$CRUD_ENV_ID")
 [[ "$CODE" == 204 ]] || { echo "FAIL: delete temporary environment got $CODE"; exit 1; }
 [[ "$(api_get_code "$BASE/api/v1/environments/$CRUD_ENV_ID")" == 404 ]] || { echo "FAIL: deleted temporary environment still exists"; exit 1; }
 echo "  Environment CRUD: OK ($API_ENV_ID)"
@@ -935,7 +979,7 @@ echo "=== API interpreter tests ==="
 export INTERPRETER_PYTHON_STEP_NAME="python-step"
 export INTERPRETER_TEMPLATE_NAME="python-template"
 INTERPRETER_PROJECT=$(api_post "{\"name\":\"e2e-interpreters\"}" "$BASE/api/v1/projects")
-INTERPRETER_PROJECT_ID=$(echo "$INTERPRETER_PROJECT" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+INTERPRETER_PROJECT_ID=$(echo "$INTERPRETER_PROJECT" | python3 -c "$JSON_ID_EXPR")
 INTERPRETER_ENV_ID=$ENV_ID
 [[ -n "$INTERPRETER_PROJECT_ID" && -n "$INTERPRETER_ENV_ID" ]] || {
     echo "FAIL: could not create interpreter project/environment"; exit 1;
@@ -1067,15 +1111,15 @@ INTERPRETER_DEPLOYMENT=$(api_post \
     "{\"release_id\":$INTERPRETER_RELEASE_ID,\"environment_id\":$INTERPRETER_ENV_ID}" \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/deployments")
 INTERPRETER_DEPLOYMENT_ID=$(echo "$INTERPRETER_DEPLOYMENT" | python3 -c \
-    "import sys,json; print(json.load(sys.stdin)['id'])")
+    "$JSON_ID_EXPR")
 for i in {1..100}; do
     INTERPRETER_STATUS=$(api_get \
         "$BASE/api/v1/deployments/$INTERPRETER_DEPLOYMENT_ID/status" \
-        | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+        | python3 -c "$JSON_STATUS_EXPR")
     [[ "$INTERPRETER_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
     sleep 0.1
 done
-[[ "$INTERPRETER_STATUS" == "succeeded" ]] || {
+[[ "$INTERPRETER_STATUS" == "$SUCCEEDED_STATUS" ]] || {
     echo "FAIL: mixed interpreter deployment status=$INTERPRETER_STATUS"; exit 1;
 }
 INTERPRETER_LOGS=$(api_get \
@@ -1108,7 +1152,7 @@ INTERPRETER_REFRESH_CODE=$(api_post_code '{}' \
 INTERPRETER_PWSH_RELEASE=$(api_post '{"version":"powershell-immutable"}' \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/releases")
 INTERPRETER_PWSH_RELEASE_ID=$(echo "$INTERPRETER_PWSH_RELEASE" | python3 -c \
-    "import sys,json; print(json.load(sys.stdin)['id'])")
+    "$JSON_ID_EXPR")
 INTERPRETER_REFRESHED=$(api_post '{}' \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/releases/$INTERPRETER_PWSH_RELEASE_ID/refresh")
 echo "$INTERPRETER_REFRESHED" | python3 -c '
@@ -1129,15 +1173,15 @@ INTERPRETER_PWSH_DEPLOYMENT=$(api_post \
     "{\"release_id\":$INTERPRETER_PWSH_RELEASE_ID,\"environment_id\":$INTERPRETER_ENV_ID}" \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/deployments")
 INTERPRETER_PWSH_DEPLOYMENT_ID=$(echo "$INTERPRETER_PWSH_DEPLOYMENT" | \
-    python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+    python3 -c "$JSON_ID_EXPR")
 for i in {1..600}; do
     INTERPRETER_PWSH_STATUS=$(api_get \
         "$BASE/api/v1/deployments/$INTERPRETER_PWSH_DEPLOYMENT_ID/status" \
-        | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+        | python3 -c "$JSON_STATUS_EXPR")
     [[ "$INTERPRETER_PWSH_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
     sleep 0.2
 done
-[[ "$INTERPRETER_PWSH_STATUS" == "succeeded" ]] || {
+[[ "$INTERPRETER_PWSH_STATUS" == "$SUCCEEDED_STATUS" ]] || {
     echo "FAIL: PowerShell deployment status=$INTERPRETER_PWSH_STATUS"; exit 1;
 }
 INTERPRETER_PWSH_LOGS=$(api_get \
@@ -1156,15 +1200,15 @@ echo "  Real PowerShell container, default variables, and clean logs: OK"
 INTERPRETER_REDEPLOY=$(api_post '{}' \
     "$BASE/api/v1/deployments/$INTERPRETER_DEPLOYMENT_ID/redeploy")
 INTERPRETER_REDEPLOY_ID=$(echo "$INTERPRETER_REDEPLOY" | python3 -c \
-    "import sys,json; print(json.load(sys.stdin)['id'])")
+    "$JSON_ID_EXPR")
 for i in {1..100}; do
     INTERPRETER_REDEPLOY_STATUS=$(api_get \
         "$BASE/api/v1/deployments/$INTERPRETER_REDEPLOY_ID/status" \
-        | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+        | python3 -c "$JSON_STATUS_EXPR")
     [[ "$INTERPRETER_REDEPLOY_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
     sleep 0.1
 done
-[[ "$INTERPRETER_REDEPLOY_STATUS" == "succeeded" ]] || {
+[[ "$INTERPRETER_REDEPLOY_STATUS" == "$SUCCEEDED_STATUS" ]] || {
     echo "FAIL: frozen interpreter redeploy status=$INTERPRETER_REDEPLOY_STATUS"; exit 1;
 }
 INTERPRETER_REDEPLOY_LOGS=$(api_get \
@@ -1222,34 +1266,34 @@ echo "  Web template save/insert preserves interpreter: OK"
 
 # A5: Step CRUD.
 API_STEP=$(api_post "{\"name\":\"long-step\",\"script_body\":\"sleep 10\",\"container_image\":\"$BASH_IMAGE\"}" "$BASE/api/v1/projects/$API_PROJECT_ID/steps")
-API_STEP_ID=$(echo "$API_STEP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+API_STEP_ID=$(echo "$API_STEP" | python3 -c "$JSON_ID_EXPR")
 [[ -n "$API_STEP_ID" ]] || { echo "FAIL: create step did not return id: $API_STEP"; exit 1; }
 echo "  Step CRUD: OK ($API_STEP_ID)"
 
 # A6: Release CRUD.
 API_RELEASE=$(api_post '{"version":"v1"}' "$BASE/api/v1/projects/$API_PROJECT_ID/releases")
-API_RELEASE_ID=$(echo "$API_RELEASE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+API_RELEASE_ID=$(echo "$API_RELEASE" | python3 -c "$JSON_ID_EXPR")
 [[ -n "$API_RELEASE_ID" ]] || { echo "FAIL: create release did not return id: $API_RELEASE"; exit 1; }
 echo "  Release CRUD: OK ($API_RELEASE_ID)"
 
 # A7: Deployment create + status + cancel.
 API_DEP=$(api_post "{\"release_id\":$API_RELEASE_ID,\"environment_id\":$API_ENV_ID}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/deployments")
-API_DEP_ID=$(echo "$API_DEP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+API_DEP_ID=$(echo "$API_DEP" | python3 -c "$JSON_ID_EXPR")
 [[ -n "$API_DEP_ID" ]] || { echo "FAIL: create deployment did not return id: $API_DEP"; exit 1; }
 for i in {1..50}; do
-    API_DEP_STATUS=$(api_get "$BASE/api/v1/deployments/$API_DEP_ID/status" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+    API_DEP_STATUS=$(api_get "$BASE/api/v1/deployments/$API_DEP_ID/status" | python3 -c "$JSON_STATUS_EXPR")
     [[ "$API_DEP_STATUS" == "running" ]] && break
     sleep 0.1
 done
 [[ "$API_DEP_STATUS" == "running" ]] || { echo "FAIL: deployment did not reach running, status=$API_DEP_STATUS"; exit 1; }
 echo "  Deployment reached running: OK ($API_DEP_ID)"
 
-CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -X POST -o /dev/null -w "%{http_code}" \
+CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -X POST -o /dev/null -w "$HTTP_CODE_FORMAT" \
     "$BASE/api/v1/deployments/$API_DEP_ID/cancel")
 [[ "$CODE" == "200" ]] || { echo "FAIL: cancel deployment got $CODE, want 200"; exit 1; }
 for i in {1..50}; do
-    API_DEP_STATUS=$(api_get "$BASE/api/v1/deployments/$API_DEP_ID/status" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+    API_DEP_STATUS=$(api_get "$BASE/api/v1/deployments/$API_DEP_ID/status" | python3 -c "$JSON_STATUS_EXPR")
     [[ "$API_DEP_STATUS" == "cancelled" ]] && break
     sleep 0.1
 done
@@ -1261,13 +1305,13 @@ echo "  Deployment cancelled: OK"
 API_LOG_STEP=$(api_post "{\"name\":\"streamer\",\"script_body\":\"for i in 1 2 3; do echo api-line-\$i; sleep 0.1; done\",\"container_image\":\"$BASH_IMAGE\"}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/steps")
 API_LOG_RELEASE=$(api_post '{"version":"v2"}' "$BASE/api/v1/projects/$API_PROJECT_ID/releases")
-API_LOG_RELEASE_ID=$(echo "$API_LOG_RELEASE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+API_LOG_RELEASE_ID=$(echo "$API_LOG_RELEASE" | python3 -c "$JSON_ID_EXPR")
 API_LOG_DEP=$(api_post "{\"release_id\":$API_LOG_RELEASE_ID,\"environment_id\":$API_ENV_ID}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/deployments")
-API_LOG_DEP_ID=$(echo "$API_LOG_DEP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+API_LOG_DEP_ID=$(echo "$API_LOG_DEP" | python3 -c "$JSON_ID_EXPR")
 
 for i in {1..100}; do
-    API_LOG_STATUS=$(api_get "$BASE/api/v1/deployments/$API_LOG_DEP_ID/status" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+    API_LOG_STATUS=$(api_get "$BASE/api/v1/deployments/$API_LOG_DEP_ID/status" | python3 -c "$JSON_STATUS_EXPR")
     if [[ "$API_LOG_STATUS" =~ ^(failed|succeeded|cancelled)$ ]]; then break; fi
     sleep 0.1
 done
@@ -1304,7 +1348,7 @@ for i in {1..100}; do
     [[ "$RUNBOOK_STATUS" =~ ^(succeeded|failed|cancelled|cleanup_unconfirmed)$ ]] && break
     sleep 0.1
 done
-[[ "$RUNBOOK_STATUS" == "succeeded" ]] || { echo "FAIL: runbook status=$RUNBOOK_STATUS"; exit 1; }
+[[ "$RUNBOOK_STATUS" == "$SUCCEEDED_STATUS" ]] || { echo "FAIL: runbook status=$RUNBOOK_STATUS"; exit 1; }
 RUNBOOK_LOGS=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID/logs")
 grep -q "$RUNBOOK_MARKER" <<<"$RUNBOOK_LOGS" || { echo "FAIL: runbook log marker missing"; exit 1; }
 RUNBOOK_EXECUTION_PAGE=$(curl_body "$BASE/projects/$API_PROJECT_ID/runbooks/executions/$RUNBOOK_EXECUTION_ID")
@@ -1330,7 +1374,7 @@ VIEWER_CREATE=$(api_post "{\"email\":\"$VIEWER_EMAIL\",\"name\":\"E2E Viewer\",\
 VIEWER_USER_ID=$(echo "$VIEWER_CREATE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))")
 [[ -n "$VIEWER_USER_ID" ]] || { echo "FAIL: viewer user create did not return id: $VIEWER_CREATE"; exit 1; }
 VIEWER_LOGIN=$(mktemp)
-CODE=$(curl -s -c "$VIEWER_LOGIN" -o /dev/null -w "%{http_code}" \
+CODE=$(curl -s -c "$VIEWER_LOGIN" -o /dev/null -w "$HTTP_CODE_FORMAT" \
     -X POST -d "email=$VIEWER_EMAIL&password=$VIEWER_PASS" "$BASE/login")
 [[ "$CODE" == "303" ]] || { echo "FAIL: viewer login got $CODE, want 303"; exit 1; }
 VIEWER_SESSION_ID=$(awk '$6 == "session" { print $7 }' "$VIEWER_LOGIN")
@@ -1342,16 +1386,16 @@ VIEWER_TOKEN=$(mint_web_token "$VIEWER_LOGIN" e2e-viewer "$VIEWER_CSRF") \
 VIEWER_UPDATE=$(api_put '{"name":"E2E Viewer","role":"viewer"}' "$BASE/api/v1/admin/users/$VIEWER_USER_ID")
 VIEWER_ROLE=$(echo "$VIEWER_UPDATE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('role',''))")
 [[ "$VIEWER_ROLE" == "viewer" ]] || { echo "FAIL: viewer role = $VIEWER_ROLE, want viewer"; exit 1; }
-CODE=$(curl -s -H "Authorization: Bearer $VIEWER_TOKEN" -H "Content-Type: application/json" \
-    -X POST -d '{"name":"viewer-proj"}' -o /dev/null -w "%{http_code}" "$BASE/api/v1/projects")
+CODE=$(curl -s -H "Authorization: Bearer $VIEWER_TOKEN" -H "$JSON_CONTENT_TYPE" \
+    -X POST -d '{"name":"viewer-proj"}' -o /dev/null -w "$HTTP_CODE_FORMAT" "$BASE/api/v1/projects")
 [[ "$CODE" == "403" ]] || { echo "FAIL: viewer create project got $CODE, want 403"; exit 1; }
 echo "  403 viewer write block: OK"
 rm -f "$VIEWER_LOGIN"
 
 # A10: Swagger endpoints.
-CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/swagger/")
+CODE=$(curl -s -o /dev/null -w "$HTTP_CODE_FORMAT" "$BASE/api/swagger/")
 [[ "$CODE" == "200" ]] || { echo "FAIL: swagger redirect got $CODE, want 200"; exit 1; }
-CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/swagger/index.html")
+CODE=$(curl -s -o /dev/null -w "$HTTP_CODE_FORMAT" "$BASE/api/swagger/index.html")
 [[ "$CODE" == "200" ]] || { echo "FAIL: swagger UI got $CODE, want 200"; exit 1; }
 SWAGGER=$(curl -s "$BASE/api/swagger/spec")
 echo "$SWAGGER" | python3 -c '
@@ -1406,9 +1450,9 @@ assert [s["environment_id"] for s in stages] == list(map(int,sys.argv[1:])), "LC
 api_get "$BASE/api/v1/deployments?project_id=$LC_PROJECT_ID&release_id=$LC_REL_ID&limit=100" | python3 -c '
 import json,sys
 deployments=json.load(sys.stdin)["items"]
-succeeded={d["environment_id"] for d in deployments if d["status"] == "succeeded"}
-assert set(map(int,sys.argv[1:])) <= succeeded, "LC-Project must retain a successful deployment in every stage"
-' "$LC_DEV_ID" "$LC_TEST_ID" "$LC_PROD_ID"
+succeeded={d["environment_id"] for d in deployments if d["status"] == sys.argv[1]}
+assert set(map(int,sys.argv[2:])) <= succeeded, "LC-Project must retain a successful deployment in every stage"
+' "$SUCCEEDED_STATUS" "$LC_DEV_ID" "$LC_TEST_ID" "$LC_PROD_ID"
 echo "  LC-Project: dev -> test -> prod, promotion gates, and successful history retained: OK"
 echo "  Lifecycle promotion project: $BASE/projects/$LC_PROJECT_ID"
 echo "  Lifecycle stages: $BASE/lifecycles/$LC_LIFECYCLE_ID"

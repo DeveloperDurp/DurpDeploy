@@ -182,7 +182,7 @@ func stagingSpoolCount(t *testing.T) int {
 	n := 0
 	for _, entry := range entries {
 		name, _ := os.Readlink(filepath.Join("/proc/self/fd", entry.Name()))
-		if strings.Contains(name, "durpdeploy-gate-") {
+		if strings.Contains(name, "durpdeploy-artifact-gate-") {
 			n++
 		}
 	}

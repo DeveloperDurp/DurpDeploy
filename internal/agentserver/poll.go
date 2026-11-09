@@ -2,7 +2,6 @@ package agentserver
 
 import (
 	"net/http"
-	"time"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/dispatch"
@@ -47,7 +46,6 @@ func (s *Server) Poll(w http.ResponseWriter, r *http.Request) {
 	changed, err := s.repository.RecordAgentPollCapabilities(
 		r.Context(),
 		db.HeartbeatAgentParams{
-			Now: nullableInt64(time.Now().Unix()),
 			AgentVersion: nullableString(
 				string(request.AgentVersion),
 			),

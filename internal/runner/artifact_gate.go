@@ -45,7 +45,7 @@ func (r *DeploymentRunner) captureArtifactGate(
 	if err := r.validateArtifactGateExport(ctx, stage.keeper); err != nil {
 		return err
 	}
-	file, err := artifact.OpenGateSpool()
+	file, err := artifact.OpenGateSpool(r.repo.ArtifactClient.TempDir)
 	if err != nil {
 		return err
 	}
@@ -152,7 +152,7 @@ func (r *DeploymentRunner) restoreArtifactGate(
 		!gate.ApprovedBy.Valid {
 		return stage, repository.ErrArtifactGate
 	}
-	file, err := artifact.OpenGateSpool()
+	file, err := artifact.OpenGateSpool(r.repo.ArtifactClient.TempDir)
 	if err != nil {
 		return stage, err
 	}

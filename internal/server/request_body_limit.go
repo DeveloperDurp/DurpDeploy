@@ -26,8 +26,7 @@ func webRequestBodyLimit(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if strings.HasPrefix(r.URL.Path, "/api/v1/") ||
-			r.URL.Path == "/api/v1" || r.URL.Path == "/api/lint" ||
+		if r.URL.Path == "/api/lint" ||
 			r.URL.Path == "/login" ||
 			r.URL.Path == "/settings/security/reauth" {
 			next.ServeHTTP(w, r)

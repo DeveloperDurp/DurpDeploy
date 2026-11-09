@@ -45,7 +45,7 @@ func (r *DeploymentRunner) prepareRemoteStaging(
 	file := input.current
 	if file == nil {
 		var err error
-		file, err = artifact.OpenGateSpool()
+		file, err = artifact.OpenGateSpool(r.repo.ArtifactClient.TempDir)
 		if err != nil {
 			return err
 		}
@@ -106,7 +106,7 @@ func (r *DeploymentRunner) mergeRemoteStaging(
 		return nil, err
 	}
 	files = append(files, baseFile)
-	content, err := artifact.OpenGateSpool()
+	content, err := artifact.OpenGateSpool(r.repo.ArtifactClient.TempDir)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +131,7 @@ func (r *DeploymentRunner) mergeRemoteStaging(
 	if err != nil {
 		return nil, err
 	}
-	result, err = artifact.OpenGateSpool()
+	result, err = artifact.OpenGateSpool(r.repo.ArtifactClient.TempDir)
 	if err != nil {
 		return nil, err
 	}

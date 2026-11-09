@@ -16,7 +16,8 @@ func TestWorkspaceReclaimsStaleFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{
-		"durpdeploy-artifact-old.zip", "durpdeploy-artifact-old.tar", "keep",
+		"durpdeploy-artifact-old.zip", "durpdeploy-artifact-old.tar",
+		"durpdeploy-artifact-gate-interrupted", "keep",
 	} {
 		if err := os.WriteFile(
 			filepath.Join(directory, name),

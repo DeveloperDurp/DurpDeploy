@@ -8,15 +8,24 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
 func TestGateSpoolHasNoNamedSensitiveFile(t *testing.T) {
-	file, err := OpenGateSpool()
+	directory := t.TempDir()
+	file, err := OpenGateSpool(directory)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer testutil.Close(t, file)
+	if filepath.Dir(file.Name()) != directory {
+		t.Fatalf("spool escaped configured directory: %s", file.Name())
+	}
+	info, err := file.Stat()
+	if err != nil || info.Mode().Perm() != 0600 {
+		t.Fatalf("spool permissions: %v, %v", info, err)
+	}
 	if _, err := os.Stat(file.Name()); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("named spool remains: %v", err)
 	}
@@ -29,6 +38,16 @@ func TestGateSpoolHasNoNamedSensitiveFile(t *testing.T) {
 	data, err := io.ReadAll(file)
 	if err != nil || string(data) != "sensitive" {
 		t.Fatal("spool lost content")
+	}
+}
+
+func TestGateSpoolRejectsUnavailableDirectory(t *testing.T) {
+	file, err := OpenGateSpool(filepath.Join(t.TempDir(), "missing"))
+	if file != nil {
+		testutil.Close(t, file)
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("configured directory failure was ignored: %v", err)
 	}
 }
 

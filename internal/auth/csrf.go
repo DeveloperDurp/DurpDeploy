@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -67,7 +68,10 @@ func CSRFMiddleware() func(http.Handler) http.Handler {
 				token = r.Header.Get("X-CSRF-Token")
 			}
 
-			if token != sess.CsrfToken {
+			if subtle.ConstantTimeCompare(
+				[]byte(token),
+				[]byte(sess.CsrfToken),
+			) != 1 {
 				http.Error(w, "Invalid CSRF token", http.StatusForbidden)
 				return
 			}

@@ -14,7 +14,7 @@ import (
 
 func TestConfiguredSnapshotLimits(t *testing.T) {
 	snapshot := snapshotFixture(t, map[string]string{"a/b/file": "data"})
-	file, err := artifact.OpenGateSpool()
+	file, err := artifact.OpenGateSpool(t.TempDir())
 	require.NoError(t, err)
 	defer testutil.Close(t, file)
 	require.NoError(t, snapshot.Write(t.Context(), file))
@@ -47,7 +47,7 @@ func TestConfiguredMergerLimits(t *testing.T) {
 	}{{4, 2, true}, {3, 2, false}, {4, 1, false}} {
 		limits := config.Defaults().Limits.Staging
 		limits.PayloadBytes, limits.Entries = tc.payload, tc.entries
-		file, err := artifact.OpenGateSpool()
+		file, err := artifact.OpenGateSpool(t.TempDir())
 		require.NoError(t, err)
 		m, err := NewMergerWithLimits(
 			t.Context(),
@@ -79,7 +79,7 @@ func TestConfiguredMergerRaisesHistoricalCeilings(t *testing.T) {
 	for i := range int(limits.Entries) - 1 {
 		base.Entries[fmt.Sprintf("file-%d", i)] = Entry{}
 	}
-	file, err := artifact.OpenGateSpool()
+	file, err := artifact.OpenGateSpool(t.TempDir())
 	require.NoError(t, err)
 	defer testutil.Close(t, file)
 	m, err := NewMergerWithLimits(

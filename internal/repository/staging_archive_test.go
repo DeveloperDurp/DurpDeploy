@@ -24,7 +24,7 @@ func TestStagingArchivePolicyPreservesStoredBytes(t *testing.T) {
 		"UPDATE deployments SET status='running' WHERE id=3",
 	)
 	require.NoError(t, err)
-	file, err := artifact.OpenGateSpool()
+	file, err := artifact.OpenGateSpool(t.TempDir())
 	require.NoError(t, err)
 	defer testutil.Close(t, file)
 	w := tar.NewWriter(file)

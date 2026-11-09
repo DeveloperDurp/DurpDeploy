@@ -133,7 +133,6 @@ var actionMap = map[string]string{
 	"POST /api/lint":                                                          "",
 	"POST /api/v1/lint":                                                       "",
 
-	"GET /api/v1/deployments":                                                        "list_deployments",
 	"POST /api/v1/tokens":                                                            "create_api_token",
 	"PATCH /api/v1/tokens/{id}":                                                      "update_api_token_scope",
 	"DELETE /api/v1/tokens/{id}":                                                     "revoke_api_token",

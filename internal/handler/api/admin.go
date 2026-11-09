@@ -1,9 +1,7 @@
 package api
 
 import (
-	"context"
 	"database/sql"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -274,17 +272,12 @@ func (h *AdminHandler) UpdateNotificationSettings(
 //	  403: body:ForbiddenError
 //	  500: body:ServerError
 func (h *AdminHandler) Stats(w http.ResponseWriter, r *http.Request) {
-	users, err := countRows(r.Context(), h.repo.DB, "users")
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	projects, err := countRows(r.Context(), h.repo.DB, "projects")
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	deployments, err := countRows(r.Context(), h.repo.DB, "deployments")
+	var users, projects, deployments int64
+	err := h.repo.DB.QueryRowContext(r.Context(), `
+SELECT (SELECT COUNT(*) FROM users),
+       (SELECT COUNT(*) FROM projects),
+       (SELECT COUNT(*) FROM deployments)
+`).Scan(&users, &projects, &deployments)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -295,16 +288,6 @@ func (h *AdminHandler) Stats(w http.ResponseWriter, r *http.Request) {
 		"projects":    projects,
 		"deployments": deployments,
 	})
-}
-
-func countRows(ctx context.Context, db *sql.DB, table string) (int64, error) {
-	row := db.QueryRowContext(
-		ctx,
-		fmt.Sprintf("SELECT COUNT(*) FROM %s", table),
-	)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
 }
 
 // swagger:route POST /admin/maintenance admin maintenance

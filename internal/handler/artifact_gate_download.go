@@ -47,7 +47,7 @@ func (h *ArtifactGateHandler) openGateBundle(
 		gateHTTPError(w, r, 409, "Artifact is expired")
 		return nil, db.ArtifactGate{}
 	}
-	file, err := artifact.OpenGateSpool()
+	file, err := artifact.OpenGateSpool(h.repo.ArtifactClient.TempDir)
 	if err != nil {
 		gateHTTPError(w, r, 500, "Artifact storage unavailable")
 		return nil, db.ArtifactGate{}

@@ -3744,6 +3744,31 @@ Open the dashboard, projects, environments, and `/api/swagger/` in a browser.
 Confirm that styles and scripts load.
 These checks create no records or schedules.
 
+## Security consistency checks
+
+Use the thread stack URL from its `connection.json` file.
+Sign in with an administrator account.
+Create a project with the browser session and a valid CSRF token.
+Expect HTTP 303 and a retained project.
+Repeat the request with a missing, shortened, or incorrect CSRF token.
+Expect HTTP 403 and no new project.
+Send a valid `X-CSRF-Token` header without a form token.
+Expect HTTP 303 and a retained project.
+Send an incorrect form token with a valid header token.
+Expect HTTP 403 because the form token takes precedence.
+
+Request `GET /api/v1/admin/stats` with an administrator bearer token.
+Compare `users`, `projects`, and `deployments` with the retained example counts.
+Repeat the request with a viewer bearer token.
+Expect HTTP 403.
+Poll with a paired agent.
+Inspect its fleet details through the public API.
+Compare its heartbeat timestamp with the database clock.
+Confirm that artifact generation, approval, download, and staging transfer still complete.
+Retain the projects and deployment history for manual review.
+These checks do not require schedules.
+Keep existing test schedules disabled.
+
 ## API token lookup failures
 
 Run the isolated authentication and HTTP regression checks:
