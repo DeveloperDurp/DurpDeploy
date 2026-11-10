@@ -117,6 +117,28 @@ The separate `/admin/users` page and `/api/v1/admin/users` endpoint require a gl
 This shared-infrastructure model does not provide tenant isolation for environment names or member-picker directory data.
 Directory visibility does not grant project access or member management permission.
 
+## Shared step templates
+
+Saved step templates are global shared definitions.
+Every authenticated browser user, including viewers, can read their full scripts and script history without source-project membership.
+Global bearer tokens have the same read access through `/api/v1/templates` and its detail and history endpoints.
+The responses include execution settings, container images, variable names, and agent selectors.
+Project-scoped tokens cannot read these shared templates, including through the project template picker.
+
+Saving a step as a template copies its definition into this shared collection.
+The saved step template retains no source-project ownership or membership boundary.
+Removing source-project membership does not revoke access to the shared copy.
+Copying a shared step template into a project still requires destination-project authoring permission.
+
+Do not put secret values in script text.
+Stored script text and historical versions do not receive deployment-log redaction.
+Use secret-variable references instead of literal secret values.
+References remain visible, but they do not include the referenced values.
+
+Whole-project templates retain their separate source-project membership controls.
+The curated library contains shared embedded definitions and permits scoped-token previews through authorized project routes.
+Read access does not grant permission to apply or execute a definition.
+
 ## Project groups
 
 Project groups organize the project list without changing project permissions.

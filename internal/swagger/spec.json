@@ -10712,6 +10712,7 @@
     },
     "/projects/{id}/templates-picker": {
       "get": {
+        "description": "Requires destination-project access and a global token.\nReturns shared full scripts without source-project membership checks.",
         "produces": [
           "application/json"
         ],
@@ -10748,6 +10749,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
             }
           },
           "500": {
@@ -11529,6 +11536,7 @@
     },
     "/templates": {
       "get": {
+        "description": "Global tokens can read full scripts without source-project membership.\nStored scripts are not redacted. Project-scoped tokens are rejected.",
         "produces": [
           "application/json"
         ],
@@ -11564,6 +11572,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
             }
           },
           "500": {
@@ -11649,6 +11663,7 @@
     },
     "/templates/{id}": {
       "get": {
+        "description": "Global tokens can read the full script without source-project membership.\nStored scripts are not redacted. Project-scoped tokens are rejected.",
         "produces": [
           "application/json"
         ],
@@ -11685,6 +11700,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
             }
           },
           "404": {
@@ -11852,6 +11873,7 @@
     },
     "/templates/{id}/history": {
       "get": {
+        "description": "Global tokens can read full historical scripts without source membership.\nHistorical scripts are not redacted. Project-scoped tokens are rejected.",
         "produces": [
           "application/json"
         ],
@@ -11888,6 +11910,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
             }
           },
           "404": {

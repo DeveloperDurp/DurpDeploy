@@ -52,6 +52,8 @@ func (req stepTemplateRequest) definition() stepdefinition.Definition {
 // swagger:route GET /templates templates listTemplates
 //
 // List all step templates.
+// Global tokens can read full scripts without source-project membership.
+// Stored scripts are not redacted. Project-scoped tokens are rejected.
 //
 //	Produces:
 //	- application/json
@@ -63,6 +65,7 @@ func (req stepTemplateRequest) definition() stepdefinition.Definition {
 //	Responses:
 //	  200: body:StepTemplateListResponse
 //	  401: body:UnauthorizedError
+//	  403: body:ForbiddenError
 //	  500: body:ServerError
 func (h *StepTemplateHandler) ListTemplates(
 	w http.ResponseWriter,
@@ -111,6 +114,8 @@ func (h *StepTemplateHandler) ListTemplates(
 // swagger:route GET /projects/{id}/templates-picker templates templatesPicker
 //
 // List step templates for the picker.
+// Requires destination-project access and a global token.
+// Returns shared full scripts without source-project membership checks.
 //
 //	Produces:
 //	- application/json
@@ -123,6 +128,7 @@ func (h *StepTemplateHandler) ListTemplates(
 //	  200: body:StepTemplateListResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
+//	  403: body:ForbiddenError
 //	  500: body:ServerError
 func (h *StepTemplateHandler) TemplatesPicker(
 	w http.ResponseWriter,
@@ -208,6 +214,8 @@ func (h *StepTemplateHandler) CreateTemplate(
 // swagger:route GET /templates/{id} templates getTemplate
 //
 // Get a step template.
+// Global tokens can read the full script without source-project membership.
+// Stored scripts are not redacted. Project-scoped tokens are rejected.
 //
 //	Produces:
 //	- application/json
@@ -223,6 +231,7 @@ func (h *StepTemplateHandler) CreateTemplate(
 //	200: body:StepTemplate
 //	400: body:BadRequestError
 //	401: body:UnauthorizedError
+//	403: body:ForbiddenError
 //	404: body:NotFoundError
 //	500: body:ServerError
 func (h *StepTemplateHandler) GetTemplate(
@@ -359,6 +368,8 @@ func (h *StepTemplateHandler) DeleteTemplate(
 // swagger:route GET /templates/{id}/history templates getTemplateHistory
 //
 // List version history for a step template.
+// Global tokens can read full historical scripts without source membership.
+// Historical scripts are not redacted. Project-scoped tokens are rejected.
 //
 //	Produces:
 //	- application/json
@@ -371,6 +382,7 @@ func (h *StepTemplateHandler) DeleteTemplate(
 //	  200: body:StepTemplateVersionListResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
+//	  403: body:ForbiddenError
 //	  404: body:NotFoundError
 //	  500: body:ServerError
 func (h *StepTemplateHandler) ListTemplateHistory(

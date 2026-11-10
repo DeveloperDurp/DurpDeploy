@@ -91,6 +91,29 @@ An export permits one download and records an audit event without secret values.
 Invalid, expired, canceled, consumed, or unapproved requests return `404`.
 Insufficient administrator or token permissions return `403`.
 
+## Shared saved step templates
+
+Saved step templates are global shared definitions without source-project ownership.
+Global tokens, including viewer tokens, can read full scripts through these endpoints:
+
+```text
+GET /api/v1/templates
+GET /api/v1/templates/{id}
+GET /api/v1/templates/{id}/history
+GET /api/v1/projects/{id}/templates-picker
+```
+
+The project picker requires access to its destination project.
+Project-scoped tokens cannot use these shared-template endpoints.
+Every authenticated browser user can read shared scripts and history without source-project membership.
+Template reads include script literals without deployment-log redaction.
+Do not include secret values in script text.
+Use secret-variable references instead.
+Editing a template does not remove literals from earlier versions or copies.
+
+Whole-project templates retain source-project membership controls.
+Curated definitions use the separate routes below.
+
 ## Curated step and workflow templates
 
 Browse `GET /api/v1/template-library` with a global token.

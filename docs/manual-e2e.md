@@ -4018,3 +4018,41 @@ Stop it with `make dev-stack ACTION=down STATE=/home/user/.local/state/durpdeplo
 The retained probe also attempted a 70 MiB write to ordinary workload `/tmp`.
 The write failed at the default 64 MiB bound.
 Supervisor mounts and host-mode scripts have separate resource boundaries.
+
+## Shared step-template visibility
+
+Use the [retained template history](https://durpdeploy-dev-6e1846d6a3a5f78336ddf8fa.localhost:41067/templates/1/history) for manual review.
+The retained destination project is `/projects/2` on that instance.
+Read `.local/evidence/184/private-live.json` in the task worktree for fixture credentials.
+The separate stack state is `/home/user/.local/state/durpdeploy/retained-184-20261109`.
+Stop it with `make dev-stack ACTION=down STATE=/home/user/.local/state/durpdeploy/retained-184-20261109`.
+
+Use two disposable projects named Shared template source and Shared template destination.
+Retain both projects and the saved template after these checks.
+Keep all schedules disabled.
+
+1. As a source Maintainer, create a step with a harmless marker and a secret-variable reference.
+2. Select **Save Template** for that step.
+3. Edit the saved template and change the harmless marker.
+4. As a viewer without source-project membership, open `/templates`.
+5. Open the saved template history and expand **View full script** for both versions.
+6. Confirm that both markers and the variable reference remain readable.
+7. Repeat the history check with a phone viewport.
+8. With a global viewer token, request `/api/v1/templates`, `/api/v1/templates/{id}`, and `/api/v1/templates/{id}/history`.
+9. Confirm that the API returns full scripts and saved execution settings.
+10. With destination membership, request `/api/v1/projects/{id}/templates-picker` with the global viewer token.
+11. Confirm that the picker returns the shared definition.
+12. Repeat those API reads with a project-scoped token.
+13. Confirm that each shared-template request returns `403`.
+14. Preview `/api/v1/projects/{id}/template-library/http-health-check` with the scoped token.
+15. Confirm that the curated preview returns `200` for an authorized destination project.
+16. Remove the original author's source-project membership.
+17. Confirm that shared template detail and history reads remain available.
+18. As a destination Maintainer, insert the shared template into that project.
+19. Confirm that a viewer or Deployer cannot insert it.
+
+Saved step templates have no source-project ownership boundary.
+Whole-project templates retain their separate source-project membership controls.
+Script literals remain readable without deployment-log redaction, including earlier versions and copies.
+Use harmless markers instead of real secret values for this check.
+Use **Enable** on a schedule only when you intend to run its deployment or runbook.

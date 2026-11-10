@@ -65,6 +65,27 @@ Never restore a compromised identity.
 The listener certificate and private key are separate from `DURPDEPLOY_SECRET_KEY`.
 The encryption-key rotation command does not rotate the listener identity or repair agent trust.
 
+### Shared step-template read boundary
+
+Saved step templates intentionally share full script bodies and historical versions across projects.
+Every authenticated browser user and global bearer token can read these definitions, including viewers without source-project membership.
+Project-scoped tokens cannot read shared saved step templates or their project picker.
+Script reads also expose saved execution settings, container images, variable names, and agent selectors through the API.
+
+Saving a project step as a template creates a shared copy without source-project ownership.
+Later membership changes do not restrict that copy.
+Destination-project authoring controls still apply when a user inserts the template.
+Whole-project templates instead retain source-project membership controls.
+Curated library definitions remain shared and support scoped-token previews through authorized project routes.
+
+Do not store literal secrets in template scripts.
+Template reads and historical versions do not use deployment-log scrubbing.
+The server does not identify or redact arbitrary secret text in stored scripts.
+Use secret-variable references instead of secret literals.
+References remain readable and resolve separately during execution.
+Editing the current script does not remove literals from earlier template versions or copies.
+If a script disclosed a secret, rotate that secret and review existing versions and copies.
+
 ### OIDC boundary
 
 OIDC adds browser sign-in; local password login and bearer API authentication
