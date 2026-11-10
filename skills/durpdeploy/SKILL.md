@@ -647,6 +647,18 @@ Created projects and release snapshots remain independent.
 
 ## Deploy flow (the common ask)
 
+Environments are shared execution resources without separate project ownership or caller memberships.
+Effective Deployer permission permits deploying existing releases from a project without a lifecycle to any existing environment.
+This includes environments used by inaccessible projects and applies to authorized project-scoped tokens.
+Lifecycle-bound projects can deploy only to their lifecycle stages.
+Force cannot bypass environment eligibility.
+Promotion and approval gates still apply, including at scheduled execution time.
+
+Environment selection chooses matching remote agents and environment-specific variable values from the source release and assigned lifecycle.
+It does not import another project's variables or grant access to that project.
+Treat free-floating projects' authorized authors and deployment operators as trusted users of every environment's matching execution resources.
+Environment-name visibility alone grants no execution permission.
+
 Administrators can read delivery history with `GET /api/v1/admin/notifications`.
 Each `results` field contains a JSON string that maps channels to delivery statuses.
 Email status `ok: sent without TLS` means delivery succeeded over plaintext.

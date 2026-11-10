@@ -262,6 +262,65 @@ func (f *testFixture) captureRunCalls() chan runCall {
 
 // --- tests ---
 
+func TestTick_SharedEnvironmentEligibility(t *testing.T) {
+	for _, bound := range []bool{false, true} {
+		t.Run(fmt.Sprintf("lifecycle=%t", bound), func(t *testing.T) {
+			assertSharedEnvironmentEligibility(t, bound)
+		})
+	}
+}
+
+func assertSharedEnvironmentEligibility(t *testing.T, bound bool) {
+	t.Helper()
+	f := newFixture(t)
+	project := f.createProject()
+	release := f.createRelease(project.ID)
+	environment := f.createEnvironment("shared")
+	other, err := f.repo.Queries.CreateProject(f.ctx(),
+		db.CreateProjectParams{Name: "other-project"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherRelease := f.createRelease(other.ID)
+	f.createDeployment(otherRelease.ID, environment.ID, "succeeded")
+	if bound {
+		lifecycle := f.createLifecycle("excludes shared environment")
+		f.attachLifecycle(project.ID, lifecycle.ID)
+	}
+	schedule := f.createSchedule(project.ID, release.ID,
+		environment.ID, "* * * * *", f.now.Add(-time.Minute), 1, "")
+	calls := f.captureRunCalls()
+	f.sched.Tick(f.ctx())
+	deployments, err := f.repo.Queries.ListDeploymentsByRelease(
+		f.ctx(), release.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bound {
+		if len(deployments) != 0 || len(calls) != 0 {
+			t.Fatal("scheduler executed outside the project lifecycle")
+		}
+	} else {
+		select {
+		case call := <-calls:
+			if call.EnvironmentID != environment.ID ||
+				call.ReleaseID != release.ID || len(deployments) != 1 {
+				t.Fatal("scheduler did not execute the source release")
+			}
+		case <-time.After(time.Second):
+			t.Fatal("scheduler did not execute in the shared environment")
+		}
+	}
+	updated, err := f.repo.Queries.GetScheduledDeployment(
+		f.ctx(), schedule.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.NextRunAt <= f.now.Unix() {
+		t.Fatal("scheduler did not advance the occurrence")
+	}
+}
+
 func TestTick_DueRow_FiresAndAdvances(t *testing.T) {
 	f := newFixture(t)
 	proj := f.createProject()

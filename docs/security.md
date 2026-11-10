@@ -74,6 +74,28 @@ email verification, provider outage, and administrator recovery requirements.
 
 ### Execution boundary
 
+Environments are globally shared execution resources, including their matching remote-agent fleets.
+Effective Deployer permission on a free-floating project permits deploying its existing releases to any existing environment.
+The caller does not need membership in another project that uses that environment.
+Project-scoped tokens retain this execution eligibility within their authorized source projects and permission ceilings.
+Environment-name visibility alone grants no execution permission.
+
+Lifecycle-bound projects can deploy only to their assigned lifecycle stages.
+Force cannot bypass this restriction.
+Promotion and approval gates remain active, including at scheduled execution time.
+Schedule authoring requires effective Maintainer permission.
+These controls do not provide separate environment memberships or project ownership of agent fleets.
+
+Environment selection chooses matching agents and environment-specific values from the source release and its assigned lifecycle context.
+It does not import arbitrary foreign-project variables.
+New deployments capture their variables and environment identity through the existing snapshot rules.
+Existing snapshots, retry, and re-run contracts remain unchanged.
+
+Trust free-floating projects' authorized script authors and deployment operators with every environment's matching execution resources.
+Agent environment and capability labels select agents without establishing project isolation.
+Use separate instances when projects must not share environment execution authority.
+See [shared environment execution](roles.md#shared-environment-execution) for the role requirements.
+
 Server-side steps run only in containers managed through the embedded agent's
 local Docker or Podman socket. No step receives that socket or a control-plane mount;
 the root filesystem is read-only, network is disabled by default (local steps

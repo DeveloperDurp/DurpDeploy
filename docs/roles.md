@@ -78,6 +78,29 @@ Lifecycle assignment can expose shared secrets.
 Only global administrators create or change lifecycle assignments.
 Authorized project administrators can retain or remove an existing assignment.
 
+## Shared environment execution
+
+Environments are shared execution resources without project ownership or separate caller memberships.
+Effective Deployer permission on a project permits deployment of its existing releases to any environment when the project has no lifecycle.
+The global role, project membership, and token ceiling must each permit deployment.
+This permission includes environments used by projects that the caller cannot access.
+Environment-name visibility alone does not grant deployment permission.
+
+Lifecycle-bound projects can deploy only to their lifecycle stages.
+Promotion and approval gates still apply.
+Force cannot bypass lifecycle environment eligibility.
+Scheduled executions recheck these gates when they run.
+Schedule authoring still requires effective Maintainer permission.
+
+The selected environment determines matching remote agents and environment-specific variable values.
+Variable capture uses the source release and its project's assigned lifecycle.
+Selecting an environment does not import another project's variables or grant access to that project.
+Release and deployment snapshots retain their existing behavior.
+
+Treat every free-floating project's authorized script authors and deployment operators as trusted users of every environment's matching agent fleet.
+Agent labels select execution resources without establishing a project authorization boundary.
+Use separate instances when projects must not share environment execution authority.
+
 ## Shared directory and environment names
 
 Environment names are shared instance metadata.

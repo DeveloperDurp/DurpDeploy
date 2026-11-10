@@ -45,6 +45,49 @@ Record the instance URL, agent links, certificate path, and stop command in priv
 Leave schedules disabled after testing.
 After fleet verification, use each schedule's enable control to restore only the schedules required for normal operation.
 
+## Shared environment execution (#183)
+
+Environments are shared execution resources without project ownership or separate caller memberships.
+Effective Deployer permission permits existing-release deployment from a free-floating project to every existing environment.
+This includes environments used by inaccessible projects.
+Lifecycle stages constrain lifecycle-bound projects, including forced web submissions and scheduled execution.
+Environment selection does not import another project's variables.
+
+Use the retained fixture at `/home/user/.local/state/durpdeploy/retained-183`.
+Read its URL and CA path from `connection.json`.
+Read administrator and operator credentials from `review-login.json` and `operator-login.json` in that private directory.
+Keep this fixture outside the thread teardown registration.
+
+1. Sign in as the project operator.
+2. Open **183 Source free-floating** and its **Deploy** page.
+3. Confirm that **183 Shared execution** and **183 Lifecycle stage** are selectable.
+4. Deploy release `183-shared-trust` to **183 Shared execution**.
+5. Confirm that the logs contain `source=source-selected foreign=unset`.
+6. Confirm that **183 Inaccessible project** remains inaccessible to the operator.
+7. Open **183 Lifecycle-bound** and select release `183-bound` on its **Deploy** page.
+8. Confirm that only **183 Lifecycle stage** is selectable.
+9. Submit **183 Shared execution** through the deployment API for the lifecycle-bound project.
+10. Confirm that the API returns `422` without creating a deployment.
+11. Submit the same selection through the web endpoint with and without `force=true`.
+12. Confirm that both web requests return `422` without creating deployments.
+
+Use `POST /api/v1/projects/{id}/deployments` with the source project's `release_id` and target `environment_id`.
+Expect `201` for authorized free-floating deployment and `403` for Viewer permission or missing source-project membership.
+A project-scoped Deployer token retains shared target eligibility within its authorized source project.
+A Viewer token ceiling blocks deployment without changing the owner's browser permissions.
+
+The retained source schedule is disabled.
+To test scheduling manually, enable that schedule in **Scheduled Deployments** and wait for its next occurrence.
+Disable the schedule after the check.
+Keep all projects, environments, releases, accounts, and deployment history for repeat checks.
+
+Run `TestSharedEnvironment.*E2E` with the `e2e,packagebrowser` tags for automated API, web, and browser coverage.
+Run `TestTick_SharedEnvironmentEligibility` for scheduler execution eligibility.
+Existing remote fan-out tests cover environment and capability label matching.
+Existing deployment identity and variable tests cover snapshot behavior across supported database backends.
+
+Stop the retained fixture with `make dev-stack ACTION=down STATE=/home/user/.local/state/durpdeploy/retained-183`.
+
 ## Foreign key validation (#189)
 
 Run `make e2e-test` against a running instance.
