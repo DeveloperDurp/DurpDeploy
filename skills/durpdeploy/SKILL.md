@@ -345,6 +345,18 @@ Creation time and project ID resolve equal names in descending order.
 Use `limit` and `offset` to paginate matching projects.
 The default limit is 100 and the maximum is 1000.
 
+Set `updates_available=true` to list projects with a newer release for an environment.
+GET project responses include `release_availability`.
+Read `latest_release`, `updates_available`, and `environments` from that object.
+Each environment includes `current_release`, `update_available`, `ready_to_deploy`, `reason`, and `requires_approval`.
+The latest release uses creation time and release ID.
+Version labels do not determine order.
+Only successful deployments update the current release.
+Check runs do not update the current release.
+Promotion readiness uses the existing lifecycle rules.
+Approval requirements remain separate from promotion readiness.
+Projects without releases or eligible environments have no updates.
+
 The web list uses the same project filters and pagination.
 Group headings appear alphabetically, followed by Ungrouped.
 Sorting controls project order within each displayed group.

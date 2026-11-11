@@ -46,6 +46,13 @@ func ParseProjectCatalogOptions(
 	if len(o.Query) > 1000 {
 		return o, errors.New("search must not exceed 1000 bytes")
 	}
+	switch values.Get("updates_available") {
+	case "", "false":
+	case "true":
+		o.UpdatesAvailable = true
+	default:
+		return o, errors.New("updates_available must be true or false")
+	}
 	if o.Sort == "" {
 		o.Sort = "name"
 	}

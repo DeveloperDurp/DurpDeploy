@@ -1,6 +1,6 @@
 module durpdeploy
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/DeveloperDurp/durpdeploy-agent v0.1.2-0.20261024215522-261682484e74

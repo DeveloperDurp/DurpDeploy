@@ -60,9 +60,12 @@ func TestProjectPanelBatchAPIWebE2E(t *testing.T) {
 		f.environment,
 	}
 	var baseline [2]int64
+	seedRelease(t, f.h.repo, f.project.ID)
 	for _, size := range [][2]int{{2, 2}, {12, 8}, {42, 32}} {
 		for len(projects) < size[0] {
-			projects = append(projects, seedProject(t, f.h.repo))
+			project := seedProject(t, f.h.repo)
+			seedRelease(t, f.h.repo, project.ID)
+			projects = append(projects, project)
 		}
 		for len(environments) < size[1] {
 			environments = append(environments, seedEnv(t, f.h.repo))

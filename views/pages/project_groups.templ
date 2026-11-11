@@ -63,6 +63,7 @@ func (s ProjectListState) PageURL(offset int64) string {
 	v := url.Values{"q": {s.Options.Query}, "sort": {s.Options.Sort},
 		"limit": {strconv.FormatInt(s.Options.Limit, 10)}, "offset": {strconv.FormatInt(offset, 10)}}
 	if s.Options.GroupID >= 0 { v.Set("group_id", strconv.FormatInt(s.Options.GroupID, 10)) }
+	if s.Options.UpdatesAvailable { v.Set("updates_available", "true") }
 	return s.Path + "?" + v.Encode()
 }
 
@@ -276,7 +277,7 @@ templ ProjectCatalogControls(state ProjectListState) {
 	<div x-data="{ open: false }" class="space-y-2 mb-4">
 		<button type="button" class="btn btn-ghost md:hidden" @click="open = !open" aria-expanded="false" :aria-expanded="open" aria-controls={ state.FilterID() } data-project-filter-toggle>
 			<span x-text="open ? 'Hide filters' : 'Filters'">Filters</span>
-			if state.Options.Query != "" || state.Options.GroupID >= 0 || state.Options.Sort != "name" || state.Options.Limit != 100 {
+			if state.Options.Query != "" || state.Options.GroupID >= 0 || state.Options.Sort != "name" || state.Options.Limit != 100 || state.Options.UpdatesAvailable {
 				<span class="badge badge-primary">Active</span>
 			}
 		</button>
@@ -309,6 +310,7 @@ templ ProjectCatalogControls(state ProjectListState) {
 			<option value="name_desc" selected?={ state.Options.Sort == "name_desc" }>Name Z–A</option>
 		</select></label>
 		<label class="form-control min-w-0"><span class="label-text">Per page</span><input class="input input-bordered md:input-sm w-24 max-w-full" type="number" name="limit" min="1" max="1000" value={ strconv.FormatInt(state.Options.Limit, 10) }/></label>
+		<label class="flex items-center gap-2 text-sm"><input type="checkbox" class="checkbox checkbox-sm" name="updates_available" value="true" checked?={ state.Options.UpdatesAvailable }/>Updates available</label>
 		<button type="submit" class="btn md:btn-sm btn-primary">Filter</button>
 		<a href={ templ.SafeURL(state.Path) } hx-boost="false" class="btn md:btn-sm btn-ghost"
 		if state.Modal {

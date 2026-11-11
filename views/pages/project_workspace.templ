@@ -7,6 +7,7 @@ import (
 )
 
 type LifecyclePanel struct {
+	Releases        repository.ProjectReleaseAvailability
 	CredentialStatus repository.CredentialStatusSummary
 	Lifecycle       db.Lifecycle
 	Stages          []LifecyclePanelStage
@@ -15,6 +16,8 @@ type LifecyclePanel struct {
 }
 
 type LifecyclePanelStage struct {
+	ReleaseUpdate    *repository.EnvironmentReleaseAvailability
+	AvailableVersion string
 	Stage            db.LifecycleStage
 	Environment      db.Environment
 	LatestDeployment *db.Deployment
@@ -53,6 +56,7 @@ templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable
 				}
 			</p>
 			@ProjectPermissionSummary()
+			@ProjectReleaseBadge(panel.Releases)
 			@ProjectCredentialBanner(project.ID, panel.CredentialStatus)
 			@LifecyclePanelSection(project, panel)
 			@VariablesPreviewSection(project, vars, envs) {
@@ -64,6 +68,35 @@ templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable
 		</div>
 		@ProjectMenuDialog(project)
 	</div>
+}
+
+templ ProjectReleaseBadge(state repository.ProjectReleaseAvailability) {
+	if state.UpdatesAvailable && state.LatestRelease != nil {
+		<span class="badge badge-info badge-sm mb-3" title={ "Latest release: " + state.LatestRelease.Version } data-release-update>New release</span>
+	}
+}
+
+templ EnvironmentReleaseUpdate(state *repository.EnvironmentReleaseAvailability, version string) {
+	if state != nil && state.UpdateAvailable {
+		<div class="text-xs mt-1 break-words" data-environment-release-update>
+			<div class="font-mono break-all">
+				if state.CurrentRelease != nil {
+					{ state.CurrentRelease.Version }
+				} else {
+					No successful deploys
+				}
+				<span> → </span>{ version }
+			</div>
+			if state.ReadyToDeploy {
+				<span class="text-info">Ready to deploy</span>
+				if state.RequiresApproval {
+					<span> · Approval required</span>
+				}
+			} else {
+				<span title={ state.Reason }>Waiting for preceding stage</span>
+			}
+		</div>
+	}
 }
 
 // Keep the drawer inside the detail fragment so navigation removes it too.

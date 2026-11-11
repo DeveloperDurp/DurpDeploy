@@ -5911,6 +5911,13 @@
         "operationId": "listProjects",
         "parameters": [
           {
+            "type": "boolean",
+            "x-go-name": "UpdatesAvailable",
+            "description": "Return projects with a newer release for at least one environment.",
+            "name": "updates_available",
+            "in": "query"
+          },
+          {
             "type": "string",
             "x-go-name": "Query",
             "description": "Search project names and descriptions. Matching ignores ASCII case.",
@@ -13855,6 +13862,40 @@
       "x-go-name": "swaggerEnvironmentListResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "EnvironmentReleaseAvailability": {
+      "type": "object",
+      "properties": {
+        "current_release": {
+          "$ref": "#/definitions/ReleaseReference"
+        },
+        "environment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "EnvironmentID"
+        },
+        "environment_name": {
+          "type": "string",
+          "x-go-name": "EnvironmentName"
+        },
+        "ready_to_deploy": {
+          "type": "boolean",
+          "x-go-name": "ReadyToDeploy"
+        },
+        "reason": {
+          "type": "string",
+          "x-go-name": "Reason"
+        },
+        "requires_approval": {
+          "type": "boolean",
+          "x-go-name": "RequiresApproval"
+        },
+        "update_available": {
+          "type": "boolean",
+          "x-go-name": "UpdateAvailable"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
+    },
     "EnvironmentRequest": {
       "type": "object",
       "title": "EnvironmentRequest is the body for create/update environment.",
@@ -15327,6 +15368,26 @@
       "x-go-name": "swaggerProjectNotificationResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "ProjectReleaseAvailability": {
+      "type": "object",
+      "properties": {
+        "environments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EnvironmentReleaseAvailability"
+          },
+          "x-go-name": "Environments"
+        },
+        "latest_release": {
+          "$ref": "#/definitions/ReleaseReference"
+        },
+        "updates_available": {
+          "type": "boolean",
+          "x-go-name": "UpdatesAvailable"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
+    },
     "ProjectRequest": {
       "type": "object",
       "title": "ProjectRequest is the body for project updates.",
@@ -15405,6 +15466,9 @@
         "notify_emails": {
           "type": "string",
           "x-go-name": "NotifyEmails"
+        },
+        "release_availability": {
+          "$ref": "#/definitions/ProjectReleaseAvailability"
         },
         "slack_webhook_url": {
           "type": "string",
@@ -15765,6 +15829,22 @@
       },
       "x-go-name": "swaggerReleaseListResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "ReleaseReference": {
+      "type": "object",
+      "title": "ReleaseReference exposes release identity without its frozen script data.",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "version": {
+          "type": "string",
+          "x-go-name": "Version"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
     },
     "ReleaseRequest": {
       "type": "object",

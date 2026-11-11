@@ -28,7 +28,7 @@ for entry in "${targets[@]}"; do
   # The wrapper deadline also covers cold compilation and cleanup.
   timeout --signal=TERM --kill-after=10s 6m env -i \
     HOME="$HOME" PATH="$PATH" \
-    GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.10}" GOFLAGS=-mod=readonly \
+    GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.11}" GOFLAGS=-mod=readonly \
     GOPATH="$(go env GOPATH)" GOMODCACHE="$(go env GOMODCACHE)" \
     GOCACHE="$(go env GOCACHE)" GOMAXPROCS=2 GOMEMLIMIT=1GiB \
     "${command[@]}" >"$private/$target.log" 2>&1 || status=$?

@@ -1,5 +1,31 @@
 # Manual checks after `make e2e-test`
 
+## Project release availability
+
+1. Open a project with two lifecycle stages.
+2. Create a release.
+3. Open Projects.
+4. Confirm that the project shows New release.
+5. Select Updates available.
+6. Confirm that the project remains visible.
+7. Open the project.
+8. Confirm that the first environment shows Ready to deploy.
+9. Confirm that the second environment shows Waiting for preceding stage.
+10. Deploy the release successfully to the first environment.
+11. Confirm that the second environment shows Ready to deploy.
+12. If approval is required, confirm that Approval required also appears.
+13. Deploy the release successfully to the second environment.
+14. Confirm that the project disappears from the filtered list.
+15. Create another release and confirm that the badge returns.
+
+Failed deployments and check runs do not clear the badge.
+Creation time determines release order.
+Release ID resolves equal creation times.
+Version labels do not determine release order.
+Use `GET /api/v1/projects?updates_available=true` to check the same filter.
+Read `release_availability` from GET project responses for environment details.
+Keep the project and releases for repeat checks.
+
 ## Server listener identity replacement (#181)
 
 Use a dedicated disposable instance with two test agents and isolated private identity directories.

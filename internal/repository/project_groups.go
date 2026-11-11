@@ -23,6 +23,7 @@ type ProjectCatalogAccess = db.ListAccessibleProjectGroupsParams
 type ProjectCatalogOptions struct {
 	Query, Sort            string
 	GroupID, Limit, Offset int64
+	UpdatesAvailable       bool
 }
 
 func (r *Repository) ProjectCatalog(
@@ -32,28 +33,37 @@ func (r *Repository) ProjectCatalog(
 ) ([]db.Project, int64, error) {
 	search := strings.NewReplacer("!", "!!", "%", "!%", "_", "!_", "[", "![").
 		Replace(options.Query)
-	filter := db.CountProjectCatalogParams{
+	filter := db.ListProjectCatalogParams{
 		IsAdmin: access.IsAdmin, UserID: access.UserID, TokenID: access.TokenID,
 		GroupFilter: options.GroupID, Search: "%" + search + "%",
+		SortOrder: options.Sort, PageLimit: options.Limit, PageOffset: options.Offset,
 	}
-	total, err := r.Queries.CountProjectCatalog(ctx, filter)
+	if options.UpdatesAvailable {
+		filter.UpdatesAvailable = 1
+	}
+	rows, err := r.Queries.ListProjectCatalog(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}
-	projects, err := r.Queries.ListProjectCatalog(
-		ctx,
-		db.ListProjectCatalogParams{
-			IsAdmin:     filter.IsAdmin,
-			UserID:      filter.UserID,
-			TokenID:     filter.TokenID,
-			GroupFilter: filter.GroupFilter,
-			Search:      filter.Search,
-			SortOrder:   options.Sort,
-			PageLimit:   options.Limit,
-			PageOffset:  options.Offset,
-		},
-	)
-	return projects, total, err
+	var total int64
+	if len(rows) > 0 {
+		total = rows[0].Total
+	} else {
+		// An empty page cannot carry its window count. Reuse the same filter.
+		filter.PageOffset, filter.PageLimit = 0, 1
+		first, err := r.Queries.ListProjectCatalog(ctx, filter)
+		if err != nil {
+			return nil, 0, err
+		}
+		if len(first) > 0 {
+			total = first[0].Total
+		}
+	}
+	projects := make([]db.Project, len(rows))
+	for i, row := range rows {
+		projects[i] = row.Project
+	}
+	return projects, total, nil
 }
 
 func (r *Repository) SaveProjectGroup(

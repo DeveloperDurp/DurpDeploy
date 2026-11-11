@@ -1,7 +1,10 @@
 // allow: SIZE_OK — swagger model definitions for the generated OpenAPI spec.
 package api
 
-import "durpdeploy/internal/stepdefinition"
+import (
+	"durpdeploy/internal/repository"
+	"durpdeploy/internal/stepdefinition"
+)
 
 // --- Database-mirror models returned directly by API handlers ---
 
@@ -425,14 +428,15 @@ type swaggerProjectListResponse struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerProjectResponse struct {
-	SlackWebhookURLConfigured   bool   `json:"slack_webhook_url_configured"`
-	GotifyTokenConfigured       bool   `json:"gotify_token_configured"`
-	DiscordWebhookURLConfigured bool   `json:"discord_webhook_url_configured"`
-	ID                          int64  `json:"id"`
-	Name                        string `json:"name"`
-	Description                 string `json:"description"`
-	CreatedAt                   int64  `json:"created_at"`
-	LifecycleID                 *int64 `json:"lifecycle_id"`
+	ReleaseAvailability         *repository.ProjectReleaseAvailability `json:"release_availability,omitempty"`
+	SlackWebhookURLConfigured   bool                                   `json:"slack_webhook_url_configured"`
+	GotifyTokenConfigured       bool                                   `json:"gotify_token_configured"`
+	DiscordWebhookURLConfigured bool                                   `json:"discord_webhook_url_configured"`
+	ID                          int64                                  `json:"id"`
+	Name                        string                                 `json:"name"`
+	Description                 string                                 `json:"description"`
+	CreatedAt                   int64                                  `json:"created_at"`
+	LifecycleID                 *int64                                 `json:"lifecycle_id"`
 	// Extensions:
 	// ---
 	// x-nullable: true

@@ -68,16 +68,18 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	panel.CredentialStatus = repository.SummarizeCredentials(credentials)
-	if isFragmentRequest(r) {
-		if err := pages.ProjectDetail(project, panel, variables, environments).
-			Render(r.Context(), w); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	} else {
-		if err := pages.ProjectDetailPage(project, panel, variables, environments, r.URL.Path).
-			Render(r.Context(), w); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
+	page := pages.ProjectDetail(project, panel, variables, environments)
+	if !isFragmentRequest(r) {
+		page = pages.ProjectDetailPage(
+			project,
+			panel,
+			variables,
+			environments,
+			r.URL.Path,
+		)
+	}
+	if err := page.Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -88,6 +90,30 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 // filterEmpty=false so users can see the full list of lifecycle stages or
 // every env, including untouched ones, when picking a deployment target.
 func (h *ProjectHandler) buildPanelForProject(
+	r *http.Request,
+	project db.Project,
+	data *projectPanelData,
+	filterEmpty bool,
+) (pages.LifecyclePanel, error) {
+	panel, err := h.buildEnvironmentPanel(r, project, data, filterEmpty)
+	if err != nil {
+		return panel, err
+	}
+	panel.Releases = data.releases[project.ID]
+	for i := range panel.Stages {
+		for _, state := range panel.Releases.Environments {
+			if state.EnvironmentID == panel.Stages[i].Environment.ID {
+				panel.Stages[i].ReleaseUpdate = &state
+			}
+		}
+		if panel.Releases.LatestRelease != nil {
+			panel.Stages[i].AvailableVersion = panel.Releases.LatestRelease.Version
+		}
+	}
+	return panel, nil
+}
+
+func (h *ProjectHandler) buildEnvironmentPanel(
 	r *http.Request,
 	project db.Project,
 	data *projectPanelData,
@@ -149,7 +175,8 @@ func buildFreeFloatingPanel(
 			},
 			data,
 		)
-		if filterEmpty && stage.LatestAttempt == nil {
+		if filterEmpty && stage.LatestAttempt == nil &&
+			!data.releases[projectID].UpdatesAvailable {
 			continue
 		}
 		views = append(views, stage)
@@ -186,6 +213,7 @@ func populateStageView(
 }
 
 type projectPanelData struct {
+	releases     map[int64]repository.ProjectReleaseAvailability
 	environments []db.Environment
 	envsByID     map[int64]db.Environment
 	deployments  map[[2]int64][]db.ListProjectPanelDeploymentsRow
@@ -225,6 +253,30 @@ func (h *ProjectHandler) loadProjectPanelData(
 	for _, row := range rows {
 		key := [2]int64{row.ProjectID, row.Deployment.EnvironmentID}
 		data.deployments[key] = append(data.deployments[key], row)
+	}
+	for _, project := range projects {
+		if _, loaded := data.lifecycles[project.LifecycleID.Int64]; !project.LifecycleID.Valid ||
+			loaded {
+			continue
+		}
+		id := project.LifecycleID.Int64
+		data.lifecycles[id], err = h.repo.Queries.GetLifecycle(r.Context(), id)
+		if err != nil {
+			return nil, err
+		}
+		data.stages[id], err = h.repo.Queries.ListLifecycleStages(
+			r.Context(),
+			id,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	data.releases, err = h.repo.ReleaseAvailabilityForPanel(
+		r.Context(), projects, environments, rows, data.stages,
+	)
+	if err != nil {
+		return nil, err
 	}
 	return data, nil
 }

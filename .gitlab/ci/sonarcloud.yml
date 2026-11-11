@@ -32,6 +32,10 @@ coverage:
 
 sonarcloud:
   stage: verify
+  variables:
+    KUBERNETES_MEMORY_LIMIT: "4Gi"
+    # Keep room for the JVM and native allocations outside the analysis heap.
+    SONAR_SCANNER_JAVA_OPTS: "-Xmx2g"
   image:
     name: harbor.durp.info/dockerhub/sonarsource/sonar-scanner-cli@sha256:38207bba3d98c8ce6f6c051ea2b9f05a24480da78c9ee5945ceafc3d9de02b88
     entrypoint: [""]

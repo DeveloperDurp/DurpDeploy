@@ -10,42 +10,6 @@ import (
 	"database/sql"
 )
 
-const countProjectCatalog = `-- name: CountProjectCatalog :one
-SELECT COUNT(*) FROM projects p
-WHERE (CAST(?1 AS INTEGER) = 1 OR p.id IN (
-    SELECT pm.project_id FROM project_members pm
-    WHERE pm.user_id = ?2))
-AND (CAST(?3 AS TEXT) = '' OR p.id IN (
-    SELECT tp.project_id FROM api_token_projects tp
-    WHERE tp.token_id = ?3))
-AND (CAST(?4 AS BIGINT) = -1
-    OR (CAST(?4 AS BIGINT) = 0 AND p.group_id IS NULL)
-    OR p.group_id = ?4)
-AND ((LOWER(p.name) LIKE LOWER(?5) ESCAPE '!')
-    OR (LOWER(COALESCE(p.description, '')) LIKE LOWER(?5) ESCAPE '!'))
-`
-
-type CountProjectCatalogParams struct {
-	IsAdmin     int64  `json:"is_admin"`
-	UserID      int64  `json:"user_id"`
-	TokenID     string `json:"token_id"`
-	GroupFilter int64  `json:"group_filter"`
-	Search      string `json:"search"`
-}
-
-func (q *Queries) CountProjectCatalog(ctx context.Context, arg CountProjectCatalogParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countProjectCatalog,
-		arg.IsAdmin,
-		arg.UserID,
-		arg.TokenID,
-		arg.GroupFilter,
-		arg.Search,
-	)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const createProjectGroup = `-- name: CreateProjectGroup :one
 INSERT INTO project_groups (name, name_key) VALUES (?, ?) RETURNING id, name, name_key
 `
@@ -137,7 +101,18 @@ func (q *Queries) ListAccessibleProjectGroups(ctx context.Context, arg ListAcces
 }
 
 const listProjectCatalog = `-- name: ListProjectCatalog :many
-SELECT p.id, p.name, p.description, p.created_at, p.lifecycle_id, p.slack_webhook_url, p.notify_emails, p.gotify_url, p.gotify_token, p.discord_webhook_url, p.group_id FROM projects p
+WITH successful_deployments AS (
+    SELECT d.release_id, d.environment_id, deployed.project_id,
+        ROW_NUMBER() OVER (PARTITION BY deployed.project_id, d.environment_id
+            ORDER BY d.created_at DESC, d.id DESC) AS deployment_rank
+    FROM deployments d JOIN releases deployed ON deployed.id = d.release_id
+    WHERE d.kind = 'deployment' AND d.status = 'succeeded'
+    AND COALESCE(d.ansible_check_mode, 0) = 0
+    AND NOT EXISTS (SELECT 1 FROM deployment_steps s
+        WHERE d.ansible_check_mode IS NULL AND s.deployment_id = d.id
+        AND s.kind = 'ansible' AND s.ansible_json LIKE '%"check":true%')
+)
+SELECT p.id, p.name, p.description, p.created_at, p.lifecycle_id, p.slack_webhook_url, p.notify_emails, p.gotify_url, p.gotify_token, p.discord_webhook_url, p.group_id, CAST(COUNT(*) OVER () AS BIGINT) AS total FROM projects p
 WHERE (CAST(?1 AS INTEGER) = 1 OR p.id IN (
     SELECT pm.project_id FROM project_members pm
     WHERE pm.user_id = ?2))
@@ -150,26 +125,48 @@ AND (CAST(?4 AS BIGINT) = -1
 AND CAST(?5 AS TEXT) != ''
 AND ((LOWER(p.name) LIKE LOWER(?6) ESCAPE '!')
     OR (LOWER(COALESCE(p.description, '')) LIKE LOWER(?6) ESCAPE '!'))
+AND (CAST(?7 AS INTEGER) = 0 OR EXISTS (
+    SELECT 1 FROM releases r CROSS JOIN environments e
+    WHERE r.project_id = p.id AND r.kind = 'deployment'
+    AND NOT EXISTS (SELECT 1 FROM releases newer
+        WHERE newer.project_id = p.id AND newer.kind = 'deployment'
+        AND (newer.created_at > r.created_at
+            OR (newer.created_at = r.created_at AND newer.id > r.id)))
+    AND (p.lifecycle_id IS NULL OR EXISTS (
+        SELECT 1 FROM lifecycle_stages ls
+        WHERE ls.lifecycle_id = p.lifecycle_id AND ls.environment_id = e.id))
+    AND r.id != COALESCE((
+        SELECT d.release_id FROM successful_deployments d
+        WHERE d.project_id = p.id AND d.environment_id = e.id
+        AND d.deployment_rank = 1
+    ), 0)
+))
 ORDER BY
     CASE WHEN CAST(?5 AS TEXT) = 'name' THEN LOWER(p.name) END ASC,
     CASE WHEN CAST(?5 AS TEXT) = 'name_desc' THEN LOWER(p.name) END DESC,
     p.created_at DESC, p.id DESC
-LIMIT ?8 OFFSET ?7
+LIMIT ?9 OFFSET ?8
 `
 
 type ListProjectCatalogParams struct {
-	IsAdmin     int64  `json:"is_admin"`
-	UserID      int64  `json:"user_id"`
-	TokenID     string `json:"token_id"`
-	GroupFilter int64  `json:"group_filter"`
-	SortOrder   string `json:"sort_order"`
-	Search      string `json:"search"`
-	PageOffset  int64  `json:"page_offset"`
-	PageLimit   int64  `json:"page_limit"`
+	IsAdmin          int64  `json:"is_admin"`
+	UserID           int64  `json:"user_id"`
+	TokenID          string `json:"token_id"`
+	GroupFilter      int64  `json:"group_filter"`
+	SortOrder        string `json:"sort_order"`
+	Search           string `json:"search"`
+	UpdatesAvailable int64  `json:"updates_available"`
+	PageOffset       int64  `json:"page_offset"`
+	PageLimit        int64  `json:"page_limit"`
+}
+
+type ListProjectCatalogRow struct {
+	Project Project `json:"project"`
+	Total   int64   `json:"total"`
 }
 
 // The fifth binding also selects the CASE order because sqlc does not rewrite CASE arguments.
-func (q *Queries) ListProjectCatalog(ctx context.Context, arg ListProjectCatalogParams) ([]Project, error) {
+func (q *Queries) ListProjectCatalog(ctx context.Context, arg ListProjectCatalogParams) ([]ListProjectCatalogRow, error) {
 	rows, err := q.db.QueryContext(ctx, listProjectCatalog,
 		arg.IsAdmin,
 		arg.UserID,
@@ -177,6 +174,7 @@ func (q *Queries) ListProjectCatalog(ctx context.Context, arg ListProjectCatalog
 		arg.GroupFilter,
 		arg.SortOrder,
 		arg.Search,
+		arg.UpdatesAvailable,
 		arg.PageOffset,
 		arg.PageLimit,
 	)
@@ -184,21 +182,22 @@ func (q *Queries) ListProjectCatalog(ctx context.Context, arg ListProjectCatalog
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Project
+	var items []ListProjectCatalogRow
 	for rows.Next() {
-		var i Project
+		var i ListProjectCatalogRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Description,
-			&i.CreatedAt,
-			&i.LifecycleID,
-			&i.SlackWebhookUrl,
-			&i.NotifyEmails,
-			&i.GotifyUrl,
-			&i.GotifyToken,
-			&i.DiscordWebhookUrl,
-			&i.GroupID,
+			&i.Project.ID,
+			&i.Project.Name,
+			&i.Project.Description,
+			&i.Project.CreatedAt,
+			&i.Project.LifecycleID,
+			&i.Project.SlackWebhookUrl,
+			&i.Project.NotifyEmails,
+			&i.Project.GotifyUrl,
+			&i.Project.GotifyToken,
+			&i.Project.DiscordWebhookUrl,
+			&i.Project.GroupID,
+			&i.Total,
 		); err != nil {
 			return nil, err
 		}

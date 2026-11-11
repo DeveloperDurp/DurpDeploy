@@ -50,6 +50,7 @@ templ ProjectsList(projects []db.Project, panels []LifecyclePanel, state Project
 
 templ ProjectsListRow(p db.Project, panel LifecyclePanel) {
 	@ResourceCard(p.Name, fmt.Sprintf("/projects/%d", p.ID)) {
+		@ProjectReleaseBadge(panel.Releases)
 		if p.Description.Valid {
 			<p class="opacity-70">{ p.Description.String }</p>
 		}
@@ -61,8 +62,8 @@ templ ProjectsListRow(p db.Project, panel LifecyclePanel) {
 // The env name is the label and the version pill (or em-dash for
 // untouched) sits below. Lifecycle-bound projects show every stage in the
 // lifecycle, including untouched ones, so the user can see the full chain
-// at a glance. Free-floating projects show only envs with at least one
-// deployment. Empty projects distinguish missing history from missing environments.
+// at a glance. Projects without a lifecycle also show untouched environments
+// when a release is available. Empty projects distinguish history from targets.
 templ ProjectsListDeployments(panel LifecyclePanel) {
 	if len(panel.Stages) == 0 {
 		if panel.HasEnvironments {

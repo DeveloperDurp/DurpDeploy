@@ -504,6 +504,9 @@ type listReleasesQueryParam struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type listProjectsQueryParam struct {
+	// Return projects with a newer release for at least one environment.
+	// in: query
+	UpdatesAvailable bool `json:"updates_available"`
 	// Search project names and descriptions. Matching ignores ASCII case.
 	// in: query
 	Query string `json:"q"`

@@ -42,20 +42,21 @@ type projectNotificationsRequest struct {
 }
 
 type projectResponse struct {
-	SlackWebhookURLConfigured   bool   `json:"slack_webhook_url_configured"`
-	GotifyTokenConfigured       bool   `json:"gotify_token_configured"`
-	DiscordWebhookURLConfigured bool   `json:"discord_webhook_url_configured"`
-	ID                          int64  `json:"id"`
-	Name                        string `json:"name"`
-	Description                 string `json:"description"`
-	CreatedAt                   int64  `json:"created_at"`
-	LifecycleID                 *int64 `json:"lifecycle_id"`
-	GroupID                     *int64 `json:"group_id"`
-	SlackWebhookURL             string `json:"slack_webhook_url"`
-	NotifyEmails                string `json:"notify_emails"`
-	GotifyURL                   string `json:"gotify_url"`
-	GotifyToken                 string `json:"gotify_token"`
-	DiscordWebhookURL           string `json:"discord_webhook_url"`
+	ReleaseAvailability         *repository.ProjectReleaseAvailability `json:"release_availability,omitempty"`
+	SlackWebhookURLConfigured   bool                                   `json:"slack_webhook_url_configured"`
+	GotifyTokenConfigured       bool                                   `json:"gotify_token_configured"`
+	DiscordWebhookURLConfigured bool                                   `json:"discord_webhook_url_configured"`
+	ID                          int64                                  `json:"id"`
+	Name                        string                                 `json:"name"`
+	Description                 string                                 `json:"description"`
+	CreatedAt                   int64                                  `json:"created_at"`
+	LifecycleID                 *int64                                 `json:"lifecycle_id"`
+	GroupID                     *int64                                 `json:"group_id"`
+	SlackWebhookURL             string                                 `json:"slack_webhook_url"`
+	NotifyEmails                string                                 `json:"notify_emails"`
+	GotifyURL                   string                                 `json:"gotify_url"`
+	GotifyToken                 string                                 `json:"gotify_token"`
+	DiscordWebhookURL           string                                 `json:"discord_webhook_url"`
 }
 
 func toProjectResponse(p db.Project) projectResponse {
@@ -157,8 +158,16 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	items := make([]any, len(rows))
+	availability, err := h.repo.ReleaseAvailability(r.Context(), rows)
+	if err != nil {
+		RespondError(w, 500, "could not load release availability")
+		return
+	}
 	for i, project := range rows {
-		items[i] = toProjectResponse(project)
+		item := toProjectResponse(project)
+		state := availability[project.ID]
+		item.ReleaseAvailability = &state
+		items[i] = item
 	}
 
 	RespondJSON(w, http.StatusOK, PaginatedResponse{
@@ -301,7 +310,18 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, toProjectResponse(project))
+	availability, err := h.repo.ReleaseAvailability(
+		r.Context(),
+		[]db.Project{project},
+	)
+	if err != nil {
+		RespondError(w, 500, "could not load release availability")
+		return
+	}
+	item := toProjectResponse(project)
+	state := availability[project.ID]
+	item.ReleaseAvailability = &state
+	RespondJSON(w, http.StatusOK, item)
 }
 
 // swagger:route PUT /projects/{id} projects updateProject

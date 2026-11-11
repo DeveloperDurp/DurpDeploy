@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-export GOTOOLCHAIN=go1.26.10
+export GOTOOLCHAIN=go1.26.11
 root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 destination=${SECURITY_TOOL_DIR:-$root/bin/security}
 mkdir -p "$destination"

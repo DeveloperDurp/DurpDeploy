@@ -7,8 +7,8 @@
 # Node.js 24.22.1 on Alpine 3.24 retains its bundled license notices.
 FROM harbor.durp.info/dockerhub/library/node:24.22.1-alpine3.24@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS node
 
-# Stage 1: Go 1.26.10 Alpine builder, pinned by digest.
-FROM harbor.durp.info/dockerhub/library/golang:1.26.10-alpine3.24@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS builder
+# Stage 1: Go 1.26.11 Alpine builder, pinned by digest.
+FROM harbor.durp.info/dockerhub/library/golang:1.26.11-alpine3.24@sha256:ae52b5bc6ed045a9ed26ab03dc19327a802a9cc9aa8b27ed57f5c6b60579b0bb AS builder
 
 # Install build tooling (Node/npm for Tailwind/esbuild, make for the Makefile, git
 # and ca-certificates for Go module proxy / npm registry HTTPS fetches).
