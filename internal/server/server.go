@@ -740,6 +740,8 @@ func newRouter(
 			aar.Get("/admin/audit", adminH.AuditLog)
 			aar.Get("/admin/stats", adminH.Stats)
 			aar.Post("/admin/maintenance", api.EmptyBody(adminH.Maintenance))
+			aar.Post("/admin/maintenance/deployments/{id}/reconcile",
+				api.EmptyBody(adminH.ReconcileDeploymentQueue))
 			aar.Get("/admin/db-tables", adminH.DbTables)
 			aar.Get("/admin/notifications", adminH.ListNotifications)
 			aar.Get(

@@ -886,6 +886,47 @@ Existing deployment snapshots and logs must stay unchanged.
 bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestStep(AddOrderAPIWeb|AddPreservesSavedFailureAPIWeb|AddModalBrowser|EditModalBrowser)E2E$' ./internal/handler/api
 ```
 
+## Bounded queue reconciliation (#192)
+
+Use an isolated stack and a disposable project for this check.
+Keep retained examples outside the thread teardown registration.
+Keep all schedules disabled.
+
+1. Create an administrator API token.
+2. Call `POST /api/v1/admin/maintenance` with an empty body.
+3. Confirm that `slots` reports persisted queue owners and blockers.
+4. Select a deployment that still owns unresolved work.
+5. Call `POST /api/v1/admin/maintenance/deployments/{id}/reconcile` with `{}`.
+6. Expect `409` while execution, cleanup, or buffered logs remain unresolved.
+7. Restore the same paired agent, private state directory, and runtime.
+8. Let the agent reconcile processes, managed staging, terminal reports, and cleanup readiness.
+9. Repeat the diagnostic request.
+10. If a stale slot remains after confirmed cleanup, repeat its reconciliation request.
+11. Expect `changed: true` only when that request releases the selected slot.
+12. Repeat the request and expect `changed: false`.
+13. Inspect the audit log for one operator-attributed `reconcile_deployment_queue` event per explicit release.
+14. Confirm that the original terminal outcome remains unchanged.
+15. Repeat both operations with a deployer token and expect `403`.
+
+Normal lifecycle reconciliation can release the slot before the explicit request.
+In that case, `changed: false` is the expected response.
+A missing deployment returns `404`.
+An audit storage failure must leave the slot and queued work unchanged.
+Repository tests inject stale state and audit failures into disposable databases.
+Do not modify retained production or demo records to create these conditions.
+
+Run the focused HTTP and repository regressions:
+
+```sh
+bash scripts/go_test.sh -race -count=1 -timeout=8m -run 'TestQueueRecovery' ./internal/repository ./internal/server
+```
+
+The historical delete-mid-run sequence does not reproduce through current deletion routes.
+Deletion returns a conflict while remote work or logs remain unresolved.
+Permanent identity loss without cleanup evidence remains outside this bounded recovery path.
+Reverting this change removes diagnostics and explicit reconciliation.
+Reverting cannot undo work admitted by a successful release.
+
 ## Queued cancellation step explanations (A15)
 
 1. Create a release with at least two steps.

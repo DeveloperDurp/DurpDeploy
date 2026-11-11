@@ -292,7 +292,7 @@ SELECT (SELECT COUNT(*) FROM users),
 
 // swagger:route POST /admin/maintenance admin maintenance
 //
-// Run maintenance tasks.
+// Diagnose deployment queue slots without changing cleanup evidence.
 //
 //	Security:
 //	  bearer:
@@ -300,12 +300,25 @@ SELECT (SELECT COUNT(*) FROM users),
 //	Responses:
 //	  400: body:BadRequestError
 //	  413: body:RequestEntityTooLargeError
-//	  200: body:EmptyResponse
+//	  200: body:QueueMaintenanceResponse
 //	  401: body:UnauthorizedError
 //	  403: body:ForbiddenError
 //	  500: body:ServerError
 func (h *AdminHandler) Maintenance(w http.ResponseWriter, r *http.Request) {
-	RespondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	slots, err := h.repo.DeploymentQueueDiagnostics(r.Context())
+	if err != nil {
+		RespondError(
+			w,
+			http.StatusInternalServerError,
+			"Could not diagnose deployment queues",
+		)
+		return
+	}
+	RespondJSON(
+		w,
+		http.StatusOK,
+		QueueMaintenanceResponse{Status: "ok", Slots: slots},
+	)
 }
 
 // swagger:route GET /admin/db-tables admin dbTables

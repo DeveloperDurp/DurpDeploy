@@ -1018,13 +1018,13 @@
         "tags": [
           "admin"
         ],
-        "summary": "Run maintenance tasks.",
+        "summary": "Diagnose deployment queue slots without changing cleanup evidence.",
         "operationId": "maintenance",
         "responses": {
           "200": {
-            "description": "EmptyResponse is returned for no-content endpoints.",
+            "description": "QueueMaintenanceResponse reports current queue owners and persisted blockers.",
             "schema": {
-              "$ref": "#/definitions/EmptyResponse"
+              "$ref": "#/definitions/QueueMaintenanceResponse"
             }
           },
           "400": {
@@ -1043,6 +1043,80 @@
             "description": "Forbidden error response.",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/maintenance/deployments/{id}/reconcile": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Reconcile one queue slot using existing cleanup evidence.",
+        "operationId": "reconcileDeploymentQueue",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "QueueReconciliationResponse reports whether this request released the slot.",
+            "schema": {
+              "$ref": "#/definitions/QueueReconciliationResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
             }
           },
           "413": {
@@ -14467,6 +14541,27 @@
       },
       "x-go-package": "durpdeploy/internal/db"
     },
+    "ListDeploymentRecoveryRunsRow": {
+      "type": "object",
+      "properties": {
+        "agent_id": {
+          "type": "string",
+          "x-go-name": "AgentID"
+        },
+        "agent_status": {
+          "type": "string",
+          "x-go-name": "AgentStatus"
+        },
+        "cleanup_confirmed_at": {
+          "$ref": "#/definitions/NullInt64"
+        },
+        "state": {
+          "type": "string",
+          "x-go-name": "State"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/db"
+    },
     "LogEntry": {
       "type": "object",
       "title": "LogEntry is a single line of deployment log output.",
@@ -15477,6 +15572,88 @@
         "secret": {
           "type": "boolean",
           "x-go-name": "Secret"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
+    },
+    "QueueMaintenanceResponse": {
+      "type": "object",
+      "title": "QueueMaintenanceResponse reports current queue owners and persisted blockers.",
+      "properties": {
+        "slots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/QueueRecovery"
+          },
+          "x-go-name": "Slots"
+        },
+        "status": {
+          "type": "string",
+          "x-go-name": "Status"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "QueueReconciliationResponse": {
+      "type": "object",
+      "title": "QueueReconciliationResponse reports whether this request released the slot.",
+      "properties": {
+        "changed": {
+          "type": "boolean",
+          "x-go-name": "Changed"
+        },
+        "deployment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DeploymentID"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "QueueRecovery": {
+      "type": "object",
+      "title": "QueueRecovery describes persisted evidence, never an assertion of cleanup.",
+      "properties": {
+        "blocker_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "x-go-name": "BlockerIDs"
+        },
+        "buffered_remote_logs": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "BufferedLogs"
+        },
+        "cleanup_confirmed": {
+          "type": "boolean",
+          "x-go-name": "CleanupConfirmed"
+        },
+        "cleanup_evidence": {
+          "type": "boolean",
+          "x-go-name": "CleanupEvidence"
+        },
+        "deployment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DeploymentID"
+        },
+        "local_namespace": {
+          "type": "boolean",
+          "x-go-name": "LocalNamespace"
+        },
+        "remote_runs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ListDeploymentRecoveryRunsRow"
+          },
+          "x-go-name": "RemoteRuns"
+        },
+        "status": {
+          "type": "string",
+          "x-go-name": "Status"
         }
       },
       "x-go-package": "durpdeploy/internal/repository"

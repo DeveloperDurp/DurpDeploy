@@ -364,6 +364,39 @@ the failed deployment to success. A late cleanup failure still requires the
 ready v3 poll before the queue can advance. Never re-pair or remove state as
 a substitute for cleanup.
 
+### Diagnose and reconcile queue slots
+
+Call `POST /api/v1/admin/maintenance` with an administrator token and an empty body.
+The response keeps `status: "ok"` and adds `slots`.
+This operation reports persisted state without performing cleanup.
+Each slot includes its deployment, blocker IDs, local namespace presence, cleanup marker, buffered-log count, and remote run states.
+Remote run entries include the agent ID, registration status, and nullable cleanup timestamp.
+`cleanup_evidence` reports a recorded deployment confirmation or a remote cleanup confirmation without a local namespace barrier.
+Blocker IDs and buffered logs can still prevent release when this field is true.
+
+Restore the same paired agent, state directory, and runtime before remote recovery.
+Let the agent reconcile processes and managed staging before it polls.
+Replay durable terminal reports through the agent when necessary.
+Do not reset pairing or manufacture a ready poll to clear a warning.
+
+If recorded cleanup already permits release, call `POST /api/v1/admin/maintenance/deployments/{id}/reconcile` with an empty body or `{}`.
+Only administrators can use this operation.
+The operation checks the selected queue pair under its environment lock.
+Unresolved execution, cleanup, or buffered logs return `409`.
+Missing cleanup confirmation also returns `409`, even when the deployment status is terminal.
+A missing deployment returns `404`.
+Success returns `deployment_id` and `changed`.
+A retry after release returns `changed: false`.
+Each release commits an operator-attributed `reconcile_deployment_queue` audit event with the queue change.
+An audit failure rolls back the release.
+
+The operation does not set cleanup timestamps or change terminal outcomes.
+Admin acknowledgment cannot prove that external processes stopped.
+A permanently lost identity without cleanup evidence remains blocked.
+The deleted-agent orphan sequence from issue #192 does not reproduce through current deletion routes.
+Current deletion guards preserve unresolved work and its identity.
+Re-pairing a deleted registration creates a different registration and cannot recover its old claims.
+
 ## Development container
 
 For a populated demo with both host and container steps, use `make demo`.

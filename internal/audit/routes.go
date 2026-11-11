@@ -4,6 +4,7 @@ package audit
 // registered in server.go. New routes need one map entry; the fallback
 // heuristic catches anything missed with a lossy name.
 var actionMap = map[string]string{
+	"POST /api/v1/admin/maintenance/deployments/{id}/reconcile":             "reconcile_deployment_queue",
 	"POST /projects/{id}/ansible/preview":                                   "",
 	"POST /api/v1/projects/{id}/ansible/preview":                            "",
 	"POST /projects/{id}/credentials":                                       "create_credential",

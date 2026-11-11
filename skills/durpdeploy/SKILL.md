@@ -27,6 +27,27 @@ Empty-body control actions do not require this header.
 Missing project parents return `404` from variable, step, runbook, and project-template lists after authorization checks.
 Scoped tokens still receive `403` for projects outside their selection.
 
+## Diagnose deployment queues
+
+Call `POST /api/v1/admin/maintenance` with an administrator token and an empty body.
+Read `slots` for deployment IDs, blockers, local namespace presence, cleanup markers, buffered-log counts, and remote run states.
+The response describes persisted state and does not perform cleanup.
+`cleanup_evidence` identifies recorded cleanup confirmation, subject to the reported execution and log barriers.
+If existing evidence permits release, call `POST /api/v1/admin/maintenance/deployments/{id}/reconcile` with an empty body or `{}`.
+Success returns `deployment_id` and `changed`.
+Retries after release return `changed: false`.
+Unresolved execution, cleanup, or buffered logs return `409`.
+Terminal status or missing protocol rows cannot replace recorded cleanup confirmation.
+Missing deployments return `404`.
+Successful releases commit an operator-attributed `reconcile_deployment_queue` audit event with the queue change.
+An audit failure rolls back the release.
+
+Restore the same agent identity, state directory, and runtime for remote cleanup.
+Let the agent confirm process and managed staging cleanup before polling.
+Do not synthesize readiness, remove state, or reset pairing to release a queue.
+Permanently lost identities without cleanup evidence remain blocked.
+Reconciliation does not change terminal outcomes or cleanup timestamps.
+
 ## Analyze caller-supplied script text
 
 Send `POST /api/v1/lint` with a valid PAT and an `application/json` body.
