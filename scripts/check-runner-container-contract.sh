@@ -75,7 +75,7 @@ grep -Fq 'podman/podman.sock:/var/run/durpdeploy-runtime.sock' \
 	"$root/compose.podman.yml"
 grep -Fq 'label=disable' "$root/compose.podman.yml"
 
-if [ "${RUNNER_CONTAINER_CONTRACT_STATIC_ONLY:-0}" = 1 ]; then
+if [[ "${RUNNER_CONTAINER_CONTRACT_STATIC_ONLY:-0}" == 1 ]]; then
 	printf '%s\n' 'runner container contract: static PASS'
 	exit 0
 fi

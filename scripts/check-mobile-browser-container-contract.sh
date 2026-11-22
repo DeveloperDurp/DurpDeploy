@@ -4,7 +4,7 @@ set -euo pipefail
 root=${MOBILE_BROWSER_CONTRACT_ROOT:-.}
 
 require_file() {
-	if [ ! -f "$root/$1" ]; then
+	if [[ ! -f "$root/$1" ]]; then
 		echo "mobile browser contract: missing $1" >&2
 		exit 1
 	fi

@@ -28,7 +28,7 @@ reject_pattern() {
 }
 
 for file in "${files[@]}"; do
-	if [ ! -f "$root/$file" ]; then
+	if [[ ! -f "$root/$file" ]]; then
 		echo "MFA documentation contract: missing $file" >&2
 		exit 1
 	fi

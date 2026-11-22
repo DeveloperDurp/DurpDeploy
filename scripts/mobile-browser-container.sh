@@ -11,7 +11,7 @@ export MOBILE_BROWSER_NODE_MODULES
 export NODE_PATH="$MOBILE_BROWSER_NODE_MODULES"
 
 copy_receipt() {
-	if [ -f "$receipt_path" ]; then
+	if [[ -f "$receipt_path" ]]; then
 		cp "$receipt_path" "$evidence_dir/$receipt_name"
 	fi
 }
