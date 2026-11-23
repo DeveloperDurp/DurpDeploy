@@ -11,8 +11,7 @@ import (
 )
 
 func (r *DeploymentRunner) failStep(
-	ctx context.Context,
-	cancelCtx context.Context,
+	ctx, cancelCtx context.Context,
 	event events.Event,
 	cancellationWins bool,
 ) {
@@ -25,12 +24,10 @@ func (r *DeploymentRunner) failStep(
 }
 
 func (r *DeploymentRunner) completeDeployment(
-	ctx context.Context,
-	cancelCtx context.Context,
+	ctx, cancelCtx context.Context,
 	deploymentID int64,
 	status string,
-	cancellationWins bool,
-	localCleanupConfirmed bool,
+	cancellationWins, localCleanupConfirmed bool,
 ) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -112,8 +109,7 @@ func (r *DeploymentRunner) finalizeCancellation(
 }
 
 func (r *DeploymentRunner) persistCompletion(
-	ctx context.Context,
-	cancelCtx context.Context,
+	ctx, cancelCtx context.Context,
 	deploymentID int64,
 	status string,
 	cancellationWins bool,
@@ -180,8 +176,7 @@ func (r *DeploymentRunner) retryCompletion(
 	cancelCtx context.Context,
 	deploymentID int64,
 	status string,
-	cancellationWins bool,
-	localCleanupConfirmed bool,
+	cancellationWins, localCleanupConfirmed bool,
 ) {
 	defer cancel()
 	ticker := time.NewTicker(time.Second)
@@ -230,8 +225,7 @@ func (r *DeploymentRunner) publish(
 }
 
 func (r *DeploymentRunner) failUnlessCancelled(
-	ctx context.Context,
-	cancelCtx context.Context,
+	ctx, cancelCtx context.Context,
 	deploymentID int64,
 ) {
 	if cancelCtx.Err() != nil {

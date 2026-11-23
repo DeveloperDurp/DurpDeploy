@@ -87,8 +87,7 @@ func (s *FactorStore) LoadCredential(
 func (s *FactorStore) UpdateCredentialCounter(
 	ctx context.Context,
 	credentialID []byte,
-	signCount int64,
-	cloneWarning int64,
+	signCount, cloneWarning int64,
 ) (db.WebauthnCredential, error) {
 	var credential db.WebauthnCredential
 	err := s.repo.WithTx(ctx, func(queries *db.Queries) error {
@@ -112,8 +111,7 @@ func (s *FactorStore) UpdateCredentialCounterWith(
 	ctx context.Context,
 	queries *db.Queries,
 	credentialID []byte,
-	signCount int64,
-	cloneWarning int64,
+	signCount, cloneWarning int64,
 ) (db.WebauthnCredential, error) {
 	credential, err := queries.UpdateWebAuthnCredentialCounter(
 		ctx,

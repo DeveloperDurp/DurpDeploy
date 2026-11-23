@@ -16,8 +16,7 @@ import (
 
 func (r *Repository) QueueRemoteStepRuns(
 	ctx context.Context,
-	deploymentID int64,
-	stepIndex int64,
+	deploymentID, stepIndex int64,
 ) (int64, error) {
 	var created int64
 	err := r.WithDeploymentTx(

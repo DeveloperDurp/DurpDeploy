@@ -45,9 +45,7 @@ type PairingChallenge struct {
 }
 
 func ParsePairingStartInput(
-	name string,
-	address string,
-	code string,
+	name, address, code string,
 ) (PairingStartInput, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len(name) > 255 {
@@ -69,9 +67,7 @@ func ParsePairingStartInput(
 }
 
 func ParsePairingInput(
-	address string,
-	code string,
-	fingerprint string,
+	address, code, fingerprint string,
 ) (PairingInput, error) {
 	parsedAddress, err := parsePairingAddress(address)
 	if err != nil {

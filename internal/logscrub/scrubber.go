@@ -59,14 +59,12 @@ func NewConfigured(
 		append(additional, patterns...))
 }
 
-func NewWithPatterns(secrets []string, patterns []string) *Scrubber {
+func NewWithPatterns(secrets, patterns []string) *Scrubber {
 	return newScrubber(secrets, nil, patterns)
 }
 
 func newScrubber(
-	secrets []string,
-	patterns []string,
-	streamPatterns []string,
+	secrets, patterns, streamPatterns []string,
 ) *Scrubber {
 	literals := make([]string, 0, len(secrets))
 	for _, secret := range secrets {
@@ -329,8 +327,7 @@ func (p pendingPattern) addClosure(
 	states map[uint32]int,
 	pc uint32,
 	start int,
-	previousRune rune,
-	nextRune rune,
+	previousRune, nextRune rune,
 	resolveEmpty bool,
 ) {
 	if previous, ok := states[pc]; ok && previous <= start {
@@ -371,7 +368,7 @@ func recordPatternState(states map[uint32]int, pc uint32, start int) {
 	}
 }
 
-func hasWordSuffixFold(text string, suffix string) bool {
+func hasWordSuffixFold(text, suffix string) bool {
 	start := len(text) - len(suffix)
 	if start < 0 || !strings.EqualFold(text[start:], suffix) {
 		return false

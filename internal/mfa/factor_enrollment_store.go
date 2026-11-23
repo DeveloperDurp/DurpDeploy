@@ -20,8 +20,7 @@ func (s *FactorStore) BeginTOTPEnrollment(
 }
 
 func (s *FactorStore) ConfirmTOTPEnrollment(
-	encryptedSeed string,
-	code string,
+	encryptedSeed, code string,
 	lastAcceptedStep int64,
 ) (string, int64, error) {
 	if s.box == nil {

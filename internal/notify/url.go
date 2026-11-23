@@ -68,8 +68,7 @@ func newHTTPClient(
 	transport.Proxy = nil
 	transport.DialContext = func(
 		ctx context.Context,
-		network string,
-		address string,
+		network, address string,
 	) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(address)
 		if err != nil {

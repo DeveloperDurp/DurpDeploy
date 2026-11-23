@@ -516,8 +516,7 @@ func projectLifecycleID(r *http.Request) (int64, error) {
 func ApplyLifecycleSelection(
 	ctx context.Context,
 	repo *repository.Repository,
-	projectID int64,
-	lifecycleID int64,
+	projectID, lifecycleID int64,
 ) error {
 	user := auth.UserFromContext(ctx)
 	if lifecycleID <= 0 && (user == nil || user.Role != "admin") {

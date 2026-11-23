@@ -38,8 +38,8 @@
   {
     "rule": "G115",
     "file": "internal/logscrub/scrubber.go",
-    "line": "358",
-    "source_sha256": "cae5e7638978e14b246c326402b77f20a29b62e1a6bb954261ea71777f8a1317",
+    "line": "355",
+    "source_sha256": "97781db57ee63259593d2476fb9dda682c8df9f37b325490e6edb5c02ccd1dab",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Arg is narrowed only for compiler-created InstEmptyWidth, whose standard-library EmptyOp bitmask fits uint8. Evidence: regexp/syntax compiler; scrubber_test.go boundary/streaming coverage."
@@ -47,8 +47,8 @@
   {
     "rule": "G115",
     "file": "internal/logscrub/scrubber.go",
-    "line": "295",
-    "source_sha256": "cae5e7638978e14b246c326402b77f20a29b62e1a6bb954261ea71777f8a1317",
+    "line": "293",
+    "source_sha256": "97781db57ee63259593d2476fb9dda682c8df9f37b325490e6edb5c02ccd1dab",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Instruction index is produced exclusively by successful regexp/syntax.Compile and fits its uint32 program addresses. Evidence: scrubber.go compile path; scrubber_test.go streaming-pattern coverage."
@@ -290,8 +290,8 @@
   {
     "rule": "G124",
     "file": "internal/handler/auth.go",
-    "line": "262",
-    "source_sha256": "7da2108b97a7f9e7f318efb6a6f1a7e357181ca12676247e0a42e27cd1a5adbe",
+    "line": "261",
+    "source_sha256": "1b90dc276e30a0cabad10111b4ba5fa8ce534175657480d3286df12f2ea70bef",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
@@ -480,7 +480,7 @@
     "rule": "G710",
     "file": "internal/handler/project.go",
     "line": "490",
-    "source_sha256": "9ec0413c7b2d124523b13a2df8f91a75200bd1fe343fded9f7dd88dc0e2e0803",
+    "source_sha256": "26383fefbbba6cd40fefe974aa61edffb9f9c9d32a002ed9379ba936701476c0",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "The redirect uses a fixed /projects/ path prefix and an ID parsed as int64 by parseProjectID. The destination remains on the same origin. Evidence: ProjectHandler.UpdateProject and parseProjectID."
@@ -489,7 +489,7 @@
     "rule": "G710",
     "file": "internal/handler/project.go",
     "line": "276",
-    "source_sha256": "9ec0413c7b2d124523b13a2df8f91a75200bd1fe343fded9f7dd88dc0e2e0803",
+    "source_sha256": "26383fefbbba6cd40fefe974aa61edffb9f9c9d32a002ed9379ba936701476c0",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "The redirect uses a fixed /projects/ path prefix and an ID parsed as int64 by parseProjectID. The destination remains on the same origin. Evidence: ProjectHandler.UpdateProjectNotifications and parseProjectID."
@@ -596,8 +596,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/auth.go",
-    "line": "221",
-    "source_sha256": "7da2108b97a7f9e7f318efb6a6f1a7e357181ca12676247e0a42e27cd1a5adbe",
+    "line": "220",
+    "source_sha256": "1b90dc276e30a0cabad10111b4ba5fa8ce534175657480d3286df12f2ea70bef",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Password login redirects only after session issuance through takeLoginDestination. This helper bounds and decodes the cookie, then SafeLoginDestination rejects external authorities, schemes, backslashes, controls, auth loops, and excessive lengths. Only local paths and queries survive. Evidence: internal/auth/login_destination_test.go; internal/handler/login_destination_test.go; API/browser login destination E2E tests."

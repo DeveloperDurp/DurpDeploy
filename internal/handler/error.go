@@ -178,8 +178,7 @@ func retargetFormDialog(
 func WriteFormError(
 	w http.ResponseWriter,
 	r *http.Request,
-	fragment templ.Component,
-	page templ.Component,
+	fragment, page templ.Component,
 ) {
 	if r.Header.Get("HX-Request") == "true" {
 		if w.Header().Get("HX-Retarget") == "" {

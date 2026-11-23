@@ -20,8 +20,7 @@ type ResolvedChallenge struct {
 
 func (s *ChallengeService) Resolve(
 	ctx context.Context,
-	token string,
-	csrf string,
+	token, csrf string,
 	purpose ChallengePurpose,
 ) (ResolvedChallenge, error) {
 	challenge, err := s.resolvePendingLogin(ctx, token, csrf)
@@ -41,8 +40,7 @@ func (s *ChallengeService) Resolve(
 
 func (s *ChallengeService) ResolveLogin(
 	ctx context.Context,
-	token string,
-	csrf string,
+	token, csrf string,
 ) (ResolvedChallenge, error) {
 	challenge, err := s.resolvePendingLogin(ctx, token, csrf)
 	if err != nil {
@@ -178,8 +176,7 @@ func (s *ChallengeService) Cancel(
 }
 
 func canPromoteChallenge(
-	current ChallengePurpose,
-	next ChallengePurpose,
+	current, next ChallengePurpose,
 ) bool {
 	switch current {
 	case ChallengePurposeLoginMFA, ChallengePurposeTOTPVerify:
@@ -195,8 +192,7 @@ func canPromoteChallenge(
 
 func (s *ChallengeService) resolvePendingLogin(
 	ctx context.Context,
-	token string,
-	csrf string,
+	token, csrf string,
 ) (db.MfaChallenge, error) {
 	now := s.clock().Unix()
 	challenge, err := s.repo.Queries.GetActiveMFAChallenge(

@@ -49,8 +49,7 @@ func NewAuthHandler(repo *repository.Repository) *AuthHandler {
 
 func (h *AuthHandler) verifyPassword(
 	ctx context.Context,
-	passwordHash string,
-	password string,
+	passwordHash, password string,
 ) (bool, error) {
 	return h.withPasswordVerification(ctx, func() bool {
 		return auth.VerifyPassword(passwordHash, password)

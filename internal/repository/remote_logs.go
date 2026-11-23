@@ -133,8 +133,7 @@ func (r *Repository) appendRemoteDeploymentLogs(
 }
 
 func attributedRemoteLog(
-	line string,
-	agentID string,
+	line, agentID string,
 	scrubber *logscrub.Scrubber,
 ) string {
 	// Keep one visible line per event without changing raw redaction boundaries.
@@ -166,8 +165,7 @@ func (r *Repository) FlushRemoteDeploymentLogs(
 func appendRemoteDeploymentLog(
 	ctx context.Context,
 	q *db.Queries,
-	deploymentID int64,
-	now int64,
+	deploymentID, now int64,
 	event RemoteLogEvent,
 ) (db.DeploymentLog, bool, error) {
 	log, err := q.GetRemoteDeploymentLogBySequence(

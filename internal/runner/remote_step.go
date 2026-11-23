@@ -21,8 +21,7 @@ type remoteStepRequest struct {
 }
 
 func (r *DeploymentRunner) runRemoteStep(
-	ctx context.Context,
-	cancelCtx context.Context,
+	ctx, cancelCtx context.Context,
 	request remoteStepRequest,
 ) (result error) {
 	if request.step.Kind == "ansible" {

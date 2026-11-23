@@ -13,8 +13,7 @@ import (
 func (s *ChallengeService) ReplaceAdminMFAResetContinuation(
 	ctx context.Context,
 	userID int64,
-	sessionID string,
-	ceremonyJSON string,
+	sessionID, ceremonyJSON string,
 ) error {
 	if userID <= 0 || sessionID == "" || ceremonyJSON == "" {
 		return ErrChallengeInvalid

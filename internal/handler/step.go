@@ -188,8 +188,7 @@ func parseStepPlacement(
 
 func ValidateStepPlacement(
 	target string,
-	selectors []string,
-	available []string,
+	selectors, available []string,
 ) (string, []string, error) {
 	target = strings.TrimSpace(target)
 	if target == "" {
