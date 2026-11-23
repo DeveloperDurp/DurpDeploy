@@ -133,11 +133,15 @@ func updateWhereIndex(query string) int {
 }
 
 func rewriteReturning(query string) (string, error) {
+	const (
+		sqlWhitespace = " \t\r\n"
+		outputClause  = " OUTPUT "
+	)
 	start := keywordIndexOutsideQuotes(query, "RETURNING")
 	if start < 0 {
 		return "", ErrMalformedReturning
 	}
-	rest := strings.TrimLeft(query[start+len("RETURNING"):], " \t\r\n")
+	rest := strings.TrimLeft(query[start+len("RETURNING"):], sqlWhitespace)
 	if rest == "" {
 		return "", ErrMalformedReturning
 	}
@@ -152,7 +156,7 @@ func rewriteReturning(query string) (string, error) {
 		}
 		columnsEnd++
 	}
-	returningColumns := strings.TrimRight(rest[:columnsEnd], " \t\r\n")
+	returningColumns := strings.TrimRight(rest[:columnsEnd], sqlWhitespace)
 	if strings.TrimSpace(returningColumns) == "" {
 		return "", ErrMalformedReturning
 	}
@@ -160,7 +164,7 @@ func rewriteReturning(query string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	statement := strings.TrimRight(query[:start], " \t\r\n")
+	statement := strings.TrimRight(query[:start], sqlWhitespace)
 	trailing := rest[len(returningColumns):columnsEnd] + rest[columnsEnd:]
 	switch {
 	case containsOutsideQuotes(statement, "INSERT INTO"):
@@ -169,10 +173,10 @@ func rewriteReturning(query string) (string, error) {
 			return "", ErrMalformedReturning
 		}
 		insertAt := values
-		for insertAt > 0 && strings.ContainsRune(" \t\r\n", rune(statement[insertAt-1])) {
+		for insertAt > 0 && strings.ContainsRune(sqlWhitespace, rune(statement[insertAt-1])) {
 			insertAt--
 		}
-		return statement[:insertAt] + " OUTPUT " + output + statement[insertAt:] + trailing, nil
+		return statement[:insertAt] + outputClause + output + statement[insertAt:] + trailing, nil
 	case containsOutsideQuotes(statement, "UPDATE"):
 		whereIndex := updateWhereIndex(statement)
 		if whereIndex < 0 {
@@ -180,12 +184,12 @@ func rewriteReturning(query string) (string, error) {
 		}
 		start := whereIndex
 		for start > 0 && strings.ContainsRune(
-			" \t\r\n", rune(statement[start-1]),
+			sqlWhitespace, rune(statement[start-1]),
 		) {
 			start--
 		}
 		separator := statement[start:whereIndex]
-		return statement[:start] + " OUTPUT " + output + separator + statement[whereIndex:] + trailing, nil
+		return statement[:start] + outputClause + output + separator + statement[whereIndex:] + trailing, nil
 	case containsOutsideQuotes(statement, "DELETE FROM"):
 		deleted, err := outputColumns(returningColumns, "DELETED")
 		if err != nil {
@@ -198,14 +202,14 @@ func rewriteReturning(query string) (string, error) {
 		); whereIndex >= 0 {
 			start := whereIndex
 			for start > 0 && strings.ContainsRune(
-				" \t\r\n", rune(statement[start-1]),
+				sqlWhitespace, rune(statement[start-1]),
 			) {
 				start--
 			}
 			separator := statement[start:whereIndex]
-			return statement[:start] + " OUTPUT " + deleted + separator + statement[whereIndex:] + trailing, nil
+			return statement[:start] + outputClause + deleted + separator + statement[whereIndex:] + trailing, nil
 		}
-		return statement + " OUTPUT " + deleted + trailing, nil
+		return statement + outputClause + deleted + trailing, nil
 	default:
 		return "", ErrMalformedReturning
 	}

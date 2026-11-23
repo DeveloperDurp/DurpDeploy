@@ -25,7 +25,10 @@ import (
 // package that read it via ProjectIDFromContext.
 type ProjectAccessKey struct{}
 
-const deploymentNotFoundMessage = "404 page not found"
+const (
+	deploymentNotFoundMessage  = "404 page not found"
+	projectAccessDeniedMessage = "project access denied"
+)
 
 // ProjectIDFromContext returns the project id injected by
 // RequireProjectAccess, or 0 (and false) if absent.
@@ -89,7 +92,7 @@ func serveProjectAccess(
 	}
 
 	if !TokenAllowsProject(r.Context(), projectID) {
-		RenderRequestError(w, r, deniedStatus, "project access denied")
+		RenderRequestError(w, r, deniedStatus, projectAccessDeniedMessage)
 		return
 	}
 	// Global admin bypasses the membership check, but the
@@ -202,7 +205,7 @@ func RequireDeploymentProjectAccess(
 
 			if !TokenAllowsProject(r.Context(), release.ProjectID) {
 				RenderRequestError(w, r, http.StatusForbidden,
-					"project access denied")
+					projectAccessDeniedMessage)
 				return
 			}
 			if user.Role != "admin" &&
@@ -237,7 +240,7 @@ func applyProjectPermission(
 				w,
 				r,
 				http.StatusForbidden,
-				"project access denied",
+				projectAccessDeniedMessage,
 			)
 			return false
 		}

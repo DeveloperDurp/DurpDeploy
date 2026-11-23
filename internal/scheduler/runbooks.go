@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"slices"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
@@ -25,23 +26,13 @@ func (s *Scheduler) fireRunbook(ctx context.Context, row db.RunbookSchedule) {
 	parsed, err := s.parser.Parse(row.Cron)
 	if err != nil {
 		s.log.Error("invalid runbook cron", "schedule_id", row.ID, "error", err)
-		if err := s.repo.Queries.DisableRunbookSchedule(
-			ctx, row.ID,
-		); err != nil {
-			s.log.Error("disable runbook schedule", "schedule_id", row.ID,
-				"error", err)
-		}
+		s.disableRunbookSchedule(ctx, row.ID)
 		return
 	}
 	next := parsed.Next(s.now())
 	if next.IsZero() {
 		s.log.Error("unsatisfiable runbook cron", "schedule_id", row.ID)
-		if err := s.repo.Queries.DisableRunbookSchedule(
-			ctx, row.ID,
-		); err != nil {
-			s.log.Error("disable runbook schedule", "schedule_id", row.ID,
-				"error", err)
-		}
+		s.disableRunbookSchedule(ctx, row.ID)
 		return
 	}
 	book, err := s.repo.Queries.GetRunbookByID(ctx, row.RunbookID)
@@ -88,20 +79,16 @@ func (s *Scheduler) fireRunbook(ctx context.Context, row db.RunbookSchedule) {
 			)
 			return
 		}
-		accessible := false
-		for _, stage := range stages {
-			accessible = accessible || stage.EnvironmentID == row.EnvironmentID
-		}
+		accessible := slices.ContainsFunc(
+			stages,
+			func(stage db.LifecycleStage) bool {
+				return stage.EnvironmentID == row.EnvironmentID
+			},
+		)
 		if !accessible {
 			s.log.Warn("disable inaccessible runbook environment",
 				"schedule_id", row.ID)
-			if err := s.repo.Queries.DisableRunbookSchedule(
-				ctx,
-				row.ID,
-			); err != nil {
-				s.log.Error("disable runbook schedule", "schedule_id", row.ID,
-					"error", err)
-			}
+			s.disableRunbookSchedule(ctx, row.ID)
 			return
 		}
 	}
@@ -165,5 +152,15 @@ func (s *Scheduler) fireRunbook(ctx context.Context, row db.RunbookSchedule) {
 	if result.Deployment.Status == "pending" {
 		go s.runFunc(context.WithoutCancel(ctx), result.Deployment.ID,
 			result.Deployment.ReleaseID, result.Deployment.EnvironmentID)
+	}
+}
+
+func (s *Scheduler) disableRunbookSchedule(
+	ctx context.Context,
+	scheduleID int64,
+) {
+	if err := s.repo.Queries.DisableRunbookSchedule(ctx, scheduleID); err != nil {
+		s.log.Error("disable runbook schedule", "schedule_id", scheduleID,
+			"error", err)
 	}
 }

@@ -37,6 +37,8 @@ func URL(name string) string {
 }
 
 func Handler() http.Handler {
+	const cacheControlHeader = "Cache-Control"
+
 	files := http.FileServer(http.FS(Assets))
 	return http.StripPrefix(
 		"/static/",
@@ -50,16 +52,16 @@ func Handler() http.Handler {
 				return
 			}
 			if version := versions[strings.TrimPrefix(r.URL.Path, "/")]; version != "" {
-				w.Header().Set("Cache-Control", "no-cache")
+				w.Header().Set(cacheControlHeader, "no-cache")
 				w.Header().Set("ETag", `"`+version+`"`)
 				if requested := r.URL.Query().Get("v"); requested != "" {
 					if requested != version {
-						w.Header().Set("Cache-Control", "no-store")
+						w.Header().Set(cacheControlHeader, "no-store")
 						http.NotFound(w, r)
 						return
 					}
 					w.Header().
-						Set("Cache-Control", "public, max-age=31536000, immutable")
+						Set(cacheControlHeader, "public, max-age=31536000, immutable")
 				}
 			}
 			files.ServeHTTP(w, r)
