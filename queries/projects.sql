@@ -1,5 +1,5 @@
 -- name: ListProjects :many
-SELECT * FROM projects ORDER BY created_at DESC;
+SELECT id, name, description, created_at, lifecycle_id, slack_webhook_url, notify_emails, gotify_url, gotify_token, discord_webhook_url, group_id FROM projects ORDER BY created_at DESC;
 
 -- name: ListProjectsPaginated :many
 SELECT * FROM projects ORDER BY created_at DESC

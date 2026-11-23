@@ -1,5 +1,5 @@
 -- name: GetGlobalNotifications :one
-SELECT * FROM global_notifications WHERE id = 1;
+SELECT id, slack_webhook_url, notify_emails, gotify_url, gotify_token, discord_webhook_url, updated_at FROM global_notifications WHERE id = 1;
 
 -- name: LockGlobalNotifications :execrows
 UPDATE global_notifications SET id = id WHERE id = 1; -- NOSONAR: intentional write lock

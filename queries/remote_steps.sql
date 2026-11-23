@@ -115,7 +115,7 @@ WHERE state = 'started'
   AND last_heartbeat_at <= sqlc.arg(stale_before);
 
 -- name: GetRemoteStepRunByClaim :one
-SELECT * FROM remote_step_runs
+SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, recovery_cancelled, cleanup_confirmed_at FROM remote_step_runs
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND agent_id = sqlc.arg(agent_id)
   AND claim_token_hash = sqlc.arg(claim_token_hash);

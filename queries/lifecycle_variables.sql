@@ -23,7 +23,7 @@ WHERE id = ? AND lifecycle_id = ? AND is_credential = 0 RETURNING *;
 DELETE FROM lifecycle_variables WHERE id = ? AND lifecycle_id = ? AND is_credential = 0;
 
 -- name: ListAllLifecycleVariables :many
-SELECT * FROM lifecycle_variables ORDER BY id ASC;
+SELECT id, lifecycle_id, name, value, environment_id, secret, created_at, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential FROM lifecycle_variables ORDER BY id ASC;
 
 -- name: UpdateLifecycleVariableValue :exec
 UPDATE lifecycle_variables SET value = ? WHERE id = ?;

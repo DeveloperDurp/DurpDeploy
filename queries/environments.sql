@@ -1,5 +1,5 @@
 -- name: ListEnvironments :many
-SELECT * FROM environments ORDER BY created_at DESC;
+SELECT id, name, description, tags, created_at, verification_type, verification_target, verification_timeout_seconds FROM environments ORDER BY created_at DESC;
 
 -- name: ListDeploymentEnvironmentsForUser :many
 SELECT e.* FROM environments e

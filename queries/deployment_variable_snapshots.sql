@@ -5,7 +5,7 @@ SELECT * FROM deployment_variable_snapshots WHERE deployment_id = ?;
 INSERT INTO deployment_variable_snapshots (deployment_id, value) VALUES (?, ?);
 
 -- name: ListAllDeploymentVariableSnapshots :many
-SELECT * FROM deployment_variable_snapshots ORDER BY deployment_id ASC;
+SELECT deployment_id, value FROM deployment_variable_snapshots ORDER BY deployment_id ASC;
 
 -- name: UpdateDeploymentVariableSnapshotValue :exec
 UPDATE deployment_variable_snapshots SET value = ? WHERE deployment_id = ?;

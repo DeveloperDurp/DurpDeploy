@@ -12,7 +12,7 @@ UPDATE agents SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE id = ? AND status IN ('pending', 'active', 'disabled');
 
 -- name: ListAgents :many
-SELECT * FROM agents ORDER BY name ASC, id ASC;
+SELECT id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol FROM agents ORDER BY name ASC, id ASC;
 
 -- name: UpdateAgent :one
 UPDATE agents SET name = ?, endpoint = ?, updated_at = unixepoch()

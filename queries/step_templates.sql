@@ -1,5 +1,5 @@
 -- name: ListStepTemplates :many
-SELECT * FROM step_templates ORDER BY name ASC;
+SELECT id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode, kind, ansible_json FROM step_templates ORDER BY name ASC;
 
 -- name: ListStepTemplatesPaginated :many
 SELECT * FROM step_templates ORDER BY name ASC

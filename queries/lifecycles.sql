@@ -1,5 +1,5 @@
 -- name: ListLifecycles :many
-SELECT * FROM lifecycles ORDER BY name ASC;
+SELECT id, name, description, created_at FROM lifecycles ORDER BY name ASC;
 
 -- name: ListLifecyclesWithStageCounts :many
 SELECT lifecycles.*, (

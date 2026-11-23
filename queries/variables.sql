@@ -37,7 +37,7 @@ WHERE project_id = sqlc.arg(project_id) AND name = sqlc.arg(name) AND is_credent
        OR (environment_id IS NULL AND sqlc.narg(environment_id) IS NULL));
 
 -- name: ListAllVariables :many
-SELECT * FROM variables ORDER BY id ASC;
+SELECT id, project_id, name, value, environment_id, created_at, secret, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential FROM variables ORDER BY id ASC;
 
 -- name: UpdateVariableValue :exec
 UPDATE variables SET value = ? WHERE id = ?;

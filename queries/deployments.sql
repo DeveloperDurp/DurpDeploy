@@ -67,7 +67,7 @@ WHERE status IN ('running', 'publishing_artifact') AND assigned_agent_id IS NULL
 RETURNING *;
 
 -- name: ListDeployments :many
-SELECT * FROM deployments WHERE kind = 'deployment' ORDER BY created_at DESC;
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at, environment_name_snapshot, ansible_check_mode FROM deployments WHERE kind = 'deployment' ORDER BY created_at DESC;
 
 -- name: ListDeploymentsWithRefs :many
 SELECT
