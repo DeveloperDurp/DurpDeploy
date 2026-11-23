@@ -12,7 +12,7 @@ UPDATE agents SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE id = ? AND status IN ('pending', 'active', 'disabled');
 
 -- name: ListAgents :many
-SELECT * FROM agents ORDER BY name, id;
+SELECT * FROM agents ORDER BY name ASC, id ASC;
 
 -- name: UpdateAgent :one
 UPDATE agents SET name = ?, endpoint = ?, updated_at = unixepoch()
@@ -84,7 +84,7 @@ DELETE FROM agent_labels WHERE agent_id = ? AND label = ?;
 SELECT label FROM agent_labels WHERE agent_id = ? ORDER BY label;
 
 -- name: ListAvailableAgentLabels :many
-SELECT DISTINCT label FROM agent_labels ORDER BY label;
+SELECT DISTINCT label FROM agent_labels ORDER BY label ASC;
 
 -- name: AddAgentInterpreter :execrows
 INSERT INTO agent_interpreters (agent_id, interpreter)
@@ -117,7 +117,7 @@ WHERE l.agent_id = ? ORDER BY e.name, e.id;
 SELECT e.* FROM environments e
 WHERE NOT EXISTS (SELECT 1 FROM agent_environment_labels l
  WHERE l.agent_id = sqlc.arg(agent_id) AND l.environment_id = e.id)
-ORDER BY e.name, e.id;
+ORDER BY e.name ASC, e.id ASC;
 
 -- name: ListRevocableAgentClaims :many
 SELECT * FROM remote_deployment_claims

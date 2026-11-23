@@ -289,7 +289,7 @@ func (q *Queries) ListProjectsForUserPaginated(ctx context.Context, arg ListProj
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, email, name, role, created_at, updated_at, last_login_at FROM users ORDER BY email
+SELECT id, email, name, role, created_at, updated_at, last_login_at FROM users ORDER BY email ASC
 `
 
 type ListUsersRow struct {

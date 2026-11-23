@@ -295,7 +295,7 @@ JOIN agents a ON a.id = p.agent_id
 WHERE p.pairing_code_hash = ?1
    OR p.agent_pin = ?2
    OR a.endpoint = ?3
-ORDER BY p.agent_id
+ORDER BY p.agent_id ASC
 `
 
 type ListAgentPairingRecoveryCandidatesParams struct {

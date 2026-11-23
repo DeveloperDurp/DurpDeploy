@@ -234,7 +234,7 @@ WHERE d.kind = 'deployment'
       WHERE pm.user_id = ?5
   ))
 GROUP BY CAST(d.created_at / 86400 AS INTEGER), d.status
-ORDER BY day, d.status
+ORDER BY day ASC, d.status ASC
 `
 
 type DeploymentActivityParams struct {

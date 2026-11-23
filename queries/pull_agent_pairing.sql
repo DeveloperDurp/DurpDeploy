@@ -18,7 +18,7 @@ JOIN agents a ON a.id = p.agent_id
 WHERE p.pairing_code_hash = sqlc.arg(pairing_code_hash)
    OR p.agent_pin = sqlc.arg(agent_pin)
    OR a.endpoint = sqlc.arg(endpoint)
-ORDER BY p.agent_id;
+ORDER BY p.agent_id ASC;
 
 -- name: CreateCommittingAgentPairing :one
 INSERT INTO agent_pairings (

@@ -35,7 +35,7 @@ func (q *Queries) GetDeploymentVariableSnapshot(ctx context.Context, deploymentI
 }
 
 const listAllDeploymentVariableSnapshots = `-- name: ListAllDeploymentVariableSnapshots :many
-SELECT deployment_id, value FROM deployment_variable_snapshots ORDER BY deployment_id
+SELECT deployment_id, value FROM deployment_variable_snapshots ORDER BY deployment_id ASC
 `
 
 func (q *Queries) ListAllDeploymentVariableSnapshots(ctx context.Context) ([]DeploymentVariableSnapshot, error) {

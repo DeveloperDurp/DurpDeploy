@@ -338,7 +338,7 @@ func (q *Queries) ListAgentLabels(ctx context.Context, agentID string) ([]string
 }
 
 const listAgents = `-- name: ListAgents :many
-SELECT id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol FROM agents ORDER BY name, id
+SELECT id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol FROM agents ORDER BY name ASC, id ASC
 `
 
 func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
@@ -384,7 +384,7 @@ const listAvailableAgentEnvironmentLabels = `-- name: ListAvailableAgentEnvironm
 SELECT e.id, e.name, e.description, e.tags, e.created_at, e.verification_type, e.verification_target, e.verification_timeout_seconds FROM environments e
 WHERE NOT EXISTS (SELECT 1 FROM agent_environment_labels l
  WHERE l.agent_id = ?1 AND l.environment_id = e.id)
-ORDER BY e.name, e.id
+ORDER BY e.name ASC, e.id ASC
 `
 
 func (q *Queries) ListAvailableAgentEnvironmentLabels(ctx context.Context, agentID string) ([]Environment, error) {
@@ -420,7 +420,7 @@ func (q *Queries) ListAvailableAgentEnvironmentLabels(ctx context.Context, agent
 }
 
 const listAvailableAgentLabels = `-- name: ListAvailableAgentLabels :many
-SELECT DISTINCT label FROM agent_labels ORDER BY label
+SELECT DISTINCT label FROM agent_labels ORDER BY label ASC
 `
 
 func (q *Queries) ListAvailableAgentLabels(ctx context.Context) ([]string, error) {

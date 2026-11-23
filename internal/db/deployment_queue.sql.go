@@ -204,7 +204,7 @@ func (q *Queries) ListDeploymentQueueBlockers(ctx context.Context, id int64) ([]
 const listDeploymentQueueEnvironments = `-- name: ListDeploymentQueueEnvironments :many
 SELECT environment_id FROM deployments WHERE status IN ('queued', 'pending', 'running', 'publishing_artifact', 'awaiting_artifact_approval', 'cleanup_unconfirmed')
 UNION SELECT environment_id FROM environment_deployment_slots
-ORDER BY environment_id
+ORDER BY environment_id ASC
 `
 
 func (q *Queries) ListDeploymentQueueEnvironments(ctx context.Context) ([]int64, error) {

@@ -126,7 +126,7 @@ func (q *Queries) GetVariable(ctx context.Context, id int64) (Variable, error) {
 }
 
 const listAllVariables = `-- name: ListAllVariables :many
-SELECT id, project_id, name, value, environment_id, created_at, secret, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential FROM variables ORDER BY id
+SELECT id, project_id, name, value, environment_id, created_at, secret, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential FROM variables ORDER BY id ASC
 `
 
 func (q *Queries) ListAllVariables(ctx context.Context) ([]Variable, error) {

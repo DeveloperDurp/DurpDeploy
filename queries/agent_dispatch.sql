@@ -31,7 +31,7 @@ WHERE deployment_id = sqlc.arg(deployment_id)
 -- name: ListRemoteLifecycleClaims :many
 SELECT deployment_id, agent_id FROM remote_deployment_claims
 WHERE state IN ('claimed', 'started', 'cancel_requested')
-ORDER BY agent_id, deployment_id;
+ORDER BY agent_id ASC, deployment_id ASC;
 
 -- name: ListWaitingRemoteDeploymentClaims :many
 SELECT c.deployment_id FROM remote_deployment_claims c
@@ -49,7 +49,7 @@ WHERE c.agent_id = sqlc.arg(agent_id) AND c.state = 'waiting'
       AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
   AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy WHERE busy.agent_id = c.agent_id
       AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
-ORDER BY c.created_at, c.deployment_id;
+ORDER BY c.created_at ASC, c.deployment_id ASC;
 
 -- name: FailUnsupportedWaitingRemoteDeploymentClaims :exec
 UPDATE remote_deployment_claims SET state = 'failed',

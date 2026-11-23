@@ -95,7 +95,7 @@ func (q *Queries) GetTOTPRotationValue(ctx context.Context, userID int64) ([]byt
 }
 
 const listAgentIdentityRotationKeys = `-- name: ListAgentIdentityRotationKeys :many
-SELECT id FROM agents ORDER BY id
+SELECT id FROM agents ORDER BY id ASC
 `
 
 func (q *Queries) ListAgentIdentityRotationKeys(ctx context.Context) ([]string, error) {
@@ -122,7 +122,7 @@ func (q *Queries) ListAgentIdentityRotationKeys(ctx context.Context) ([]string, 
 }
 
 const listPairingIdentityRotationKeys = `-- name: ListPairingIdentityRotationKeys :many
-SELECT agent_id FROM agent_pairings ORDER BY agent_id
+SELECT agent_id FROM agent_pairings ORDER BY agent_id ASC
 `
 
 func (q *Queries) ListPairingIdentityRotationKeys(ctx context.Context) ([]string, error) {
@@ -149,7 +149,7 @@ func (q *Queries) ListPairingIdentityRotationKeys(ctx context.Context) ([]string
 }
 
 const listRemoteClaimLogBufferRotationKeys = `-- name: ListRemoteClaimLogBufferRotationKeys :many
-SELECT deployment_id FROM remote_deployment_claims ORDER BY deployment_id
+SELECT deployment_id FROM remote_deployment_claims ORDER BY deployment_id ASC
 `
 
 func (q *Queries) ListRemoteClaimLogBufferRotationKeys(ctx context.Context) ([]int64, error) {
@@ -177,7 +177,7 @@ func (q *Queries) ListRemoteClaimLogBufferRotationKeys(ctx context.Context) ([]i
 
 const listRemoteStepLogBufferRotationKeys = `-- name: ListRemoteStepLogBufferRotationKeys :many
 SELECT deployment_id, step_index, agent_id FROM remote_step_runs
-ORDER BY deployment_id, step_index, agent_id
+ORDER BY deployment_id ASC, step_index ASC, agent_id ASC
 `
 
 type ListRemoteStepLogBufferRotationKeysRow struct {
@@ -210,7 +210,7 @@ func (q *Queries) ListRemoteStepLogBufferRotationKeys(ctx context.Context) ([]Li
 }
 
 const listTOTPEnrollmentRotationKeys = `-- name: ListTOTPEnrollmentRotationKeys :many
-SELECT token_hash FROM mfa_challenges WHERE purpose = 'totp_enroll' ORDER BY token_hash
+SELECT token_hash FROM mfa_challenges WHERE purpose = 'totp_enroll' ORDER BY token_hash ASC
 `
 
 func (q *Queries) ListTOTPEnrollmentRotationKeys(ctx context.Context) ([][]byte, error) {
@@ -237,7 +237,7 @@ func (q *Queries) ListTOTPEnrollmentRotationKeys(ctx context.Context) ([][]byte,
 }
 
 const listTOTPRotationKeys = `-- name: ListTOTPRotationKeys :many
-SELECT user_id FROM mfa_totp ORDER BY user_id
+SELECT user_id FROM mfa_totp ORDER BY user_id ASC
 `
 
 func (q *Queries) ListTOTPRotationKeys(ctx context.Context) ([]int64, error) {

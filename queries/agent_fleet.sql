@@ -4,13 +4,13 @@ FROM agents a LEFT JOIN agent_pairings p ON p.agent_id = a.id;
 
 -- name: ListFleetInterpreters :many
 SELECT agent_id, interpreter FROM agent_interpreters
-ORDER BY agent_id, interpreter;
+ORDER BY agent_id ASC, interpreter ASC;
 
 -- name: ListFleetExecutionCapabilities :many
 SELECT agent_id, 'mode' AS kind, execution_mode AS value FROM agent_execution_modes
 UNION ALL SELECT agent_id, 'runtime' AS kind, runtime AS value FROM agent_container_runtimes
 UNION ALL SELECT agent_id, 'interpreter' AS kind, interpreter AS value FROM agent_container_interpreters
-ORDER BY agent_id, kind, value;
+ORDER BY agent_id ASC, kind ASC, value ASC;
 
 -- name: ListFleetCurrentWork :many
 SELECT agent_id, deployment_id, step_index, state FROM remote_step_runs
@@ -21,7 +21,7 @@ SELECT agent_id, deployment_id, CAST(-1 AS INTEGER) AS step_index, state
 FROM remote_deployment_claims
 WHERE state IN ('claimed', 'started', 'cancel_requested')
     OR (state = 'cleanup_unconfirmed' AND cleanup_confirmed_at IS NULL)
-ORDER BY agent_id, deployment_id, step_index;
+ORDER BY agent_id ASC, deployment_id ASC, step_index ASC;
 
 -- name: ListFleetQueuedWork :many
 SELECT agent_id, CAST(COUNT(*) AS INTEGER) AS queued_work FROM (

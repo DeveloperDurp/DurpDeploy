@@ -486,7 +486,7 @@ func (q *Queries) HeartbeatRemoteDeployment(ctx context.Context, arg HeartbeatRe
 const listRemoteLifecycleClaims = `-- name: ListRemoteLifecycleClaims :many
 SELECT deployment_id, agent_id FROM remote_deployment_claims
 WHERE state IN ('claimed', 'started', 'cancel_requested')
-ORDER BY agent_id, deployment_id
+ORDER BY agent_id ASC, deployment_id ASC
 `
 
 type ListRemoteLifecycleClaimsRow struct {
@@ -533,7 +533,7 @@ WHERE c.agent_id = ?1 AND c.state = 'waiting'
       AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
   AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy WHERE busy.agent_id = c.agent_id
       AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
-ORDER BY c.created_at, c.deployment_id
+ORDER BY c.created_at ASC, c.deployment_id ASC
 `
 
 func (q *Queries) ListWaitingRemoteDeploymentClaims(ctx context.Context, agentID string) ([]int64, error) {

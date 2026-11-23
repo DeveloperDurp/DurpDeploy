@@ -52,7 +52,7 @@ WHERE id = ?;
 
 -- name: ListArtifactGateChunkKeys :many
 SELECT deployment_id, step_index, chunk_index FROM artifact_gate_chunks
-ORDER BY deployment_id, step_index, chunk_index;
+ORDER BY deployment_id ASC, step_index ASC, chunk_index ASC;
 
 -- name: UpdateArtifactGateChunkCiphertext :exec
 UPDATE artifact_gate_chunks SET ciphertext = sqlc.arg(ciphertext)

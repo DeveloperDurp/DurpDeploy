@@ -81,7 +81,7 @@ func (q *Queries) GetReleaseVariable(ctx context.Context, id int64) (ReleaseVari
 }
 
 const listAllReleaseVariables = `-- name: ListAllReleaseVariables :many
-SELECT id, release_id, name, value, environment_id, created_at, secret FROM release_variables ORDER BY id
+SELECT id, release_id, name, value, environment_id, created_at, secret FROM release_variables ORDER BY id ASC
 `
 
 func (q *Queries) ListAllReleaseVariables(ctx context.Context) ([]ReleaseVariable, error) {

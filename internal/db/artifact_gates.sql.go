@@ -304,7 +304,7 @@ func (q *Queries) GetArtifactGateRun(ctx context.Context, deploymentID int64) (A
 
 const listArtifactGateChunkKeys = `-- name: ListArtifactGateChunkKeys :many
 SELECT deployment_id, step_index, chunk_index FROM artifact_gate_chunks
-ORDER BY deployment_id, step_index, chunk_index
+ORDER BY deployment_id ASC, step_index ASC, chunk_index ASC
 `
 
 type ListArtifactGateChunkKeysRow struct {

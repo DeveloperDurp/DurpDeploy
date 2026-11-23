@@ -111,7 +111,7 @@ FROM remote_deployment_claims c
 WHERE c.agent_id = ?1
   AND (c.state IN ('claimed', 'started', 'cancel_requested')
       OR (c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL))
-ORDER BY deployment_id, step_index
+ORDER BY deployment_id ASC, step_index ASC
 `
 
 type ListAgentCurrentWorkRow struct {

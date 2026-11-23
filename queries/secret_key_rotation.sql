@@ -2,7 +2,7 @@
 SELECT COUNT(*) FROM deployment_staging_chunks;
 
 -- name: ListTOTPRotationKeys :many
-SELECT user_id FROM mfa_totp ORDER BY user_id;
+SELECT user_id FROM mfa_totp ORDER BY user_id ASC;
 
 -- name: GetTOTPRotationValue :one
 SELECT encrypted_seed FROM mfa_totp WHERE user_id = ?;
@@ -11,7 +11,7 @@ SELECT encrypted_seed FROM mfa_totp WHERE user_id = ?;
 UPDATE mfa_totp SET encrypted_seed = ? WHERE user_id = ?;
 
 -- name: ListTOTPEnrollmentRotationKeys :many
-SELECT token_hash FROM mfa_challenges WHERE purpose = 'totp_enroll' ORDER BY token_hash;
+SELECT token_hash FROM mfa_challenges WHERE purpose = 'totp_enroll' ORDER BY token_hash ASC;
 
 -- name: GetTOTPEnrollmentRotationValue :one
 SELECT ceremony_json FROM mfa_challenges WHERE token_hash = ?;
@@ -20,7 +20,7 @@ SELECT ceremony_json FROM mfa_challenges WHERE token_hash = ?;
 UPDATE mfa_challenges SET ceremony_json = ? WHERE token_hash = ?;
 
 -- name: ListAgentIdentityRotationKeys :many
-SELECT id FROM agents ORDER BY id;
+SELECT id FROM agents ORDER BY id ASC;
 
 -- name: GetAgentIdentityRotationValue :one
 SELECT encrypted_identity FROM agents WHERE id = ?;
@@ -29,7 +29,7 @@ SELECT encrypted_identity FROM agents WHERE id = ?;
 UPDATE agents SET encrypted_identity = ? WHERE id = ?;
 
 -- name: ListPairingIdentityRotationKeys :many
-SELECT agent_id FROM agent_pairings ORDER BY agent_id;
+SELECT agent_id FROM agent_pairings ORDER BY agent_id ASC;
 
 -- name: GetPairingIdentityRotationValue :one
 SELECT encrypted_identity FROM agent_pairings WHERE agent_id = ?;
@@ -38,7 +38,7 @@ SELECT encrypted_identity FROM agent_pairings WHERE agent_id = ?;
 UPDATE agent_pairings SET encrypted_identity = ? WHERE agent_id = ?;
 
 -- name: ListRemoteClaimLogBufferRotationKeys :many
-SELECT deployment_id FROM remote_deployment_claims ORDER BY deployment_id;
+SELECT deployment_id FROM remote_deployment_claims ORDER BY deployment_id ASC;
 
 -- name: GetRemoteClaimLogBufferRotationValue :one
 SELECT log_buffer_ciphertext FROM remote_deployment_claims WHERE deployment_id = ?;
@@ -48,7 +48,7 @@ UPDATE remote_deployment_claims SET log_buffer_ciphertext = ? WHERE deployment_i
 
 -- name: ListRemoteStepLogBufferRotationKeys :many
 SELECT deployment_id, step_index, agent_id FROM remote_step_runs
-ORDER BY deployment_id, step_index, agent_id;
+ORDER BY deployment_id ASC, step_index ASC, agent_id ASC;
 
 -- name: GetRemoteStepLogBufferRotationValue :one
 SELECT log_buffer_ciphertext FROM remote_step_runs

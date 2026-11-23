@@ -533,7 +533,7 @@ WHERE r.agent_id = ?1 AND r.state = 'waiting'
       AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
   AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy WHERE busy.agent_id = r.agent_id
       AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
-ORDER BY r.created_at, r.deployment_id, r.step_index
+ORDER BY r.created_at ASC, r.deployment_id ASC, r.step_index ASC
 `
 
 type ListWaitingRemoteStepRunsRow struct {

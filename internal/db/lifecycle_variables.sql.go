@@ -118,7 +118,7 @@ func (q *Queries) LifecycleVariableScopeAllowed(ctx context.Context, arg Lifecyc
 }
 
 const listAllLifecycleVariables = `-- name: ListAllLifecycleVariables :many
-SELECT id, lifecycle_id, name, value, environment_id, secret, created_at, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential FROM lifecycle_variables ORDER BY id
+SELECT id, lifecycle_id, name, value, environment_id, secret, created_at, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential FROM lifecycle_variables ORDER BY id ASC
 `
 
 func (q *Queries) ListAllLifecycleVariables(ctx context.Context) ([]LifecycleVariable, error) {

@@ -27,7 +27,7 @@ GROUP BY r.project_id ORDER BY r.project_id;
 -- name: ListDeploymentQueueEnvironments :many
 SELECT environment_id FROM deployments WHERE status IN ('queued', 'pending', 'running', 'publishing_artifact', 'awaiting_artifact_approval', 'cleanup_unconfirmed')
 UNION SELECT environment_id FROM environment_deployment_slots
-ORDER BY environment_id;
+ORDER BY environment_id ASC;
 
 -- name: CancelWaitingQueuedRemoteClaim :exec
 UPDATE remote_deployment_claims SET state = 'cancelled', finished_at = unixepoch(), updated_at = unixepoch()
