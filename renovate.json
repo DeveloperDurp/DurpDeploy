@@ -4,7 +4,8 @@
     {
       "matchFileNames": ["Dockerfile.transport-security"],
       "matchDatasources": ["deb"],
-      "matchPackageNames": ["chromium-headless-shell"],
+      "matchPackageNames": ["chromium-common", "chromium-headless-shell"],
+      "groupName": "transport Chromium Debian packages",
       "registryUrls": [
         "https://security.debian.org/debian-security?suite=trixie-security&components=main&binaryArch=amd64"
       ]

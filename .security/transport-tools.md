@@ -2,9 +2,11 @@
 
 The scanner image uses Ubuntu 26.04.
 Its manifest digest is `sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c`.
-It installs Debian's `chromium-headless-shell=156.0.8078.79-1~deb13u1` from the security repository.
+It installs Debian's `chromium-headless-shell` and `chromium-common` at version `156.0.8078.108-1~deb13u1`.
+The packages come from the Debian Security repository.
+Renovate updates both package pins in the same merge request.
 The image retains package license notices under `/usr/share/doc`.
-The browser package retains its notices under `/usr/share/doc/chromium-headless-shell`.
+The Chromium packages retain their notices under `/usr/share/doc/chromium-headless-shell` and `/usr/share/doc/chromium-common`.
 
 testssl.sh 3.2.4 uses GPL version 2.
 Its exact source commit is `97763a411c525720a5f9bd9d2cded416b10f210a`.
