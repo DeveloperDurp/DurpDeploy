@@ -453,7 +453,7 @@
     "rule": "G710",
     "file": "internal/handler/project_members.go",
     "line": "290",
-    "source_sha256": "7296433afd37695617a37b138f7b9a50d669bc340d3d01bc48f1a2edc2042dc2",
+    "source_sha256": "85c9f945e0f6ee0904e3d3438f1bab417faa4ee6040e384accbf7e2f976a106d",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "These handlers redirect to the fixed /projects/ path prefix and an int64 ID from parseProjectID. Requests cannot set a destination host or path."
@@ -462,7 +462,7 @@
     "rule": "G710",
     "file": "internal/handler/project_members.go",
     "line": "242",
-    "source_sha256": "7296433afd37695617a37b138f7b9a50d669bc340d3d01bc48f1a2edc2042dc2",
+    "source_sha256": "85c9f945e0f6ee0904e3d3438f1bab417faa4ee6040e384accbf7e2f976a106d",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "These handlers redirect to the fixed /projects/ path prefix and an int64 ID from parseProjectID. Requests cannot set a destination host or path."
@@ -471,7 +471,7 @@
     "rule": "G710",
     "file": "internal/handler/project_members.go",
     "line": "168",
-    "source_sha256": "7296433afd37695617a37b138f7b9a50d669bc340d3d01bc48f1a2edc2042dc2",
+    "source_sha256": "85c9f945e0f6ee0904e3d3438f1bab417faa4ee6040e384accbf7e2f976a106d",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "These handlers redirect to the fixed /projects/ path prefix and an int64 ID from parseProjectID. Requests cannot set a destination host or path."
@@ -480,7 +480,7 @@
     "rule": "G710",
     "file": "internal/handler/project.go",
     "line": "490",
-    "source_sha256": "26383fefbbba6cd40fefe974aa61edffb9f9c9d32a002ed9379ba936701476c0",
+    "source_sha256": "6af19deefa7534c90353d2092183701988f860f5c6fbcc74071c1c2bf6574176",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "The redirect uses a fixed /projects/ path prefix and an ID parsed as int64 by parseProjectID. The destination remains on the same origin. Evidence: ProjectHandler.UpdateProject and parseProjectID."
@@ -489,7 +489,7 @@
     "rule": "G710",
     "file": "internal/handler/project.go",
     "line": "276",
-    "source_sha256": "26383fefbbba6cd40fefe974aa61edffb9f9c9d32a002ed9379ba936701476c0",
+    "source_sha256": "6af19deefa7534c90353d2092183701988f860f5c6fbcc74071c1c2bf6574176",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "The redirect uses a fixed /projects/ path prefix and an ID parsed as int64 by parseProjectID. The destination remains on the same origin. Evidence: ProjectHandler.UpdateProjectNotifications and parseProjectID."

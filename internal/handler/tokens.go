@@ -199,8 +199,8 @@ func (h *TokensHandler) MyTokensPost(w http.ResponseWriter, r *http.Request) {
 
 	audit.SetTokenChange(r, id, grant, nil)
 	redirect := "/settings/tokens?flash=" + url.QueryEscape(flashID)
-	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("HX-Redirect", redirect)
+	if r.Header.Get(hxRequestHeader) == "true" {
+		w.Header().Set(hxRedirectHeader, redirect)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -242,20 +242,7 @@ func (h *TokensHandler) MyTokensRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.repo.Queries.RevokeApiToken(r.Context(), id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	audit.SetTokenChange(r, id, repository.TokenScope{Scope: row.Scope,
-		Role: row.TokenRole}, nil)
-	redirect := "/settings/tokens"
-	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("HX-Redirect", redirect)
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	http.Redirect(w, r, redirect, http.StatusSeeOther)
+	h.revokeToken(w, r, id, "/settings/tokens", row)
 }
 
 // AdminTokens handles GET /admin/tokens. Lists every token across
@@ -302,6 +289,15 @@ func (h *TokensHandler) AdminTokensRevoke(
 		return
 	}
 
+	h.revokeToken(w, r, id, "/admin/tokens", row)
+}
+
+func (h *TokensHandler) revokeToken(
+	w http.ResponseWriter,
+	r *http.Request,
+	id, redirect string,
+	row db.GetApiTokenByIDRow,
+) {
 	if err := h.repo.Queries.RevokeApiToken(r.Context(), id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -309,9 +305,8 @@ func (h *TokensHandler) AdminTokensRevoke(
 
 	audit.SetTokenChange(r, id, repository.TokenScope{Scope: row.Scope,
 		Role: row.TokenRole}, nil)
-	redirect := "/admin/tokens"
-	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("HX-Redirect", redirect)
+	if r.Header.Get(hxRequestHeader) == "true" {
+		w.Header().Set(hxRedirectHeader, redirect)
 		w.WriteHeader(http.StatusOK)
 		return
 	}

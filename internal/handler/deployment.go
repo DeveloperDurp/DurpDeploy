@@ -589,7 +589,7 @@ func (h *DeploymentHandler) CancelDeployment(
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if r.Header.Get(hxRequestHeader) == "true" {
 		if err := pages.DeploymentStatusUpdate(deployment, false).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -661,7 +661,7 @@ func (h *DeploymentHandler) ApproveDeployment(
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	if r.Header.Get("HX-Request") == "true" {
+	if r.Header.Get(hxRequestHeader) == "true" {
 		w.Header().Set(
 			"HX-Redirect",
 			fmt.Sprintf("/deployments/%d", id),
@@ -801,7 +801,7 @@ func (h *DeploymentHandler) RedeployDeployment(
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	if r.Header.Get("HX-Request") == "true" {
+	if r.Header.Get(hxRequestHeader) == "true" {
 		// HX-Redirect (not 303) so the client does a full-page nav; a
 		// body swap would clobber the nav bar's Alpine.js state.
 		w.Header().

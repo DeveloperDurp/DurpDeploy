@@ -204,7 +204,7 @@ func (h *StepTemplateHandler) CreateTemplate(
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if r.Header.Get(hxRequestHeader) == "true" {
 		w.Header().Set("HX-Redirect", "/templates")
 		return
 	}
@@ -403,7 +403,7 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		h.ListTemplates(w, r)
 		return
 	}
-	if r.Header.Get("HX-Request") == "true" {
+	if r.Header.Get(hxRequestHeader) == "true" {
 		if err := pages.TemplateFormFragment(&updated, false, "").
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -640,7 +640,7 @@ func (h *StepTemplateHandler) SaveStepAsTemplate(
 		selectors,
 	); err != nil {
 		if IsUniqueViolation(err) {
-			if r.Header.Get("HX-Request") == "true" {
+			if r.Header.Get(hxRequestHeader) == "true" {
 				SetToastError(w, "A template with this name already exists")
 				w.WriteHeader(http.StatusConflict)
 				steps, err := h.repo.Queries.ListStepsByProject(
@@ -668,7 +668,7 @@ func (h *StepTemplateHandler) SaveStepAsTemplate(
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if r.Header.Get(hxRequestHeader) == "true" {
 		SetToastSuccess(w, "Step saved as template")
 		steps, err := h.repo.Queries.ListStepsByProject(r.Context(), projectID)
 		if err != nil {

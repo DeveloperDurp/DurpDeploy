@@ -21,9 +21,13 @@ const internalErrorMessage = "Internal server error"
 
 const safeErrorHeader = "X-DurpDeploy-Safe-Error"
 
+const hxRetargetHeader = "HX-Retarget"
+const hxReswapHeader = "HX-Reswap"
+const formDialogHeader = "X-Form-Dialog"
+
 // Page navigation needs the complete document for its title and shell.
 func isFragmentRequest(r *http.Request) bool {
-	return r.Header.Get("HX-Request") == "true" &&
+	return r.Header.Get(hxRequestHeader) == "true" &&
 		(r.Method != http.MethodGet || (r.Header.Get("HX-Boosted") != "true" &&
 			r.Header.Get("HX-History-Restore-Request") != "true"))
 }
@@ -164,12 +168,12 @@ func retargetFormDialog(
 	r *http.Request,
 	target string,
 ) bool {
-	if r.Header.Get("HX-Request") != "true" ||
-		r.Header.Get("X-Form-Dialog") != "true" {
+	if r.Header.Get(hxRequestHeader) != "true" ||
+		r.Header.Get(formDialogHeader) != "true" {
 		return false
 	}
-	w.Header().Set("HX-Retarget", target)
-	w.Header().Set("HX-Reswap", "outerHTML")
+	w.Header().Set(hxRetargetHeader, target)
+	w.Header().Set(hxReswapHeader, "outerHTML")
 	w.Header().Set("HX-Reselect", target)
 	w.Header().Set("HX-Trigger-After-Settle", "form-saved")
 	return true
@@ -180,15 +184,15 @@ func WriteFormError(
 	r *http.Request,
 	fragment, page templ.Component,
 ) {
-	if r.Header.Get("HX-Request") == "true" {
-		if w.Header().Get("HX-Retarget") == "" {
-			w.Header().Set("HX-Retarget", "#form-container")
+	if r.Header.Get(hxRequestHeader) == "true" {
+		if w.Header().Get(hxRetargetHeader) == "" {
+			w.Header().Set(hxRetargetHeader, "#form-container")
 		}
-		if w.Header().Get("HX-Reswap") == "" {
-			w.Header().Set("HX-Reswap", "innerHTML")
+		if w.Header().Get(hxReswapHeader) == "" {
+			w.Header().Set(hxReswapHeader, "innerHTML")
 		}
-		if r.Header.Get("X-Form-Dialog") == "true" {
-			w.Header().Set("HX-Retarget", "#project-edit-content")
+		if r.Header.Get(formDialogHeader) == "true" {
+			w.Header().Set(hxRetargetHeader, "#project-edit-content")
 		}
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		if err := fragment.Render(r.Context(), w); err != nil {

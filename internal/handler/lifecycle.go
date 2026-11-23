@@ -133,7 +133,7 @@ func (h *LifecycleHandler) CreateLifecycle(
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if r.Header.Get(hxRequestHeader) == "true" {
 		w.Header().Set("HX-Redirect", "/lifecycles")
 		return
 	}
@@ -179,26 +179,7 @@ func (h *LifecycleHandler) SaveLifecycle(
 
 	switch r.FormValue("_method") {
 	case "delete":
-		if user := auth.UserFromContext(
-			r.Context(),
-		); user == nil ||
-			user.Role != "admin" {
-			http.Error(
-				w,
-				"Only a global admin can delete a lifecycle",
-				http.StatusForbidden,
-			)
-			return
-		}
-		if err := h.repo.Queries.DeleteLifecycle(r.Context(), id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if retargetFormDialog(w, r, "#lifecycles-content") {
-			h.ListLifecycles(w, r)
-			return
-		}
-		http.Redirect(w, r, lifecyclesPath, http.StatusSeeOther)
+		h.deleteLifecycle(w, r, id)
 	case "put":
 		name := strings.TrimSpace(r.FormValue("name"))
 		desc := r.FormValue("description")
@@ -250,7 +231,7 @@ func (h *LifecycleHandler) SaveLifecycle(
 			h.ListLifecycles(w, r)
 			return
 		}
-		if r.Header.Get("HX-Request") == "true" {
+		if r.Header.Get(hxRequestHeader) == "true" {
 			w.Header().Set("HX-Redirect", lifecyclesPath)
 			return
 		}
@@ -258,6 +239,31 @@ func (h *LifecycleHandler) SaveLifecycle(
 	default:
 		http.Error(w, "Unknown method", http.StatusBadRequest)
 	}
+}
+
+func (h *LifecycleHandler) deleteLifecycle(
+	w http.ResponseWriter,
+	r *http.Request,
+	id int64,
+) {
+	if user := auth.UserFromContext(r.Context()); user == nil ||
+		user.Role != "admin" {
+		http.Error(
+			w,
+			"Only a global admin can delete a lifecycle",
+			http.StatusForbidden,
+		)
+		return
+	}
+	if err := h.repo.Queries.DeleteLifecycle(r.Context(), id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if retargetFormDialog(w, r, "#lifecycles-content") {
+		h.ListLifecycles(w, r)
+		return
+	}
+	http.Redirect(w, r, lifecyclesPath, http.StatusSeeOther)
 }
 
 func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
@@ -423,7 +429,7 @@ func (h *LifecycleHandler) UpdateLifecycleStage(
 	}
 	stage.RequiresApproval = reqApproval
 
-	if r.Header.Get("HX-Request") != "true" {
+	if r.Header.Get(hxRequestHeader) != "true" {
 		http.Redirect(
 			w, r,
 			fmt.Sprintf("/lifecycles/%d", stage.LifecycleID),

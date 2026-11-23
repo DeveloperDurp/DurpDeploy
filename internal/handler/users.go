@@ -137,8 +137,8 @@ func (h *UsersHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	redirect := "/admin/users"
 
-	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("HX-Redirect", redirect)
+	if r.Header.Get(hxRequestHeader) == "true" {
+		w.Header().Set(hxRedirectHeader, redirect)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -249,8 +249,8 @@ func (h *UsersHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	redirect := "/admin/users"
 
-	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("HX-Redirect", redirect)
+	if r.Header.Get(hxRequestHeader) == "true" {
+		w.Header().Set(hxRedirectHeader, redirect)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -323,8 +323,8 @@ func (h *UsersHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	_ = target
 
 	redirect := "/admin/users"
-	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("HX-Redirect", redirect)
+	if r.Header.Get(hxRequestHeader) == "true" {
+		w.Header().Set(hxRedirectHeader, redirect)
 		w.WriteHeader(http.StatusOK)
 		return
 	}

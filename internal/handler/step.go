@@ -517,7 +517,7 @@ func writeStepFormError(
 		step.ApprovalReviewFormat = r.FormValue("approval_review_format")
 		_, names, _ := parseStepContainerConfig(r, step.ExecutionTarget)
 		step.VariableNames = marshalStepVariableNames(names)
-		w.Header().Set("HX-Retarget", "#step-edit-content")
+		w.Header().Set(hxRetargetHeader, "#step-edit-content")
 		w.Header().Set("HX-Reswap", "innerHTML")
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		if err := components.StepForm(
@@ -530,12 +530,12 @@ func writeStepFormError(
 	mobile := r.URL.Query().Get("mobile") == "1"
 	if r.Header.Get("HX-Request") == "true" {
 		if isNew {
-			w.Header().Set("HX-Retarget", "#add-step-form")
+			w.Header().Set(hxRetargetHeader, "#add-step-form")
 		} else if mobile {
-			w.Header().Set("HX-Retarget",
+			w.Header().Set(hxRetargetHeader,
 				fmt.Sprintf("#mobile-step-edit-%d", step.ID))
 		} else {
-			w.Header().Set("HX-Retarget", fmt.Sprintf("#step-row-%d", step.ID))
+			w.Header().Set(hxRetargetHeader, fmt.Sprintf("#step-row-%d", step.ID))
 			w.Header().Set("HX-Reswap", "outerHTML")
 		}
 	}

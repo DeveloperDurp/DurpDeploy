@@ -216,7 +216,7 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		h.ListProjects(w, r)
 		return
 	}
-	if r.Header.Get("HX-Request") == "true" {
+	if r.Header.Get(hxRequestHeader) == "true" {
 		w.Header().Set(hxRedirectHeader, projectsPath)
 		return
 	}
@@ -477,7 +477,7 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if r.Header.Get(hxRequestHeader) == "true" {
 		// After an HTMX edit, navigate the browser back to the project's
 		// detail page so the user sees the updated lifecycle / env panel.
 		// HX-Redirect tells HTMX to do a full navigation rather than a
@@ -578,7 +578,7 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	// has no Edit/Delete buttons anymore (those moved to the project
 	// detail page), so callers from the project page expect a
 	// navigation, not an in-place swap.
-	if r.Header.Get("HX-Request") == "true" {
+	if r.Header.Get(hxRequestHeader) == "true" {
 		w.Header().Set(hxRedirectHeader, projectsPath)
 		w.WriteHeader(http.StatusOK)
 		return
