@@ -9,7 +9,7 @@ export function createVariablesPage(focusFormField) {
 			const nameInput = form.querySelector('input[name="name"]');
 			const environment = form.querySelector('select[name="environment_id"]');
 			if (nameInput) nameInput.value = button.dataset.overrideFor;
-			if (button.hasAttribute('data-override-environment')) {
+			if (button.dataset.overrideEnvironment !== undefined) {
 				environment.value = button.dataset.overrideEnvironment;
 				const secret = form.querySelector('input[name="secret"]');
 				if (secret.checked !== (button.dataset.overrideSecret === 'true')) secret.click();

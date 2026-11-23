@@ -39,7 +39,7 @@ document.addEventListener('htmx:beforeSwap', (event) => {
 		event.detail.shouldSwap = true;
 	}
 	const target = event.detail.target;
-	if (target.hasAttribute('data-artifact-gates') &&
+	if (target.dataset.artifactGates !== undefined &&
 		target.contains(document.activeElement)) {
 		event.detail.shouldSwap = false;
 	}
@@ -318,8 +318,8 @@ Alpine.data('toast', () => ({
 			const dialog = trigger.closest('dialog[open]');
 			dialog?.querySelector('[data-modal-error]')?.remove();
 			this.requestToasts.set(e.detail.xhr, {
-				success: trigger.getAttribute('data-toast-success'),
-				error: trigger.getAttribute('data-toast-error'),
+				success: trigger.dataset.toastSuccess,
+				error: trigger.dataset.toastError,
 				dialog,
 				formError: dialog?.querySelector('[data-form-error]'),
 			});
@@ -385,9 +385,9 @@ window.showToast = (msg, type, source) => {
 Alpine.data('navbar', () => ({
 	theme: localStorage.getItem('theme') || 'mocha',
 	init() {
-		document.documentElement.setAttribute('data-theme', this.theme);
+		document.documentElement.dataset.theme = this.theme;
 		this.$watch('theme', (value) => {
-			document.documentElement.setAttribute('data-theme', value);
+			document.documentElement.dataset.theme = value;
 			localStorage.setItem('theme', value);
 		});
 	},
@@ -923,7 +923,7 @@ Alpine.data('stepVariables', () => createStepVariables(focusFormField));
 registerLogComponents(Alpine);
 
 function base64URLToBuffer(value) {
-	const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(
+	const padded = value.replaceAll('-', '+').replaceAll('_', '/').padEnd(
 		value.length + ((4 - (value.length % 4)) % 4),
 		'=',
 	);
@@ -939,7 +939,7 @@ function bufferToBase64URL(buffer) {
 	const bytes = new Uint8Array(buffer);
 	let binary = '';
 	for (const byte of bytes) binary += String.fromCharCode(byte);
-	return window.btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+	return window.btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
 }
 
 function publicKeyOptions(options, creation) {
