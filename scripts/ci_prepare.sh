@@ -10,9 +10,15 @@ case ${CI_RUNTIME:-docker} in
   none) exit 0 ;;
   docker)
     export DOCKER_HOST=unix:///var/run/docker.sock
+    mtu=$(cat /sys/class/net/eth0/mtu)
+    if [[ ! $mtu =~ ^[1-9][0-9]{1,4}$ ]] || ((mtu < 68 || mtu > 65535)); then
+      echo 'Invalid CI pod interface MTU.' >&2
+      exit 2
+    fi
     # The legacy DinD wrapper hides /tmp under tmpfs and moves daemon storage into RAM.
     # The Kubernetes build volume provides disk storage outside the build context.
     container=docker dockerd --host="$DOCKER_HOST" --storage-driver=overlay2 \
+      --mtu="$mtu" --default-network-opt "bridge=com.docker.network.driver.mtu=$mtu" \
       --data-root="${CI_BUILDS_DIR:?}/.durpdeploy-ci-docker" \
       > /tmp/durpdeploy-ci-dockerd.log 2>&1 &
     for _ in {1..60}; do

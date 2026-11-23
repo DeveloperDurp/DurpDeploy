@@ -119,8 +119,14 @@ ci-runtime:
   image: harbor.durp.info/dockerhub/library/docker:29.9.2-cli@sha256:5e6baf67325a79f64ed3bed6863954d5e05d0f3d4e57cbdb14809346814bbfdb
   services:
     - name: harbor.durp.info/dockerhub/library/docker:29.9.2-dind@sha256:9e79b879b177fbd72c34376a3dd3d91747da5db49e1f560f76aea59561471977
-      entrypoint: [dockerd-entrypoint.sh]
-      command: [dockerd, "--host=unix:///var/run/docker.sock", "--host=tcp://127.0.0.1:2375", "--tls=false"]
+      entrypoint: ["/bin/sh", "-ec"]
+      command:
+        - |
+          read -r mtu < /sys/class/net/eth0/mtu
+          exec dockerd-entrypoint.sh dockerd \
+            --host=unix:///var/run/docker.sock \
+            --host=tcp://127.0.0.1:2375 --tls=false \
+            --mtu="$mtu" --default-network-opt "bridge=com.docker.network.driver.mtu=$mtu"
       variables:
         HEALTHCHECK_TCP_PORT: "2375"
   variables:
