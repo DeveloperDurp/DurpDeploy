@@ -201,7 +201,7 @@
     "rule": "G124",
     "file": "internal/oidc/transaction_cookie.go",
     "line": "154",
-    "source_sha256": "bf084e990786b14a604034dec66d31ee23f099ca00e85c59d9e29f3bb467cf0e",
+    "source_sha256": "76b68d2905bc2d250563bb830d2688db7355f66a8852db190cf424ec36e71880",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
@@ -210,7 +210,7 @@
     "rule": "G124",
     "file": "internal/oidc/transaction_cookie.go",
     "line": "113",
-    "source_sha256": "bf084e990786b14a604034dec66d31ee23f099ca00e85c59d9e29f3bb467cf0e",
+    "source_sha256": "76b68d2905bc2d250563bb830d2688db7355f66a8852db190cf424ec36e71880",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."

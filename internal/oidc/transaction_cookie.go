@@ -212,8 +212,8 @@ func validPKCEExtraCharacters(value string) bool {
 	return true
 }
 
-func validOpaque(value string, min, max int) bool {
-	if len(value) < min || len(value) > max {
+func validOpaque(value string, minLength, maxLength int) bool {
+	if len(value) < minLength || len(value) > maxLength {
 		return false
 	}
 	for _, char := range value {
@@ -229,8 +229,8 @@ func isOpaqueCharacter(char rune) bool {
 		char >= '0' && char <= '9' || char == '-' || char == '_'
 }
 
-func validText(value string, min, max int) bool {
-	if len(value) < min || len(value) > max {
+func validText(value string, minLength, maxLength int) bool {
+	if len(value) < minLength || len(value) > maxLength {
 		return false
 	}
 	for _, char := range value {

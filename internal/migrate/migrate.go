@@ -9,10 +9,12 @@ import (
 	"strings"
 
 	"github.com/pressly/goose/v3"
+	// Register the sqlite driver used by SQLite migrations.
 	_ "modernc.org/sqlite"
 
 	"durpdeploy/internal/dbconfig"
 	"durpdeploy/internal/mssqldriver"
+	// Register the pgx-qmark driver used by PostgreSQL migrations.
 	_ "durpdeploy/internal/pgdriver"
 	"durpdeploy/migrations"
 )

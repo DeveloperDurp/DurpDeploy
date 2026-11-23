@@ -143,7 +143,7 @@ func claimDocument(raw []byte) (map[string]json.RawMessage, error) {
 	if err := decoder.Decode(&claims); err != nil || claims == nil {
 		return nil, claimError("claims", ClaimInvalid)
 	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+	if decoder.Decode(&struct{}{}) != io.EOF {
 		return nil, claimError("claims", ClaimInvalid)
 	}
 	return claims, nil
