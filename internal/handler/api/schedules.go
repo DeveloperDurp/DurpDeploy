@@ -16,6 +16,9 @@ import (
 	"durpdeploy/internal/repository"
 )
 
+const invalidScheduleIDMessage = "Invalid schedule ID"
+const scheduleNotFoundMessage = "Schedule not found"
+
 type ScheduleHandler struct {
 	repo *repository.Repository
 }
@@ -62,21 +65,7 @@ func (h *ScheduleHandler) ListSchedules(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	projectID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid project ID")
-		return
-	}
-
-	if _, err := h.repo.Queries.GetProject(r.Context(), projectID); err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Project not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	limit, offset, ok := parsePagination(w, r)
+	projectID, limit, offset, ok := projectPageParams(w, r, h.repo)
 	if !ok {
 		return
 	}
@@ -148,52 +137,8 @@ func (h *ScheduleHandler) CreateSchedule(
 		return
 	}
 
-	var req scheduledDeploymentRequest
-	if !readJSONBool(w, r, &req) {
-		return
-	}
-	cronExpr := cmp.Or(req.CronExpr, req.Cron)
-	if req.ReleaseID == 0 || req.EnvironmentID == 0 || cronExpr == "" {
-		RespondError(
-			w,
-			http.StatusUnprocessableEntity,
-			"release_id, environment_id, and cron are required",
-		)
-		return
-	}
-
-	release, err := h.repo.Queries.GetDeploymentRelease(
-		r.Context(),
-		req.ReleaseID,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Release not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if release.ProjectID != projectID {
-		RespondError(w, http.StatusNotFound, "Release not found")
-		return
-	}
-	if err := h.repo.ValidateExecutableRelease(
-		r.Context(),
-		release.ID,
-	); err != nil {
-		if writeArtifactError(w, err) {
-			return
-		}
-		if errors.Is(err, repository.ErrLegacyServerStep) {
-			RespondError(
-				w,
-				http.StatusConflict,
-				repository.ErrLegacyServerStep.Error(),
-			)
-		} else {
-			RespondError(w, http.StatusInternalServerError, err.Error())
-		}
+	req, cronExpr, ok := h.readScheduleRequest(w, r, projectID)
+	if !ok {
 		return
 	}
 	if _, err := h.repo.Queries.GetEnvironment(
@@ -242,7 +187,7 @@ func (h *ScheduleHandler) CreateSchedule(
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "Release not found")
+			RespondError(w, http.StatusNotFound, releaseNotFoundMessage)
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -273,35 +218,12 @@ func (h *ScheduleHandler) CreateSchedule(
 //	404: body:NotFoundError
 //	500: body:ServerError
 func (h *ScheduleHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
-	schedID, err := parseParamInt(r, "schedId")
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid schedule ID")
-		return
-	}
-
-	schedule, err := h.repo.Queries.GetScheduledDeployment(r.Context(), schedID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Schedule not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	// R2: refuse to serve a schedule that belongs to a different
-	// project than the URL {id}. 404 (not 403) so we don't leak
-	// existence.
-	projectID, ok := requireProjectFromContext(w, r)
+	existing, ok := h.loadProjectSchedule(w, r)
 	if !ok {
 		return
 	}
-	if schedule.ProjectID != projectID {
-		RespondError(w, http.StatusNotFound, "Schedule not found")
-		return
-	}
 
-	RespondJSON(w, http.StatusOK, schedule)
+	RespondJSON(w, http.StatusOK, existing)
 }
 
 // swagger:route PUT /projects/{id}/schedules/{schedId} schedules updateSchedule
@@ -335,75 +257,17 @@ func (h *ScheduleHandler) UpdateSchedule(
 	if !ok {
 		return
 	}
-	schedID, err := parseParamInt(r, "schedId")
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid schedule ID")
-		return
-	}
-
-	// R2: load the schedule first so we can verify it belongs to the
-	// URL's project before mutating it. UpdateScheduledDeployment
-	// returns the row only on success, so the existence check has to
-	// happen up front.
-	existing, err := h.repo.Queries.GetScheduledDeployment(r.Context(), schedID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Schedule not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
+	existing, ok := h.loadSchedule(w, r)
+	if !ok {
 		return
 	}
 	if existing.ProjectID != projectID {
-		RespondError(w, http.StatusNotFound, "Schedule not found")
+		RespondError(w, http.StatusNotFound, scheduleNotFoundMessage)
 		return
 	}
 
-	var req scheduledDeploymentRequest
-	if !readJSONBool(w, r, &req) {
-		return
-	}
-	cronExpr := cmp.Or(req.CronExpr, req.Cron)
-	if req.ReleaseID == 0 || req.EnvironmentID == 0 || cronExpr == "" {
-		RespondError(
-			w,
-			http.StatusUnprocessableEntity,
-			"release_id, environment_id, and cron are required",
-		)
-		return
-	}
-	release, err := h.repo.Queries.GetDeploymentRelease(
-		r.Context(),
-		req.ReleaseID,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Release not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if release.ProjectID != projectID {
-		RespondError(w, http.StatusNotFound, "Release not found")
-		return
-	}
-	if err := h.repo.ValidateExecutableRelease(
-		r.Context(),
-		release.ID,
-	); err != nil {
-		if writeArtifactError(w, err) {
-			return
-		}
-		if errors.Is(err, repository.ErrLegacyServerStep) {
-			RespondError(
-				w,
-				http.StatusConflict,
-				repository.ErrLegacyServerStep.Error(),
-			)
-		} else {
-			RespondError(w, http.StatusInternalServerError, err.Error())
-		}
+	req, cronExpr, ok := h.readScheduleRequest(w, r, projectID)
+	if !ok {
 		return
 	}
 	sched, err := handler.ParseAndValidateCron(cronExpr)
@@ -429,7 +293,7 @@ func (h *ScheduleHandler) UpdateSchedule(
 	schedule, err := h.repo.UpdateScheduledDeployment(
 		r.Context(),
 		db.UpdateScheduledDeploymentParams{
-			ID:            schedID,
+			ID:            existing.ID,
 			ProjectID:     projectID,
 			ReleaseID:     req.ReleaseID,
 			EnvironmentID: req.EnvironmentID,
@@ -472,35 +336,14 @@ func (h *ScheduleHandler) DeleteSchedule(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	schedID, err := parseParamInt(r, "schedId")
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid schedule ID")
-		return
-	}
-
-	// R2: refuse to delete a schedule that belongs to a different
-	// project than the URL {id}.
-	existing, err := h.repo.Queries.GetScheduledDeployment(r.Context(), schedID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Schedule not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	projectID, ok := requireProjectFromContext(w, r)
+	existing, ok := h.loadProjectSchedule(w, r)
 	if !ok {
-		return
-	}
-	if existing.ProjectID != projectID {
-		RespondError(w, http.StatusNotFound, "Schedule not found")
 		return
 	}
 
 	if err := h.repo.Queries.DeleteScheduledDeployment(
 		r.Context(),
-		schedID,
+		existing.ID,
 	); err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -531,65 +374,135 @@ func (h *ScheduleHandler) ToggleSchedule(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	schedID, err := parseParamInt(r, "schedId")
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid schedule ID")
-		return
-	}
-
-	// R2: refuse to toggle a schedule that belongs to a different
-	// project than the URL {id}. ToggleScheduledDeploymentEnabled
-	// returns the updated row only on success, so the existence
-	// check has to happen up front.
-	existing, err := h.repo.Queries.GetScheduledDeployment(r.Context(), schedID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Schedule not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	projectID, ok := requireProjectFromContext(w, r)
+	existing, ok := h.loadProjectSchedule(w, r)
 	if !ok {
 		return
 	}
-	if existing.ProjectID != projectID {
-		RespondError(w, http.StatusNotFound, "Schedule not found")
+	if existing.Enabled == 0 &&
+		!h.validateScheduleRelease(w, r, existing.ReleaseID) {
 		return
-	}
-	if existing.Enabled == 0 {
-		if err := h.repo.ValidateExecutableRelease(
-			r.Context(),
-			existing.ReleaseID,
-		); err != nil {
-			if writeArtifactError(w, err) {
-				return
-			}
-			if errors.Is(err, repository.ErrLegacyServerStep) {
-				RespondError(
-					w,
-					http.StatusConflict,
-					repository.ErrLegacyServerStep.Error(),
-				)
-			} else {
-				RespondError(w, http.StatusInternalServerError, err.Error())
-			}
-			return
-		}
 	}
 
 	updated, err := h.repo.Queries.ToggleScheduledDeploymentEnabled(
 		r.Context(),
-		schedID,
+		existing.ID,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Schedule not found")
+			RespondError(w, http.StatusNotFound, scheduleNotFoundMessage)
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, updated)
+}
+
+func (h *ScheduleHandler) readScheduleRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	projectID int64,
+) (scheduledDeploymentRequest, string, bool) {
+	var req scheduledDeploymentRequest
+	if !readJSONBool(w, r, &req) {
+		return req, "", false
+	}
+	cronExpr := cmp.Or(req.CronExpr, req.Cron)
+	if req.ReleaseID == 0 || req.EnvironmentID == 0 || cronExpr == "" {
+		RespondError(
+			w,
+			http.StatusUnprocessableEntity,
+			"release_id, environment_id, and cron are required",
+		)
+		return req, "", false
+	}
+
+	release, err := h.repo.Queries.GetDeploymentRelease(
+		r.Context(),
+		req.ReleaseID,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			RespondError(w, http.StatusNotFound, releaseNotFoundMessage)
+			return req, "", false
+		}
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return req, "", false
+	}
+	if release.ProjectID != projectID {
+		RespondError(w, http.StatusNotFound, releaseNotFoundMessage)
+		return req, "", false
+	}
+	if !h.validateScheduleRelease(w, r, release.ID) {
+		return req, "", false
+	}
+	return req, cronExpr, true
+}
+
+func (h *ScheduleHandler) validateScheduleRelease(
+	w http.ResponseWriter,
+	r *http.Request,
+	releaseID int64,
+) bool {
+	if err := h.repo.ValidateExecutableRelease(
+		r.Context(),
+		releaseID,
+	); err != nil {
+		if writeArtifactError(w, err) {
+			return false
+		}
+		if errors.Is(err, repository.ErrLegacyServerStep) {
+			RespondError(
+				w,
+				http.StatusConflict,
+				repository.ErrLegacyServerStep.Error(),
+			)
+		} else {
+			RespondError(w, http.StatusInternalServerError, err.Error())
+		}
+		return false
+	}
+	return true
+}
+
+func (h *ScheduleHandler) loadSchedule(
+	w http.ResponseWriter,
+	r *http.Request,
+) (db.ScheduledDeployment, bool) {
+	id, err := parseParamInt(r, "schedId")
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, invalidScheduleIDMessage)
+		return db.ScheduledDeployment{}, false
+	}
+
+	schedule, err := h.repo.Queries.GetScheduledDeployment(r.Context(), id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			RespondError(w, http.StatusNotFound, scheduleNotFoundMessage)
+			return db.ScheduledDeployment{}, false
+		}
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return db.ScheduledDeployment{}, false
+	}
+	return schedule, true
+}
+
+func (h *ScheduleHandler) loadProjectSchedule(
+	w http.ResponseWriter,
+	r *http.Request,
+) (db.ScheduledDeployment, bool) {
+	schedule, ok := h.loadSchedule(w, r)
+	if !ok {
+		return db.ScheduledDeployment{}, false
+	}
+	projectID, ok := requireProjectFromContext(w, r)
+	if !ok {
+		return db.ScheduledDeployment{}, false
+	}
+	// Mask a schedule in another project as missing.
+	if schedule.ProjectID != projectID {
+		RespondError(w, http.StatusNotFound, scheduleNotFoundMessage)
+		return db.ScheduledDeployment{}, false
+	}
+	return schedule, true
 }

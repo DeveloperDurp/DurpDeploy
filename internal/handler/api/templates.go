@@ -11,6 +11,8 @@ import (
 	"durpdeploy/internal/stepdefinition"
 )
 
+const invalidTemplateIDMessage = "Invalid template ID"
+
 type StepTemplateHandler struct {
 	repo *repository.Repository
 }
@@ -240,7 +242,7 @@ func (h *StepTemplateHandler) GetTemplate(
 ) {
 	id, err := parseParamInt(r, "id")
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid template ID")
+		RespondError(w, http.StatusBadRequest, invalidTemplateIDMessage)
 		return
 	}
 
@@ -290,7 +292,7 @@ func (h *StepTemplateHandler) UpdateTemplate(
 ) {
 	id, err := parseParamInt(r, "id")
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid template ID")
+		RespondError(w, http.StatusBadRequest, invalidTemplateIDMessage)
 		return
 	}
 
@@ -353,7 +355,7 @@ func (h *StepTemplateHandler) DeleteTemplate(
 ) {
 	id, err := parseParamInt(r, "id")
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid template ID")
+		RespondError(w, http.StatusBadRequest, invalidTemplateIDMessage)
 		return
 	}
 
@@ -391,7 +393,7 @@ func (h *StepTemplateHandler) ListTemplateHistory(
 ) {
 	id, err := parseParamInt(r, "id")
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid template ID")
+		RespondError(w, http.StatusBadRequest, invalidTemplateIDMessage)
 		return
 	}
 

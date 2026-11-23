@@ -12,6 +12,8 @@ import (
 	"durpdeploy/internal/verification"
 )
 
+const invalidEnvironmentIDMessage = "Invalid environment ID"
+
 type EnvironmentHandler struct {
 	repo *repository.Repository
 }
@@ -243,7 +245,7 @@ func (h *EnvironmentHandler) GetEnvironment(
 ) {
 	id, err := parseParamInt(r, "id")
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid environment ID")
+		RespondError(w, http.StatusBadRequest, invalidEnvironmentIDMessage)
 		return
 	}
 
@@ -296,7 +298,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 ) {
 	id, err := parseParamInt(r, "id")
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid environment ID")
+		RespondError(w, http.StatusBadRequest, invalidEnvironmentIDMessage)
 		return
 	}
 
@@ -399,7 +401,7 @@ func (h *EnvironmentHandler) DeleteEnvironment(
 ) {
 	id, err := parseParamInt(r, "id")
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid environment ID")
+		RespondError(w, http.StatusBadRequest, invalidEnvironmentIDMessage)
 		return
 	}
 

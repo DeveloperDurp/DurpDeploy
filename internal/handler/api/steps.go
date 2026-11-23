@@ -11,6 +11,9 @@ import (
 	"durpdeploy/internal/stepdefinition"
 )
 
+const invalidStepIDMessage = "Invalid step ID"
+const stepNotFoundMessage = "Step not found"
+
 type StepHandler struct {
 	repo *repository.Repository
 }
@@ -181,14 +184,14 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 func (h *StepHandler) GetStep(w http.ResponseWriter, r *http.Request) {
 	stepID, err := parseParamInt(r, "stepId")
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid step ID")
+		RespondError(w, http.StatusBadRequest, invalidStepIDMessage)
 		return
 	}
 
 	step, err := h.repo.Queries.GetStep(r.Context(), stepID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "Step not found")
+			RespondError(w, http.StatusNotFound, stepNotFoundMessage)
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -202,7 +205,7 @@ func (h *StepHandler) GetStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if step.ProjectID != projectID {
-		RespondError(w, http.StatusNotFound, "Step not found")
+		RespondError(w, http.StatusNotFound, stepNotFoundMessage)
 		return
 	}
 
@@ -236,30 +239,8 @@ func (h *StepHandler) GetStep(w http.ResponseWriter, r *http.Request) {
 //	  404: body:NotFoundError
 //	  500: body:ServerError
 func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
-	stepID, err := parseParamInt(r, "stepId")
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid step ID")
-		return
-	}
-
-	// R2: load the step first so we can verify it belongs to the URL's
-	// project before mutating it. UpdateStep returns the row only on
-	// success, so the existence check has to happen up front.
-	existing, err := h.repo.Queries.GetStep(r.Context(), stepID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "Step not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	projectID, ok := requireProjectFromContext(w, r)
+	stepID, ok := h.loadProjectStepForMutation(w, r)
 	if !ok {
-		return
-	}
-	if existing.ProjectID != projectID {
-		RespondError(w, http.StatusNotFound, "Step not found")
 		return
 	}
 
@@ -284,7 +265,7 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "Step not found")
+			RespondError(w, http.StatusNotFound, stepNotFoundMessage)
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -313,29 +294,8 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 //	  401: body:UnauthorizedError
 //	  500: body:ServerError
 func (h *StepHandler) DeleteStep(w http.ResponseWriter, r *http.Request) {
-	stepID, err := parseParamInt(r, "stepId")
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid step ID")
-		return
-	}
-
-	// R2: refuse to delete a step that belongs to a different project
-	// than the URL {id}. 404 (not 403) so we don't leak existence.
-	existing, err := h.repo.Queries.GetStep(r.Context(), stepID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "Step not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	projectID, ok := requireProjectFromContext(w, r)
+	stepID, ok := h.loadProjectStepForMutation(w, r)
 	if !ok {
-		return
-	}
-	if existing.ProjectID != projectID {
-		RespondError(w, http.StatusNotFound, "Step not found")
 		return
 	}
 
@@ -345,6 +305,37 @@ func (h *StepHandler) DeleteStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *StepHandler) loadProjectStepForMutation(
+	w http.ResponseWriter,
+	r *http.Request,
+) (int64, bool) {
+	stepID, err := parseParamInt(r, "stepId")
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, invalidStepIDMessage)
+		return 0, false
+	}
+
+	// Match the URL project before mutation. Mask foreign steps as missing.
+	existing, err := h.repo.Queries.GetStep(r.Context(), stepID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			RespondError(w, http.StatusNotFound, stepNotFoundMessage)
+			return 0, false
+		}
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return 0, false
+	}
+	projectID, ok := requireProjectFromContext(w, r)
+	if !ok {
+		return 0, false
+	}
+	if existing.ProjectID != projectID {
+		RespondError(w, http.StatusNotFound, stepNotFoundMessage)
+		return 0, false
+	}
+	return stepID, true
 }
 
 // swagger:route PATCH /projects/{id}/steps/reorder steps reorderSteps

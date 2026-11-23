@@ -95,6 +95,29 @@ func requireExistingProject(
 	return id, true
 }
 
+func projectPageParams(
+	w http.ResponseWriter,
+	r *http.Request,
+	repo *repository.Repository,
+) (projectID, limit, offset int64, ok bool) {
+	projectID, err := parseParamInt(r, "id")
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, invalidProjectIDMessage)
+		return 0, 0, 0, false
+	}
+	_, err = repo.Queries.GetProject(r.Context(), projectID)
+	switch {
+	case err == sql.ErrNoRows:
+		RespondError(w, http.StatusNotFound, projectNotFoundMessage)
+		return 0, 0, 0, false
+	case err != nil:
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return 0, 0, 0, false
+	}
+	limit, offset, ok = parsePagination(w, r)
+	return projectID, limit, offset, ok
+}
+
 // MethodNotAllowedJSON is a chi-compatible 405 handler that returns JSON.
 // Mount it on the /api/v1 sub-router so wrong-method API requests
 // return {"error":"method not allowed"} instead of the web HTML page.

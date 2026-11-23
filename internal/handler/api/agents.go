@@ -13,6 +13,8 @@ import (
 	"durpdeploy/internal/repository"
 )
 
+const agentNotFoundMessage = "Agent not found"
+
 type AgentHandler struct {
 	repo    *repository.Repository
 	pairing agentserver.Pairer
@@ -120,7 +122,7 @@ func (h *AgentHandler) GetAgent(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "Agent not found")
+			RespondError(w, http.StatusNotFound, agentNotFoundMessage)
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -301,7 +303,7 @@ func (h *AgentHandler) RevokeAgent(w http.ResponseWriter, r *http.Request) {
 	_, err := h.repo.RevokeAgent(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "Agent not found")
+			RespondError(w, http.StatusNotFound, agentNotFoundMessage)
 			return
 		}
 		RespondError(w, http.StatusConflict, err.Error())
@@ -344,7 +346,7 @@ func (h *AgentHandler) AddLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if errors.Is(err, repository.ErrAgentNotFound) {
-		RespondError(w, http.StatusNotFound, "Agent not found")
+		RespondError(w, http.StatusNotFound, agentNotFoundMessage)
 		return
 	}
 	if err != nil {
@@ -404,7 +406,7 @@ func (h *AgentHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 
 func writeAgentNotFound(w http.ResponseWriter, err error) {
 	if errors.Is(err, sql.ErrNoRows) {
-		RespondError(w, http.StatusNotFound, "Agent not found")
+		RespondError(w, http.StatusNotFound, agentNotFoundMessage)
 		return
 	}
 	RespondError(w, http.StatusInternalServerError, err.Error())

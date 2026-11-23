@@ -11,6 +11,8 @@ import (
 	"durpdeploy/internal/repository"
 )
 
+const invalidProjectIDMessage = "Invalid project ID"
+
 type ProjectHandler struct {
 	repo *repository.Repository
 }
@@ -296,7 +298,7 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 	id, err := parseParamInt(r, "id")
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid project ID")
+		RespondError(w, http.StatusBadRequest, invalidProjectIDMessage)
 		return
 	}
 
@@ -351,7 +353,7 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	id, err := parseParamInt(r, "id")
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid project ID")
+		RespondError(w, http.StatusBadRequest, invalidProjectIDMessage)
 		return
 	}
 
@@ -424,7 +426,7 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	id, err := parseParamInt(r, "id")
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid project ID")
+		RespondError(w, http.StatusBadRequest, invalidProjectIDMessage)
 		return
 	}
 
@@ -466,7 +468,7 @@ func (h *ProjectHandler) GetProjectNotifications(
 ) {
 	id, err := parseParamInt(r, "id")
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid project ID")
+		RespondError(w, http.StatusBadRequest, invalidProjectIDMessage)
 		return
 	}
 
@@ -513,7 +515,7 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 ) {
 	id, err := parseParamInt(r, "id")
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid project ID")
+		RespondError(w, http.StatusBadRequest, invalidProjectIDMessage)
 		return
 	}
 

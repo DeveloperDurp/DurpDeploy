@@ -15,6 +15,9 @@ import (
 	"durpdeploy/internal/repository"
 )
 
+const releaseNotFoundMessage = "Release not found"
+const invalidReleaseIDMessage = "Invalid release ID"
+
 type ReleaseHandler struct {
 	repo *repository.Repository
 }
@@ -61,21 +64,7 @@ type releaseVariableJSON struct {
 //	  404: body:NotFoundError
 //	  500: body:ServerError
 func (h *ReleaseHandler) ListReleases(w http.ResponseWriter, r *http.Request) {
-	projectID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid project ID")
-		return
-	}
-
-	if _, err := h.repo.Queries.GetProject(r.Context(), projectID); err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Project not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	limit, offset, ok := parsePagination(w, r)
+	projectID, limit, offset, ok := projectPageParams(w, r, h.repo)
 	if !ok {
 		return
 	}
@@ -129,34 +118,14 @@ func (h *ReleaseHandler) ListReleases(w http.ResponseWriter, r *http.Request) {
 //	  404: body:NotFoundError
 //	  500: body:ServerError
 func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
-	projectID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid project ID")
-		return
-	}
-	releaseID, err := strconv.ParseInt(chi.URLParam(r, "relId"), 10, 64)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid release ID")
-		return
-	}
-
-	release, err := h.repo.Queries.GetDeploymentRelease(r.Context(), releaseID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Release not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if release.ProjectID != projectID {
-		RespondError(w, http.StatusNotFound, "Release not found")
+	release, ok := h.loadProjectRelease(w, r)
+	if !ok {
 		return
 	}
 
 	variables, err := h.repo.ListReleaseVariablesForDisplay(
 		r.Context(),
-		releaseID,
+		release.ID,
 	)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -212,12 +181,12 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 func (h *ReleaseHandler) DeleteRelease(w http.ResponseWriter, r *http.Request) {
 	projectID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid project ID")
+		RespondError(w, http.StatusBadRequest, invalidProjectIDMessage)
 		return
 	}
 	releaseID, err := strconv.ParseInt(chi.URLParam(r, "relId"), 10, 64)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid release ID")
+		RespondError(w, http.StatusBadRequest, invalidReleaseIDMessage)
 		return
 	}
 	if err := h.repo.DeleteRelease(
@@ -225,7 +194,7 @@ func (h *ReleaseHandler) DeleteRelease(w http.ResponseWriter, r *http.Request) {
 	); err != nil {
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
-			RespondError(w, http.StatusNotFound, "Release not found")
+			RespondError(w, http.StatusNotFound, releaseNotFoundMessage)
 		case errors.Is(err, repository.ErrReleaseHasActiveDeployment):
 			RespondError(w, http.StatusConflict, err.Error())
 		default:
@@ -260,28 +229,8 @@ func (h *ReleaseHandler) RefreshRelease(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	projectID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid project ID")
-		return
-	}
-	releaseID, err := strconv.ParseInt(chi.URLParam(r, "relId"), 10, 64)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid release ID")
-		return
-	}
-
-	release, err := h.repo.Queries.GetDeploymentRelease(r.Context(), releaseID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Release not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if release.ProjectID != projectID {
-		RespondError(w, http.StatusNotFound, "Release not found")
+	release, ok := h.loadProjectRelease(w, r)
+	if !ok {
 		return
 	}
 
@@ -291,7 +240,7 @@ func (h *ReleaseHandler) RefreshRelease(
 			return
 		}
 		if errors.Is(err, sql.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "Release not found")
+			RespondError(w, http.StatusNotFound, releaseNotFoundMessage)
 			return
 		}
 		if errors.Is(err, repository.ErrLegacyServerStep) ||
@@ -308,4 +257,35 @@ func (h *ReleaseHandler) RefreshRelease(
 	}
 	audit.SetReleaseProvenance(r, updated)
 	RespondJSON(w, http.StatusOK, updated)
+}
+
+func (h *ReleaseHandler) loadProjectRelease(
+	w http.ResponseWriter,
+	r *http.Request,
+) (db.Release, bool) {
+	projectID, err := parseParamInt(r, "id")
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, invalidProjectIDMessage)
+		return db.Release{}, false
+	}
+	releaseID, err := parseParamInt(r, "relId")
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, invalidReleaseIDMessage)
+		return db.Release{}, false
+	}
+
+	release, err := h.repo.Queries.GetDeploymentRelease(r.Context(), releaseID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			RespondError(w, http.StatusNotFound, releaseNotFoundMessage)
+			return db.Release{}, false
+		}
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return db.Release{}, false
+	}
+	if release.ProjectID != projectID {
+		RespondError(w, http.StatusNotFound, releaseNotFoundMessage)
+		return db.Release{}, false
+	}
+	return release, true
 }

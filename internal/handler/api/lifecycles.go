@@ -11,6 +11,8 @@ import (
 	"durpdeploy/internal/repository"
 )
 
+const invalidLifecycleIDMessage = "Invalid lifecycle ID"
+
 const lifecycleNotFoundMessage = "Lifecycle not found"
 
 type LifecycleHandler struct {
@@ -33,7 +35,7 @@ func (h *LifecycleHandler) DeleteLifecycle(
 ) {
 	id, err := parseParamInt(r, "id")
 	if err != nil || id <= 0 {
-		RespondError(w, http.StatusBadRequest, "Invalid lifecycle ID")
+		RespondError(w, http.StatusBadRequest, invalidLifecycleIDMessage)
 		return
 	}
 	if _, err := h.repo.Queries.GetLifecycle(r.Context(), id); err != nil {
@@ -237,7 +239,7 @@ func (h *LifecycleHandler) GetLifecycle(
 ) {
 	id, err := parseParamInt(r, "id")
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid lifecycle ID")
+		RespondError(w, http.StatusBadRequest, invalidLifecycleIDMessage)
 		return
 	}
 
@@ -296,7 +298,7 @@ func (h *LifecycleHandler) SaveLifecycle(
 ) {
 	id, err := parseParamInt(r, "id")
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid lifecycle ID")
+		RespondError(w, http.StatusBadRequest, invalidLifecycleIDMessage)
 		return
 	}
 
@@ -376,7 +378,7 @@ func (h *LifecycleHandler) SaveLifecycle(
 func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 	id, err := parseParamInt(r, "id")
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid lifecycle ID")
+		RespondError(w, http.StatusBadRequest, invalidLifecycleIDMessage)
 		return
 	}
 
@@ -395,10 +397,7 @@ func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 		sortOrder = *req.SortOrder
 	}
 
-	requiresApproval := int64(0)
-	if req.RequiresApproval != nil && *req.RequiresApproval {
-		requiresApproval = 1
-	}
+	requiresApproval := lifecycleStageApproval(req.RequiresApproval, 0)
 
 	stage, err := h.repo.CreateLifecycleStage(
 		r.Context(),
@@ -460,7 +459,7 @@ func (h *LifecycleHandler) ReorderStages(
 ) {
 	id, err := parseParamInt(r, "id")
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid lifecycle ID")
+		RespondError(w, http.StatusBadRequest, invalidLifecycleIDMessage)
 		return
 	}
 
@@ -539,13 +538,9 @@ func (h *LifecycleHandler) UpdateStage(w http.ResponseWriter, r *http.Request) {
 	if req.SortOrder != nil && *req.SortOrder > 0 {
 		sortOrder = *req.SortOrder
 	}
-	requiresApproval := stage.RequiresApproval
-	if req.RequiresApproval != nil {
-		requiresApproval = 0
-		if *req.RequiresApproval {
-			requiresApproval = 1
-		}
-	}
+	requiresApproval := lifecycleStageApproval(
+		req.RequiresApproval, stage.RequiresApproval,
+	)
 
 	updated, err := h.repo.Queries.UpdateLifecycleStage(
 		r.Context(),
@@ -570,6 +565,16 @@ func (h *LifecycleHandler) UpdateStage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondJSON(w, http.StatusOK, updated)
+}
+
+func lifecycleStageApproval(value *bool, fallback int64) int64 {
+	if value == nil {
+		return fallback
+	}
+	if *value {
+		return 1
+	}
+	return 0
 }
 
 // swagger:route POST /lifecycles/{id}/stages/{stageId}/delete lifecycles deleteLifecycleStage

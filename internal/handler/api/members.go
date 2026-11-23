@@ -12,6 +12,9 @@ import (
 	"durpdeploy/internal/repository"
 )
 
+const memberAuthenticationRequiredMessage = "Not authenticated"
+const memberAdminAccessRequiredMessage = "Admin access required"
+
 type MemberHandler struct {
 	repo *repository.Repository
 }
@@ -47,21 +50,7 @@ type projectMemberRequest struct {
 //	  404: body:NotFoundError
 //	  500: body:ServerError
 func (h *MemberHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
-	projectID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid project ID")
-		return
-	}
-
-	if _, err := h.repo.Queries.GetProject(r.Context(), projectID); err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Project not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	limit, offset, ok := parsePagination(w, r)
+	projectID, limit, offset, ok := projectPageParams(w, r, h.repo)
 	if !ok {
 		return
 	}
@@ -123,7 +112,7 @@ func (h *MemberHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
 func (h *MemberHandler) AddMember(w http.ResponseWriter, r *http.Request) {
 	projectID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid project ID")
+		RespondError(w, http.StatusBadRequest, invalidProjectIDMessage)
 		return
 	}
 
@@ -150,11 +139,15 @@ func (h *MemberHandler) AddMember(w http.ResponseWriter, r *http.Request) {
 
 	user := auth.UserFromContext(r.Context())
 	if user == nil {
-		RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		RespondError(
+			w,
+			http.StatusUnauthorized,
+			memberAuthenticationRequiredMessage,
+		)
 		return
 	}
 	if !auth.CanManageProject(r.Context(), h.repo, projectID) {
-		RespondError(w, http.StatusForbidden, "Admin access required")
+		RespondError(w, http.StatusForbidden, memberAdminAccessRequiredMessage)
 		return
 	}
 
@@ -219,24 +212,8 @@ func (h *MemberHandler) AddMember(w http.ResponseWriter, r *http.Request) {
 //	  404: body:NotFoundError
 //	  500: body:ServerError
 func (h *MemberHandler) RemoveMember(w http.ResponseWriter, r *http.Request) {
-	user := auth.UserFromContext(r.Context())
-	if user == nil {
-		RespondError(w, http.StatusUnauthorized, "Not authenticated")
-		return
-	}
-	projectID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid project ID")
-		return
-	}
-	userID, err := strconv.ParseInt(chi.URLParam(r, "userId"), 10, 64)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid user ID")
-		return
-	}
-
-	if !auth.CanManageProject(r.Context(), h.repo, projectID) {
-		RespondError(w, http.StatusForbidden, "Admin access required")
+	projectID, userID, ok := h.managedMemberIDs(w, r)
+	if !ok {
 		return
 	}
 
@@ -279,24 +256,8 @@ func (h *MemberHandler) UpdateMemberRole(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	user := auth.UserFromContext(r.Context())
-	if user == nil {
-		RespondError(w, http.StatusUnauthorized, "Not authenticated")
-		return
-	}
-	projectID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid project ID")
-		return
-	}
-	userID, err := strconv.ParseInt(chi.URLParam(r, "userId"), 10, 64)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid user ID")
-		return
-	}
-
-	if !auth.CanManageProject(r.Context(), h.repo, projectID) {
-		RespondError(w, http.StatusForbidden, "Admin access required")
+	projectID, userID, ok := h.managedMemberIDs(w, r)
+	if !ok {
 		return
 	}
 
@@ -354,4 +315,34 @@ func (h *MemberHandler) UpdateMemberRole(
 		return
 	}
 	RespondJSON(w, http.StatusOK, member)
+}
+
+func (h *MemberHandler) managedMemberIDs(
+	w http.ResponseWriter,
+	r *http.Request,
+) (projectID, userID int64, ok bool) {
+	if auth.UserFromContext(r.Context()) == nil {
+		RespondError(
+			w,
+			http.StatusUnauthorized,
+			memberAuthenticationRequiredMessage,
+		)
+		return 0, 0, false
+	}
+	projectID, err := parseParamInt(r, "id")
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, invalidProjectIDMessage)
+		return 0, 0, false
+	}
+	userID, err = parseParamInt(r, "userId")
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "Invalid user ID")
+		return 0, 0, false
+	}
+
+	if !auth.CanManageProject(r.Context(), h.repo, projectID) {
+		RespondError(w, http.StatusForbidden, memberAdminAccessRequiredMessage)
+		return 0, 0, false
+	}
+	return projectID, userID, true
 }

@@ -16,6 +16,8 @@ import (
 	"durpdeploy/internal/repository"
 )
 
+const tokenListErrorMessage = "could not list tokens"
+
 // RespondJSON writes a JSON response with the given status and payload.
 func RespondJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -282,13 +284,13 @@ func (h *APITokenHandler) ListTokens(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "could not list tokens")
+		RespondError(w, http.StatusInternalServerError, tokenListErrorMessage)
 		return
 	}
 
 	total, err := h.repo.Queries.CountApiTokensByUser(ctx, user.ID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "could not list tokens")
+		RespondError(w, http.StatusInternalServerError, tokenListErrorMessage)
 		return
 	}
 
@@ -398,7 +400,7 @@ func (h *APITokenHandler) ListAllTokens(
 			RespondError(
 				w,
 				http.StatusInternalServerError,
-				"could not list tokens",
+				tokenListErrorMessage,
 			)
 			return
 		}
@@ -407,7 +409,7 @@ func (h *APITokenHandler) ListAllTokens(
 			RespondError(
 				w,
 				http.StatusInternalServerError,
-				"could not list tokens",
+				tokenListErrorMessage,
 			)
 			return
 		}
@@ -428,7 +430,7 @@ func (h *APITokenHandler) ListAllTokens(
 			RespondError(
 				w,
 				http.StatusInternalServerError,
-				"could not list tokens",
+				tokenListErrorMessage,
 			)
 			return
 		}
@@ -444,7 +446,7 @@ func (h *APITokenHandler) ListAllTokens(
 			RespondError(
 				w,
 				http.StatusInternalServerError,
-				"could not list tokens",
+				tokenListErrorMessage,
 			)
 			return
 		}
@@ -453,7 +455,7 @@ func (h *APITokenHandler) ListAllTokens(
 			RespondError(
 				w,
 				http.StatusInternalServerError,
-				"could not list tokens",
+				tokenListErrorMessage,
 			)
 			return
 		}

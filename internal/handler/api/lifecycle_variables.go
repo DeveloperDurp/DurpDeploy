@@ -50,7 +50,7 @@ func lifecycleVariableIDs(
 ) (db.GetLifecycleVariableParams, bool) {
 	lifecycleID, err := parseParamInt(r, "id")
 	if err != nil || lifecycleID <= 0 {
-		RespondError(w, 400, "Invalid lifecycle ID")
+		RespondError(w, 400, invalidLifecycleIDMessage)
 		return db.GetLifecycleVariableParams{}, false
 	}
 	id, err := parseParamInt(r, "varId")
@@ -107,7 +107,7 @@ func (h *LifecycleVariableHandler) List(
 ) {
 	id, err := parseParamInt(r, "id")
 	if err != nil || id <= 0 {
-		RespondError(w, 400, "Invalid lifecycle ID")
+		RespondError(w, 400, invalidLifecycleIDMessage)
 		return
 	}
 	if _, err := h.repo.Queries.GetLifecycle(r.Context(), id); err != nil {
@@ -220,7 +220,7 @@ func (h *LifecycleVariableHandler) save(
 ) {
 	lifecycleID, err := parseParamInt(r, "id")
 	if err != nil || lifecycleID <= 0 {
-		RespondError(w, 400, "Invalid lifecycle ID")
+		RespondError(w, 400, invalidLifecycleIDMessage)
 		return
 	}
 	var id int64

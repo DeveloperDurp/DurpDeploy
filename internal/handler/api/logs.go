@@ -49,7 +49,7 @@ func NewLogHandler(
 func (h *LogHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 	depID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid deployment ID")
+		RespondError(w, http.StatusBadRequest, invalidDeploymentIDMessage)
 		return
 	}
 	h.streamDeploymentLogs(w, r, depID)
@@ -106,7 +106,7 @@ func (h *LogHandler) streamDeploymentLogs(
 func (h *LogHandler) ExportLogs(w http.ResponseWriter, r *http.Request) {
 	depID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid deployment ID")
+		RespondError(w, http.StatusBadRequest, invalidDeploymentIDMessage)
 		return
 	}
 
@@ -145,7 +145,7 @@ func (h *LogHandler) exportDeploymentLogs(
 func (h *LogHandler) GetLog(w http.ResponseWriter, r *http.Request) {
 	depID, err := parseParamInt(r, "id")
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid deployment ID")
+		RespondError(w, http.StatusBadRequest, invalidDeploymentIDMessage)
 		return
 	}
 	logID, err := parseParamInt(r, "logId")

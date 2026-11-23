@@ -34,7 +34,7 @@ func (h *RunbookHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 	if _, err := h.repo.Queries.GetRunbook(r.Context(), db.GetRunbookParams{
 		ID: id, ProjectID: projectID,
 	}); err != nil {
-		RespondError(w, http.StatusNotFound, "Runbook not found")
+		RespondError(w, http.StatusNotFound, runbookNotFoundMessage)
 		return
 	}
 	items, err := h.repo.Queries.ListRunbookSchedules(r.Context(), id)
@@ -84,7 +84,7 @@ func (h *RunbookHandler) CreateSchedule(
 	if _, err := h.repo.Queries.GetRunbook(r.Context(), db.GetRunbookParams{
 		ID: id, ProjectID: projectID,
 	}); err != nil {
-		RespondError(w, http.StatusNotFound, "Runbook not found")
+		RespondError(w, http.StatusNotFound, runbookNotFoundMessage)
 		return
 	}
 	if _, ok := h.projectEnvironment(w, r, projectID, req.EnvironmentID); !ok {
@@ -179,7 +179,7 @@ func (h *RunbookHandler) DisableSchedule(
 	if _, err := h.repo.Queries.GetRunbook(r.Context(), db.GetRunbookParams{
 		ID: id, ProjectID: projectID,
 	}); err != nil {
-		RespondError(w, http.StatusNotFound, "Runbook not found")
+		RespondError(w, http.StatusNotFound, runbookNotFoundMessage)
 		return
 	}
 	if _, err := h.repo.Queries.GetRunbookSchedule(

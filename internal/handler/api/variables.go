@@ -12,6 +12,8 @@ import (
 	"durpdeploy/internal/repository"
 )
 
+const variableNotFoundMessage = "Variable not found"
+
 type VariableHandler struct {
 	repo *repository.Repository
 }
@@ -237,17 +239,8 @@ func (h *VariableHandler) CreateVariable(
 		return
 	}
 
-	name := trimSpace(req.Name)
-	if name == "ARTIFACT_PATH" {
-		RespondError(
-			w,
-			422,
-			"ARTIFACT_PATH is reserved for deployment artifacts",
-		)
-		return
-	}
-	if name == "" {
-		RespondError(w, http.StatusBadRequest, "Name is required")
+	name, ok := readVariableName(w, req.Name)
+	if !ok {
 		return
 	}
 
@@ -321,7 +314,7 @@ func (h *VariableHandler) GetVariable(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "Variable not found")
+			RespondError(w, http.StatusNotFound, variableNotFoundMessage)
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -332,7 +325,7 @@ func (h *VariableHandler) GetVariable(w http.ResponseWriter, r *http.Request) {
 	// project than the URL {id}. The decrypted value is the secret
 	// the whole IDOR is about, so this is the must-pass check.
 	if variable.ProjectID != projectID {
-		RespondError(w, http.StatusNotFound, "Variable not found")
+		RespondError(w, http.StatusNotFound, variableNotFoundMessage)
 		return
 	}
 
@@ -378,7 +371,7 @@ func (h *VariableHandler) UpdateVariable(
 	existing, err := h.repo.Queries.GetVariable(r.Context(), varID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "Variable not found")
+			RespondError(w, http.StatusNotFound, variableNotFoundMessage)
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -389,7 +382,7 @@ func (h *VariableHandler) UpdateVariable(
 		return
 	}
 	if existing.ProjectID != projectID || existing.IsCredential != 0 {
-		RespondError(w, http.StatusNotFound, "Variable not found")
+		RespondError(w, http.StatusNotFound, variableNotFoundMessage)
 		return
 	}
 
@@ -398,17 +391,8 @@ func (h *VariableHandler) UpdateVariable(
 		return
 	}
 
-	name := trimSpace(req.Name)
-	if name == "ARTIFACT_PATH" {
-		RespondError(
-			w,
-			422,
-			"ARTIFACT_PATH is reserved for deployment artifacts",
-		)
-		return
-	}
-	if name == "" {
-		RespondError(w, http.StatusBadRequest, "Name is required")
+	name, ok := readVariableName(w, req.Name)
+	if !ok {
 		return
 	}
 
@@ -460,9 +444,26 @@ func (h *VariableHandler) UpdateVariable(
 	RespondJSON(w, http.StatusOK, toVariableResponse(variable))
 }
 
+func readVariableName(w http.ResponseWriter, value string) (string, bool) {
+	name := trimSpace(value)
+	if name == "ARTIFACT_PATH" {
+		RespondError(
+			w,
+			422,
+			"ARTIFACT_PATH is reserved for deployment artifacts",
+		)
+		return "", false
+	}
+	if name == "" {
+		RespondError(w, http.StatusBadRequest, "Name is required")
+		return "", false
+	}
+	return name, true
+}
+
 func respondVariableUpdateError(w http.ResponseWriter, err error) {
 	if errors.Is(err, sql.ErrNoRows) {
-		RespondError(w, http.StatusNotFound, "Variable not found")
+		RespondError(w, http.StatusNotFound, variableNotFoundMessage)
 		return
 	}
 	status := handler.ArtifactErrorStatus(err)

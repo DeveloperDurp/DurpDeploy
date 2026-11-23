@@ -13,6 +13,8 @@ import (
 	"durpdeploy/internal/repository"
 )
 
+const invalidUserIDMessage = "Invalid user ID"
+
 type UserHandler struct {
 	repo *repository.Repository
 }
@@ -199,7 +201,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid user ID")
+		RespondError(w, http.StatusBadRequest, invalidUserIDMessage)
 		return
 	}
 
@@ -255,7 +257,7 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid user ID")
+		RespondError(w, http.StatusBadRequest, invalidUserIDMessage)
 		return
 	}
 
@@ -326,7 +328,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid user ID")
+		RespondError(w, http.StatusBadRequest, invalidUserIDMessage)
 		return
 	}
 

@@ -20,6 +20,9 @@ import (
 	"durpdeploy/internal/runner"
 )
 
+const invalidDeploymentIDMessage = "Invalid deployment ID"
+const deploymentNotFoundMessage = "Deployment not found"
+
 const projectNotFoundMessage = "Project not found"
 
 type DeploymentHandler struct {
@@ -104,14 +107,14 @@ func (h *DeploymentHandler) CreateDeployment(
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Release not found")
+			RespondError(w, http.StatusNotFound, releaseNotFoundMessage)
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if release.ProjectID != projectID {
-		RespondError(w, http.StatusNotFound, "Release not found")
+		RespondError(w, http.StatusNotFound, releaseNotFoundMessage)
 		return
 	}
 	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
@@ -166,7 +169,7 @@ func (h *DeploymentHandler) CreateDeployment(
 			return
 		}
 		if errors.Is(err, sql.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "Release not found")
+			RespondError(w, http.StatusNotFound, releaseNotFoundMessage)
 			return
 		}
 		if errors.Is(err, repository.ErrLegacyServerStep) {
@@ -398,14 +401,14 @@ func (h *DeploymentHandler) GetDeployment(
 ) {
 	depID, err := deploymentIDFromRequest(r)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid deployment ID")
+		RespondError(w, http.StatusBadRequest, invalidDeploymentIDMessage)
 		return
 	}
 
 	deployment, err := h.repo.Queries.GetDeployment(r.Context(), depID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Deployment not found")
+			RespondError(w, http.StatusNotFound, deploymentNotFoundMessage)
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -459,14 +462,14 @@ func (h *DeploymentHandler) GetDeploymentStatus(
 ) {
 	depID, err := deploymentIDFromRequest(r)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid deployment ID")
+		RespondError(w, http.StatusBadRequest, invalidDeploymentIDMessage)
 		return
 	}
 
 	_, err = h.repo.Queries.GetDeployment(r.Context(), depID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Deployment not found")
+			RespondError(w, http.StatusNotFound, deploymentNotFoundMessage)
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -521,14 +524,14 @@ func (h *DeploymentHandler) ApproveDeployment(
 
 	depID, err := deploymentIDFromRequest(r)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid deployment ID")
+		RespondError(w, http.StatusBadRequest, invalidDeploymentIDMessage)
 		return
 	}
 
 	deployment, err := h.repo.Queries.GetDeployment(r.Context(), depID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Deployment not found")
+			RespondError(w, http.StatusNotFound, deploymentNotFoundMessage)
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -590,19 +593,8 @@ func (h *DeploymentHandler) RedeployDeployment(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	depID, err := deploymentIDFromRequest(r)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid deployment ID")
-		return
-	}
-
-	deployment, err := h.repo.Queries.GetDeployment(r.Context(), depID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Deployment not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
+	deployment, ok := h.loadRepeatDeployment(w, r)
+	if !ok {
 		return
 	}
 	if deployment.Status != "succeeded" && deployment.Status != "failed" &&
@@ -638,14 +630,14 @@ func (h *DeploymentHandler) CancelDeployment(
 ) {
 	depID, err := deploymentIDFromRequest(r)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid deployment ID")
+		RespondError(w, http.StatusBadRequest, invalidDeploymentIDMessage)
 		return
 	}
 
 	deployment, err := h.repo.Queries.GetDeployment(r.Context(), depID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Deployment not found")
+			RespondError(w, http.StatusNotFound, deploymentNotFoundMessage)
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -749,19 +741,8 @@ func (h *DeploymentHandler) RetryDeployment(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	depID, err := deploymentIDFromRequest(r)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid deployment ID")
-		return
-	}
-
-	deployment, err := h.repo.Queries.GetDeployment(r.Context(), depID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Deployment not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
+	deployment, ok := h.loadRepeatDeployment(w, r)
+	if !ok {
 		return
 	}
 	if deployment.Status != "failed" && deployment.Status != "cancelled" &&
@@ -781,6 +762,28 @@ func (h *DeploymentHandler) RetryDeployment(
 	})
 }
 
+func (h *DeploymentHandler) loadRepeatDeployment(
+	w http.ResponseWriter,
+	r *http.Request,
+) (db.Deployment, bool) {
+	depID, err := deploymentIDFromRequest(r)
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, invalidDeploymentIDMessage)
+		return db.Deployment{}, false
+	}
+
+	deployment, err := h.repo.Queries.GetDeployment(r.Context(), depID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			RespondError(w, http.StatusNotFound, deploymentNotFoundMessage)
+			return db.Deployment{}, false
+		}
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return db.Deployment{}, false
+	}
+	return deployment, true
+}
+
 func (h *DeploymentHandler) createDeploymentFromSource(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -792,7 +795,7 @@ func (h *DeploymentHandler) createDeploymentFromSource(
 		deployment.ReleaseID,
 	)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "Release not found")
+		RespondError(w, http.StatusNotFound, releaseNotFoundMessage)
 		return
 	}
 	project, err := h.repo.Queries.GetProject(r.Context(), release.ProjectID)
@@ -908,7 +911,7 @@ func (h *DeploymentHandler) ListDeploymentLogs(
 ) {
 	depID, err := deploymentIDFromRequest(r)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid deployment ID")
+		RespondError(w, http.StatusBadRequest, invalidDeploymentIDMessage)
 		return
 	}
 
@@ -945,7 +948,7 @@ func (h *DeploymentHandler) DeploymentEvents(
 ) {
 	depID, err := deploymentIDFromRequest(r)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid deployment ID")
+		RespondError(w, http.StatusBadRequest, invalidDeploymentIDMessage)
 		return
 	}
 

@@ -18,6 +18,8 @@ import (
 	"durpdeploy/internal/stepdefinition"
 )
 
+const runbookNotFoundMessage = "Runbook not found"
+
 type RunbookHandler struct {
 	repo   *repository.Repository
 	runner *runner.DeploymentRunner
@@ -67,7 +69,7 @@ func (h *RunbookHandler) Get(w http.ResponseWriter, r *http.Request) {
 		ID: id, ProjectID: projectID,
 	})
 	if errors.Is(err, sql.ErrNoRows) {
-		RespondError(w, http.StatusNotFound, "Runbook not found")
+		RespondError(w, http.StatusNotFound, runbookNotFoundMessage)
 		return
 	}
 	if err != nil {
@@ -106,7 +108,7 @@ func (h *RunbookHandler) Version(w http.ResponseWriter, r *http.Request) {
 	if _, err := h.repo.Queries.GetRunbook(r.Context(), db.GetRunbookParams{
 		ID: id, ProjectID: projectID,
 	}); err != nil {
-		RespondError(w, http.StatusNotFound, "Runbook not found")
+		RespondError(w, http.StatusNotFound, runbookNotFoundMessage)
 		return
 	}
 	version, err := h.repo.Queries.GetRunbookVersion(
@@ -276,7 +278,7 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		RespondError(w, http.StatusNotFound, "Runbook not found")
+		RespondError(w, http.StatusNotFound, runbookNotFoundMessage)
 		return
 	}
 	if isUniqueViolation(err) {
