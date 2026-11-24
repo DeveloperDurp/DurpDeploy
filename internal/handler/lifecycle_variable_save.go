@@ -28,23 +28,12 @@ func (h *LifecycleVariableHandler) Save(
 		http.Error(w, err.Error(), 400)
 		return
 	}
-	var env sql.NullInt64
-	scope := r.FormValue("environment_id")
-	if scope == "" && id != 0 {
-		for _, variable := range data.Variables {
-			if variable.ID == id && variable.EnvironmentID.Valid {
-				http.Error(w, "Choose an explicit environment scope", 400)
-				return
-			}
-		}
-	}
-	if scope != "" && scope != "all" {
-		envID, err := strconv.ParseInt(scope, 10, 64)
-		if err != nil || envID <= 0 {
-			http.Error(w, "Invalid environment ID", 400)
-			return
-		}
-		env = sql.NullInt64{Int64: envID, Valid: true}
+	env, scopeError := lifecycleVariableEnvironment(
+		r.FormValue("environment_id"), id, data.Variables,
+	)
+	if scopeError != "" {
+		http.Error(w, scopeError, 400)
+		return
 	}
 	var secret int64
 	if r.FormValue("secret") == "on" {
@@ -99,4 +88,27 @@ func (h *LifecycleVariableHandler) Save(
 	} else {
 		http.Redirect(w, r, fmt.Sprintf("/lifecycles/%d#shared-variables", data.Lifecycle.ID), http.StatusSeeOther)
 	}
+}
+
+func lifecycleVariableEnvironment(
+	scope string,
+	id int64,
+	variables []db.LifecycleVariable,
+) (sql.NullInt64, string) {
+	var env sql.NullInt64
+	if scope == "" && id != 0 {
+		for _, variable := range variables {
+			if variable.ID == id && variable.EnvironmentID.Valid {
+				return env, "Choose an explicit environment scope"
+			}
+		}
+	}
+	if scope != "" && scope != "all" {
+		envID, err := strconv.ParseInt(scope, 10, 64)
+		if err != nil || envID <= 0 {
+			return env, "Invalid environment ID"
+		}
+		env = sql.NullInt64{Int64: envID, Valid: true}
+	}
+	return env, ""
 }
