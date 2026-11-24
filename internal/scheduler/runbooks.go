@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
+	"time"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
@@ -92,6 +93,15 @@ func (s *Scheduler) fireRunbook(ctx context.Context, row db.RunbookSchedule) {
 			return
 		}
 	}
+	s.createScheduledRunbookExecution(ctx, row, book, next)
+}
+
+func (s *Scheduler) createScheduledRunbookExecution(
+	ctx context.Context,
+	row db.RunbookSchedule,
+	book db.Runbook,
+	next time.Time,
+) {
 	versionID := int64(0)
 	if row.VersionID.Valid {
 		versionID = row.VersionID.Int64

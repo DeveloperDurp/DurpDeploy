@@ -237,8 +237,15 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 	if requiresApproval {
 		initialStatus = "pending_approval"
 	}
+	s.createScheduledOccurrence(ctx, row, next, initialStatus)
+}
 
-	// create deployment
+func (s *Scheduler) createScheduledOccurrence(
+	ctx context.Context,
+	row db.ScheduledDeployment,
+	next time.Time,
+	initialStatus string,
+) {
 	note := fmt.Sprintf("Scheduled: %d - %s", row.ID, row.Note.String)
 	result, err := s.repo.CreateScheduledOccurrence(
 		ctx,
@@ -313,7 +320,6 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 			row.EnvironmentID,
 		)
 	}
-
 }
 
 func (s *Scheduler) park(
