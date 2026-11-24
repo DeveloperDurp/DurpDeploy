@@ -14,6 +14,8 @@ import (
 	"durpdeploy/views/pages"
 )
 
+const releaseNotFoundMessage = "Release not found"
+
 func (h *ReleaseHandler) RefreshRelease(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -31,14 +33,14 @@ func (h *ReleaseHandler) RefreshRelease(
 	release, err := h.repo.Queries.GetDeploymentRelease(r.Context(), releaseID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			http.Error(w, "Release not found", http.StatusNotFound)
+			http.Error(w, releaseNotFoundMessage, http.StatusNotFound)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if release.ProjectID != projectID {
-		http.Error(w, "Release not found", http.StatusNotFound)
+		http.Error(w, releaseNotFoundMessage, http.StatusNotFound)
 		return
 	}
 	if _, err := RefreshReleaseSnapshot(
@@ -50,7 +52,7 @@ func (h *ReleaseHandler) RefreshRelease(
 			return
 		}
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "Release not found", http.StatusNotFound)
+			http.Error(w, releaseNotFoundMessage, http.StatusNotFound)
 			return
 		}
 		if errors.Is(err, repository.ErrReleaseHasActiveDeployment) {

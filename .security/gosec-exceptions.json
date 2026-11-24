@@ -381,7 +381,7 @@
     "rule": "G710",
     "file": "internal/handler/scheduled_deployment.go",
     "line": "658",
-    "source_sha256": "9f4ce76a0addef3f47ee3c1e35121eb3b79496583c26079074849be7ca139564",
+    "source_sha256": "2351badbcc8eb775058ab6bf40008c32c451a4a39dfc8eeaba0c3e23be27528f",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Redirect uses pages.ScheduleListURL with a fixed /projects/ path prefix. parseProjectID and scheduleOffset parse IDs and offsets as int64. No user-controlled host or path is accepted. Evidence: scheduled_deployment.go, scheduled_deployment_list.go, scheduled_deployments.templ, TestSchedulePagesBrowserE2E."
@@ -390,7 +390,7 @@
     "rule": "G710",
     "file": "internal/handler/scheduled_deployment.go",
     "line": "556",
-    "source_sha256": "9f4ce76a0addef3f47ee3c1e35121eb3b79496583c26079074849be7ca139564",
+    "source_sha256": "2351badbcc8eb775058ab6bf40008c32c451a4a39dfc8eeaba0c3e23be27528f",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Redirect uses pages.ScheduleListURL with a fixed /projects/ path prefix. parseProjectID and scheduleOffset parse IDs and offsets as int64. No user-controlled host or path is accepted. Evidence: scheduled_deployment.go, scheduled_deployment_list.go, scheduled_deployments.templ, TestSchedulePagesBrowserE2E."
@@ -399,7 +399,7 @@
     "rule": "G710",
     "file": "internal/handler/scheduled_deployment.go",
     "line": "500",
-    "source_sha256": "9f4ce76a0addef3f47ee3c1e35121eb3b79496583c26079074849be7ca139564",
+    "source_sha256": "2351badbcc8eb775058ab6bf40008c32c451a4a39dfc8eeaba0c3e23be27528f",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Redirect uses pages.ScheduleListURL with a fixed /projects/ path prefix. parseProjectID and scheduleOffset parse IDs and offsets as int64. No user-controlled host or path is accepted. Evidence: scheduled_deployment.go, scheduled_deployment_list.go, scheduled_deployments.templ, TestSchedulePagesBrowserE2E."
@@ -408,7 +408,7 @@
     "rule": "G710",
     "file": "internal/handler/scheduled_deployment.go",
     "line": "290",
-    "source_sha256": "9f4ce76a0addef3f47ee3c1e35121eb3b79496583c26079074849be7ca139564",
+    "source_sha256": "2351badbcc8eb775058ab6bf40008c32c451a4a39dfc8eeaba0c3e23be27528f",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Redirect uses pages.ScheduleListURL with a fixed /projects/ path prefix. parseProjectID and scheduleOffset parse IDs and offsets as int64. No user-controlled host or path is accepted. Evidence: scheduled_deployment.go, scheduled_deployment_list.go, scheduled_deployments.templ, TestSchedulePagesBrowserE2E."
@@ -425,8 +425,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/release_refresh.go",
-    "line": "91",
-    "source_sha256": "c3bc13676e6eaac6c02eb567efd43a016be0e86741b49c0c545227e65fa955d2",
+    "line": "93",
+    "source_sha256": "6aa2b42b0c08a1c1d53c4e67348d2d49c73d24456d36d624381fb853be6f8fe7",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."

@@ -59,7 +59,9 @@ sonarcloud:
         test -s "artifacts/coverage/$shard.out"
       done
       if [[ $CI_PIPELINE_SOURCE == merge_request_event ]]; then
+        # Keep unchanged Go files available for package-level type resolution.
         analysis=(
+          -Dsonar.sensor.cache.enable=false
           -Dsonar.pullrequest.key="gitlab-$CI_MERGE_REQUEST_IID"
           -Dsonar.pullrequest.branch="$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"
           -Dsonar.pullrequest.base="$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"

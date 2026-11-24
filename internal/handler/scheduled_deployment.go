@@ -223,7 +223,7 @@ func (h *ScheduledDeploymentHandler) Create(
 		submitted.ReleaseID,
 	)
 	if err != nil {
-		http.Error(w, "Release not found", http.StatusBadRequest)
+		http.Error(w, releaseNotFoundMessage, http.StatusBadRequest)
 		return
 	}
 	if release.ProjectID != projectID {
@@ -280,7 +280,7 @@ func (h *ScheduledDeploymentHandler) Create(
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "Release not found", http.StatusNotFound)
+			http.Error(w, releaseNotFoundMessage, http.StatusNotFound)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -414,7 +414,7 @@ func (h *ScheduledDeploymentHandler) Update(
 		submitted.ReleaseID,
 	)
 	if err != nil {
-		http.Error(w, "Release not found", http.StatusBadRequest)
+		http.Error(w, releaseNotFoundMessage, http.StatusBadRequest)
 		return
 	}
 	if release.ProjectID != projectID {
