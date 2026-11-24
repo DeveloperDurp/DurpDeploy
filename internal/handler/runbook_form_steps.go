@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -37,31 +38,10 @@ func formNumber(value string) (int64, error) {
 
 func (h *RunbookHandler) formSteps(r *http.Request) (string, error) {
 	names := r.Form["step_name"]
-	fields := []string{"step_script", "step_interpreter", "step_timeout",
-		"step_retries", "step_target", "step_selectors"}
 	if len(names) == 0 {
 		return "", errors.New("add at least one step")
 	}
-	for _, field := range fields {
-		if len(r.Form[field]) != len(names) {
-			return "", errors.New("incomplete step fields")
-		}
-	}
-	images := r.Form["step_image"]
-	modes := r.Form["step_agent_mode"]
-	kinds, ansibleValues := r.Form["step_kind"], r.Form["step_ansible"]
-	if len(kinds) != 0 && len(kinds) != len(names) ||
-		len(ansibleValues) != 0 && len(ansibleValues) != len(names) {
-		return "", errors.New("incomplete step fields")
-	}
-	networks := r.Form["step_network"]
-	variableLists := r.Form["step_variable_names"]
-	// Absent arrays mean empty values for every step; a partially
-	// submitted array is a malformed form.
-	if len(modes) != 0 && len(modes) != len(names) ||
-		len(images) != 0 && len(images) != len(names) ||
-		len(networks) != 0 && len(networks) != len(names) ||
-		len(variableLists) != 0 && len(variableLists) != len(names) {
+	if !completeRunbookStepFields(r.Form, len(names)) {
 		return "", errors.New("incomplete step fields")
 	}
 	available, err := h.repo.Queries.ListAvailableAgentLabels(r.Context())
@@ -69,105 +49,136 @@ func (h *RunbookHandler) formSteps(r *http.Request) (string, error) {
 		return "", err
 	}
 	steps := make([]runbookFormStep, len(names))
-	for i, name := range names {
-		name = strings.TrimSpace(name)
-		kind := ""
-		var ansible *stepdefinition.Ansible
-		if len(kinds) == len(names) {
-			kind = kinds[i]
-		}
-		if len(ansibleValues) == len(names) {
-			var err error
-			ansible, err = stepdefinition.DecodeAnsible(ansibleValues[i])
-			if err != nil {
-				return "", err
-			}
-		}
-		script := r.Form["step_script"][i]
-		if name == "" ||
-			kind != stepdefinition.AnsibleKind &&
-				strings.TrimSpace(script) == "" {
-			return "", errors.New("each step needs a name and script")
-		}
-		selected := ""
-		var err error
-		if kind != stepdefinition.AnsibleKind {
-			selected, err = interpreter.Validate(r.Form["step_interpreter"][i])
-		}
+	for i := range names {
+		step, err := decodeRunbookFormStep(r.Form, i)
 		if err != nil {
 			return "", err
 		}
-		timeout, err := formNumber(r.Form["step_timeout"][i])
-		if err != nil || timeout < 0 {
-			return "", errors.New("invalid step timeout")
-		}
-		retries, err := formNumber(r.Form["step_retries"][i])
-		if err != nil || retries < 0 {
-			return "", errors.New("invalid step retries")
-		}
-		if err := agentexecution.ValidateLimitsWithPolicy(timeout, retries, h.repo.ResourceLimits().Execution); err != nil {
+		if err := h.validateRunbookFormStep(r.Form, i, &step, available); err != nil {
 			return "", err
 		}
-		var selectors []string
-		for _, label := range strings.Split(r.Form["step_selectors"][i], ",") {
-			if label = strings.TrimSpace(label); label != "" {
-				selectors = append(selectors, label)
-			}
-		}
-		target, selectors, err := ValidateStepPlacement(
-			r.Form["step_target"][i], selectors, available,
-		)
-		if err != nil {
-			return "", err
-		}
-		image := ""
-		if len(images) == len(names) {
-			image = images[i]
-		}
-		var variableNames []string
-		if len(variableLists) == len(names) {
-			for _, raw := range strings.Split(variableLists[i], ",") {
-				if raw = strings.TrimSpace(raw); raw != "" {
-					variableNames = append(variableNames, raw)
-				}
-			}
-		}
-		mode := "host"
-		if len(modes) == len(names) {
-			mode = modes[i]
-		}
-		if message := ValidateStepExecutionConfig(agentexecution.Config{
-			Target: target, Mode: mode, Image: image, VariableNames: variableNames,
-		}); message != "" {
-			return "", errors.New(strings.ToLower(message[:1]) + message[1:])
-		}
-		network := ""
-		if len(networks) == len(names) {
-			network = networks[i]
-		}
-		if err := artifact.ValidateGateConfig(
-			target,
-			network,
-			"",
-			"",
-			"",
-		); err != nil {
-			return "", err
-		}
-		steps[i] = runbookFormStep{
-			Kind: kind, Ansible: ansible,
-			Name: name, ScriptBody: script, Interpreter: selected,
-			SortOrder: int64(i), TimeoutSeconds: timeout,
-			MaxRetries: retries, ExecutionTarget: target,
-			AgentExecutionMode: mode,
-			AgentSelectors:     selectors, ContainerImage: image,
-			NetworkMode:   network,
-			VariableNames: variableNames,
-		}
-		if err := stepdefinition.Definition(steps[i]).ValidateWrite(); err != nil {
-			return "", err
-		}
+		steps[i] = runbookFormStep(step)
 	}
 	encoded, err := json.Marshal(steps)
 	return string(encoded), err
+}
+
+func completeRunbookStepFields(form url.Values, count int) bool {
+	required := []string{"step_script", "step_interpreter", "step_timeout",
+		"step_retries", "step_target", "step_selectors"}
+	for _, field := range required {
+		if len(form[field]) != count {
+			return false
+		}
+	}
+	// Optional fields may be absent or supply one value for each step.
+	optional := []string{"step_kind", "step_ansible", "step_agent_mode",
+		"step_image", "step_network", "step_variable_names"}
+	for _, field := range optional {
+		if size := len(form[field]); size != 0 && size != count {
+			return false
+		}
+	}
+	return true
+}
+
+func optionalRunbookStepValue(values []string, i int, fallback string) string {
+	if len(values) == 0 {
+		return fallback
+	}
+	return values[i]
+}
+
+func decodeRunbookFormStep(
+	form url.Values,
+	i int,
+) (stepdefinition.Definition, error) {
+	name := strings.TrimSpace(form["step_name"][i])
+	kind := optionalRunbookStepValue(form["step_kind"], i, "")
+	ansible, err := stepdefinition.DecodeAnsible(
+		optionalRunbookStepValue(form["step_ansible"], i, ""),
+	)
+	if err != nil {
+		return stepdefinition.Definition{}, err
+	}
+	script := form["step_script"][i]
+	if name == "" ||
+		kind != stepdefinition.AnsibleKind && strings.TrimSpace(script) == "" {
+		return stepdefinition.Definition{}, errors.New(
+			"each step needs a name and script",
+		)
+	}
+	selected := ""
+	if kind != stepdefinition.AnsibleKind {
+		selected, err = interpreter.Validate(form["step_interpreter"][i])
+		if err != nil {
+			return stepdefinition.Definition{}, err
+		}
+	}
+	timeout, err := formNumber(form["step_timeout"][i])
+	if err != nil || timeout < 0 {
+		return stepdefinition.Definition{}, errors.New("invalid step timeout")
+	}
+	retries, err := formNumber(form["step_retries"][i])
+	if err != nil || retries < 0 {
+		return stepdefinition.Definition{}, errors.New("invalid step retries")
+	}
+	return stepdefinition.Definition{
+		Kind: kind, Ansible: ansible,
+		Name: name, ScriptBody: script, Interpreter: selected,
+		SortOrder: int64(i), TimeoutSeconds: timeout, MaxRetries: retries,
+	}, nil
+}
+
+func splitRunbookStepList(raw string) []string {
+	var values []string
+	for value := range strings.SplitSeq(raw, ",") {
+		if value = strings.TrimSpace(value); value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
+}
+
+func (h *RunbookHandler) validateRunbookFormStep(
+	form url.Values,
+	i int,
+	step *stepdefinition.Definition,
+	available []string,
+) error {
+	if err := agentexecution.ValidateLimitsWithPolicy(
+		step.TimeoutSeconds, step.MaxRetries, h.repo.ResourceLimits().Execution,
+	); err != nil {
+		return err
+	}
+	target, selectors, err := ValidateStepPlacement(
+		form["step_target"][i],
+		splitRunbookStepList(form["step_selectors"][i]),
+		available,
+	)
+	if err != nil {
+		return err
+	}
+	step.ExecutionTarget = target
+	step.AgentSelectors = selectors
+	step.ContainerImage = optionalRunbookStepValue(form["step_image"], i, "")
+	step.VariableNames = splitRunbookStepList(
+		optionalRunbookStepValue(form["step_variable_names"], i, ""),
+	)
+	step.AgentExecutionMode = optionalRunbookStepValue(
+		form["step_agent_mode"],
+		i,
+		"host",
+	)
+	if message := ValidateStepExecutionConfig(agentexecution.Config{
+		Target: target, Mode: step.AgentExecutionMode, Image: step.ContainerImage,
+		VariableNames: step.VariableNames,
+	}); message != "" {
+		return errors.New(strings.ToLower(message[:1]) + message[1:])
+	}
+	step.NetworkMode = optionalRunbookStepValue(form["step_network"], i, "")
+	if err := artifact.ValidateGateConfig(target, step.NetworkMode, "", "", ""); err != nil {
+		return err
+	}
+	return step.ValidateWrite()
 }

@@ -177,84 +177,10 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for i := range req.Steps {
-		step := &req.Steps[i]
-		step.Name = strings.TrimSpace(step.Name)
-		if err := agentexecution.ValidateLimitsWithPolicy(step.TimeoutSeconds, step.MaxRetries, h.repo.ResourceLimits().Execution); err != nil {
-			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+		if !h.validateRunbookStep(w, r, projectID, &req.Steps[i]) {
 			return
 		}
-		if step.Name == "" ||
-			step.Kind != stepdefinition.AnsibleKind &&
-				strings.TrimSpace(step.ScriptBody) == "" {
-			RespondError(
-				w,
-				http.StatusUnprocessableEntity,
-				"Invalid runbook step",
-			)
-			return
-		}
-		if err := (stepdefinition.Definition(*step)).ValidateWrite(); err != nil {
-			RespondError(w, http.StatusUnprocessableEntity, err.Error())
-			return
-		}
-		if step.Ansible != nil {
-			if err := h.repo.ValidateAnsibleReferences(r.Context(), projectID, step.Ansible); err != nil {
-				RespondError(w, http.StatusUnprocessableEntity, err.Error())
-				return
-			}
-		}
-		selected := ""
-		var err error
-		if step.Kind != stepdefinition.AnsibleKind {
-			selected, err = interpreter.Validate(step.Interpreter)
-		}
-		if err != nil {
-			RespondError(w, http.StatusUnprocessableEntity, err.Error())
-			return
-		}
-		step.Interpreter = selected
-		target, selectors, valid := validatePlacement(
-			w, r, h.repo, step.ExecutionTarget, step.AgentSelectors,
-		)
-		if !valid {
-			return
-		}
-		step.ExecutionTarget = target
-		if err := artifact.ValidateGateConfig(
-			target,
-			step.NetworkMode,
-			step.ApprovalArtifactPath,
-			step.ApprovalReviewPath,
-			step.ApprovalReviewFormat,
-		); err != nil ||
-			step.ApprovalArtifactPath != "" {
-			RespondError(
-				w,
-				http.StatusUnprocessableEntity,
-				"Runbooks do not support artifact gates; invalid network configuration",
-			)
-			return
-		}
-		step.AgentSelectors = selectors
-		config := agentexecution.Config{
-			Target: target, Mode: step.AgentExecutionMode,
-			Image: step.ContainerImage, VariableNames: step.VariableNames,
-		}
-		if message := handler.ValidateStepExecutionConfig(
-			config,
-		); message != "" {
-			status := http.StatusUnprocessableEntity
-			if step.ContainerImage != "" &&
-				!handler.ValidContainerImage(step.ContainerImage) {
-				status = http.StatusBadRequest
-			}
-			RespondError(w, status, strings.ToLower(message[:1])+message[1:])
-			return
-		}
-		if step.AgentExecutionMode == "" {
-			step.AgentExecutionMode = "host"
-		}
-		step.SortOrder = int64(i)
+		req.Steps[i].SortOrder = int64(i)
 	}
 	steps, err := json.Marshal(req.Steps)
 	if err != nil {
@@ -303,6 +229,88 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 		Runbook db.Runbook        `json:"runbook"`
 		Version db.RunbookVersion `json:"version"`
 	}{book, version})
+}
+
+func (h *RunbookHandler) validateRunbookStep(
+	w http.ResponseWriter,
+	r *http.Request,
+	projectID int64,
+	step *runbookStep,
+) bool {
+	step.Name = strings.TrimSpace(step.Name)
+	if err := agentexecution.ValidateLimitsWithPolicy(step.TimeoutSeconds, step.MaxRetries, h.repo.ResourceLimits().Execution); err != nil {
+		RespondError(w, http.StatusUnprocessableEntity, err.Error())
+		return false
+	}
+	if step.Name == "" ||
+		step.Kind != stepdefinition.AnsibleKind &&
+			strings.TrimSpace(step.ScriptBody) == "" {
+		RespondError(
+			w,
+			http.StatusUnprocessableEntity,
+			"Invalid runbook step",
+		)
+		return false
+	}
+	if err := (stepdefinition.Definition(*step)).ValidateWrite(); err != nil {
+		RespondError(w, http.StatusUnprocessableEntity, err.Error())
+		return false
+	}
+	if step.Ansible != nil {
+		if err := h.repo.ValidateAnsibleReferences(r.Context(), projectID, step.Ansible); err != nil {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return false
+		}
+	}
+	selected := ""
+	var err error
+	if step.Kind != stepdefinition.AnsibleKind {
+		selected, err = interpreter.Validate(step.Interpreter)
+	}
+	if err != nil {
+		RespondError(w, http.StatusUnprocessableEntity, err.Error())
+		return false
+	}
+	step.Interpreter = selected
+	target, selectors, valid := validatePlacement(
+		w, r, h.repo, step.ExecutionTarget, step.AgentSelectors,
+	)
+	if !valid {
+		return false
+	}
+	step.ExecutionTarget = target
+	if err := artifact.ValidateGateConfig(
+		target,
+		step.NetworkMode,
+		step.ApprovalArtifactPath,
+		step.ApprovalReviewPath,
+		step.ApprovalReviewFormat,
+	); err != nil || step.ApprovalArtifactPath != "" {
+		RespondError(
+			w,
+			http.StatusUnprocessableEntity,
+			"Runbooks do not support artifact gates; invalid network configuration",
+		)
+		return false
+	}
+	step.AgentSelectors = selectors
+	config := agentexecution.Config{
+		Target: target, Mode: step.AgentExecutionMode,
+		Image: step.ContainerImage, VariableNames: step.VariableNames,
+	}
+	if message := handler.ValidateStepExecutionConfig(config); message != "" {
+		status := http.StatusUnprocessableEntity
+		if step.ContainerImage != "" &&
+			!handler.ValidContainerImage(step.ContainerImage) {
+			status = http.StatusBadRequest
+		}
+		RespondError(w, status, strings.ToLower(message[:1])+message[1:])
+		return false
+	}
+	if step.AgentExecutionMode == "" {
+		step.AgentExecutionMode = "host"
+	}
+	return true
 }
 
 // swagger:route POST /projects/{id}/runbooks runbooks createRunbook
