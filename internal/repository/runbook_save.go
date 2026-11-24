@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"durpdeploy/internal/artifact"
-	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 )
 
@@ -23,12 +22,8 @@ func (r *Repository) SaveRunbook(
 		)
 	}
 	for i := range variables {
-		if variables[i].Name == containerenv.StageVariable ||
-			variables[i].Name == containerenv.ApprovedVariable {
-			return db.Runbook{}, db.RunbookVersion{}, containerenv.ErrReserved
-		}
-		if variables[i].Name == artifact.PathVariable {
-			return db.Runbook{}, db.RunbookVersion{}, ErrArtifactPathReserved
+		if err := rejectReservedArtifactVariable(variables[i].Name); err != nil {
+			return db.Runbook{}, db.RunbookVersion{}, err
 		}
 		variables[i].Value, err = r.EncryptValue(variables[i].Value)
 		if err != nil {

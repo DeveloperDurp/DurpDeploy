@@ -37,6 +37,17 @@ func validateVariableName(name string) error {
 	return nil
 }
 
+func rejectReservedArtifactVariable(name string) error {
+	switch name {
+	case artifact.PathVariable:
+		return ErrArtifactPathReserved
+	case containerenv.StageVariable, containerenv.ApprovedVariable:
+		return containerenv.ErrReserved
+	default:
+		return nil
+	}
+}
+
 // SaveLifecycleVariable shares validation and encryption between API and web.
 // A blank value keeps an existing secret, atomically with its metadata update.
 func (r *Repository) SaveLifecycleVariable(
@@ -46,12 +57,8 @@ func (r *Repository) SaveLifecycleVariable(
 	if err := validateVariableName(input.Name); err != nil {
 		return db.LifecycleVariable{}, err
 	}
-	if input.Name == artifact.PathVariable {
-		return db.LifecycleVariable{}, ErrArtifactPathReserved
-	}
-	if input.Name == containerenv.StageVariable ||
-		input.Name == containerenv.ApprovedVariable {
-		return db.LifecycleVariable{}, containerenv.ErrReserved
+	if err := rejectReservedArtifactVariable(input.Name); err != nil {
+		return db.LifecycleVariable{}, err
 	}
 	var result db.LifecycleVariable
 	err := withSQLiteBusyRetry(ctx, func() error {
