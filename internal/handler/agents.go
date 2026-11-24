@@ -92,13 +92,13 @@ func (h *AgentsHandler) Detail(w http.ResponseWriter, r *http.Request) {
 
 func (h *AgentsHandler) RetryPair(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Invalid form", http.StatusBadRequest)
+		http.Error(w, invalidAgentForm, http.StatusBadRequest)
 		return
 	}
 	if h.pairing == nil {
 		http.Error(
 			w,
-			"Agent listener is disabled",
+			agentListenerDisabled,
 			http.StatusServiceUnavailable,
 		)
 		return
@@ -149,7 +149,7 @@ func (h *AgentsHandler) Revoke(w http.ResponseWriter, r *http.Request) {
 
 func (h *AgentsHandler) AddLabel(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Invalid form", http.StatusBadRequest)
+		http.Error(w, invalidAgentForm, http.StatusBadRequest)
 		return
 	}
 	agentID := chi.URLParam(r, "id")
@@ -181,7 +181,7 @@ func (h *AgentsHandler) AddLabel(w http.ResponseWriter, r *http.Request) {
 
 func (h *AgentsHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Invalid form", http.StatusBadRequest)
+		http.Error(w, invalidAgentForm, http.StatusBadRequest)
 		return
 	}
 	agentID := chi.URLParam(r, "id")

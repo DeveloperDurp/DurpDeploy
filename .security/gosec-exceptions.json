@@ -498,7 +498,7 @@
     "rule": "G710",
     "file": "internal/handler/agents.go",
     "line": "208",
-    "source_sha256": "b4e9d3abe38326524b98c4661492f997f1cc02cc44b155e8ef0e0d132fdd15ae",
+    "source_sha256": "39d89adbdcc53922bff6b4d4493e0b4707962c635ce049af59fcdb3402a04adc",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
@@ -507,7 +507,7 @@
     "rule": "G710",
     "file": "internal/handler/agents.go",
     "line": "179",
-    "source_sha256": "b4e9d3abe38326524b98c4661492f997f1cc02cc44b155e8ef0e0d132fdd15ae",
+    "source_sha256": "39d89adbdcc53922bff6b4d4493e0b4707962c635ce049af59fcdb3402a04adc",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
@@ -516,7 +516,7 @@
     "rule": "G710",
     "file": "internal/handler/agents.go",
     "line": "129",
-    "source_sha256": "b4e9d3abe38326524b98c4661492f997f1cc02cc44b155e8ef0e0d132fdd15ae",
+    "source_sha256": "39d89adbdcc53922bff6b4d4493e0b4707962c635ce049af59fcdb3402a04adc",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."

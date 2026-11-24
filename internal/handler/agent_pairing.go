@@ -10,13 +10,18 @@ import (
 	"durpdeploy/views/pages"
 )
 
+const (
+	agentListenerDisabled = "Agent listener is disabled"
+	invalidAgentForm      = "Invalid form"
+)
+
 func (h *AgentsHandler) Pair(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Invalid form", http.StatusBadRequest)
+		http.Error(w, invalidAgentForm, http.StatusBadRequest)
 		return
 	}
 	if h.pairing == nil {
-		h.renderListError(w, r, "Agent listener is disabled")
+		h.renderListError(w, r, agentListenerDisabled)
 		return
 	}
 	input, err := agentserver.ParsePairingStartInput(
@@ -38,7 +43,7 @@ func (h *AgentsHandler) Pair(w http.ResponseWriter, r *http.Request) {
 
 func (h *AgentsHandler) ConfirmPair(w http.ResponseWriter, r *http.Request) {
 	if h.pairing == nil {
-		http.Error(w, "Agent listener is disabled", http.StatusServiceUnavailable)
+		http.Error(w, agentListenerDisabled, http.StatusServiceUnavailable)
 		return
 	}
 	challenge, err := h.pairing.Challenge(chi.URLParam(r, "challengeID"))
@@ -58,7 +63,7 @@ func (h *AgentsHandler) ConfirmPair(w http.ResponseWriter, r *http.Request) {
 
 func (h *AgentsHandler) ApprovePair(w http.ResponseWriter, r *http.Request) {
 	if h.pairing == nil {
-		http.Error(w, "Agent listener is disabled", http.StatusServiceUnavailable)
+		http.Error(w, agentListenerDisabled, http.StatusServiceUnavailable)
 		return
 	}
 	result, err := h.pairing.Approve(
@@ -73,7 +78,7 @@ func (h *AgentsHandler) ApprovePair(w http.ResponseWriter, r *http.Request) {
 
 func (h *AgentsHandler) DenyPair(w http.ResponseWriter, r *http.Request) {
 	if h.pairing == nil {
-		http.Error(w, "Agent listener is disabled", http.StatusServiceUnavailable)
+		http.Error(w, agentListenerDisabled, http.StatusServiceUnavailable)
 		return
 	}
 	if err := h.pairing.Deny(chi.URLParam(r, "challengeID")); err != nil {
