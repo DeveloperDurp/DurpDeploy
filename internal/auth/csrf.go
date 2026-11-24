@@ -24,61 +24,59 @@ const viewerWriteBlockMessage = "Viewers cannot perform write operations"
 func CSRFMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch r.Method {
-			case http.MethodPost,
-				http.MethodPut,
-				http.MethodDelete,
-				http.MethodPatch:
-			default:
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			path := r.URL.Path
-			if path == "/login" {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			// /api/lint is a read-only linting action, exempt from CSRF
-			// and the viewer write-block, but a valid session is still
-			// required (AuthMiddleware runs first and sets it).
-			if path == "/api/lint" {
-				sess := SessionFromContext(r.Context())
-				if sess == nil {
-					http.Error(w, "Unauthorized", http.StatusUnauthorized)
-					return
-				}
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			sess := SessionFromContext(r.Context())
-			if sess == nil {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
-				return
-			}
-
-			if RejectRestrictedWrite(w, r) {
-				return
-			}
-
-			token := r.PostFormValue("csrf_token")
-			if token == "" {
-				token = r.Header.Get("X-CSRF-Token")
-			}
-
-			if subtle.ConstantTimeCompare(
-				[]byte(token),
-				[]byte(sess.CsrfToken),
-			) != 1 {
-				http.Error(w, "Invalid CSRF token", http.StatusForbidden)
-				return
-			}
-
-			next.ServeHTTP(w, r)
+			serveCSRF(w, r, next)
 		})
 	}
+}
+
+func serveCSRF(w http.ResponseWriter, r *http.Request, next http.Handler) {
+	switch r.Method {
+	case http.MethodPost,
+		http.MethodPut,
+		http.MethodDelete,
+		http.MethodPatch:
+	default:
+		next.ServeHTTP(w, r)
+		return
+	}
+
+	path := r.URL.Path
+	if path == "/login" {
+		next.ServeHTTP(w, r)
+		return
+	}
+
+	sess := SessionFromContext(r.Context())
+	if sess == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Lint requires a valid session. It is a read-only action exempt
+	// from CSRF and the viewer write-block.
+	if path == "/api/lint" {
+		next.ServeHTTP(w, r)
+		return
+	}
+
+	if RejectRestrictedWrite(w, r) {
+		return
+	}
+
+	token := r.PostFormValue("csrf_token")
+	if token == "" {
+		token = r.Header.Get("X-CSRF-Token")
+	}
+
+	if subtle.ConstantTimeCompare(
+		[]byte(token),
+		[]byte(sess.CsrfToken),
+	) != 1 {
+		http.Error(w, "Invalid CSRF token", http.StatusForbidden)
+		return
+	}
+
+	next.ServeHTTP(w, r)
 }
 
 // RejectViewerWrite preserves the viewer response before any body parsing.

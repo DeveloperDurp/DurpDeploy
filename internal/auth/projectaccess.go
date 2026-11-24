@@ -203,25 +203,41 @@ func RequireDeploymentProjectAccess(
 				return
 			}
 
-			if !TokenAllowsProject(r.Context(), release.ProjectID) {
-				RenderRequestError(w, r, http.StatusForbidden,
-					projectAccessDeniedMessage)
-				return
-			}
-			if user.Role != "admin" &&
-				!checkProjectMembership(
-					w,
-					r,
-					repo,
-					user.ID,
-					release.ProjectID,
-				) {
-				return
-			}
-			setTokenProject(r.Context(), release.ProjectID)
-			applyProjectPermission(w, r, repo, release.ProjectID, next)
+			serveDeploymentProjectAccess(
+				w,
+				r,
+				next,
+				repo,
+				release.ProjectID,
+				user,
+			)
 		})
 	}
+}
+
+func serveDeploymentProjectAccess(
+	w http.ResponseWriter,
+	r *http.Request,
+	next http.Handler,
+	repo *repository.Repository,
+	projectID int64,
+	user *db.User,
+) {
+	if !TokenAllowsProject(r.Context(), projectID) {
+		RenderRequestError(
+			w,
+			r,
+			http.StatusForbidden,
+			projectAccessDeniedMessage,
+		)
+		return
+	}
+	if user.Role != "admin" &&
+		!checkProjectMembership(w, r, repo, user.ID, projectID) {
+		return
+	}
+	setTokenProject(r.Context(), projectID)
+	applyProjectPermission(w, r, repo, projectID, next)
 }
 
 // applyProjectPermission also supplies the membership ceiling to templates.
