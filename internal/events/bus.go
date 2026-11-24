@@ -105,40 +105,8 @@ func splitEmails(v sql.NullString) []string {
 // Settings and history failures produce diagnostics without provider or driver
 // details. Delivery remains best effort and never changes deployment outcomes.
 func (b *Bus) Publish(ctx context.Context, evt Event) {
-	if evt.DeploymentID != 0 {
-		deployment, err := b.repo.Queries.GetDeployment(ctx, evt.DeploymentID)
-		if err != nil {
-			return
-		}
-		if deployment.Kind == "runbook" {
-			execution, err := b.repo.Queries.GetRunbookExecutionByDeployment(
-				ctx, evt.DeploymentID)
-			if err != nil {
-				return
-			}
-			switch evt.Type {
-			case DeploymentStarted:
-				evt.Type = RunbookStarted
-			case DeploymentSucceeded:
-				evt.Type = RunbookSucceeded
-			case DeploymentFailed:
-				evt.Type = RunbookFailed
-			}
-			evt.Message = strings.Replace(evt.Message,
-				fmt.Sprintf("Deployment #%d", evt.DeploymentID),
-				fmt.Sprintf("Runbook execution #%d", execution.ID), 1)
-		} else if release, err := b.repo.Queries.GetRelease(
-			ctx, deployment.ReleaseID); err == nil {
-			source := provenance.FromRelease(release)
-			for _, field := range []struct{ name, value string }{
-				{"Repository", source.RepositoryURL}, {"Commit", source.CommitSHA},
-				{"Artifact", source.ArtifactRef}, {"CI run", source.CIRunURL},
-			} {
-				if field.value != "" {
-					evt.Message += "\n" + field.name + ": " + field.value
-				}
-			}
-		}
+	if !b.enrichDeploymentEvent(ctx, &evt) {
+		return
 	}
 	settingsAvailable := true
 	scope := "project"
@@ -225,4 +193,44 @@ func (b *Bus) Publish(ctx context.Context, evt Event) {
 	if err != nil {
 		logger.WarnContext(ctx, "write notification history failed")
 	}
+}
+
+func (b *Bus) enrichDeploymentEvent(ctx context.Context, evt *Event) bool {
+	if evt.DeploymentID == 0 {
+		return true
+	}
+	deployment, err := b.repo.Queries.GetDeployment(ctx, evt.DeploymentID)
+	if err != nil {
+		return false
+	}
+	if deployment.Kind == "runbook" {
+		execution, err := b.repo.Queries.GetRunbookExecutionByDeployment(
+			ctx, evt.DeploymentID)
+		if err != nil {
+			return false
+		}
+		switch evt.Type {
+		case DeploymentStarted:
+			evt.Type = RunbookStarted
+		case DeploymentSucceeded:
+			evt.Type = RunbookSucceeded
+		case DeploymentFailed:
+			evt.Type = RunbookFailed
+		}
+		evt.Message = strings.Replace(evt.Message,
+			fmt.Sprintf("Deployment #%d", evt.DeploymentID),
+			fmt.Sprintf("Runbook execution #%d", execution.ID), 1)
+	} else if release, err := b.repo.Queries.GetRelease(
+		ctx, deployment.ReleaseID); err == nil {
+		source := provenance.FromRelease(release)
+		for _, field := range []struct{ name, value string }{
+			{"Repository", source.RepositoryURL}, {"Commit", source.CommitSHA},
+			{"Artifact", source.ArtifactRef}, {"CI run", source.CIRunURL},
+		} {
+			if field.value != "" {
+				evt.Message += "\n" + field.name + ": " + field.value
+			}
+		}
+	}
+	return true
 }
