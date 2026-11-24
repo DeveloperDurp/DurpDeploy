@@ -65,38 +65,8 @@ func deploymentLogPanels(
 		func(i, j int) bool { return ordered[i].ID < ordered[j].ID },
 	)
 	for _, log := range ordered {
-		position := len(steps)
-		if log.StepIndex.Valid && log.StepIndex.Int64 < int64(len(steps)) &&
-			log.StepIndex.Int64 >= 0 {
-			position = int(log.StepIndex.Int64)
-		} else if log.StepName.Valid {
-			// Legacy rows are grouped by name only when the match is unambiguous.
-			match := -1
-			for index, step := range steps {
-				if log.StepName.String == step.Name ||
-					strings.HasPrefix(log.StepName.String, step.Name+" @ ") {
-					if match != -1 {
-						match = -1
-						break
-					}
-					match = index
-				}
-			}
-			if match != -1 {
-				position = match
-			}
-		}
-		panel := &view.Panels[position]
-		panel.Logs = append(panel.Logs, log)
-		if log.StepState.Valid {
-			panel.State = log.StepState.String
-			if panel.State == "cancelled" &&
-				log.Line == repository.QueuedCancellationLogLine {
-				panel.State = "not_run_queued"
-			}
-		} else if panel.State == "pending" {
-			panel.State = "unknown"
-		}
+		position := deploymentLogPanelIndex(steps, log)
+		appendDeploymentLog(&view.Panels[position], log)
 		if log.ID > view.LastID {
 			view.LastID = log.ID
 		}
@@ -114,6 +84,42 @@ func deploymentLogPanels(
 		}
 	}
 	return view
+}
+
+func deploymentLogPanelIndex(steps []ReleaseStep, log db.DeploymentLog) int {
+	if log.StepIndex.Valid && log.StepIndex.Int64 < int64(len(steps)) &&
+		log.StepIndex.Int64 >= 0 {
+		return int(log.StepIndex.Int64)
+	}
+	messagesIndex := len(steps)
+	if !log.StepName.Valid {
+		return messagesIndex
+	}
+	// Legacy rows are grouped by name only when the match is unambiguous.
+	match := messagesIndex
+	for index, step := range steps {
+		if log.StepName.String == step.Name ||
+			strings.HasPrefix(log.StepName.String, step.Name+" @ ") {
+			if match != messagesIndex {
+				return messagesIndex
+			}
+			match = index
+		}
+	}
+	return match
+}
+
+func appendDeploymentLog(panel *deploymentLogPanel, log db.DeploymentLog) {
+	panel.Logs = append(panel.Logs, log)
+	if log.StepState.Valid {
+		panel.State = log.StepState.String
+		if panel.State == "cancelled" &&
+			log.Line == repository.QueuedCancellationLogLine {
+			panel.State = "not_run_queued"
+		}
+	} else if panel.State == "pending" {
+		panel.State = "unknown"
+	}
 }
 
 func logStepKinds(steps []ReleaseStep) string {
