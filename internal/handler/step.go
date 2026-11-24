@@ -20,6 +20,11 @@ import (
 	"durpdeploy/views/pages"
 )
 
+const (
+	invalidProjectIDMessage = "Invalid project ID"
+	invalidStepIDMessage    = "Invalid step ID"
+)
+
 // IsStepContainerRequired reports whether the execution target is the
 // server-container path that requires a container image (local only;
 // agent runs on the remote agent and must not carry one).
@@ -74,10 +79,6 @@ func validateStepContainerConfig(
 		}
 		if !ValidContainerImage(image) {
 			return "Invalid container image"
-		}
-	case "agent":
-		if image != "" {
-			return "Agent steps cannot use a container image"
 		}
 	default:
 		if image != "" {
@@ -230,7 +231,7 @@ func ValidateStepPlacement(
 func (h *StepHandler) ListSteps(w http.ResponseWriter, r *http.Request) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -252,7 +253,7 @@ func (h *StepHandler) ListSteps(w http.ResponseWriter, r *http.Request) {
 func (h *StepHandler) StepsPage(w http.ResponseWriter, r *http.Request) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -281,7 +282,7 @@ func (h *StepHandler) StepsPage(w http.ResponseWriter, r *http.Request) {
 func (h *StepHandler) NewStepForm(w http.ResponseWriter, r *http.Request) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -305,7 +306,7 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 	labels, _, err := h.placementOptions(r.Context(), 0)
@@ -567,14 +568,14 @@ func writeStepFormError(
 func (h *StepHandler) EditStepForm(w http.ResponseWriter, r *http.Request) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
 	stepIDStr := chi.URLParam(r, "stepId")
 	stepID, err := strconv.ParseInt(stepIDStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid step ID", http.StatusBadRequest)
+		http.Error(w, invalidStepIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -620,14 +621,14 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
 	stepIDStr := chi.URLParam(r, "stepId")
 	stepID, err := strconv.ParseInt(stepIDStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid step ID", http.StatusBadRequest)
+		http.Error(w, invalidStepIDMessage, http.StatusBadRequest)
 		return
 	}
 	existing, err := h.getProjectStep(r, projectID, stepID)
@@ -847,14 +848,14 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 func (h *StepHandler) DeleteStep(w http.ResponseWriter, r *http.Request) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
 	stepIDStr := chi.URLParam(r, "stepId")
 	stepID, err := strconv.ParseInt(stepIDStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid step ID", http.StatusBadRequest)
+		http.Error(w, invalidStepIDMessage, http.StatusBadRequest)
 		return
 	}
 	if _, err := h.getProjectStep(r, projectID, stepID); err != nil {
@@ -894,13 +895,13 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
 	stepID, err := strconv.ParseInt(r.FormValue("step_id"), 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid step ID", http.StatusBadRequest)
+		http.Error(w, invalidStepIDMessage, http.StatusBadRequest)
 		return
 	}
 
