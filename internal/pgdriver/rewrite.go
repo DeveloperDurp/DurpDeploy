@@ -102,29 +102,34 @@ func rewritePlaceholders(query string) string {
 			inDouble = true
 			b.WriteByte(c)
 		case c == '?':
-			start := i + 1
-			end := start
-			for end < len(query) && query[end] >= '0' && query[end] <= '9' {
-				end++
-			}
-			if end > start {
-				idx, err := strconv.Atoi(query[start:end])
-				if err == nil && idx > 0 {
-					if idx > n {
-						n = idx
-					}
-					b.WriteByte('$')
-					b.WriteString(strconv.Itoa(idx))
-					i = end - 1
-					continue
-				}
-			}
-			n++
-			b.WriteByte('$')
-			b.WriteString(strconv.Itoa(n))
+			i, n = writePlaceholder(&b, query, i, n)
 		default:
 			b.WriteByte(c)
 		}
 	}
 	return b.String()
+}
+
+func writePlaceholder(
+	b *strings.Builder,
+	query string,
+	offset, ordinal int,
+) (int, int) {
+	start := offset + 1
+	end := start
+	for end < len(query) && query[end] >= '0' && query[end] <= '9' {
+		end++
+	}
+	if end > start {
+		index, err := strconv.Atoi(query[start:end])
+		if err == nil && index > 0 {
+			b.WriteByte('$')
+			b.WriteString(strconv.Itoa(index))
+			return end - 1, max(ordinal, index)
+		}
+	}
+	ordinal++
+	b.WriteByte('$')
+	b.WriteString(strconv.Itoa(ordinal))
+	return offset, ordinal
 }

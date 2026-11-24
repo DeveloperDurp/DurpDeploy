@@ -16,21 +16,12 @@ func rewritePlaceholders(query string) string {
 			continue
 		}
 		if query[i] == '?' {
-			if i+1 < len(query) && query[i+1] >= '0' && query[i+1] <= '9' {
-				end := i + 1
-				for end < len(query) && query[end] >= '0' && query[end] <= '9' {
-					end++
-				}
-				explicit, err := strconv.Atoi(query[i+1 : end])
-				if err == nil {
-					if explicit > ordinal {
-						ordinal = explicit
-					}
-					result.WriteString("@p")
-					result.WriteString(strconv.Itoa(explicit))
-					i = end
-					continue
-				}
+			if index, end, ok := numberedPlaceholder(query, i+1); ok {
+				ordinal = max(ordinal, index)
+				result.WriteString("@p")
+				result.WriteString(strconv.Itoa(index))
+				i = end
+				continue
 			}
 			ordinal++
 			result.WriteString("@p")
@@ -42,4 +33,16 @@ func rewritePlaceholders(query string) string {
 		i++
 	}
 	return result.String()
+}
+
+func numberedPlaceholder(query string, start int) (int, int, bool) {
+	end := start
+	for end < len(query) && query[end] >= '0' && query[end] <= '9' {
+		end++
+	}
+	if end == start {
+		return 0, start, false
+	}
+	index, err := strconv.Atoi(query[start:end])
+	return index, end, err == nil
 }

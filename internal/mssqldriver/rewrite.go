@@ -172,22 +172,14 @@ func rewriteReturning(query string) (string, error) {
 		if values < 0 {
 			return "", ErrMalformedReturning
 		}
-		insertAt := values
-		for insertAt > 0 && strings.ContainsRune(sqlWhitespace, rune(statement[insertAt-1])) {
-			insertAt--
-		}
+		insertAt := len(strings.TrimRight(statement[:values], sqlWhitespace))
 		return statement[:insertAt] + outputClause + output + statement[insertAt:] + trailing, nil
 	case containsOutsideQuotes(statement, "UPDATE"):
 		whereIndex := updateWhereIndex(statement)
 		if whereIndex < 0 {
 			return "", ErrMalformedReturning
 		}
-		start := whereIndex
-		for start > 0 && strings.ContainsRune(
-			sqlWhitespace, rune(statement[start-1]),
-		) {
-			start--
-		}
+		start := len(strings.TrimRight(statement[:whereIndex], sqlWhitespace))
 		separator := statement[start:whereIndex]
 		return statement[:start] + outputClause + output + separator + statement[whereIndex:] + trailing, nil
 	case containsOutsideQuotes(statement, "DELETE FROM"):
@@ -200,12 +192,9 @@ func rewriteReturning(query string) (string, error) {
 			statement,
 			"WHERE",
 		); whereIndex >= 0 {
-			start := whereIndex
-			for start > 0 && strings.ContainsRune(
-				sqlWhitespace, rune(statement[start-1]),
-			) {
-				start--
-			}
+			start := len(
+				strings.TrimRight(statement[:whereIndex], sqlWhitespace),
+			)
 			separator := statement[start:whereIndex]
 			return statement[:start] + outputClause + deleted + separator + statement[whereIndex:] + trailing, nil
 		}
