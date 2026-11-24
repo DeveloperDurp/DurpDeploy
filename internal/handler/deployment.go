@@ -1004,17 +1004,9 @@ type DeploymentsFilter struct {
 // typed filter. Exported for use by the JSON API handler.
 func ParseDeploymentsFilter(r *http.Request) DeploymentsFilter {
 	q := r.URL.Query()
-	f := DeploymentsFilter{Limit: deploymentsDefaultLimit, Offset: 0}
-
-	if s := strings.TrimSpace(q.Get("project_id")); s != "" {
-		if v, err := strconv.ParseInt(s, 10, 64); err == nil && v > 0 {
-			f.ProjectID = sql.NullInt64{Int64: v, Valid: true}
-		}
-	}
-	if s := strings.TrimSpace(q.Get("env_id")); s != "" {
-		if v, err := strconv.ParseInt(s, 10, 64); err == nil && v > 0 {
-			f.EnvID = sql.NullInt64{Int64: v, Valid: true}
-		}
+	f := DeploymentsFilter{
+		ProjectID: parseDeploymentFilterID(q.Get("project_id")),
+		EnvID:     parseDeploymentFilterID(q.Get("env_id")),
 	}
 	if s := strings.TrimSpace(q.Get("status")); s != "" {
 		if _, ok := allowedStatuses[s]; ok {
@@ -1031,20 +1023,39 @@ func ParseDeploymentsFilter(r *http.Request) DeploymentsFilter {
 			f.ToUnix = sql.NullInt64{Int64: t, Valid: true}
 		}
 	}
-	if s := strings.TrimSpace(q.Get("limit")); s != "" {
+	f.Limit, f.Offset = parseDeploymentListPagination(
+		q.Get("limit"), q.Get("offset"),
+	)
+	return f
+}
+
+func parseDeploymentFilterID(value string) sql.NullInt64 {
+	if s := strings.TrimSpace(value); s != "" {
+		if v, err := strconv.ParseInt(s, 10, 64); err == nil && v > 0 {
+			return sql.NullInt64{Int64: v, Valid: true}
+		}
+	}
+	return sql.NullInt64{}
+}
+
+func parseDeploymentListPagination(
+	rawLimit, rawOffset string,
+) (limit, offset int64) {
+	limit = deploymentsDefaultLimit
+	if s := strings.TrimSpace(rawLimit); s != "" {
 		if v, err := strconv.ParseInt(s, 10, 64); err == nil && v > 0 {
 			if v > deploymentsMaxLimit {
 				v = deploymentsMaxLimit
 			}
-			f.Limit = v
+			limit = v
 		}
 	}
-	if s := strings.TrimSpace(q.Get("offset")); s != "" {
+	if s := strings.TrimSpace(rawOffset); s != "" {
 		if v, err := strconv.ParseInt(s, 10, 64); err == nil && v >= 0 {
-			f.Offset = v
+			offset = v
 		}
 	}
-	return f
+	return limit, offset
 }
 
 func parseDateStart(s string) (int64, bool) {

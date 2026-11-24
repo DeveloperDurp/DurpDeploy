@@ -244,36 +244,9 @@ func (h *DeploymentHandler) ListDeployments(
 	if user.Role == "admin" {
 		isAdmin = 1
 	}
-	var fProjectID sql.NullInt64
-	if idStr := chi.URLParam(r, "id"); idStr != "" {
-		projectID, err := strconv.ParseInt(idStr, 10, 64)
-		if err != nil {
-			RespondError(w, http.StatusBadRequest, "Invalid project ID")
-			return
-		}
-		if _, err := h.repo.Queries.GetProject(
-			r.Context(),
-			projectID,
-		); err != nil {
-			if err == sql.ErrNoRows {
-				RespondError(w, http.StatusNotFound, projectNotFoundMessage)
-				return
-			}
-			RespondError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		fProjectID = sql.NullInt64{Int64: projectID, Valid: true}
-	}
-	if !fProjectID.Valid {
-		if value := r.URL.Query().Get("project_id"); value != "" {
-			projectID, err := strconv.ParseInt(value, 10, 64)
-			if err != nil || projectID <= 0 {
-				RespondError(w, http.StatusBadRequest,
-					"project_id must be a positive integer")
-				return
-			}
-			fProjectID = sql.NullInt64{Int64: projectID, Valid: true}
-		}
+	fProjectID, ok := h.deploymentProjectFilter(w, r)
+	if !ok {
+		return
 	}
 	limit, offset, ok := parsePagination(w, r)
 	if !ok {
@@ -373,6 +346,41 @@ func (h *DeploymentHandler) ListDeployments(
 		Limit:  limit,
 		Offset: offset,
 	})
+}
+
+func (h *DeploymentHandler) deploymentProjectFilter(
+	w http.ResponseWriter,
+	r *http.Request,
+) (sql.NullInt64, bool) {
+	if idStr := chi.URLParam(r, "id"); idStr != "" {
+		projectID, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			RespondError(w, http.StatusBadRequest, "Invalid project ID")
+			return sql.NullInt64{}, false
+		}
+		if _, err := h.repo.Queries.GetProject(
+			r.Context(),
+			projectID,
+		); err != nil {
+			if err == sql.ErrNoRows {
+				RespondError(w, http.StatusNotFound, projectNotFoundMessage)
+				return sql.NullInt64{}, false
+			}
+			RespondError(w, http.StatusInternalServerError, err.Error())
+			return sql.NullInt64{}, false
+		}
+		return sql.NullInt64{Int64: projectID, Valid: true}, true
+	}
+	if value := r.URL.Query().Get("project_id"); value != "" {
+		projectID, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || projectID <= 0 {
+			RespondError(w, http.StatusBadRequest,
+				"project_id must be a positive integer")
+			return sql.NullInt64{}, false
+		}
+		return sql.NullInt64{Int64: projectID, Valid: true}, true
+	}
+	return sql.NullInt64{}, true
 }
 
 // swagger:route GET /deployments/{id} deployments getDeployment
