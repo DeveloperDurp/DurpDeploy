@@ -14,6 +14,11 @@ import (
 	"durpdeploy/views/pages"
 )
 
+const (
+	variableNameRequired  = "Name is required"
+	variableScopeConflict = "A variable with this name and scope already exists"
+)
+
 // Variable resolution rule (documented for future use):
 // At deploy time, query release_variables WHERE release_id = deployment's release.
 // For each variable: if environment_id matches deployment environment, use that value;
@@ -44,7 +49,7 @@ func (h *VariableHandler) ListVariables(
 ) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -97,7 +102,7 @@ func (h *VariableHandler) CreateVariable(
 
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -119,12 +124,12 @@ func (h *VariableHandler) CreateVariable(
 		WriteFormError(
 			w,
 			r,
-			pages.VariableForm(projectID, environments, "Name is required"),
+			pages.VariableForm(projectID, environments, variableNameRequired),
 			pages.VariablesPage(
 				project,
 				variables,
 				environments,
-				"Name is required",
+				variableNameRequired,
 				r.URL.Path,
 			),
 		)
@@ -162,13 +167,13 @@ func (h *VariableHandler) CreateVariable(
 				pages.VariableForm(
 					projectID,
 					environments,
-					"A variable with this name and scope already exists",
+					variableScopeConflict,
 				),
 				pages.VariablesPage(
 					project,
 					variables,
 					environments,
-					"A variable with this name and scope already exists",
+					variableScopeConflict,
 					r.URL.Path,
 				),
 			)
@@ -193,7 +198,7 @@ func (h *VariableHandler) CreateVariable(
 func (h *VariableHandler) EditVariable(w http.ResponseWriter, r *http.Request) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -242,7 +247,7 @@ func (h *VariableHandler) UpdateVariable(
 
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -295,13 +300,13 @@ func (h *VariableHandler) UpdateVariable(
 				projectID,
 				variable,
 				environments,
-				"Name is required",
+				variableNameRequired,
 			),
 			pages.VariablesPage(
 				project,
 				variables,
 				environments,
-				"Name is required",
+				variableNameRequired,
 				r.URL.Path,
 			),
 		)
@@ -363,13 +368,13 @@ func (h *VariableHandler) UpdateVariable(
 					projectID,
 					variable,
 					environments,
-					"A variable with this name and scope already exists",
+					variableScopeConflict,
 				),
 				pages.VariablesPage(
 					project,
 					variables,
 					environments,
-					"A variable with this name and scope already exists",
+					variableScopeConflict,
 					r.URL.Path,
 				),
 			)
