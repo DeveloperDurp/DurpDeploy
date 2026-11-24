@@ -17,8 +17,11 @@ import (
 )
 
 const (
-	lifecyclesPath          = "/lifecycles"
-	lifecyclesContentTarget = "#lifecycles-content"
+	lifecyclesPath            = "/lifecycles"
+	lifecyclesContentTarget   = "#lifecycles-content"
+	invalidLifecycleIDMessage = "Invalid lifecycle ID"
+	lifecycleNameEmpty        = "Name is required"
+	lifecycleNameConflict     = "A lifecycle with this name already exists"
 )
 
 type LifecycleHandler struct {
@@ -87,8 +90,8 @@ func (h *LifecycleHandler) CreateLifecycle(
 		WriteFormError(
 			w,
 			r,
-			pages.LifecycleForm(lc, false, "Name is required"),
-			pages.LifecycleFormPage(lc, false, "Name is required", r.URL.Path),
+			pages.LifecycleForm(lc, false, lifecycleNameEmpty),
+			pages.LifecycleFormPage(lc, false, lifecycleNameEmpty, r.URL.Path),
 		)
 		return
 	}
@@ -116,12 +119,12 @@ func (h *LifecycleHandler) CreateLifecycle(
 				pages.LifecycleForm(
 					lc,
 					false,
-					"A lifecycle with this name already exists",
+					lifecycleNameConflict,
 				),
 				pages.LifecycleFormPage(
 					lc,
 					false,
-					"A lifecycle with this name already exists",
+					lifecycleNameConflict,
 					r.URL.Path,
 				),
 			)
@@ -149,7 +152,7 @@ func (h *LifecycleHandler) EditLifecycle(
 ) {
 	id, err := parseLifecycleID(r)
 	if err != nil {
-		http.Error(w, "Invalid lifecycle ID", http.StatusBadRequest)
+		http.Error(w, invalidLifecycleIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -171,7 +174,7 @@ func (h *LifecycleHandler) SaveLifecycle(
 ) {
 	id, err := parseLifecycleID(r)
 	if err != nil {
-		http.Error(w, "Invalid lifecycle ID", http.StatusBadRequest)
+		http.Error(w, invalidLifecycleIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -193,7 +196,7 @@ func (h *LifecycleHandler) SaveLifecycle(
 				Description: sql.NullString{String: desc, Valid: desc != ""},
 			}
 			if err := h.writeLifecycleDetailError(
-				w, r, lc, "Name is required",
+				w, r, lc, lifecycleNameEmpty,
 			); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
@@ -221,7 +224,7 @@ func (h *LifecycleHandler) SaveLifecycle(
 					w,
 					r,
 					lc,
-					"A lifecycle with this name already exists",
+					lifecycleNameConflict,
 				); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 				}
@@ -272,7 +275,7 @@ func (h *LifecycleHandler) deleteLifecycle(
 func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 	id, err := parseLifecycleID(r)
 	if err != nil {
-		http.Error(w, "Invalid lifecycle ID", http.StatusBadRequest)
+		http.Error(w, invalidLifecycleIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -322,7 +325,7 @@ func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 func (h *LifecycleHandler) DeleteStage(w http.ResponseWriter, r *http.Request) {
 	id, err := parseLifecycleID(r)
 	if err != nil {
-		http.Error(w, "Invalid lifecycle ID", http.StatusBadRequest)
+		http.Error(w, invalidLifecycleIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -354,7 +357,7 @@ func (h *LifecycleHandler) ReorderStage(
 ) {
 	id, err := parseLifecycleID(r)
 	if err != nil {
-		http.Error(w, "Invalid lifecycle ID", http.StatusBadRequest)
+		http.Error(w, invalidLifecycleIDMessage, http.StatusBadRequest)
 		return
 	}
 
