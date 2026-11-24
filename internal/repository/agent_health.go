@@ -174,17 +174,9 @@ func (r *Repository) AdvanceAgentHealth(
 			if err != nil {
 				return err
 			}
-			started := make(map[string]int64, len(baselines))
-			for _, row := range baselines {
-				started[row.ID] = row.Baseline
-			}
+			started := agentHealthBaselineByID(baselines)
 			for _, candidate := range agents {
-				if candidate.Status != "active" ||
-					AgentHealthAt(
-						candidate,
-						now,
-						started[candidate.ID],
-					) == candidate.HealthState {
+				if !agentNeedsHealthUpdate(candidate, now, started) {
 					continue
 				}
 				// Recheck transition candidates under lock against fresh heartbeats.
@@ -228,4 +220,13 @@ func (r *Repository) AdvanceAgentHealth(
 		return nil, fmt.Errorf("advance agent health: %w", err)
 	}
 	return transitions, nil
+}
+
+func agentNeedsHealthUpdate(
+	agent db.Agent,
+	now int64,
+	baselines map[string]int64,
+) bool {
+	return agent.Status == "active" &&
+		AgentHealthAt(agent, now, baselines[agent.ID]) != agent.HealthState
 }

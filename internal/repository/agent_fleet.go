@@ -20,10 +20,7 @@ func (r *Repository) AgentFleetReports(
 	if err != nil {
 		return nil, nil, fmt.Errorf("fleet baselines: %w", err)
 	}
-	started := make(map[string]int64, len(baselines))
-	for _, row := range baselines {
-		started[row.ID] = row.Baseline
-	}
+	started := agentHealthBaselineByID(baselines)
 	version, recommended := fleetBuildVersions()
 	reports := make(map[string]AgentHealthReport, len(agents))
 	for _, agent := range agents {
@@ -124,4 +121,14 @@ func (r *Repository) AgentFleetReports(
 		)
 	}
 	return reports, interpreters, nil
+}
+
+func agentHealthBaselineByID(
+	rows []db.ListFleetHealthBaselinesRow,
+) map[string]int64 {
+	baselines := make(map[string]int64, len(rows))
+	for _, row := range rows {
+		baselines[row.ID] = row.Baseline
+	}
+	return baselines
 }
