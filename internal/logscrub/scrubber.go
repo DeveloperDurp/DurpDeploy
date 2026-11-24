@@ -184,29 +184,33 @@ func (s *Scrubber) ScrubParts(parts []string) []string {
 	}
 	offset := 0
 	for index, part := range parts {
-		start, end := offset, offset+len(part)
-		var output strings.Builder
-		cursor := start
-		for _, match := range matches {
-			if match[1] <= start || match[0] >= end {
-				continue
-			}
-			left := max(match[0], start)
-			if left > cursor {
-				output.WriteString(joined[cursor:left])
-			}
-			if match[0] >= start {
-				output.WriteString(replacement)
-			}
-			cursor = min(match[1], end)
-		}
-		if cursor < end {
-			output.WriteString(joined[cursor:end])
-		}
-		result[index] = output.String()
+		end := offset + len(part)
+		result[index] = scrubPart(joined, offset, end, matches)
 		offset = end
 	}
 	return result
+}
+
+func scrubPart(joined string, start, end int, matches [][]int) string {
+	var output strings.Builder
+	cursor := start
+	for _, match := range matches {
+		if match[1] <= start || match[0] >= end {
+			continue
+		}
+		left := max(match[0], start)
+		if left > cursor {
+			output.WriteString(joined[cursor:left])
+		}
+		if match[0] >= start {
+			output.WriteString(replacement)
+		}
+		cursor = min(match[1], end)
+	}
+	if cursor < end {
+		output.WriteString(joined[cursor:end])
+	}
+	return output.String()
 }
 
 func (s *Scrubber) PendingBytes(text string) int {
@@ -214,8 +218,31 @@ func (s *Scrubber) PendingBytes(text string) int {
 		return 0
 	}
 	incompleteRune := incompleteUTF8SuffixBytes(text)
-	pending := incompleteRune
-	for _, literal := range s.literals {
+	pending := literalPendingBytes(text, s.literals, incompleteRune)
+	pending = defaultPendingBytes(text, pending)
+	for _, pattern := range s.pendingPatterns {
+		patternPending := pattern.pendingBytes(
+			text[:len(text)-incompleteRune],
+		)
+		if patternPending > 0 {
+			patternPending += incompleteRune
+		}
+		pending = max(pending, patternPending)
+	}
+	if pending > 0 && s.all != nil {
+		boundary := len(text) - pending
+		for _, match := range s.all.FindAllStringIndex(text, -1) {
+			if match[0] < boundary && match[1] > boundary {
+				pending = len(text) - match[0]
+				break
+			}
+		}
+	}
+	return pending
+}
+
+func literalPendingBytes(text string, literals []string, pending int) int {
+	for _, literal := range literals {
 		limit := min(len(text), len(literal)-1)
 		for size := limit; size > pending; size-- {
 			if strings.HasSuffix(text, literal[:size]) {
@@ -224,6 +251,10 @@ func (s *Scrubber) PendingBytes(text string) int {
 			}
 		}
 	}
+	return pending
+}
+
+func defaultPendingBytes(text string, pending int) int {
 	for _, prefix := range []string{
 		"Bearer", "ghp_", "AKIA", "xoxb-", "xoxa-", "xoxp-",
 	} {
@@ -247,24 +278,6 @@ func (s *Scrubber) PendingBytes(text string) int {
 	for _, pattern := range commonPendingPatterns {
 		if match := pattern.FindStringIndex(text); match != nil {
 			pending = max(pending, match[1]-match[0])
-		}
-	}
-	for _, pattern := range s.pendingPatterns {
-		patternPending := pattern.pendingBytes(
-			text[:len(text)-incompleteRune],
-		)
-		if patternPending > 0 {
-			patternPending += incompleteRune
-		}
-		pending = max(pending, patternPending)
-	}
-	if pending > 0 && s.all != nil {
-		boundary := len(text) - pending
-		for _, match := range s.all.FindAllStringIndex(text, -1) {
-			if match[0] < boundary && match[1] > boundary {
-				pending = len(text) - match[0]
-				break
-			}
 		}
 	}
 	return pending
