@@ -24,17 +24,19 @@ func ValidateGateConfig(
 		}
 		return nil
 	}
-	for _, path := range []string{artifactPath, reviewPath} {
-		if len(path) > 128 || !fs.ValidPath(path) || path == "." ||
-			strings.ContainsAny(path, "\\\x00") {
-			return ErrGateConfig
-		}
+	if !validGatePath(artifactPath) || !validGatePath(reviewPath) {
+		return ErrGateConfig
 	}
 	if artifactPath == reviewPath ||
 		(format != "summary" && format != "terraform") {
 		return ErrGateConfig
 	}
 	return nil
+}
+
+func validGatePath(path string) bool {
+	return len(path) <= 128 && fs.ValidPath(path) && path != "." &&
+		!strings.ContainsAny(path, "\\\x00")
 }
 
 // GateReview deliberately exposes counts only, never names, values or outputs.
