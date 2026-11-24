@@ -15,6 +15,8 @@ import (
 	"durpdeploy/views/pages"
 )
 
+const environmentsContentTarget = "#environments-content"
+
 type EnvironmentHandler struct {
 	Repo *repository.Repository
 }
@@ -138,7 +140,7 @@ func (h *EnvironmentHandler) CreateEnvironment(
 		return
 	}
 
-	if retargetFormDialog(w, r, "#environments-content") {
+	if retargetFormDialog(w, r, environmentsContentTarget) {
 		h.ListEnvironments(w, r)
 		return
 	}
@@ -265,7 +267,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 		return
 	}
 
-	if retargetFormDialog(w, r, "#environments-content") {
+	if retargetFormDialog(w, r, environmentsContentTarget) {
 		h.ListEnvironments(w, r)
 		return
 	}
@@ -305,7 +307,7 @@ func (h *EnvironmentHandler) DeleteEnvironment(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	retargetFormDialog(w, r, "#environments-content")
+	retargetFormDialog(w, r, environmentsContentTarget)
 	if err := pages.EnvironmentsListContent(envs).Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}

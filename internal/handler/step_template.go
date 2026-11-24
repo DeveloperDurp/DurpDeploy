@@ -15,6 +15,8 @@ import (
 	"durpdeploy/views/pages"
 )
 
+const templatesContentTarget = "#templates-content"
+
 type StepTemplateHandler struct {
 	repo *repository.Repository
 }
@@ -198,7 +200,7 @@ func (h *StepTemplateHandler) CreateTemplate(
 		return
 	}
 
-	if retargetFormDialog(w, r, "#templates-content") {
+	if retargetFormDialog(w, r, templatesContentTarget) {
 		w.Header().Set("HX-Push-Url", "/templates")
 		h.ListTemplates(w, r)
 		return
@@ -399,7 +401,7 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		return
 	}
 
-	if retargetFormDialog(w, r, "#templates-content") {
+	if retargetFormDialog(w, r, templatesContentTarget) {
 		h.ListTemplates(w, r)
 		return
 	}
@@ -429,7 +431,7 @@ func (h *StepTemplateHandler) DeleteTemplate(
 		return
 	}
 
-	if retargetFormDialog(w, r, "#templates-content") {
+	if retargetFormDialog(w, r, templatesContentTarget) {
 		h.ListTemplates(w, r)
 		return
 	}

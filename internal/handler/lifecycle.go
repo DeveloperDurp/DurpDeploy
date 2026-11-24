@@ -16,7 +16,10 @@ import (
 	"durpdeploy/views/pages"
 )
 
-const lifecyclesPath = "/lifecycles"
+const (
+	lifecyclesPath          = "/lifecycles"
+	lifecyclesContentTarget = "#lifecycles-content"
+)
 
 type LifecycleHandler struct {
 	repo *repository.Repository
@@ -128,7 +131,7 @@ func (h *LifecycleHandler) CreateLifecycle(
 		return
 	}
 
-	if retargetFormDialog(w, r, "#lifecycles-content") {
+	if retargetFormDialog(w, r, lifecyclesContentTarget) {
 		h.ListLifecycles(w, r)
 		return
 	}
@@ -153,7 +156,7 @@ func (h *LifecycleHandler) EditLifecycle(
 	http.Redirect(
 		w,
 		r,
-		"/lifecycles/"+strconv.FormatInt(id, 10),
+		lifecyclesPath+"/"+strconv.FormatInt(id, 10),
 		http.StatusSeeOther,
 	)
 }
@@ -227,7 +230,7 @@ func (h *LifecycleHandler) SaveLifecycle(
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if retargetFormDialog(w, r, "#lifecycles-content") {
+		if retargetFormDialog(w, r, lifecyclesContentTarget) {
 			h.ListLifecycles(w, r)
 			return
 		}
@@ -259,7 +262,7 @@ func (h *LifecycleHandler) deleteLifecycle(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if retargetFormDialog(w, r, "#lifecycles-content") {
+	if retargetFormDialog(w, r, lifecyclesContentTarget) {
 		h.ListLifecycles(w, r)
 		return
 	}
@@ -311,7 +314,7 @@ func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(
 		w,
 		r,
-		"/lifecycles/"+strconv.FormatInt(id, 10),
+		lifecyclesPath+"/"+strconv.FormatInt(id, 10),
 		http.StatusSeeOther,
 	)
 }
@@ -340,7 +343,7 @@ func (h *LifecycleHandler) DeleteStage(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(
 		w,
 		r,
-		"/lifecycles/"+strconv.FormatInt(id, 10),
+		lifecyclesPath+"/"+strconv.FormatInt(id, 10),
 		http.StatusSeeOther,
 	)
 }
@@ -385,7 +388,7 @@ func (h *LifecycleHandler) ReorderStage(
 	http.Redirect(
 		w,
 		r,
-		"/lifecycles/"+strconv.FormatInt(id, 10),
+		lifecyclesPath+"/"+strconv.FormatInt(id, 10),
 		http.StatusSeeOther,
 	)
 }
