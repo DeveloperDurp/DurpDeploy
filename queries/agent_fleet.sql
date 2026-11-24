@@ -38,11 +38,11 @@ SELECT agent_id, deployment_id, finished_at FROM (
     FROM (
         SELECT r.agent_id, d.id AS deployment_id, d.finished_at
         FROM remote_step_runs r JOIN deployments d ON d.id = r.deployment_id
-        WHERE r.state = 'succeeded' AND d.status = 'succeeded'
+        WHERE d.status = 'succeeded' AND r.state = d.status
         UNION
         SELECT c.agent_id, d.id AS deployment_id, d.finished_at
         FROM remote_deployment_claims c JOIN deployments d ON d.id = c.deployment_id
-        WHERE c.state = 'succeeded' AND d.status = 'succeeded'
+        WHERE d.status = 'succeeded' AND c.state = d.status
     ) successes
 ) ranked WHERE ordinal = 1;
 

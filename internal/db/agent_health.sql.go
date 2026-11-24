@@ -81,10 +81,10 @@ SELECT d.id AS deployment_id, d.finished_at FROM deployments d
 WHERE d.status = 'succeeded' AND (
     EXISTS (SELECT 1 FROM remote_step_runs r
         WHERE r.deployment_id = d.id AND r.agent_id = ?1
-          AND r.state = 'succeeded') OR
+          AND r.state = d.status) OR
     EXISTS (SELECT 1 FROM remote_deployment_claims c
         WHERE c.deployment_id = d.id AND c.agent_id = ?1
-          AND c.state = 'succeeded'))
+          AND c.state = d.status))
 ORDER BY d.finished_at DESC, d.id DESC LIMIT 1
 `
 
