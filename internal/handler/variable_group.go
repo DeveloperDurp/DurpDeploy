@@ -3,7 +3,6 @@ package handler
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -78,7 +77,7 @@ func (h *VariableHandler) SaveVariableGroup(
 }
 
 func redirectToVariableList(w http.ResponseWriter, r *http.Request, id int64) {
-	http.Redirect(w, r, fmt.Sprintf("/projects/%d/variables", id),
+	http.Redirect(w, r, "/projects/"+strconv.FormatInt(id, 10)+"/variables",
 		http.StatusSeeOther)
 }
 

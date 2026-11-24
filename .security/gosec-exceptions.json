@@ -92,8 +92,8 @@
   {
     "rule": "G101",
     "file": "internal/audit/routes.go",
-    "line": "6-233",
-    "source_sha256": "6be670a400853022f0084a12266b5ebbc48bb020462983c2fb336cce9bc6fe51",
+    "line": "6-235",
+    "source_sha256": "4446710145407d59be7adddeaac8eed5059a4cc4b035a876477ca42bce73a40b",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie name or audit action/route metadata, not a credential value. Evidence: passkey binding readers/setters or internal/audit/audit.go consumers."
