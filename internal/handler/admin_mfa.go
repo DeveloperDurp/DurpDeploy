@@ -12,6 +12,8 @@ import (
 	"durpdeploy/internal/auth"
 )
 
+const mfaResetFailedMessage = "Unable to reset MFA"
+
 func (h *AuthHandler) AdminMFAResetPost(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -27,7 +29,7 @@ func (h *AuthHandler) AdminMFAResetPost(
 	}
 	targetID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil || targetID <= 0 {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		http.Error(w, invalidUserIDMessage, http.StatusBadRequest)
 		return
 	}
 	if caller.ID == targetID {
@@ -40,7 +42,7 @@ func (h *AuthHandler) AdminMFAResetPost(
 		return
 	}
 	if _, err := h.repo.Queries.GetUserByID(r.Context(), targetID); err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		http.Error(w, invalidUserIDMessage, http.StatusBadRequest)
 		return
 	}
 	if !auth.IsRecentlyAuthenticated(session) {
@@ -49,7 +51,7 @@ func (h *AuthHandler) AdminMFAResetPost(
 			Reason:       reason,
 		})
 		if err != nil {
-			http.Error(w, "Unable to reset MFA", http.StatusUnprocessableEntity)
+			http.Error(w, mfaResetFailedMessage, http.StatusUnprocessableEntity)
 			return
 		}
 		if err := h.challengeService().ReplaceAdminMFAResetContinuation(
@@ -58,7 +60,7 @@ func (h *AuthHandler) AdminMFAResetPost(
 			session.ID,
 			string(intent),
 		); err != nil {
-			http.Error(w, "Unable to reset MFA", http.StatusUnprocessableEntity)
+			http.Error(w, mfaResetFailedMessage, http.StatusUnprocessableEntity)
 			return
 		}
 		audit.Suppress(r)
@@ -67,15 +69,15 @@ func (h *AuthHandler) AdminMFAResetPost(
 	}
 	factors, err := h.mfaFactors()
 	if err != nil {
-		http.Error(w, "Unable to reset MFA", http.StatusUnprocessableEntity)
+		http.Error(w, mfaResetFailedMessage, http.StatusUnprocessableEntity)
 		return
 	}
 	if err := factors.Reset(r.Context(), targetID); err != nil {
-		http.Error(w, "Unable to reset MFA", http.StatusUnprocessableEntity)
+		http.Error(w, mfaResetFailedMessage, http.StatusUnprocessableEntity)
 		return
 	}
 	r.PostForm.Set("reason", reason)
-	http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+	http.Redirect(w, r, adminUsersPath, http.StatusSeeOther)
 }
 
 func mfaResetReason(value string) (string, bool) {

@@ -16,6 +16,12 @@ import (
 	"durpdeploy/views/pages"
 )
 
+const (
+	adminUsersPath       = "/admin/users"
+	invalidUserIDMessage = "Invalid user ID"
+	userNotFoundMessage  = "User not found"
+)
+
 // UsersHandler manages /admin/users. All routes are admin-only — the
 // RequireRole("admin") middleware on the /admin/* sub-group in
 // server.go gates entry.
@@ -135,14 +141,12 @@ func (h *UsersHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	redirect := "/admin/users"
-
 	if r.Header.Get(hxRequestHeader) == "true" {
-		w.Header().Set(hxRedirectHeader, redirect)
+		w.Header().Set(hxRedirectHeader, adminUsersPath)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	http.Redirect(w, r, redirect, http.StatusSeeOther)
+	http.Redirect(w, r, adminUsersPath, http.StatusSeeOther)
 }
 
 // EditUserForm renders /admin/users/{id}/edit with the user loaded
@@ -150,13 +154,13 @@ func (h *UsersHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 func (h *UsersHandler) EditUserForm(w http.ResponseWriter, r *http.Request) {
 	id, err := parseUserID(r)
 	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		http.Error(w, invalidUserIDMessage, http.StatusBadRequest)
 		return
 	}
 
 	u, err := h.repo.Queries.GetUserByID(r.Context(), id)
 	if errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, "User not found", http.StatusNotFound)
+		http.Error(w, userNotFoundMessage, http.StatusNotFound)
 		return
 	}
 	if err != nil {
@@ -184,13 +188,13 @@ func (h *UsersHandler) EditUserForm(w http.ResponseWriter, r *http.Request) {
 func (h *UsersHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	id, err := parseUserID(r)
 	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		http.Error(w, invalidUserIDMessage, http.StatusBadRequest)
 		return
 	}
 
 	target, err := h.repo.Queries.GetUserByID(r.Context(), id)
 	if errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, "User not found", http.StatusNotFound)
+		http.Error(w, userNotFoundMessage, http.StatusNotFound)
 		return
 	}
 	if err != nil {
@@ -247,14 +251,12 @@ func (h *UsersHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	redirect := "/admin/users"
-
 	if r.Header.Get(hxRequestHeader) == "true" {
-		w.Header().Set(hxRedirectHeader, redirect)
+		w.Header().Set(hxRedirectHeader, adminUsersPath)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	http.Redirect(w, r, redirect, http.StatusSeeOther)
+	http.Redirect(w, r, adminUsersPath, http.StatusSeeOther)
 }
 
 // DeleteUser handles DELETE /admin/users/{id}. Refuses to delete the
@@ -271,7 +273,7 @@ func (h *UsersHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 func (h *UsersHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	id, err := parseUserID(r)
 	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		http.Error(w, invalidUserIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -287,7 +289,7 @@ func (h *UsersHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 
 	target, err := h.repo.Queries.GetUserByID(r.Context(), id)
 	if errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, "User not found", http.StatusNotFound)
+		http.Error(w, userNotFoundMessage, http.StatusNotFound)
 		return
 	}
 	if err != nil {
@@ -322,13 +324,12 @@ func (h *UsersHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	// the 404 path and to populate the audit log details).
 	_ = target
 
-	redirect := "/admin/users"
 	if r.Header.Get(hxRequestHeader) == "true" {
-		w.Header().Set(hxRedirectHeader, redirect)
+		w.Header().Set(hxRedirectHeader, adminUsersPath)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	http.Redirect(w, r, redirect, http.StatusSeeOther)
+	http.Redirect(w, r, adminUsersPath, http.StatusSeeOther)
 }
 
 // renderFormError centralizes the 422-with-form re-render for both
