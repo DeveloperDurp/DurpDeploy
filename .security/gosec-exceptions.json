@@ -299,8 +299,8 @@
   {
     "rule": "G120",
     "file": "internal/server/request_body_limit.go",
-    "line": "71",
-    "source_sha256": "0bda7d405f2c2ada6222a36f52547de8201f24150fba6cfab5b4189679d4b420",
+    "line": "60",
+    "source_sha256": "5d319cb8e49cddcd85810abb8f8c279bfe2c78bce6612222af14d43657e7ced2",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "The validated startup form policy caps the entire encoded body before ParseMultipartForm, including unknown lengths. Temporary files are removed. Evidence: server/request_body_limit.go and configured_body_e2e_test.go."

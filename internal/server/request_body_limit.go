@@ -17,18 +17,7 @@ import (
 // before CSRF can parse them, even with a header token.
 func webRequestBodyLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost,
-			http.MethodPut,
-			http.MethodPatch,
-			http.MethodDelete:
-		default:
-			next.ServeHTTP(w, r)
-			return
-		}
-		if r.URL.Path == "/api/lint" ||
-			r.URL.Path == "/login" ||
-			r.URL.Path == "/settings/security/reauth" {
+		if !shouldLimitWebForm(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -37,11 +26,11 @@ func webRequestBodyLimit(next http.Handler) http.Handler {
 		}
 		limits := handler.RequestBodyLimits(r)
 		limit := limits.FormBytes
-		if r.URL.Path == "/settings/security/password" {
-			limit = limits.PasswordFormBytes
-		}
-		if strings.Contains(r.URL.Path, "/package-repository") {
+		switch {
+		case strings.Contains(r.URL.Path, "/package-repository"):
 			limit = limits.RepositoryFormBytes
+		case r.URL.Path == "/settings/security/password":
+			limit = limits.PasswordFormBytes
 		}
 		body, err := handler.ReadRequestBody(w, r, limit)
 		closeErr := r.Body.Close()
@@ -90,4 +79,18 @@ func webRequestBodyLimit(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func shouldLimitWebForm(r *http.Request) bool {
+	switch r.Method {
+	case http.MethodPost,
+		http.MethodPut,
+		http.MethodPatch,
+		http.MethodDelete:
+		return r.URL.Path != "/api/lint" &&
+			r.URL.Path != "/login" &&
+			r.URL.Path != "/settings/security/reauth"
+	default:
+		return false
+	}
 }
