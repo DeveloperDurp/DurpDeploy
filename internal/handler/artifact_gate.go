@@ -17,6 +17,12 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+const (
+	apiV1PathPrefix   = "/api/v1/"
+	contentTypeHeader = "Content-Type"
+	applicationJSON   = "application/json"
+)
+
 type ArtifactGateHandler struct {
 	repo   *repository.Repository
 	runner *runner.DeploymentRunner
@@ -35,8 +41,8 @@ func gateHTTPError(
 	status int,
 	message string,
 ) {
-	if strings.HasPrefix(r.URL.Path, "/api/v1/") {
-		w.Header().Set("Content-Type", "application/json")
+	if strings.HasPrefix(r.URL.Path, apiV1PathPrefix) {
+		w.Header().Set(contentTypeHeader, applicationJSON)
 		w.WriteHeader(status)
 		if err := json.NewEncoder(w).
 			Encode(map[string]string{"error": message}); err != nil {
@@ -59,8 +65,8 @@ func (h *ArtifactGateHandler) List(w http.ResponseWriter, r *http.Request) {
 		gateHTTPError(w, r, 500, "Gate lookup failed")
 		return
 	}
-	if strings.HasPrefix(r.URL.Path, "/api/v1/") {
-		w.Header().Set("Content-Type", "application/json")
+	if strings.HasPrefix(r.URL.Path, apiV1PathPrefix) {
+		w.Header().Set(contentTypeHeader, applicationJSON)
 		if err := json.NewEncoder(w).Encode(info); err != nil {
 			return
 		}
@@ -118,7 +124,7 @@ func (h *ArtifactGateHandler) decide(
 		Revision int64  `json:"revision"`
 		SHA256   string `json:"sha256"`
 	}
-	if strings.HasPrefix(r.URL.Path, "/api/v1/") {
+	if strings.HasPrefix(r.URL.Path, apiV1PathPrefix) {
 		if !ReadJSON(w, r, &request) {
 			return
 		}
@@ -174,8 +180,8 @@ func (h *ArtifactGateHandler) decide(
 			deployment.EnvironmentID,
 		)
 	}
-	if strings.HasPrefix(r.URL.Path, "/api/v1/") {
-		w.Header().Set("Content-Type", "application/json")
+	if strings.HasPrefix(r.URL.Path, apiV1PathPrefix) {
+		w.Header().Set(contentTypeHeader, applicationJSON)
 		if err := json.NewEncoder(w).
 			Encode(map[string]bool{"accepted": true}); err != nil {
 			return
