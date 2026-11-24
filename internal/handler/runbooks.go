@@ -16,6 +16,8 @@ import (
 	"durpdeploy/views/pages"
 )
 
+const invalidRunbookProject = "Invalid project"
+
 type RunbookHandler struct {
 	repo   *repository.Repository
 	runner *runner.DeploymentRunner
@@ -31,7 +33,7 @@ func NewRunbookHandler(
 func (h *RunbookHandler) List(w http.ResponseWriter, r *http.Request) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project", http.StatusBadRequest)
+		http.Error(w, invalidRunbookProject, http.StatusBadRequest)
 		return
 	}
 	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
@@ -79,7 +81,7 @@ func (h *RunbookHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *RunbookHandler) Form(w http.ResponseWriter, r *http.Request) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project", http.StatusBadRequest)
+		http.Error(w, invalidRunbookProject, http.StatusBadRequest)
 		return
 	}
 	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
@@ -164,7 +166,7 @@ func (h *RunbookHandler) Form(w http.ResponseWriter, r *http.Request) {
 func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project", http.StatusBadRequest)
+		http.Error(w, invalidRunbookProject, http.StatusBadRequest)
 		return
 	}
 	if err := r.ParseForm(); err != nil {

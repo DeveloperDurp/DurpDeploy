@@ -416,8 +416,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/runbooks.go",
-    "line": "226",
-    "source_sha256": "7aa56e39bda3c765cfc0ec3e5986252b0513304161b93f7ee31e02730aa775c0",
+    "line": "228",
+    "source_sha256": "417c8a760553da744d8887d6cf45b7127c1d22e4b1b2a938199284606b4d1e46",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
@@ -453,7 +453,7 @@
     "rule": "G710",
     "file": "internal/handler/project_members.go",
     "line": "290",
-    "source_sha256": "85c9f945e0f6ee0904e3d3438f1bab417faa4ee6040e384accbf7e2f976a106d",
+    "source_sha256": "e29b4262436f7a8192c4dc36b74a4f73e8858bf16df02ac290d323dee98fafbc",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "These handlers redirect to the fixed /projects/ path prefix and an int64 ID from parseProjectID. Requests cannot set a destination host or path."
@@ -462,7 +462,7 @@
     "rule": "G710",
     "file": "internal/handler/project_members.go",
     "line": "242",
-    "source_sha256": "85c9f945e0f6ee0904e3d3438f1bab417faa4ee6040e384accbf7e2f976a106d",
+    "source_sha256": "e29b4262436f7a8192c4dc36b74a4f73e8858bf16df02ac290d323dee98fafbc",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "These handlers redirect to the fixed /projects/ path prefix and an int64 ID from parseProjectID. Requests cannot set a destination host or path."
@@ -471,7 +471,7 @@
     "rule": "G710",
     "file": "internal/handler/project_members.go",
     "line": "168",
-    "source_sha256": "85c9f945e0f6ee0904e3d3438f1bab417faa4ee6040e384accbf7e2f976a106d",
+    "source_sha256": "e29b4262436f7a8192c4dc36b74a4f73e8858bf16df02ac290d323dee98fafbc",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "These handlers redirect to the fixed /projects/ path prefix and an int64 ID from parseProjectID. Requests cannot set a destination host or path."

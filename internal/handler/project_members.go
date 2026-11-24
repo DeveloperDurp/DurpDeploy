@@ -83,7 +83,7 @@ func (h *ProjectMembersHandler) UpdateMemberRole(
 	SetToastError(w, "Failed to update member role")
 	id, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 	if !auth.CanManageProject(r.Context(), h.repo, id) {
@@ -156,7 +156,7 @@ func (h *ProjectMembersHandler) ListMembers(
 ) {
 	id, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 	editURL := fmt.Sprintf("/projects/%d/edit", id)
@@ -183,7 +183,7 @@ func (h *ProjectMembersHandler) AddMember(
 ) {
 	id, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -253,7 +253,7 @@ func (h *ProjectMembersHandler) RemoveMember(
 ) {
 	id, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
