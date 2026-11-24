@@ -2,11 +2,17 @@
 SELECT * FROM variables WHERE project_id = ? ORDER BY created_at DESC;
 
 -- name: ListVariablesByProjectPaginated :many
-SELECT * FROM variables
+WITH variable_sort AS (
+  SELECT CAST(sqlc.arg(sort_by_name) AS INTEGER) AS by_name
+)
+SELECT variables.* FROM variables CROSS JOIN variable_sort
 WHERE project_id = sqlc.arg(project_id)
   AND (CAST(sqlc.narg('f_environment_id') AS BIGINT) IS NULL OR environment_id = sqlc.narg('f_environment_id'))
   AND (CAST(sqlc.narg('f_secret_only') AS BIGINT) IS NULL OR secret = sqlc.narg('f_secret_only'))
-ORDER BY created_at DESC
+ORDER BY CASE WHEN by_name = 1 THEN name END COLLATE BINARY,
+         CASE WHEN by_name = 1 THEN COALESCE(environment_id, 0) END,
+         created_at DESC,
+         CASE WHEN by_name = 1 THEN id END DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: CountVariablesByProject :one
@@ -41,3 +47,10 @@ SELECT id, project_id, name, value, environment_id, created_at, secret, expires_
 
 -- name: UpdateVariableValue :exec
 UPDATE variables SET value = ? WHERE id = ?;
+
+-- name: UpdateVariableGroupValue :execrows
+UPDATE variables
+SET value = sqlc.arg(value), rotation_revision = rotation_revision + 1
+WHERE id = sqlc.arg(id) AND project_id = sqlc.arg(project_id)
+  AND environment_id IS NOT NULL AND is_credential = 0
+  AND rotation_revision = sqlc.arg(revision);

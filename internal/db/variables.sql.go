@@ -206,11 +206,17 @@ func (q *Queries) ListVariablesByProject(ctx context.Context, projectID int64) (
 }
 
 const listVariablesByProjectPaginated = `-- name: ListVariablesByProjectPaginated :many
-SELECT id, project_id, name, value, environment_id, created_at, secret, expires_at, rotation_due_at, rotated_at, rotation_revision, is_credential FROM variables
+WITH variable_sort AS (
+  SELECT CAST(?6 AS INTEGER) AS by_name
+)
+SELECT variables.id, variables.project_id, variables.name, variables.value, variables.environment_id, variables.created_at, variables.secret, variables.expires_at, variables.rotation_due_at, variables.rotated_at, variables.rotation_revision, variables.is_credential FROM variables CROSS JOIN variable_sort
 WHERE project_id = ?1
   AND (CAST(?2 AS BIGINT) IS NULL OR environment_id = ?2)
   AND (CAST(?3 AS BIGINT) IS NULL OR secret = ?3)
-ORDER BY created_at DESC
+ORDER BY CASE WHEN by_name = 1 THEN name END COLLATE BINARY,
+         CASE WHEN by_name = 1 THEN COALESCE(environment_id, 0) END,
+         created_at DESC,
+         CASE WHEN by_name = 1 THEN id END DESC
 LIMIT ?5 OFFSET ?4
 `
 
@@ -220,6 +226,7 @@ type ListVariablesByProjectPaginatedParams struct {
 	FSecretOnly    sql.NullInt64 `json:"f_secret_only"`
 	PageOffset     int64         `json:"page_offset"`
 	PageLimit      int64         `json:"page_limit"`
+	SortByName     int64         `json:"sort_by_name"`
 }
 
 func (q *Queries) ListVariablesByProjectPaginated(ctx context.Context, arg ListVariablesByProjectPaginatedParams) ([]Variable, error) {
@@ -229,6 +236,7 @@ func (q *Queries) ListVariablesByProjectPaginated(ctx context.Context, arg ListV
 		arg.FSecretOnly,
 		arg.PageOffset,
 		arg.PageLimit,
+		arg.SortByName,
 	)
 	if err != nil {
 		return nil, err
@@ -300,6 +308,34 @@ func (q *Queries) UpdateVariable(ctx context.Context, arg UpdateVariableParams) 
 		&i.IsCredential,
 	)
 	return i, err
+}
+
+const updateVariableGroupValue = `-- name: UpdateVariableGroupValue :execrows
+UPDATE variables
+SET value = ?1, rotation_revision = rotation_revision + 1
+WHERE id = ?2 AND project_id = ?3
+  AND environment_id IS NOT NULL AND is_credential = 0
+  AND rotation_revision = ?4
+`
+
+type UpdateVariableGroupValueParams struct {
+	Value     sql.NullString `json:"value"`
+	ID        int64          `json:"id"`
+	ProjectID int64          `json:"project_id"`
+	Revision  int64          `json:"revision"`
+}
+
+func (q *Queries) UpdateVariableGroupValue(ctx context.Context, arg UpdateVariableGroupValueParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateVariableGroupValue,
+		arg.Value,
+		arg.ID,
+		arg.ProjectID,
+		arg.Revision,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const updateVariableKeepValue = `-- name: UpdateVariableKeepValue :one

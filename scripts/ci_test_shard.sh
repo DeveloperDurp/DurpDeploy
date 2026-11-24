@@ -101,6 +101,8 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
       '^TestRunbookHistoryPhone(APIWeb|Browser)E2E$'
       '^TestReleaseContent(APIWeb|Browser)E2E$'
       '^TestVariable(Names(APIWeb|Browser)|CancelBrowser)E2E$'
+      '^TestVariableGroupingAPIWebE2E$'
+      '^TestVariableGroupEdit(APIWeb|Browser)E2E$'
       '^TestReleaseDuplicateRecovery(APIWeb|Browser)E2E$'
       '^TestReleaseVariableGuidance(APIWeb|Browser)E2E$'
       '^TestRerunInputs(APIWeb|Browser)E2E$'

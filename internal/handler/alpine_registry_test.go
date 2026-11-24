@@ -72,10 +72,10 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 			name:        "variablesPage",
 			constructor: `\(\)`,
 			members: []string{
-				"override", "focusAfterSwap", "init", "destroy",
+				"focusCreate", "override", "focusAfterSwap", "init", "destroy",
 			},
 			methods: []string{
-				"override", "focusAfterSwap", "init", "destroy",
+				"focusCreate", "override", "focusAfterSwap", "init", "destroy",
 			},
 			events:  []string{"htmx:afterSwap"},
 			cleanup: []string{"removeEventListener"},

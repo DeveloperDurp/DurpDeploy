@@ -127,6 +127,16 @@ func (h *VariableHandler) ListVariables(
 		return
 	}
 
+	var sortByName int64
+	switch r.URL.Query().Get("sort") {
+	case "":
+	case "name":
+		sortByName = 1
+	default:
+		RespondError(w, http.StatusBadRequest, "sort must be name")
+		return
+	}
+
 	var fEnvID sql.NullInt64
 	if v := r.URL.Query().Get("environment_id"); v != "" {
 		envID, err := strconv.ParseInt(v, 10, 64)
@@ -164,6 +174,7 @@ func (h *VariableHandler) ListVariables(
 			ProjectID:      projectID,
 			FEnvironmentID: fEnvID,
 			FSecretOnly:    fSecretOnly,
+			SortByName:     sortByName,
 			PageOffset:     offset,
 			PageLimit:      limit,
 		},

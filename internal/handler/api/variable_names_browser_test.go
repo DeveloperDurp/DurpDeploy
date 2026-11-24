@@ -20,6 +20,7 @@ func TestVariableNamesBrowserE2E(t *testing.T) {
 			fmt.Sprintf("%s/projects/%d/variables", f.baseURL, f.project.ID),
 		)
 		if string(b.evaluate(t, `(() => {
+ document.querySelector('[data-variable-create] > summary').click();
  const input = document.querySelector('#variables-content input[name=name]');
  input.value = 'bad name';
  input.form.querySelector('[name=value]').value = 'keep-draft';
@@ -88,6 +89,7 @@ func checkVariableNameEdit(
 	t.Helper()
 	b.evaluate(t, fmt.Sprintf(`(() => {
  const record = [...document.querySelectorAll('tr[id^="variable-row-"], [data-mobile-variable]')].find(e => e.getClientRects().length && e.textContent.includes(%q));
+ record.querySelector('[data-variable-menu] > summary').click();
  record.querySelector('[data-variable-action=edit]').click();
  return true;
 })()`, name))

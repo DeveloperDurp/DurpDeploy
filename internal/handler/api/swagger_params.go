@@ -480,6 +480,10 @@ type listTokensQueryParam struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type listVariablesQueryParam struct {
+	// Set to name to sort by variable name and environment ID.
+	// in: query
+	// enum: name
+	Sort string `json:"sort"`
 	// in: query
 	EnvironmentID int64 `json:"environment_id"`
 	// in: query

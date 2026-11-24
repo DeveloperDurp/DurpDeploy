@@ -173,6 +173,13 @@
 }
 
 [x-cloak] { display: none !important; }
+
+.variable-group-header {
+  background-color: color-mix(in oklab, var(--color-base-100), var(--color-base-content) 10%);
+  border-block-end: 1px solid color-mix(in oklab, var(--color-base-content) 20%, transparent);
+  color: var(--color-base-content);
+}
+
 /* Keep dialog scroll locking without daisyUI's perpetual scroll animation. */
 html { scrollbar-gutter: stable; }
 

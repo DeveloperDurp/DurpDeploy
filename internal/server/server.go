@@ -522,6 +522,14 @@ func newRouter(
 			ppr.Get("/projects/{id}/variables/available", vh.Available)
 			ppr.Post("/projects/{id}/variables", vh.CreateVariable)
 			ppr.Get("/projects/{id}/variables/{varId}/edit", vh.EditVariable)
+			ppr.Get(
+				"/projects/{id}/variables/{varId}/group",
+				vh.EditVariableGroup,
+			)
+			ppr.Post(
+				"/projects/{id}/variables/{varId}/group",
+				vh.SaveVariableGroup,
+			)
 			ppr.Put("/projects/{id}/variables/{varId}", vh.UpdateVariable)
 			ppr.Delete("/projects/{id}/variables/{varId}", vh.DeleteVariable)
 
@@ -1020,6 +1028,10 @@ func newRouter(
 			par.Post("/projects/{id}/variables", apiVarH.CreateVariable)
 			par.Get("/projects/{id}/variables/{varId}", apiVarH.GetVariable)
 			par.Put("/projects/{id}/variables/{varId}", apiVarH.UpdateVariable)
+			par.Put(
+				"/projects/{id}/variables/{varId}/group",
+				apiVarH.UpdateVariableGroup,
+			)
 			par.Delete(
 				"/projects/{id}/variables/{varId}",
 				api.EmptyBody(apiVarH.DeleteVariable),

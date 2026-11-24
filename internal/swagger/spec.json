@@ -10886,6 +10886,16 @@
             "in": "query"
           },
           {
+            "enum": [
+              "name"
+            ],
+            "type": "string",
+            "x-go-name": "Sort",
+            "description": "Set to name to sort by variable name and environment ID.",
+            "name": "sort",
+            "in": "query"
+          },
+          {
             "type": "integer",
             "format": "int64",
             "x-go-name": "Limit",
@@ -11446,6 +11456,86 @@
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/projects/{id}/variables/{varId}/group": {
+      "put": {
+        "consumes": [
+          "application/json"
+        ],
+        "tags": [
+          "variables"
+        ],
+        "summary": "Save every editable environment override value for the same variable.",
+        "description": "A blank value preserves an existing secret.",
+        "operationId": "updateVariableGroup",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "description": "The ID of any environment override in the group.",
+            "name": "varId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/VariableGroupRequest"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Variable values saved"
+          },
+          "400": {
+            "description": "Invalid override values",
+            "schema": { "$ref": "#/definitions/BadRequestError" }
+          },
+          "401": {
+            "description": "Authentication required",
+            "schema": { "$ref": "#/definitions/UnauthorizedError" }
+          },
+          "403": {
+            "description": "Write access required",
+            "schema": { "$ref": "#/definitions/ForbiddenError" }
+          },
+          "404": {
+            "description": "Variable group not found",
+            "schema": { "$ref": "#/definitions/NotFoundError" }
+          },
+          "409": {
+            "description": "Variable group changed",
+            "schema": { "$ref": "#/definitions/ConflictError" }
+          },
+          "413": {
+            "description": "Request is too large",
+            "schema": { "$ref": "#/definitions/RequestEntityTooLargeError" }
+          },
+          "422": {
+            "description": "Invalid variable name",
+            "schema": { "$ref": "#/definitions/ValidationError" }
+          },
+          "500": {
+            "description": "Could not save variable values",
+            "schema": { "$ref": "#/definitions/ServerError" }
           }
         },
         "security": [
@@ -17825,6 +17915,31 @@
         }
       },
       "x-go-package": "durpdeploy/internal/repository"
+    },
+    "VariableGroupRequest": {
+      "type": "object",
+      "required": ["overrides"],
+      "properties": {
+        "overrides": {
+          "description": "Supply one entry for each editable override in the group.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/VariableGroupValue" }
+        }
+      }
+    },
+    "VariableGroupValue": {
+      "type": "object",
+      "required": ["id", "value"],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "value": {
+          "type": "string",
+          "description": "A blank value preserves a stored secret or clears a nonsecret value."
+        }
+      }
     },
     "VariableListResponse": {
       "type": "array",

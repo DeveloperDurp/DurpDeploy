@@ -1074,12 +1074,14 @@ bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestRelea
 ## Variable identifier guidance (A13)
 
 Open a disposable project's variable forms at 375, 768, and 1280 pixels.
+Select **Add variable** to open the creation form.
 Confirm that Name guidance explains the ASCII format, 255-character limit, first character, and reserved names.
 Enter `bad name` and attempt to submit.
 Confirm that validation retains the draft and explains the required format.
 Confirm that a red invalid-name message stays below Name until the input is corrected.
 Create `Mixed_2` with an empty value.
-Edit that variable and attempt to rename it to `1BAD`.
+Open the variable's **Actions** menu and select **Edit**.
+Attempt to rename the variable to `1BAD`.
 Confirm that the edit form and guidance fit within the viewport.
 Confirm that rejection leaves the saved variable unchanged.
 Correct the name and save again.
@@ -1092,6 +1094,26 @@ These checks require no schedules.
 
 ```bash
 bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^Test(VariableNames(APIWeb|Browser)E2E|ProjectVariableNamesRejectInvalidWrites)$' ./internal/repository ./internal/handler/api
+```
+
+## Grouped variable values
+
+Create two environment overrides with the same variable name.
+Mark one override as secret.
+Open **Actions**, then select **Edit** in the variable group heading.
+Confirm that each displayed value becomes an input in its row or card.
+Confirm that the Variables page URL stays the same.
+Change the values for both environments.
+Select **Save values**.
+Confirm that the editor closes, both values change, and the secret stays masked.
+Open **Edit** again and change a value.
+Select **Cancel** and confirm that the group still shows the saved values.
+Leave a secret field blank to keep its saved value.
+Select **Manage individually** for name, scope, secret settings, and deletion.
+Repeat on desktop and phone.
+
+```bash
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestVariableGroupEdit(APIWeb|Browser)E2E$' ./internal/handler/api
 ```
 
 ## Cancel variable edits

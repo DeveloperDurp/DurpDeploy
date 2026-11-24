@@ -192,11 +192,11 @@ const allTargets = [
     surface: "#variables-content",
     row: `#variable-row-${config.variableID}`,
     mobileRow: `[data-mobile-variable="${config.variableID}"]`,
-    controls: `#variable-row-${config.variableID} [data-variable-action]`,
-    mobileControls: `[data-mobile-variable="${config.variableID}"] [data-variable-action]`,
+    controls: `tbody[data-variable-group]:has(#variable-row-${config.variableID}) [data-variable-group-actions] summary, tbody:not([data-variable-group]) #variable-row-${config.variableID} [data-variable-action="menu"]`,
+    mobileControls: `[data-variable-group]:has([data-mobile-variable="${config.variableID}"]) [data-variable-group-actions] summary, [aria-label="Global variables"] [data-mobile-variable="${config.variableID}"] [data-variable-action="menu"]`,
     actionAttribute: "data-variable-action",
-    writerActions: ["edit", "delete"],
-    writerControlCount: 2,
+    writerActions: ["menu"],
+    writerControlCount: 1,
     desktopTable: "#variables-content > table",
     mobileRecord: "[data-mobile-variable-list]",
   },
@@ -704,6 +704,15 @@ function usesMobileLayout(target, viewport) {
 	);
 }
 
+async function openIndividualVariableMenu(record) {
+  const group = record.locator("xpath=ancestor::*[@data-variable-group][1]");
+  if (await group.count()) {
+    await group.locator("[data-variable-group-actions] summary").click();
+    await group.locator("[data-variable-group-manage]").click();
+  }
+  await record.locator("[data-variable-menu] > summary").click();
+}
+
 async function mobileInteractionFailure(page, target, viewport) {
 	if (target.name === "navbar") {
 		try {
@@ -833,6 +842,7 @@ async function mobileInteractionFailure(page, target, viewport) {
 			if (await edit.getAttribute("hx-target") !== rowSelector) {
 				return `${target.name} desktop edit changed its stable row target`;
 			}
+			if (action === "variable") await openIndividualVariableMenu(row);
 			await edit.click();
 			await page.waitForLoadState("networkidle");
 			const editor = page.locator(`${rowSelector} form`);
@@ -882,6 +892,7 @@ async function mobileInteractionFailure(page, target, viewport) {
 			if (await edit.getAttribute("hx-target") !== `#${action}-row-${id}`) {
 				return `${target.name} mobile edit changed its stable row target`;
 			}
+			if (action === "variable") await openIndividualVariableMenu(record);
 			await edit.click();
 			await page.waitForLoadState("networkidle");
 			const editor = record.locator(`[data-mobile-${action}-edit] form`);

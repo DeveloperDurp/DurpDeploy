@@ -1452,7 +1452,15 @@ it. Reserved artifact and container variable names are rejected.
 
 Project members can read `GET /api/v1/projects/{id}/variables/inherited` for
 the lifecycle source and any same-scope project override. The existing project
-variables endpoint continues to return only project-owned rows. To override,
+variables endpoint continues to return only project-owned rows.
+Set `sort=name` on `GET /api/v1/projects/{id}/variables` to list matching names together in environment ID order.
+Use `PUT /api/v1/projects/{id}/variables/{varId}/group` to update the values for a group in one transaction.
+Use the ID of any scoped override for `varId`.
+Send `{"overrides":[{"id":12,"value":"example"},{"id":13,"value":""}]}` with each editable override in the group.
+Use an empty value to preserve a stored secret or clear a nonsecret value.
+If a lifecycle excludes an environment, omit its override.
+Expect `204` on success or `409` if the group has changed.
+To override,
 create a project variable with the same name and environment scope. Delete that
 project variable with `DELETE /api/v1/projects/{id}/variables/{varId}?reset=inherit`
 to reset inheritance. This removes all matching local rows in that name/scope,

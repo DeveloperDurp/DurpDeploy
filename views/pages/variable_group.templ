@@ -1,0 +1,179 @@
+package pages
+
+import (
+	"cmp"
+	"durpdeploy/internal/auth"
+	"durpdeploy/internal/db"
+	"fmt"
+	"slices"
+	"strconv"
+)
+
+func VariableGroupPath(projectID, anchorID int64) string {
+	return fmt.Sprintf("/projects/%d/variables/%d/group", projectID, anchorID)
+}
+
+func variableGroupID(anchorID int64, layout string) string {
+	return fmt.Sprintf("variable-group-%s-%d", layout, anchorID)
+}
+
+type variableGroupView struct {
+	anchorID int64
+	layout   string
+	message  string
+}
+
+func (view variableGroupView) formID() string {
+	if view.layout == "" {
+		return ""
+	}
+	return variableGroupID(view.anchorID, view.layout) + "-form"
+}
+
+templ VariableDesktopGroup(projectID int64, group []db.Variable, environments VariableEnvironments, view variableGroupView) {
+	{{ anchorID := cmp.Or(view.anchorID, group[0].ID) }}
+	{{ formID := view.formID() }}
+	<tbody
+		id={ variableGroupID(anchorID, "desktop") }
+		data-variable-group={ group[0].Name }
+		x-data="{ managing: false }"
+		if view.anchorID != 0 {
+			hx-swap-oob="outerHTML"
+			x-init="$nextTick(() => { if ($el.getClientRects().length) ($refs.groupHeading || $refs.groupActions?.querySelector('summary'))?.focus() })"
+		}
+	>
+		<tr>
+			<th scope="rowgroup" colspan="5" class="variable-group-header border-t border-base-content/20 py-0">
+				<div class="flex items-center justify-between gap-2">
+					<span class="min-w-0 py-2 font-semibold font-mono break-all"
+						if formID != "" {
+							tabindex="-1"
+							x-ref="groupHeading"
+							data-variable-group-heading
+						}
+					>{ group[0].Name }</span>
+					if formID == "" && CanWrite(ctx) {
+						@VariableGroupActions(projectID, anchorID, group[0].Name, "desktop")
+					}
+				</div>
+				if view.message != "" {
+					@VariableGroupMessage(view.message)
+				}
+			</th>
+		</tr>
+		for _, variable := range group {
+			@VariableRow(projectID, variable, environments, formID)
+		}
+		if formID != "" {
+			<tr>
+				<td colspan="5">
+					@VariableGroupForm(projectID, group, environments, view)
+				</td>
+			</tr>
+		}
+	</tbody>
+}
+
+templ VariableMobileGroup(projectID int64, group []db.Variable, environments VariableEnvironments, view variableGroupView) {
+	{{ anchorID := cmp.Or(view.anchorID, group[0].ID) }}
+	{{ formID := view.formID() }}
+	<li
+		id={ variableGroupID(anchorID, "mobile") }
+		class="rounded-lg bg-base-200 border border-base-content/20"
+		data-variable-group={ group[0].Name }
+		x-data="{ managing: false }"
+		if view.anchorID != 0 {
+			hx-swap-oob="outerHTML"
+			x-init="$nextTick(() => { if ($el.getClientRects().length) ($refs.groupHeading || $refs.groupActions?.querySelector('summary'))?.focus() })"
+		}
+	>
+		<div class="variable-group-header rounded-t-lg px-3 flex items-center justify-between gap-2">
+			<h3 class="min-w-0 py-2 font-semibold font-mono text-sm break-all"
+				if formID != "" {
+					tabindex="-1"
+					x-ref="groupHeading"
+					data-variable-group-heading
+				}
+			>{ group[0].Name }</h3>
+			if formID == "" && CanWrite(ctx) {
+				@VariableGroupActions(projectID, anchorID, group[0].Name, "mobile")
+			}
+		</div>
+		if view.message != "" {
+			<div class="px-3">@VariableGroupMessage(view.message)</div>
+		}
+		<ul class="divide-y divide-base-content/20">
+			for _, variable := range group {
+				@VariableMobileRecord(projectID, variable, environments, formID)
+			}
+		</ul>
+		if formID != "" {
+			<div class="border-t border-base-content/20 p-3">
+				@VariableGroupForm(projectID, group, environments, view)
+			</div>
+		}
+	</li>
+}
+
+templ VariableGroupFragment(projectID, anchorID int64, group []db.Variable, environments VariableEnvironments, layout, message string) {
+	{{ view := variableGroupView{anchorID: anchorID, layout: layout, message: message} }}
+	if layout != "mobile" {
+		<template>
+			@VariableDesktopGroup(projectID, group, environments, view)
+		</template>
+	}
+	if layout != "desktop" {
+		@VariableMobileGroup(projectID, group, environments, view)
+	}
+}
+
+templ VariableGroupForm(projectID int64, variables []db.Variable, environments VariableEnvironments, view variableGroupView) {
+	{{ path := VariableGroupPath(projectID, view.anchorID) }}
+	<form
+		id={ view.formID() }
+		hx-post={ path + "?layout=" + view.layout }
+		hx-target="closest [data-variable-group]"
+		hx-swap="none"
+		hx-sync="closest [data-variable-group]:drop"
+		hx-disabled-elt="find button[type=submit], find button[type=button]"
+		data-toast-error="Could not save variable values"
+		class="flex flex-wrap justify-end gap-2"
+		aria-label="Edit variable values"
+		data-variable-group-form
+	>
+		if session := auth.SessionFromContext(ctx); session != nil {
+			<input type="hidden" name="csrf_token" value={ session.CsrfToken }/>
+		}
+		<button
+			type="button"
+			class="btn btn-ghost min-h-11 md:min-h-0 md:btn-sm"
+			hx-get={ path + "?cancel=1" }
+			hx-disabled-elt="this"
+			data-toast-error="Could not close the variable editor"
+		>Cancel</button>
+		if slices.ContainsFunc(variables, func(v db.Variable) bool { return variableScopeAvailable(v, environments.Options) }) {
+			<button class="btn btn-primary min-h-11 md:min-h-0 md:btn-sm" type="submit">Save values</button>
+		}
+	</form>
+}
+
+templ VariableGroupMessage(message string) {
+	<p class="alert alert-error my-2 whitespace-normal break-words" role="alert">{ message }</p>
+}
+
+templ VariableGroupField(variable db.Variable, environments VariableEnvironments, formID, scope string) {
+	{{ id := strconv.FormatInt(variable.ID, 10) }}
+	if variableScopeAvailable(variable, environments.Options) {
+		<input type="hidden" name="override_id" value={ id } form={ formID }/>
+		<input type="hidden" name={ "revision_" + id } value={ strconv.FormatInt(variable.RotationRevision, 10) } form={ formID }/>
+		if variable.Secret != 0 {
+			<input type="password" class="input input-bordered w-full min-w-0 font-mono md:input-sm" name={ "value_" + id } form={ formID } autocomplete="new-password" aria-label={ "Value in " + scope } aria-describedby={ formID + "-secret-" + id } data-variable-group-field={ id }/>
+			<span class="block mt-1 text-xs font-sans text-base-content/75" id={ formID + "-secret-" + id }>Leave blank to keep the existing secret.</span>
+		} else {
+			<input type="text" class="input input-bordered w-full min-w-0 font-mono md:input-sm" name={ "value_" + id } form={ formID } value={ variable.Value.String } aria-label={ "Value in " + scope } data-variable-group-field={ id }/>
+		}
+	} else {
+		<span class="font-mono break-all">@ProjectVariableValue(variable)</span>
+		<span class="block mt-1 whitespace-normal text-xs text-base-content/75">Use Manage individually to move this override to an active environment.</span>
+	}
+}

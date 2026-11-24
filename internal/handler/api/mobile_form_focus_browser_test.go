@@ -157,19 +157,22 @@ func TestMobileFormFocusBrowserE2E(t *testing.T) {
 })()`, fmt.Sprintf("FOCUS_%t", touch)))
 				b.wait(
 					t,
-					`!document.querySelector('.htmx-request, .htmx-settling') && document.querySelector('#variables-content form [name=name]').value === ''`,
+					`!document.querySelector('.htmx-request, .htmx-settling') && document.querySelector('[data-variable-create] input[name=name]').value === ''`,
 				)
 			}
-			if string(b.evaluate(t, fmt.Sprintf(
-				`%t ? !document.activeElement.matches('input, textarea, select') : document.activeElement === document.querySelector('#variables-content form [name=name]')`,
-				touch,
-			))) != "true" {
-				t.Fatalf(
-					"variable form autofocus mismatch: touch=%t refresh=%t",
-					touch,
-					refresh,
-				)
-			}
+			b.wait(
+				t,
+				`!document.querySelector('[data-variable-create]').open && !document.activeElement.matches('input, textarea, select')`,
+			)
+			b.evaluate(
+				t,
+				`(() => { const summary = document.querySelector('[data-variable-create] > summary'); summary.focus(); summary.click(); return true; })()`,
+			)
+			b.wait(t, fmt.Sprintf(`(() => {
+ const panel = document.querySelector('[data-variable-create]');
+ const focus = panel.querySelector(%q);
+ return panel.open && document.activeElement === focus;
+})()`, map[bool]string{true: "summary", false: "input[name=name]"}[touch]))
 		}
 	}
 }

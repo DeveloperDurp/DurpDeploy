@@ -64,7 +64,7 @@ func TestAlpineEditFormsBrowserE2E(t *testing.T) {
 		}
 		b.captureNavigation(t, page.name+"-closed", checkScheduleLayout)
 		b.evaluate(t, fmt.Sprintf(
-			`[...document.querySelectorAll(%q)].forEach(e => e.click()); true`,
+			`[...document.querySelectorAll(%q)].forEach(e => { e.closest('[data-variable-menu]')?.querySelector('summary').click(); e.click(); }); true`,
 			page.action,
 		))
 		b.wait(t, fmt.Sprintf(

@@ -55,6 +55,9 @@ func RewriteSQL(query string) string {
 	if strings.Contains(strings.ToUpper(query), "BLOB") {
 		query = blobRe.ReplaceAllString(query, "BYTEA")
 	}
+	if strings.HasPrefix(query, "-- name: ListVariablesByProjectPaginated") {
+		query = strings.ReplaceAll(query, "COLLATE BINARY", `COLLATE "C"`)
+	}
 	if strings.Contains(query, "unixepoch") {
 		query = unixepochRe.ReplaceAllString(
 			query,

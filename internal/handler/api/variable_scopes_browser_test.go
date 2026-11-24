@@ -148,6 +148,10 @@ document.querySelector('.page-header button[aria-controls="project-menu-dialog"]
 							value,
 						))
 					}
+					b.evaluate(
+						t,
+						`document.querySelector('[data-variable-create] > summary').click(); true`,
+					)
 					submit(
 						"#variables-content form[hx-post]",
 						"NEW",
@@ -172,15 +176,18 @@ document.querySelector('.page-header button[aria-controls="project-menu-dialog"]
 						)
 					}
 					b.evaluate(t, fmt.Sprintf(
-						`document.querySelector(%q).click(); true`, edit))
+						`(() => { const edit = document.querySelector(%q); edit.closest('[data-variable-menu]').querySelector('summary').click(); edit.click(); return true; })()`,
+						edit,
+					))
 					b.wait(t, fmt.Sprintf(
 						`!!document.querySelector(%q)?.getClientRects().length`,
 						form,
 					))
 					submit(form, "EDIT_ME", "edit-scoped")
 					b.evaluate(t, `(() => {
- [...document.querySelectorAll('[data-override-for="DEFAULT"]')]
- .find(e => e.getClientRects().length).click(); return true;
+ const override = [...document.querySelectorAll('[data-override-for="DEFAULT"]')].find(e => e.closest('[data-variable-menu]').getClientRects().length);
+ override.closest('[data-variable-menu]').querySelector('summary').click();
+ override.click(); return true;
 })()`)
 					submit(
 						"#variables-content form[hx-post]",

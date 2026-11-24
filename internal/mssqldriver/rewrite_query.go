@@ -4,6 +4,11 @@ import "strings"
 
 // RewriteSQL converts application queries to the supported T-SQL shapes.
 func RewriteSQL(query string) (string, error) {
+	if strings.HasPrefix(query, "-- name: ListVariablesByProjectPaginated") {
+		query = strings.ReplaceAll(
+			query, "COLLATE BINARY", "COLLATE Latin1_General_100_BIN2",
+		)
+	}
 	// Bound preview reads before the driver allocates NVARCHAR payloads.
 	if strings.HasPrefix(query, "-- name: ListDeploymentLogsBefore") ||
 		strings.HasPrefix(query, "-- name: ListDeploymentLogPreviewsAfter") {

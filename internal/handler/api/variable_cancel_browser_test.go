@@ -11,7 +11,7 @@ func TestVariableCancelBrowserE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	b := startPackageBrowser(t)
 	b.setBackTestSession(t, f.baseURL, f.session)
-	for _, width := range []int{375, 1280} {
+	for _, width := range []int{320, 1280} {
 		b.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
 			"width": width, "height": 844, "deviceScaleFactor": 1,
 			"mobile": false,
@@ -46,16 +46,40 @@ func checkVariableCancel(
 	b.navigateBackTest(t, fmt.Sprintf(
 		"%s/projects/%d/variables", f.baseURL, f.project.ID))
 	selector := fmt.Sprintf("#variable-row-%d", variable.ID)
-	if width == 375 {
+	if width < 768 {
 		selector = fmt.Sprintf(
 			"[data-mobile-variable='%d']", variable.ID)
 	}
 	b.evaluate(t, fmt.Sprintf(`(() => {
  window.cancelRecord = document.querySelector(%q);
  window.cancelForm = cancelRecord.querySelector('form');
- cancelRecord.querySelector('[data-variable-action=edit]').click();
+ const root = cancelRecord.closest('[data-variable-group]');
+ const group = root.querySelector('[data-variable-group-actions]');
+ if (cancelRecord.querySelector('summary').getClientRects().length) throw new Error('row menu was visible before Manage individually');
+ group.querySelector('summary').click();
+ group.querySelector('[data-variable-group-manage]').click();
  return true;
 })()`, selector))
+	b.wait(t, `!!cancelRecord.querySelector('summary').getClientRects().length`)
+	b.evaluate(t, `(() => {
+ const menu = cancelRecord.querySelector('[data-variable-menu]');
+ const summary = menu.querySelector('summary');
+ const edit = menu.querySelector('[data-variable-action=edit]');
+ if (menu.open || edit.getClientRects().length || !summary.getClientRects().length) {
+   throw new Error('expected a single closed Actions menu');
+ }
+ if (innerWidth < 768 && (summary.offsetHeight < 44 || document.documentElement.scrollWidth > innerWidth)) {
+   throw new Error('phone Actions menu is too small or overflows');
+ }
+ summary.click();
+ if (!menu.open || !edit.getClientRects().length) throw new Error('Edit is unreachable');
+ edit.focus();
+ edit.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+ if (menu.open || document.activeElement !== summary) throw new Error('Escape did not restore focus');
+ summary.click();
+ edit.click();
+ return true;
+})()`)
 	b.wait(t, `!!cancelForm.getClientRects().length`)
 	// Repeat cancellation to catch stale defaults after reopening.
 	for range 2 {
@@ -74,10 +98,13 @@ func checkVariableCancel(
 			t,
 			`[...cancelForm.querySelectorAll('button')].find(b => b.textContent === 'Cancel').click(); true`,
 		)
-		b.wait(t, `!cancelForm.getClientRects().length`)
+		b.wait(
+			t,
+			`!cancelForm.getClientRects().length && document.activeElement === cancelRecord.querySelector('[data-variable-menu] > summary')`,
+		)
 		b.evaluate(
 			t,
-			`cancelRecord.querySelector('[data-variable-action=edit]').click(); true`,
+			`cancelRecord.querySelector('[data-variable-menu] > summary').click(); cancelRecord.querySelector('[data-variable-action=edit]').click(); true`,
 		)
 		value, valueType := "original-value", "text"
 		if secret {
