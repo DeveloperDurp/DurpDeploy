@@ -42,32 +42,16 @@ func (r *Repository) CancelAssignedRemoteDeployment(
 			}
 			switch claim.State {
 			case "waiting", "claimed":
-				if deployment.Status != "pending" &&
-					deployment.Status != "pending_approval" {
-					return ErrRemoteLifecycleConflict
-				}
-				changed, err := q.RequestRemoteDeploymentCancellation(ctx,
-					db.RequestRemoteDeploymentCancellationParams{
-						Now:          now,
-						DeploymentID: assigned.DeploymentID,
-					})
-				if err != nil || changed != 1 {
-					return transitionError(err)
-				}
-				return cancelRemoteDeploymentStatus(ctx, q, now, identity)
+				return cancelUnstartedRemoteDeployment(
+					ctx, q, now, identity, deployment.Status,
+				)
 			case "started":
 				if deployment.Status != "running" {
 					return ErrRemoteLifecycleConflict
 				}
-				changed, err := q.RequestRemoteDeploymentCancellation(ctx,
-					db.RequestRemoteDeploymentCancellationParams{
-						Now:          now,
-						DeploymentID: assigned.DeploymentID,
-					})
-				if err != nil || changed != 1 {
-					return transitionError(err)
-				}
-				return nil
+				return requestRemoteCancellation(
+					ctx, q, now, assigned.DeploymentID,
+				)
 			case "cancel_requested":
 				if deployment.Status == "running" {
 					return nil
@@ -80,6 +64,40 @@ func (r *Repository) CancelAssignedRemoteDeployment(
 			return ErrRemoteLifecycleConflict
 		},
 	)
+}
+
+func cancelUnstartedRemoteDeployment(
+	ctx context.Context,
+	q *db.Queries,
+	now int64,
+	identity RemoteLifecycleClaim,
+	status string,
+) error {
+	if status != "pending" && status != "pending_approval" {
+		return ErrRemoteLifecycleConflict
+	}
+	if err := requestRemoteCancellation(
+		ctx, q, now, identity.DeploymentID,
+	); err != nil {
+		return err
+	}
+	return cancelRemoteDeploymentStatus(ctx, q, now, identity)
+}
+
+func requestRemoteCancellation(
+	ctx context.Context,
+	q *db.Queries,
+	now, deploymentID int64,
+) error {
+	changed, err := q.RequestRemoteDeploymentCancellation(ctx,
+		db.RequestRemoteDeploymentCancellationParams{
+			Now:          now,
+			DeploymentID: deploymentID,
+		})
+	if err != nil || changed != 1 {
+		return transitionError(err)
+	}
+	return nil
 }
 
 func (r *Repository) MaintainRemoteLifecycle(ctx context.Context) error {
@@ -138,67 +156,70 @@ func (r *Repository) maintainRemoteClaim(
 					}
 				}
 			case "started":
-				staleBefore := now - int64(agentproto.LostThreshold/time.Second)
-				if claim.LastHeartbeatAt.Valid &&
-					claim.LastHeartbeatAt.Int64 <= staleBefore {
-					changed, err := q.LoseStaleRemoteClaim(ctx,
-						db.LoseStaleRemoteClaimParams{
-							Now: sql.NullInt64{
-								Int64: now,
-								Valid: true,
-							},
-							DeploymentID: claim.DeploymentID,
-							AgentID:      claim.AgentID,
-							StaleBefore: sql.NullInt64{
-								Int64: staleBefore,
-								Valid: true,
-							},
-						})
-					if err != nil || changed != 1 {
-						return transitionError(err)
-					}
-					return failRemoteDeployment(
-						ctx,
-						q,
-						now,
-						identity,
-						deployment,
-					)
-				}
-			case "cancel_requested":
-				staleBefore := now - int64(
-					agentproto.CancelAcknowledgementTimeout/time.Second,
+				return loseStaleRemoteClaim(
+					ctx, q, now, identity, claim, deployment,
 				)
-				if claim.CancelRequestedAt.Valid &&
-					claim.CancelRequestedAt.Int64 <= staleBefore {
-					changed, err := q.ExpireRemoteCancellationClaim(ctx,
-						db.ExpireRemoteCancellationClaimParams{
-							Now: sql.NullInt64{
-								Int64: now,
-								Valid: true,
-							},
-							DeploymentID: claim.DeploymentID,
-							AgentID:      claim.AgentID,
-							StaleBefore: sql.NullInt64{
-								Int64: staleBefore,
-								Valid: true,
-							},
-						})
-					if err != nil || changed != 1 {
-						return transitionError(err)
-					}
-					return failRemoteDeployment(
-						ctx,
-						q,
-						now,
-						identity,
-						deployment,
-					)
-				}
+			case "cancel_requested":
+				return expireStaleRemoteCancellation(
+					ctx, q, now, identity, claim, deployment,
+				)
 			}
 			return nil
 		},
 	)
+}
+
+func loseStaleRemoteClaim(
+	ctx context.Context,
+	q *db.Queries,
+	now int64,
+	identity RemoteLifecycleClaim,
+	claim db.RemoteDeploymentClaim,
+	deployment db.Deployment,
+) error {
+	staleBefore := now - int64(agentproto.LostThreshold/time.Second)
+	if !claim.LastHeartbeatAt.Valid ||
+		claim.LastHeartbeatAt.Int64 > staleBefore {
+		return nil
+	}
+	changed, err := q.LoseStaleRemoteClaim(ctx, db.LoseStaleRemoteClaimParams{
+		Now:          sql.NullInt64{Int64: now, Valid: true},
+		DeploymentID: claim.DeploymentID,
+		AgentID:      claim.AgentID,
+		StaleBefore:  sql.NullInt64{Int64: staleBefore, Valid: true},
+	})
+	if err != nil || changed != 1 {
+		return transitionError(err)
+	}
+	return failRemoteDeployment(ctx, q, now, identity, deployment)
+}
+
+func expireStaleRemoteCancellation(
+	ctx context.Context,
+	q *db.Queries,
+	now int64,
+	identity RemoteLifecycleClaim,
+	claim db.RemoteDeploymentClaim,
+	deployment db.Deployment,
+) error {
+	staleBefore := now - int64(
+		agentproto.CancelAcknowledgementTimeout/time.Second,
+	)
+	if !claim.CancelRequestedAt.Valid ||
+		claim.CancelRequestedAt.Int64 > staleBefore {
+		return nil
+	}
+	changed, err := q.ExpireRemoteCancellationClaim(ctx,
+		db.ExpireRemoteCancellationClaimParams{
+			Now:          sql.NullInt64{Int64: now, Valid: true},
+			DeploymentID: claim.DeploymentID,
+			AgentID:      claim.AgentID,
+			StaleBefore:  sql.NullInt64{Int64: staleBefore, Valid: true},
+		})
+	if err != nil || changed != 1 {
+		return transitionError(err)
+	}
+	return failRemoteDeployment(ctx, q, now, identity, deployment)
 }
 
 func failRemoteDeployment(
