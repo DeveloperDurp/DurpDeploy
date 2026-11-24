@@ -30,29 +30,93 @@ func NewScheduledDeploymentHandler(
 	return &ScheduledDeploymentHandler{repo: repo, parser: parser}
 }
 
+func parseScheduleProjectRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+) (offset, projectID int64, ok bool) {
+	offset, err := scheduleOffset(r)
+	if err != nil {
+		http.Error(w, invalidScheduleOffsetMessage, http.StatusBadRequest)
+		return 0, 0, false
+	}
+	projectID, err = parseProjectID(r)
+	if err != nil {
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
+		return 0, 0, false
+	}
+	return offset, projectID, true
+}
+
+func parseScheduleItemRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+) (offset, projectID, schedID int64, ok bool) {
+	offset, projectID, ok = parseScheduleProjectRequest(w, r)
+	if !ok {
+		return 0, 0, 0, false
+	}
+	schedID, err := strconv.ParseInt(chi.URLParam(r, "schedId"), 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
+		return 0, 0, 0, false
+	}
+	return offset, projectID, schedID, true
+}
+
+func (h *ScheduledDeploymentHandler) loadScheduleProject(
+	w http.ResponseWriter,
+	r *http.Request,
+	projectID int64,
+) (db.Project, bool) {
+	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Project not found", http.StatusNotFound)
+			return db.Project{}, false
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return db.Project{}, false
+	}
+	return project, true
+}
+
+func (h *ScheduledDeploymentHandler) loadProjectSchedule(
+	w http.ResponseWriter,
+	r *http.Request,
+	projectID, schedID int64,
+) (db.ScheduledDeployment, bool) {
+	schedule, err := h.repo.Queries.GetScheduledDeployment(r.Context(), schedID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Schedule not found", http.StatusNotFound)
+			return db.ScheduledDeployment{}, false
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return db.ScheduledDeployment{}, false
+	}
+	if schedule.ProjectID != projectID {
+		http.Error(
+			w,
+			"Schedule does not belong to this project",
+			http.StatusBadRequest,
+		)
+		return db.ScheduledDeployment{}, false
+	}
+	return schedule, true
+}
+
 // List renders the scheduled deployments for a project.
 func (h *ScheduledDeploymentHandler) List(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	_, err := scheduleOffset(r)
-	if err != nil {
-		http.Error(w, invalidScheduleOffsetMessage, http.StatusBadRequest)
-		return
-	}
-	projectID, err := parseProjectID(r)
-	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+	_, projectID, ok := parseScheduleProjectRequest(w, r)
+	if !ok {
 		return
 	}
 
-	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Project not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	project, ok := h.loadScheduleProject(w, r, projectID)
+	if !ok {
 		return
 	}
 
@@ -83,24 +147,13 @@ func (h *ScheduledDeploymentHandler) NewForm(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	offset, err := scheduleOffset(r)
-	if err != nil {
-		http.Error(w, invalidScheduleOffsetMessage, http.StatusBadRequest)
-		return
-	}
-	projectID, err := parseProjectID(r)
-	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+	offset, projectID, ok := parseScheduleProjectRequest(w, r)
+	if !ok {
 		return
 	}
 
-	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Project not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	project, ok := h.loadScheduleProject(w, r, projectID)
+	if !ok {
 		return
 	}
 
@@ -195,14 +248,8 @@ func (h *ScheduledDeploymentHandler) Create(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	offset, err := scheduleOffset(r)
-	if err != nil {
-		http.Error(w, invalidScheduleOffsetMessage, http.StatusBadRequest)
-		return
-	}
-	projectID, err := parseProjectID(r)
-	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+	offset, projectID, ok := parseScheduleProjectRequest(w, r)
+	if !ok {
 		return
 	}
 
@@ -300,48 +347,18 @@ func (h *ScheduledDeploymentHandler) EditForm(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	offset, err := scheduleOffset(r)
-	if err != nil {
-		http.Error(w, invalidScheduleOffsetMessage, http.StatusBadRequest)
-		return
-	}
-	projectID, err := parseProjectID(r)
-	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+	offset, projectID, schedID, ok := parseScheduleItemRequest(w, r)
+	if !ok {
 		return
 	}
 
-	schedID, err := strconv.ParseInt(chi.URLParam(r, "schedId"), 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
+	project, ok := h.loadScheduleProject(w, r, projectID)
+	if !ok {
 		return
 	}
 
-	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Project not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	schedule, err := h.repo.Queries.GetScheduledDeployment(r.Context(), schedID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Schedule not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if schedule.ProjectID != projectID {
-		http.Error(
-			w,
-			"Schedule does not belong to this project",
-			http.StatusBadRequest,
-		)
+	schedule, ok := h.loadProjectSchedule(w, r, projectID, schedID)
+	if !ok {
 		return
 	}
 
@@ -380,20 +397,8 @@ func (h *ScheduledDeploymentHandler) Update(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	offset, err := scheduleOffset(r)
-	if err != nil {
-		http.Error(w, invalidScheduleOffsetMessage, http.StatusBadRequest)
-		return
-	}
-	projectID, err := parseProjectID(r)
-	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
-		return
-	}
-
-	schedID, err := strconv.ParseInt(chi.URLParam(r, "schedId"), 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
+	offset, projectID, schedID, ok := parseScheduleItemRequest(w, r)
+	if !ok {
 		return
 	}
 
@@ -451,21 +456,8 @@ func (h *ScheduledDeploymentHandler) Update(
 		return
 	}
 
-	existing, err := h.repo.Queries.GetScheduledDeployment(r.Context(), schedID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Schedule not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if existing.ProjectID != projectID {
-		http.Error(
-			w,
-			"Schedule does not belong to this project",
-			http.StatusBadRequest,
-		)
+	existing, ok := h.loadProjectSchedule(w, r, projectID, schedID)
+	if !ok {
 		return
 	}
 
@@ -510,38 +502,12 @@ func (h *ScheduledDeploymentHandler) Delete(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	offset, err := scheduleOffset(r)
-	if err != nil {
-		http.Error(w, invalidScheduleOffsetMessage, http.StatusBadRequest)
-		return
-	}
-	projectID, err := parseProjectID(r)
-	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+	offset, projectID, schedID, ok := parseScheduleItemRequest(w, r)
+	if !ok {
 		return
 	}
 
-	schedID, err := strconv.ParseInt(chi.URLParam(r, "schedId"), 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
-		return
-	}
-
-	existing, err := h.repo.Queries.GetScheduledDeployment(r.Context(), schedID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Schedule not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if existing.ProjectID != projectID {
-		http.Error(
-			w,
-			"Schedule does not belong to this project",
-			http.StatusBadRequest,
-		)
+	if _, ok := h.loadProjectSchedule(w, r, projectID, schedID); !ok {
 		return
 	}
 
@@ -566,38 +532,13 @@ func (h *ScheduledDeploymentHandler) Toggle(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	offset, err := scheduleOffset(r)
-	if err != nil {
-		http.Error(w, invalidScheduleOffsetMessage, http.StatusBadRequest)
-		return
-	}
-	projectID, err := parseProjectID(r)
-	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+	offset, projectID, schedID, ok := parseScheduleItemRequest(w, r)
+	if !ok {
 		return
 	}
 
-	schedID, err := strconv.ParseInt(chi.URLParam(r, "schedId"), 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
-		return
-	}
-
-	existing, err := h.repo.Queries.GetScheduledDeployment(r.Context(), schedID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Schedule not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if existing.ProjectID != projectID {
-		http.Error(
-			w,
-			"Schedule does not belong to this project",
-			http.StatusBadRequest,
-		)
+	existing, ok := h.loadProjectSchedule(w, r, projectID, schedID)
+	if !ok {
 		return
 	}
 	if existing.Enabled == 0 {
