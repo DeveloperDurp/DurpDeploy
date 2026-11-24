@@ -15,6 +15,8 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+const artifactStorageUnavailableMessage = "Artifact storage unavailable"
+
 func (h *ArtifactGateHandler) openGateBundle(
 	w http.ResponseWriter, r *http.Request,
 ) (*os.File, db.ArtifactGate) {
@@ -49,7 +51,7 @@ func (h *ArtifactGateHandler) openGateBundle(
 	}
 	file, err := artifact.OpenGateSpool(h.repo.ArtifactClient.TempDir)
 	if err != nil {
-		gateHTTPError(w, r, 500, "Artifact storage unavailable")
+		gateHTTPError(w, r, 500, artifactStorageUnavailableMessage)
 		return nil, db.ArtifactGate{}
 	}
 	if err := h.repo.WriteArtifactGateBundle(
@@ -66,7 +68,7 @@ func (h *ArtifactGateHandler) openGateBundle(
 	if _, err := file.Seek(0, 0); err != nil {
 		//nolint:errcheck // Preserve the primary seek error for this read file.
 		file.Close()
-		gateHTTPError(w, r, 500, "Artifact storage unavailable")
+		gateHTTPError(w, r, 500, artifactStorageUnavailableMessage)
 		return nil, db.ArtifactGate{}
 	}
 	return file, gate
@@ -100,7 +102,7 @@ func (h *ArtifactGateHandler) Download(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if _, err := file.Seek(0, 0); err != nil {
-			gateHTTPError(w, r, 500, "Artifact storage unavailable")
+			gateHTTPError(w, r, 500, artifactStorageUnavailableMessage)
 			return
 		}
 		reader = tar.NewReader(file)

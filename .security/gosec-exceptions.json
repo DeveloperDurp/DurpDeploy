@@ -344,8 +344,8 @@
   {
     "rule": "G110",
     "file": "internal/handler/artifact_gate_download.go",
-    "line": "120",
-    "source_sha256": "3fb67ea097a6bf42c339d7e753ab30fffcdeae3b77e95b911c3f143e50f31b56",
+    "line": "122",
+    "source_sha256": "9cab7ddfdf3cdea786623ac13dc98f3761f03a427d155296274b7105cd492bab",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "This uncompressed tar comes from an authenticated canonical spool with a verified checksum. Capture rejects links, special files, and unsafe paths. tar.Reader restricts reads to each entry. Evidence: repository/artifact_gate_storage.go, artifact/gate_bundle.go and artifact_gate_failures_e2e_test.go."
@@ -353,8 +353,8 @@
   {
     "rule": "G110",
     "file": "internal/handler/artifact_gate_download.go",
-    "line": "94-97",
-    "source_sha256": "3fb67ea097a6bf42c339d7e753ab30fffcdeae3b77e95b911c3f143e50f31b56",
+    "line": "96-99",
+    "source_sha256": "9cab7ddfdf3cdea786623ac13dc98f3761f03a427d155296274b7105cd492bab",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "This uncompressed tar comes from an authenticated canonical spool with a verified checksum. Capture rejects links, special files, and unsafe paths. tar.Reader restricts reads to each entry. Evidence: repository/artifact_gate_storage.go, artifact/gate_bundle.go and artifact_gate_failures_e2e_test.go."
