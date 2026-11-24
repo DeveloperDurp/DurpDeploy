@@ -13,6 +13,7 @@ const (
 	passkeyVerificationTokenCookie = "passkey_verification_token"
 	passkeyVerificationCSRFCookie  = "passkey_verification_csrf"
 	passkeyVerificationMaxAge      = 5 * time.Minute
+	verificationPagePath           = "/settings/security/passkeys/test"
 )
 
 func decodePasskeyVerification(
@@ -65,7 +66,7 @@ func (h *AuthHandler) setPasskeyVerificationCookies(
 		{
 			Name:     passkeyVerificationTokenCookie,
 			Value:    binding.Token,
-			Path:     "/settings/security/passkeys/test",
+			Path:     verificationPagePath,
 			MaxAge:   int(passkeyVerificationMaxAge / time.Second),
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
@@ -74,7 +75,7 @@ func (h *AuthHandler) setPasskeyVerificationCookies(
 		{
 			Name:     passkeyVerificationCSRFCookie,
 			Value:    binding.CSRF,
-			Path:     "/settings/security/passkeys/test",
+			Path:     verificationPagePath,
 			MaxAge:   int(passkeyVerificationMaxAge / time.Second),
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
@@ -92,7 +93,7 @@ func (h *AuthHandler) clearPasskeyVerificationCookies(w http.ResponseWriter) {
 	} {
 		http.SetCookie(w, &http.Cookie{
 			Name:     name,
-			Path:     "/settings/security/passkeys/test",
+			Path:     verificationPagePath,
 			MaxAge:   -1,
 			Expires:  time.Unix(0, 0),
 			HttpOnly: true,

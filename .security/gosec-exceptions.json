@@ -75,7 +75,7 @@
     "rule": "G101",
     "file": "internal/handler/security_passkey_verification_helpers.go",
     "line": "14",
-    "source_sha256": "4f677154b19487d026a8747cedf4809c1d0fe1bb77e96f45c7d82333410a83fc",
+    "source_sha256": "dcc8b9924386e32d3d25b5abe0c5ca26c31d070de4ade8484b9a002e5b34ba86",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie name or audit action/route metadata, not a credential value. Evidence: passkey binding readers/setters or internal/audit/audit.go consumers."
@@ -84,7 +84,7 @@
     "rule": "G101",
     "file": "internal/handler/security_passkey_verification_helpers.go",
     "line": "13",
-    "source_sha256": "4f677154b19487d026a8747cedf4809c1d0fe1bb77e96f45c7d82333410a83fc",
+    "source_sha256": "dcc8b9924386e32d3d25b5abe0c5ca26c31d070de4ade8484b9a002e5b34ba86",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie name or audit action/route metadata, not a credential value. Evidence: passkey binding readers/setters or internal/audit/audit.go consumers."
@@ -218,8 +218,8 @@
   {
     "rule": "G124",
     "file": "internal/handler/security_passkey_verification_helpers.go",
-    "line": "93",
-    "source_sha256": "4f677154b19487d026a8747cedf4809c1d0fe1bb77e96f45c7d82333410a83fc",
+    "line": "94",
+    "source_sha256": "dcc8b9924386e32d3d25b5abe0c5ca26c31d070de4ade8484b9a002e5b34ba86",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
@@ -227,8 +227,8 @@
   {
     "rule": "G124",
     "file": "internal/handler/security_passkey_verification_helpers.go",
-    "line": "74",
-    "source_sha256": "4f677154b19487d026a8747cedf4809c1d0fe1bb77e96f45c7d82333410a83fc",
+    "line": "75",
+    "source_sha256": "dcc8b9924386e32d3d25b5abe0c5ca26c31d070de4ade8484b9a002e5b34ba86",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
@@ -236,8 +236,8 @@
   {
     "rule": "G124",
     "file": "internal/handler/security_passkey_verification_helpers.go",
-    "line": "65",
-    "source_sha256": "4f677154b19487d026a8747cedf4809c1d0fe1bb77e96f45c7d82333410a83fc",
+    "line": "66",
+    "source_sha256": "dcc8b9924386e32d3d25b5abe0c5ca26c31d070de4ade8484b9a002e5b34ba86",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."

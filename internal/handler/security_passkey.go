@@ -203,7 +203,7 @@ func (h *AuthHandler) SecurityPasskeyFinishPost(
 		return
 	}
 	h.setPasskeyVerificationCookies(w, verification)
-	http.Redirect(w, r, "/settings/security/passkeys/test", http.StatusSeeOther)
+	http.Redirect(w, r, verificationPagePath, http.StatusSeeOther)
 }
 
 func (h *AuthHandler) writePasskeyError(w http.ResponseWriter, err error) {
