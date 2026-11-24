@@ -46,7 +46,7 @@ func (r *Repository) CreatePackageRepository(
 	ctx context.Context,
 	arg db.CreatePackageRepositoryParams,
 ) (db.PackageRepository, error) {
-	if strings.TrimSpace(arg.Name) == "" || len(arg.Name) > 255 {
+	if !validPackageRepositoryName(arg.Name) {
 		return db.PackageRepository{}, artifact.ErrInvalid
 	}
 	source := artifact.Repository{
@@ -55,13 +55,8 @@ func (r *Repository) CreatePackageRepository(
 		Username:    arg.Username,
 		Credential:  arg.Credential,
 	}
-	if err := source.Validate(); err != nil {
+	if err := r.validatePackageSource(source); err != nil {
 		return db.PackageRepository{}, err
-	}
-	if source.Credential != "" && r.secrets == nil {
-		return db.PackageRepository{}, errors.New(
-			"repository credentials require secret encryption",
-		)
 	}
 	value, err := r.encryptValue(
 		sql.NullString{String: arg.Credential, Valid: arg.Credential != ""},
@@ -71,6 +66,20 @@ func (r *Repository) CreatePackageRepository(
 	}
 	arg.Credential = value.String
 	return r.Queries.CreatePackageRepository(ctx, arg)
+}
+
+func validPackageRepositoryName(name string) bool {
+	return strings.TrimSpace(name) != "" && len(name) <= 255
+}
+
+func (r *Repository) validatePackageSource(source artifact.Repository) error {
+	if err := source.Validate(); err != nil {
+		return err
+	}
+	if source.Credential != "" && r.secrets == nil {
+		return errors.New("repository credentials require secret encryption")
+	}
+	return nil
 }
 
 func (r *Repository) UpdatePackageRepository(
@@ -113,7 +122,7 @@ func (r *Repository) UpdatePackageRepository(
 			arg.AuthType != "noauth" {
 			credential = value.String
 		}
-		if strings.TrimSpace(arg.Name) == "" || len(arg.Name) > 255 {
+		if !validPackageRepositoryName(arg.Name) {
 			return artifact.ErrInvalid
 		}
 		source := artifact.Repository{
@@ -122,13 +131,8 @@ func (r *Repository) UpdatePackageRepository(
 			Username:    arg.Username,
 			Credential:  credential,
 		}
-		if err := source.Validate(); err != nil {
+		if err := r.validatePackageSource(source); err != nil {
 			return err
-		}
-		if credential != "" && r.secrets == nil {
-			return errors.New(
-				"repository credentials require secret encryption",
-			)
 		}
 		if arg.Credential == "" && arg.AuthType == old.AuthType {
 			row, err = q.UpdatePackageRepositoryKeepCredential(

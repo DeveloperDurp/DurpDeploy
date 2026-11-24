@@ -47,13 +47,8 @@ func (r *Repository) SaveProjectPackageRepository(
 			}
 			validated := source
 			validated.Credential = credential
-			if err := validated.Validate(); err != nil {
+			if err := r.validatePackageSource(validated); err != nil {
 				return err
-			}
-			if credential != "" && r.secrets == nil {
-				return errors.New(
-					"repository credentials require secret encryption",
-				)
 			}
 			encrypted, err := r.encryptValue(
 				sql.NullString{String: credential, Valid: credential != ""},
