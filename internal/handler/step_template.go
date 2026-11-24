@@ -15,7 +15,12 @@ import (
 	"durpdeploy/views/pages"
 )
 
-const templatesContentTarget = "#templates-content"
+const (
+	templatesContentTarget   = "#templates-content"
+	invalidTemplateIDMessage = "Invalid template ID"
+	templateNameRequired     = "Name is required"
+	templateNameConflict     = "A template with this name already exists"
+)
 
 type StepTemplateHandler struct {
 	repo *repository.Repository
@@ -143,8 +148,8 @@ func (h *StepTemplateHandler) CreateTemplate(
 		WriteFormError(
 			w,
 			r,
-			pages.TemplateFormFragment(tpl, true, "Name is required"),
-			pages.TemplateForm(tpl, true, "Name is required", r.URL.Path),
+			pages.TemplateFormFragment(tpl, true, templateNameRequired),
+			pages.TemplateForm(tpl, true, templateNameRequired, r.URL.Path),
 		)
 		return
 	}
@@ -185,12 +190,12 @@ func (h *StepTemplateHandler) CreateTemplate(
 				pages.TemplateFormFragment(
 					tplErr,
 					true,
-					"A template with this name already exists",
+					templateNameConflict,
 				),
 				pages.TemplateForm(
 					tplErr,
 					true,
-					"A template with this name already exists",
+					templateNameConflict,
 					r.URL.Path,
 				),
 			)
@@ -220,7 +225,7 @@ func (h *StepTemplateHandler) EditTemplateForm(
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid template ID", http.StatusBadRequest)
+		http.Error(w, invalidTemplateIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -248,7 +253,7 @@ func (h *StepTemplateHandler) UpdateTemplate(
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid template ID", http.StatusBadRequest)
+		http.Error(w, invalidTemplateIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -333,8 +338,8 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		WriteFormError(
 			w,
 			r,
-			pages.TemplateFormFragment(tpl, false, "Name is required"),
-			pages.TemplateForm(tpl, false, "Name is required", r.URL.Path),
+			pages.TemplateFormFragment(tpl, false, templateNameRequired),
+			pages.TemplateForm(tpl, false, templateNameRequired, r.URL.Path),
 		)
 		return
 	}
@@ -386,12 +391,12 @@ func (h *StepTemplateHandler) UpdateTemplate(
 				pages.TemplateFormFragment(
 					tpl,
 					false,
-					"A template with this name already exists",
+					templateNameConflict,
 				),
 				pages.TemplateForm(
 					tpl,
 					false,
-					"A template with this name already exists",
+					templateNameConflict,
 					r.URL.Path,
 				),
 			)
@@ -422,7 +427,7 @@ func (h *StepTemplateHandler) DeleteTemplate(
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid template ID", http.StatusBadRequest)
+		http.Error(w, invalidTemplateIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -445,7 +450,7 @@ func (h *StepTemplateHandler) ListTemplateHistory(
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid template ID", http.StatusBadRequest)
+		http.Error(w, invalidTemplateIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -489,14 +494,14 @@ func (h *StepTemplateHandler) InsertTemplate(
 ) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
 	templateIDStr := chi.URLParam(r, "templateId")
 	templateID, err := strconv.ParseInt(templateIDStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid template ID", http.StatusBadRequest)
+		http.Error(w, invalidTemplateIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -584,7 +589,7 @@ func (h *StepTemplateHandler) SaveStepAsTemplate(
 ) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -643,7 +648,7 @@ func (h *StepTemplateHandler) SaveStepAsTemplate(
 	); err != nil {
 		if IsUniqueViolation(err) {
 			if r.Header.Get(hxRequestHeader) == "true" {
-				SetToastError(w, "A template with this name already exists")
+				SetToastError(w, templateNameConflict)
 				w.WriteHeader(http.StatusConflict)
 				steps, err := h.repo.Queries.ListStepsByProject(
 					r.Context(),
@@ -661,7 +666,7 @@ func (h *StepTemplateHandler) SaveStepAsTemplate(
 			}
 			http.Error(
 				w,
-				"A template with this name already exists",
+				templateNameConflict,
 				http.StatusConflict,
 			)
 			return
@@ -693,7 +698,7 @@ func (h *StepTemplateHandler) TemplatesPicker(
 ) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
