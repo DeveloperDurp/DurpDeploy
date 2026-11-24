@@ -379,26 +379,31 @@ func validateUserFields(
 	if !roles.Valid(role) {
 		return "Role must be viewer, deployer, maintainer, or admin"
 	}
-	if isNew {
-		if password == "" {
+	return validateUserPassword(password, passwordConfirmation, isNew)
+}
+
+func validateUserPassword(
+	password, passwordConfirmation string,
+	isNew bool,
+) string {
+	if password == "" {
+		switch {
+		case isNew:
 			return "Password is required"
+		case passwordConfirmation != "":
+			return "New password is required when confirming a password"
+		default:
+			return ""
 		}
-		if passwordConfirmation == "" {
-			return "Password confirmation is required"
-		}
-		if len(password) < 8 {
+	}
+	if passwordConfirmation == "" {
+		return "Password confirmation is required"
+	}
+	if len(password) < 8 {
+		if isNew {
 			return "Password must be at least 8 characters"
 		}
-	} else {
-		if password == "" && passwordConfirmation != "" {
-			return "New password is required when confirming a password"
-		}
-		if password != "" && passwordConfirmation == "" {
-			return "Password confirmation is required"
-		}
-		if password != "" && len(password) < 8 {
-			return "New password must be at least 8 characters (blank = keep current)"
-		}
+		return "New password must be at least 8 characters (blank = keep current)"
 	}
 	if password != passwordConfirmation {
 		return "Passwords do not match"
