@@ -11,11 +11,11 @@ if [[ -z "${BUILD_NUMBER:-}" ]]; then
 fi
 if [[ -z "${BUILD_MODIFIED:-}" ]]; then
 	BUILD_MODIFIED=false
-	if [[ "$BUILD_COMMIT" != unknown ]]; then
-		if ! git diff --quiet HEAD -- 2>/dev/null || \
-			[[ -n "$(git ls-files --others --exclude-standard 2>/dev/null)" ]]; then
-			BUILD_MODIFIED=true
-		fi
+	if [[ "$BUILD_COMMIT" != unknown ]] && {
+		! git diff --quiet HEAD -- 2>/dev/null ||
+			[[ -n "$(git ls-files --others --exclude-standard 2>/dev/null)" ]]
+	}; then
+		BUILD_MODIFIED=true
 	fi
 fi
 semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
