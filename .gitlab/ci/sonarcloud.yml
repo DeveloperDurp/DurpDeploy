@@ -33,7 +33,7 @@ coverage:
 sonarcloud:
   stage: verify
   variables:
-    KUBERNETES_MEMORY_LIMIT: "4Gi"
+    KUBERNETES_MEMORY_LIMIT: "6Gi"
     # Keep room for the JVM and native allocations outside the analysis heap.
     SONAR_SCANNER_JAVA_OPTS: "-Xmx2g"
   image:
