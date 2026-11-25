@@ -179,71 +179,76 @@ func TestArtifactGateFailureDoesNotUseGlobalNotifiersE2E(t *testing.T) {
 func TestArtifactGateSetupFailureNotifiesE2E(t *testing.T) {
 	for _, scenario := range []string{"ordinary-claim", "gated-claim", "capture"} {
 		t.Run(scenario, func(t *testing.T) {
-			f := newArtifactE2E(t)
-			if scenario != "capture" {
-				f.h.repo.Queries = db.New(&failedGateLookupDB{DB: f.h.repo.DB})
-			}
-			step := map[string]any{
-				"name":            "Generate",
-				"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
-				"script_body":     "true",
-			}
-			if scenario != "ordinary-claim" {
-				step["approval_artifact_path"] = "plan"
-				step["approval_review_path"] = "review"
-				step["approval_review_format"] = "summary"
-				step["script_body"] = `echo sensitive-generation-output; printf '{"create":1}' > "$DURPDEPLOY_STAGE_DIR/review"`
-			}
-			f.api(t, "POST", f.base()+"/steps", step, 201)
-			f.api(
-				t,
-				"POST",
-				f.base()+"/steps",
-				map[string]any{
-					"name":            "Apply",
-					"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
-					"script_body":     "true",
-				},
-				201,
-			)
-			release := verificationRelease(t, f, scenario)
-			deployment := verificationDeploy(t, f, release)
-			f.completion(t, deployment.ID, events.DeploymentFailed)
-			var stored db.Deployment
-			if err := json.Unmarshal(
-				f.api(
-					t,
-					"GET",
-					fmt.Sprintf("/api/v1/deployments/%d", deployment.ID),
-					nil,
-					200,
-				),
-				&stored,
-			); err != nil ||
-				stored.Status != "failed" {
-				t.Fatalf(
-					"setup failure stranded deployment: %+v err=%v",
-					stored,
-					err,
-				)
-			}
-			var count int
-			deadline := time.Now().Add(5 * time.Second)
-			for {
-				err := f.h.repo.DB.QueryRow("SELECT COUNT(*) FROM notification_events WHERE deployment_id=? AND event_type='deployment_failed' AND message='Deployment failed'", deployment.ID).
-					Scan(&count)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if count == 1 {
-					break
-				}
-				if time.Now().After(deadline) {
-					t.Fatalf("generic terminal notifications=%d", count)
-				}
-				time.Sleep(10 * time.Millisecond)
-			}
+			verifyArtifactGateSetupFailureNotification(t, scenario)
 		})
+	}
+}
+
+func verifyArtifactGateSetupFailureNotification(t *testing.T, scenario string) {
+	t.Helper()
+	f := newArtifactE2E(t)
+	if scenario != "capture" {
+		f.h.repo.Queries = db.New(&failedGateLookupDB{DB: f.h.repo.DB})
+	}
+	step := map[string]any{
+		"name":            "Generate",
+		"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
+		"script_body":     "true",
+	}
+	if scenario != "ordinary-claim" {
+		step["approval_artifact_path"] = "plan"
+		step["approval_review_path"] = "review"
+		step["approval_review_format"] = "summary"
+		step["script_body"] = `echo sensitive-generation-output; printf '{"create":1}' > "$DURPDEPLOY_STAGE_DIR/review"`
+	}
+	f.api(t, "POST", f.base()+"/steps", step, 201)
+	f.api(
+		t,
+		"POST",
+		f.base()+"/steps",
+		map[string]any{
+			"name":            "Apply",
+			"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
+			"script_body":     "true",
+		},
+		201,
+	)
+	release := verificationRelease(t, f, scenario)
+	deployment := verificationDeploy(t, f, release)
+	f.completion(t, deployment.ID, events.DeploymentFailed)
+	var stored db.Deployment
+	if err := json.Unmarshal(
+		f.api(
+			t,
+			"GET",
+			fmt.Sprintf("/api/v1/deployments/%d", deployment.ID),
+			nil,
+			200,
+		),
+		&stored,
+	); err != nil ||
+		stored.Status != "failed" {
+		t.Fatalf(
+			"setup failure stranded deployment: %+v err=%v",
+			stored,
+			err,
+		)
+	}
+	var count int
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		err := f.h.repo.DB.QueryRow("SELECT COUNT(*) FROM notification_events WHERE deployment_id=? AND event_type='deployment_failed' AND message='Deployment failed'", deployment.ID).
+			Scan(&count)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if count == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("generic terminal notifications=%d", count)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
