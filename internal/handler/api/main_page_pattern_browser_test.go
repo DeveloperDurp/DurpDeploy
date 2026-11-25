@@ -43,36 +43,7 @@ func TestMainPagePatternBrowserE2E(t *testing.T) {
 		b.navigateBackTest(t, f.baseURL+path)
 		b.wait(t, `document.querySelector('main .page-header h1') !== null`)
 		if path == fmt.Sprintf("/projects/%d/releases", f.project.ID) {
-			b.evaluate(t, `(() => {
- const form = document.querySelector('#releases-content form[hx-post]');
- form.querySelector('[name=version]').value = 'design-v2';
- form.querySelector('[type=submit]').click();
- return true;
-})()`)
-			b.wait(
-				t,
-				`document.querySelector('#releases-content').textContent.includes('design-v2') && !document.querySelector('.htmx-request, .htmx-settling')`,
-			)
-			if string(b.evaluate(t, `(() => {
- const content = document.querySelector('#releases-content');
- return content.querySelectorAll('thead th').length === 3 &&
- [...content.querySelectorAll('tbody tr')].every(row => row.children.length === 3) &&
- !content.querySelector('select[name=environment_id], input[name=force], form[action$="/deploy"]') &&
- [...content.querySelectorAll('thead th')].map(e => e.textContent).join(',') === 'Version,Created At,Actions';
-})()`)) != "true" {
-				t.Fatal(
-					"releases list retained deployment controls or mismatched columns",
-				)
-			}
-			var releases struct{ Total int64 }
-			decodeStepLogTest(
-				t,
-				f.api(t, "GET", "/api/v1"+path, nil, 200),
-				&releases,
-			)
-			if releases.Total != 2 {
-				t.Fatal("release creation did not persist through the API")
-			}
+			verifyMainPageReleaseCreation(t, f, b, path)
 		}
 		if path == fmt.Sprintf("/projects/%d/runbooks", f.project.ID) &&
 			string(
@@ -119,11 +90,93 @@ func TestMainPagePatternBrowserE2E(t *testing.T) {
 			}
 		})
 	}
+	verifyMainPageResourceCards(t, f, b, template.ID, lifecycle.ID)
+	// Header Save controls submit the real edit form and persist through the API.
+	for _, edit := range []struct {
+		path, api, name string
+	}{
+		{fmt.Sprintf("/projects/%d/edit", f.project.ID),
+			fmt.Sprintf("/api/v1/projects/%d", f.project.ID), "saved-project"},
+		{fmt.Sprintf("/templates/%d/edit", template.ID),
+			fmt.Sprintf("/api/v1/templates/%d", template.ID), "saved-template"},
+	} {
+		b.navigateBackTest(t, f.baseURL+edit.path)
+		b.evaluate(
+			t,
+			fmt.Sprintf(
+				`window.savedForm = document.querySelector('main input[name="name"]').form; document.querySelector('main input[name="name"]').value = %q; document.querySelector('.page-header button[type="submit"]').click(); true`,
+				edit.name,
+			),
+		)
+		b.wait(
+			t,
+			fmt.Sprintf(
+				`!window.savedForm?.isConnected && (document.querySelector('main input[name="name"]')?.value === %q || document.querySelector('main').textContent.includes(%q))`,
+				edit.name,
+				edit.name,
+			),
+		)
+		var saved struct{ Name string }
+		decodeStepLogTest(t, f.api(t, "GET", edit.api, nil, 200), &saved)
+		if saved.Name != edit.name {
+			t.Fatalf("header Save did not persist %s", edit.api)
+		}
+	}
+	testTemplateDeleteOnEdit(t, f, b, template.ID)
+	testNewEnvironmentHeaderSave(t, f, b)
+}
+
+func verifyMainPageReleaseCreation(
+	t *testing.T,
+	f *artifactE2E,
+	b *packageBrowser,
+	path string,
+) {
+	t.Helper()
+	b.evaluate(t, `(() => {
+ const form = document.querySelector('#releases-content form[hx-post]');
+ form.querySelector('[name=version]').value = 'design-v2';
+ form.querySelector('[type=submit]').click();
+ return true;
+})()`)
+	b.wait(
+		t,
+		`document.querySelector('#releases-content').textContent.includes('design-v2') && !document.querySelector('.htmx-request, .htmx-settling')`,
+	)
+	if string(b.evaluate(t, `(() => {
+ const content = document.querySelector('#releases-content');
+ return content.querySelectorAll('thead th').length === 3 &&
+ [...content.querySelectorAll('tbody tr')].every(row => row.children.length === 3) &&
+ !content.querySelector('select[name=environment_id], input[name=force], form[action$="/deploy"]') &&
+ [...content.querySelectorAll('thead th')].map(e => e.textContent).join(',') === 'Version,Created At,Actions';
+})()`)) != "true" {
+		t.Fatal(
+			"releases list retained deployment controls or mismatched columns",
+		)
+	}
+	var releases struct{ Total int64 }
+	decodeStepLogTest(
+		t,
+		f.api(t, "GET", "/api/v1"+path, nil, 200),
+		&releases,
+	)
+	if releases.Total != 2 {
+		t.Fatal("release creation did not persist through the API")
+	}
+}
+
+func verifyMainPageResourceCards(
+	t *testing.T,
+	f *artifactE2E,
+	b *packageBrowser,
+	templateID, lifecycleID int64,
+) {
+	t.Helper()
 	for _, card := range []struct{ list, destination string }{
 		{"/projects", fmt.Sprintf("/projects/%d", f.project.ID)},
 		{"/environments", fmt.Sprintf("/environments/%d/edit", f.environment.ID)},
-		{"/lifecycles", fmt.Sprintf("/lifecycles/%d", lifecycle.ID)},
-		{"/templates", fmt.Sprintf("/templates/%d/edit", template.ID)},
+		{"/lifecycles", fmt.Sprintf("/lifecycles/%d", lifecycleID)},
+		{"/templates", fmt.Sprintf("/templates/%d/edit", templateID)},
 	} {
 		b.navigateBackTest(t, f.baseURL+card.list)
 		if string(b.evaluate(t, fmt.Sprintf(`(() => {
@@ -166,39 +219,6 @@ func TestMainPagePatternBrowserE2E(t *testing.T) {
 			)
 		}
 	}
-	// Header Save controls submit the real edit form and persist through the API.
-	for _, edit := range []struct {
-		path, api, name string
-	}{
-		{fmt.Sprintf("/projects/%d/edit", f.project.ID),
-			fmt.Sprintf("/api/v1/projects/%d", f.project.ID), "saved-project"},
-		{fmt.Sprintf("/templates/%d/edit", template.ID),
-			fmt.Sprintf("/api/v1/templates/%d", template.ID), "saved-template"},
-	} {
-		b.navigateBackTest(t, f.baseURL+edit.path)
-		b.evaluate(
-			t,
-			fmt.Sprintf(
-				`window.savedForm = document.querySelector('main input[name="name"]').form; document.querySelector('main input[name="name"]').value = %q; document.querySelector('.page-header button[type="submit"]').click(); true`,
-				edit.name,
-			),
-		)
-		b.wait(
-			t,
-			fmt.Sprintf(
-				`!window.savedForm?.isConnected && (document.querySelector('main input[name="name"]')?.value === %q || document.querySelector('main').textContent.includes(%q))`,
-				edit.name,
-				edit.name,
-			),
-		)
-		var saved struct{ Name string }
-		decodeStepLogTest(t, f.api(t, "GET", edit.api, nil, 200), &saved)
-		if saved.Name != edit.name {
-			t.Fatalf("header Save did not persist %s", edit.api)
-		}
-	}
-	testTemplateDeleteOnEdit(t, f, b, template.ID)
-	testNewEnvironmentHeaderSave(t, f, b)
 }
 
 func testTemplateDeleteOnEdit(
