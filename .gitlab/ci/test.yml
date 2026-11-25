@@ -25,6 +25,8 @@ fuzz:
     - if: '$CI_PIPELINE_SOURCE == "web" && $CI_FUZZ == "true"'
   variables:
     CI_RUNTIME: none
+    # Go 1.27 includes the fuzz coordinator deadline fix from go.dev/issue/75804.
+    GOTOOLCHAIN: go1.27.4
     KUBERNETES_CPU_REQUEST: "1"
     KUBERNETES_CPU_LIMIT: "2"
     KUBERNETES_MEMORY_REQUEST: 2Gi
