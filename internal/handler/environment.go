@@ -15,8 +15,12 @@ import (
 	"durpdeploy/views/pages"
 )
 
-const environmentsContentTarget = "#environments-content"
-const invalidEnvironmentIDMessage = "invalid id"
+const (
+	environmentsContentTarget      = "#environments-content"
+	invalidEnvironmentIDMessage    = "invalid id"
+	environmentNameRequiredMessage = "Name is required"
+	environmentNameTakenMessage    = "An environment with this name already exists"
+)
 
 type EnvironmentHandler struct {
 	Repo *repository.Repository
@@ -74,12 +78,12 @@ func (h *EnvironmentHandler) CreateEnvironment(
 			pages.EnvironmentFormFragment(
 				&db.Environment{},
 				true,
-				"Name is required",
+				environmentNameRequiredMessage,
 			),
 			pages.EnvironmentForm(
 				&db.Environment{},
 				true,
-				"Name is required",
+				environmentNameRequiredMessage,
 				r.URL.Path,
 			),
 		)
@@ -126,12 +130,12 @@ func (h *EnvironmentHandler) CreateEnvironment(
 				pages.EnvironmentFormFragment(
 					env,
 					true,
-					"An environment with this name already exists",
+					environmentNameTakenMessage,
 				),
 				pages.EnvironmentForm(
 					env,
 					true,
-					"An environment with this name already exists",
+					environmentNameTakenMessage,
 					r.URL.Path,
 				),
 			)
@@ -204,8 +208,17 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 		WriteFormError(
 			w,
 			r,
-			pages.EnvironmentFormFragment(env, false, "Name is required"),
-			pages.EnvironmentForm(env, false, "Name is required", r.URL.Path),
+			pages.EnvironmentFormFragment(
+				env,
+				false,
+				environmentNameRequiredMessage,
+			),
+			pages.EnvironmentForm(
+				env,
+				false,
+				environmentNameRequiredMessage,
+				r.URL.Path,
+			),
 		)
 		return
 	}
@@ -253,12 +266,12 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 				pages.EnvironmentFormFragment(
 					env,
 					false,
-					"An environment with this name already exists",
+					environmentNameTakenMessage,
 				),
 				pages.EnvironmentForm(
 					env,
 					false,
-					"An environment with this name already exists",
+					environmentNameTakenMessage,
 					r.URL.Path,
 				),
 			)

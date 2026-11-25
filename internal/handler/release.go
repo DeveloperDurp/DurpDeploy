@@ -26,7 +26,7 @@ func NewReleaseHandler(repo *repository.Repository) *ReleaseHandler {
 func (h *ReleaseHandler) ListReleases(w http.ResponseWriter, r *http.Request) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -87,7 +87,7 @@ func loadReleaseViews(
 func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -111,7 +111,7 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 	release, err := h.repo.Queries.GetDeploymentRelease(r.Context(), releaseID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			http.Error(w, "Release not found", http.StatusNotFound)
+			http.Error(w, releaseNotFoundMessage, http.StatusNotFound)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -120,7 +120,7 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 
 	// Verify release belongs to project
 	if release.ProjectID != projectID {
-		http.Error(w, "Release not found", http.StatusNotFound)
+		http.Error(w, releaseNotFoundMessage, http.StatusNotFound)
 		return
 	}
 	active, err := h.repo.Queries.HasActiveReleaseDeployment(
@@ -160,7 +160,7 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 func (h *ReleaseHandler) DeleteRelease(w http.ResponseWriter, r *http.Request) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 	releaseID, err := strconv.ParseInt(chi.URLParam(r, "releaseId"), 10, 64)
@@ -173,7 +173,7 @@ func (h *ReleaseHandler) DeleteRelease(w http.ResponseWriter, r *http.Request) {
 	); err != nil {
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
-			http.Error(w, "Release not found", http.StatusNotFound)
+			http.Error(w, releaseNotFoundMessage, http.StatusNotFound)
 		case errors.Is(err, repository.ErrReleaseHasActiveDeployment):
 			http.Error(w, err.Error(), http.StatusConflict)
 		default:

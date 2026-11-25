@@ -435,7 +435,7 @@
     "rule": "G710",
     "file": "internal/handler/release.go",
     "line": "190",
-    "source_sha256": "31d3618b34335da380cded3d7eed940dff39c3ba9d5e53548ffa3cfccaa24625",
+    "source_sha256": "218cb0647ae3fc43309a62392eb49ef5a4b32a9e751a36d3b85a596462c35598",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Existing delete redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. Extracting release creation moved this redirect without changing its destination. Evidence: release.go DeleteRelease, project.go parseProjectID, release deletion/E2E tests."
