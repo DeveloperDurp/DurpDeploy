@@ -67,11 +67,27 @@ func (f *artifactE2E) checkVariableScopeSnapshot(
 			"name": "API_VALUE", "environment_id": scope.outside,
 		}, 422)
 	}
+	f.verifyVariableScopeFirstRelease(
+		t,
+		path,
+		variablePath,
+		scope.eligible,
+		expected,
+	)
+}
+
+func (f *artifactE2E) verifyVariableScopeFirstRelease(
+	t *testing.T,
+	path, variablePath string,
+	eligibleID int64,
+	expected map[string]string,
+) {
+	t.Helper()
 	var release struct{ ID int64 }
 	decodeStepLogTest(t, f.api(t, "POST", path+"/releases",
 		map[string]string{"version": "first-scoped-release"}, 201), &release)
 	f.api(t, "PUT", variablePath, map[string]any{
-		"name": "API_VALUE", "value": "changed", "environment_id": scope.eligible,
+		"name": "API_VALUE", "value": "changed", "environment_id": eligibleID,
 	}, 200)
 	var snapshot struct {
 		Variables []struct {
@@ -86,7 +102,7 @@ func (f *artifactE2E) checkVariableScopeSnapshot(
 		found := false
 		for _, saved := range snapshot.Variables {
 			if saved.Name == name && saved.Value == value &&
-				saved.EnvironmentID.Valid && saved.EnvironmentID.Int64 == scope.eligible {
+				saved.EnvironmentID.Valid && saved.EnvironmentID.Int64 == eligibleID {
 				found = true
 			}
 		}

@@ -152,9 +152,25 @@ func TestRunbookAPI_ApprovalAndSchedule(t *testing.T) {
 	if !strings.Contains(logs.Body.String(), "approved") {
 		t.Fatalf("approved execution logs=%s", logs.Body.String())
 	}
+	verifyRunbookAPISchedule(
+		t,
+		request,
+		bookURL,
+		environment.ID,
+		saved.Version.ID,
+	)
+}
+
+func verifyRunbookAPISchedule(
+	t *testing.T,
+	request func(method, path, body string) *httptest.ResponseRecorder,
+	bookURL string,
+	environmentID, versionID int64,
+) {
+	t.Helper()
 	scheduled := request(http.MethodPost, bookURL+"/schedules",
 		fmt.Sprintf(`{"environment_id":%d,"version_id":%d,"cron":"0 3 * * *"}`,
-			environment.ID, saved.Version.ID))
+			environmentID, versionID))
 	if scheduled.Code != http.StatusCreated {
 		t.Fatalf("schedule status=%d body=%s", scheduled.Code,
 			scheduled.Body.String())

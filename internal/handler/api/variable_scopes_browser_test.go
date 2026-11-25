@@ -68,143 +68,164 @@ func TestVariableScopesBeforeDeploymentBrowserE2E(t *testing.T) {
 			for _, boosted := range []bool{false, true} {
 				t.Run(fmt.Sprintf("width=%d/bound=%t/htmx=%t",
 					width, bound, boosted), func(t *testing.T) {
-					name := "variable-before-deploy-" + uuid.NewString()
-					request := map[string]any{
-						"name":        name,
-						"description": "Managed by make e2e-test. Variable scopes before deployment.",
-					}
-					if bound {
-						request["lifecycle_id"] = lifecycle.ID
-					}
-					var project struct{ ID int64 }
-					decodeStepLogTest(t, f.api(t, "POST",
-						"/api/v1/projects", request, 201), &project)
-					path := fmt.Sprintf("/projects/%d", project.ID)
-					apiPath := "/api/v1" + path
-					var editable struct{ ID int64 }
-					decodeStepLogTest(t, f.api(
+					checkVariableScopeBrowserCase(
 						t,
-						"POST",
-						apiPath+"/variables",
-						map[string]string{
-							"name":  "EDIT_ME",
-							"value": "initial",
-						},
-						201,
-					), &editable)
-					f.api(
-						t,
-						"POST",
-						apiPath+"/variables",
-						map[string]string{
-							"name":  "DEFAULT",
-							"value": "global",
-						},
-						201,
-					)
-					b.navigateBackTest(t, f.baseURL+path+"/variables")
-					if boosted {
-						b.navigateBackTest(t, f.baseURL+path)
-						b.evaluate(t, `window.variableScopeNavigation = true;
-document.querySelector('.page-header button[aria-controls="project-menu-dialog"]').click(); true`)
-						b.wait(
-							t,
-							`document.querySelector('#project-menu-dialog').matches(':modal')`,
-						)
-						b.evaluate(t, fmt.Sprintf(
-							`document.querySelector('#project-menu-dialog a[href=%q]').click(); true`,
-							path+"/variables",
-						))
-						b.waitBackTestURL(t, f.baseURL+path+"/variables")
-						if string(b.evaluate(
-							t,
-							`window.variableScopeNavigation === true`,
-						)) != "true" {
-							t.Fatal(
-								"Variables navigation reloaded the document",
-							)
-						}
-					}
-					// When: select scopes in new, edit, and override forms.
-					submit := func(selector, variableName, value string) {
-						t.Helper()
-						b.wait(
-							t,
-							`!document.querySelector('.htmx-request, .htmx-settling')`,
-						)
-						b.evaluate(t, fmt.Sprintf(`(() => {
- const form = document.querySelector(%q);
- form.elements.namedItem('name').value = %q;
- form.elements.namedItem('value').value = %q;
- return true;
-})()`, selector, variableName, value))
-						b.selectVariableScope(t, selector, scope.eligible)
-						b.evaluate(t, fmt.Sprintf(
-							`document.querySelector(%q).requestSubmit(); true`,
-							selector,
-						))
-						b.wait(t, fmt.Sprintf(
-							`document.querySelector('#variables-content').textContent.includes(%q) && !document.querySelector('.htmx-request, .htmx-settling')`,
-							value,
-						))
-					}
-					b.evaluate(
-						t,
-						`document.querySelector('[data-variable-create] > summary').click(); true`,
-					)
-					submit(
-						"#variables-content form[hx-post]",
-						"NEW",
-						"new-scoped",
-					)
-					edit := fmt.Sprintf(
-						"#variable-row-%d [data-variable-action=edit]",
-						editable.ID,
-					)
-					form := fmt.Sprintf(
-						"#variable-row-%d [data-desktop-variable-edit] form",
-						editable.ID,
-					)
-					if width == 375 {
-						edit = fmt.Sprintf(
-							"[data-mobile-variable='%d'] [data-variable-action=edit]",
-							editable.ID,
-						)
-						form = fmt.Sprintf(
-							"[data-mobile-variable='%d'] form",
-							editable.ID,
-						)
-					}
-					b.evaluate(t, fmt.Sprintf(
-						`(() => { const edit = document.querySelector(%q); edit.closest('[data-variable-menu]').querySelector('summary').click(); edit.click(); return true; })()`,
-						edit,
-					))
-					b.wait(t, fmt.Sprintf(
-						`!!document.querySelector(%q)?.getClientRects().length`,
-						form,
-					))
-					submit(form, "EDIT_ME", "edit-scoped")
-					b.evaluate(t, `(() => {
- const override = [...document.querySelectorAll('[data-override-for="DEFAULT"]')].find(e => e.closest('[data-variable-menu]').getClientRects().length);
- override.closest('[data-variable-menu]').querySelector('summary').click();
- override.click(); return true;
-})()`)
-					submit(
-						"#variables-content form[hx-post]",
-						"DEFAULT",
-						"override-scoped",
-					)
-					// Then: public API writes agree and the first snapshot retains scope.
-					f.checkVariableScopeSnapshot(t, apiPath, scope)
-					b.screenshot(t, fmt.Sprintf("variable-scopes-%d-%t-%t",
-						width, bound, boosted))
-					t.Logf(
-						"Retained variable fixture: %s%s/variables",
-						f.baseURL,
-						path,
+						f,
+						b,
+						lifecycle.ID,
+						width,
+						scope,
+						boosted,
 					)
 				})
 			}
 		}
 	}
+}
+
+func checkVariableScopeBrowserCase(
+	t *testing.T,
+	f *artifactE2E,
+	b *packageBrowser,
+	lifecycleID int64,
+	width int,
+	scope variableLifecycleScope,
+	boosted bool,
+) {
+	t.Helper()
+	name := "variable-before-deploy-" + uuid.NewString()
+	request := map[string]any{
+		"name":        name,
+		"description": "Managed by make e2e-test. Variable scopes before deployment.",
+	}
+	if scope.bound {
+		request["lifecycle_id"] = lifecycleID
+	}
+	var project struct{ ID int64 }
+	decodeStepLogTest(t, f.api(t, "POST",
+		"/api/v1/projects", request, 201), &project)
+	path := fmt.Sprintf("/projects/%d", project.ID)
+	apiPath := "/api/v1" + path
+	var editable struct{ ID int64 }
+	decodeStepLogTest(t, f.api(
+		t,
+		"POST",
+		apiPath+"/variables",
+		map[string]string{
+			"name":  "EDIT_ME",
+			"value": "initial",
+		},
+		201,
+	), &editable)
+	f.api(
+		t,
+		"POST",
+		apiPath+"/variables",
+		map[string]string{
+			"name":  "DEFAULT",
+			"value": "global",
+		},
+		201,
+	)
+	b.navigateBackTest(t, f.baseURL+path+"/variables")
+	if boosted {
+		b.navigateBackTest(t, f.baseURL+path)
+		b.evaluate(t, `window.variableScopeNavigation = true;
+document.querySelector('.page-header button[aria-controls="project-menu-dialog"]').click(); true`)
+		b.wait(
+			t,
+			`document.querySelector('#project-menu-dialog').matches(':modal')`,
+		)
+		b.evaluate(t, fmt.Sprintf(
+			`document.querySelector('#project-menu-dialog a[href=%q]').click(); true`,
+			path+"/variables",
+		))
+		b.waitBackTestURL(t, f.baseURL+path+"/variables")
+		if string(b.evaluate(
+			t,
+			`window.variableScopeNavigation === true`,
+		)) != "true" {
+			t.Fatal(
+				"Variables navigation reloaded the document",
+			)
+		}
+	}
+	// When: select scopes in new, edit, and override forms.
+	submit := func(selector, variableName, value string) {
+		t.Helper()
+		b.wait(
+			t,
+			`!document.querySelector('.htmx-request, .htmx-settling')`,
+		)
+		b.evaluate(t, fmt.Sprintf(`(() => {
+ const form = document.querySelector(%q);
+ form.elements.namedItem('name').value = %q;
+ form.elements.namedItem('value').value = %q;
+ return true;
+})()`, selector, variableName, value))
+		b.selectVariableScope(t, selector, scope.eligible)
+		b.evaluate(t, fmt.Sprintf(
+			`document.querySelector(%q).requestSubmit(); true`,
+			selector,
+		))
+		b.wait(t, fmt.Sprintf(
+			`document.querySelector('#variables-content').textContent.includes(%q) && !document.querySelector('.htmx-request, .htmx-settling')`,
+			value,
+		))
+	}
+	b.evaluate(
+		t,
+		`document.querySelector('[data-variable-create] > summary').click(); true`,
+	)
+	submit(
+		"#variables-content form[hx-post]",
+		"NEW",
+		"new-scoped",
+	)
+	edit := fmt.Sprintf(
+		"#variable-row-%d [data-variable-action=edit]",
+		editable.ID,
+	)
+	form := fmt.Sprintf(
+		"#variable-row-%d [data-desktop-variable-edit] form",
+		editable.ID,
+	)
+	if width == 375 {
+		edit = fmt.Sprintf(
+			"[data-mobile-variable='%d'] [data-variable-action=edit]",
+			editable.ID,
+		)
+		form = fmt.Sprintf(
+			"[data-mobile-variable='%d'] form",
+			editable.ID,
+		)
+	}
+	b.evaluate(t, fmt.Sprintf(
+		`(() => { const edit = document.querySelector(%q); edit.closest('[data-variable-menu]').querySelector('summary').click(); edit.click(); return true; })()`,
+		edit,
+	))
+	b.wait(t, fmt.Sprintf(
+		`!!document.querySelector(%q)?.getClientRects().length`,
+		form,
+	))
+	submit(form, "EDIT_ME", "edit-scoped")
+	b.evaluate(t, `(() => {
+ const override = [...document.querySelectorAll('[data-override-for="DEFAULT"]')].find(e => e.closest('[data-variable-menu]').getClientRects().length);
+ override.closest('[data-variable-menu]').querySelector('summary').click();
+ override.click(); return true;
+})()`)
+	submit(
+		"#variables-content form[hx-post]",
+		"DEFAULT",
+		"override-scoped",
+	)
+	// Then: public API writes agree and the first snapshot retains scope.
+	f.checkVariableScopeSnapshot(t, apiPath, scope)
+	b.screenshot(t, fmt.Sprintf("variable-scopes-%d-%t-%t",
+		width, scope.bound, boosted))
+	t.Logf(
+		"Retained variable fixture: %s%s/variables",
+		f.baseURL,
+		path,
+	)
 }

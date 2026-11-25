@@ -107,60 +107,7 @@ func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	var status string
-	for time.Now().Before(deadline) {
-		detail := request(
-			http.MethodGet,
-			fmt.Sprintf(
-				"%s/runbook-executions/%d",
-				base,
-				execution.ID,
-			),
-			"",
-		)
-		if detail.Code != http.StatusOK {
-			t.Fatalf(
-				"detail status=%d body=%s",
-				detail.Code,
-				detail.Body.String(),
-			)
-		}
-		var state struct {
-			Status      string `json:"status"`
-			RunbookName string `json:"runbook_name"`
-		}
-		if err := json.Unmarshal(
-			detail.Body.Bytes(),
-			&state,
-		); err != nil {
-			t.Fatal(err)
-		}
-		if state.RunbookName != "maintenance" {
-			t.Fatalf("detail runbook_name=%q", state.RunbookName)
-		}
-		status = state.Status
-		if status == "succeeded" || status == "failed" {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if status != "succeeded" {
-		logs := request(
-			http.MethodGet,
-			fmt.Sprintf(
-				"%s/runbook-executions/%d/logs",
-				base,
-				execution.ID,
-			),
-			"",
-		)
-		t.Fatalf(
-			"execution status=%s logs=%s",
-			status,
-			logs.Body.String(),
-		)
-	}
+	waitForVersionedRunbookExecution(t, request, base, execution.ID)
 	logs := request(
 		http.MethodGet,
 		fmt.Sprintf(
@@ -221,6 +168,69 @@ func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 	if deletedEnvironment.Code != http.StatusNoContent {
 		t.Fatalf("delete executed environment status=%d body=%s",
 			deletedEnvironment.Code, deletedEnvironment.Body.String())
+	}
+}
+
+func waitForVersionedRunbookExecution(
+	t *testing.T,
+	request func(method, path, body string) *httptest.ResponseRecorder,
+	base string,
+	executionID int64,
+) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	var status string
+	for time.Now().Before(deadline) {
+		detail := request(
+			http.MethodGet,
+			fmt.Sprintf(
+				"%s/runbook-executions/%d",
+				base,
+				executionID,
+			),
+			"",
+		)
+		if detail.Code != http.StatusOK {
+			t.Fatalf(
+				"detail status=%d body=%s",
+				detail.Code,
+				detail.Body.String(),
+			)
+		}
+		var state struct {
+			Status      string `json:"status"`
+			RunbookName string `json:"runbook_name"`
+		}
+		if err := json.Unmarshal(
+			detail.Body.Bytes(),
+			&state,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if state.RunbookName != "maintenance" {
+			t.Fatalf("detail runbook_name=%q", state.RunbookName)
+		}
+		status = state.Status
+		if status == "succeeded" || status == "failed" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if status != "succeeded" {
+		logs := request(
+			http.MethodGet,
+			fmt.Sprintf(
+				"%s/runbook-executions/%d/logs",
+				base,
+				executionID,
+			),
+			"",
+		)
+		t.Fatalf(
+			"execution status=%s logs=%s",
+			status,
+			logs.Body.String(),
+		)
 	}
 }
 
@@ -312,11 +322,30 @@ func TestRunbookAPI_ProjectDeleteAfterVersion(t *testing.T) {
 	if err := json.Unmarshal(active.Body.Bytes(), &running); err != nil {
 		t.Fatal(err)
 	}
-	deadline = time.Now().Add(5 * time.Second)
+	verifyRunbookDeletionAfterCancellation(
+		t,
+		h,
+		request,
+		base,
+		environment.ID,
+		running.ID,
+		running.DeploymentID,
+	)
+}
+
+func verifyRunbookDeletionAfterCancellation(
+	t *testing.T,
+	h *harness,
+	request func(method, path, body string) *httptest.ResponseRecorder,
+	base string,
+	environmentID, executionID, deploymentID int64,
+) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
 	status := ""
 	for time.Now().Before(deadline) {
 		deployment, err := h.repo.Queries.GetDeployment(context.Background(),
-			running.DeploymentID)
+			deploymentID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -330,7 +359,7 @@ func TestRunbookAPI_ProjectDeleteAfterVersion(t *testing.T) {
 		t.Fatalf("execution did not start: %s", status)
 	}
 	blockedEnvironment := request(http.MethodDelete,
-		fmt.Sprintf("/api/v1/environments/%d", environment.ID), "")
+		fmt.Sprintf("/api/v1/environments/%d", environmentID), "")
 	if blockedEnvironment.Code != http.StatusConflict {
 		t.Fatalf("active environment delete status=%d body=%s",
 			blockedEnvironment.Code, blockedEnvironment.Body.String())
@@ -341,7 +370,7 @@ func TestRunbookAPI_ProjectDeleteAfterVersion(t *testing.T) {
 			blocked.Body.String())
 	}
 	cancelled := request(http.MethodPost,
-		fmt.Sprintf("%s/runbook-executions/%d/cancel", base, running.ID), "")
+		fmt.Sprintf("%s/runbook-executions/%d/cancel", base, executionID), "")
 	if cancelled.Code != http.StatusOK {
 		t.Fatalf("cancel status=%d body=%s", cancelled.Code,
 			cancelled.Body.String())
@@ -349,7 +378,7 @@ func TestRunbookAPI_ProjectDeleteAfterVersion(t *testing.T) {
 	deadline = time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		deployment, err := h.repo.Queries.GetDeployment(context.Background(),
-			running.DeploymentID)
+			deploymentID)
 		if err != nil {
 			t.Fatal(err)
 		}

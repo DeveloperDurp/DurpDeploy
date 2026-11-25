@@ -133,44 +133,55 @@ printf 'snapshot=%s secret=%s\n' "$REGION" "$TOKEN"`
 		{second.Version.ID, "runbook-web"},
 		{webVersionID, "runbook-web"},
 	} {
-		var execution db.RunbookExecution
-		decodeLifecycleTest(
+		verifyLifecycleRunbookSnapshot(t, f, path, snapshot.id, snapshot.value)
+	}
+}
+
+func verifyLifecycleRunbookSnapshot(
+	t *testing.T,
+	f *artifactE2E,
+	path string,
+	versionID int64,
+	value string,
+) {
+	t.Helper()
+	var execution db.RunbookExecution
+	decodeLifecycleTest(
+		t,
+		f.api(
 			t,
-			f.api(
-				t,
-				"POST",
-				path+"/executions",
-				map[string]int64{
-					"version_id":     snapshot.id,
-					"environment_id": f.environment.ID,
-				},
-				201,
+			"POST",
+			path+"/executions",
+			map[string]int64{
+				"version_id":     versionID,
+				"environment_id": f.environment.ID,
+			},
+			201,
+		),
+		&execution,
+	)
+	f.completion(t, execution.DeploymentID, events.RunbookSucceeded)
+	logs := string(
+		f.api(
+			t,
+			"GET",
+			fmt.Sprintf(
+				"%s/runbook-executions/%d/logs",
+				f.base(),
+				execution.ID,
 			),
-			&execution,
+			nil,
+			200,
+		),
+	)
+	if !strings.Contains(logs, "snapshot="+value) ||
+		strings.Contains(logs, "lifecycle-secret-sentinel") ||
+		strings.Contains(logs, "runbook-api-secret") ||
+		strings.Contains(logs, "runbook-web-secret") {
+		t.Fatalf(
+			"runbook version %d snapshot or redaction mismatch: %s",
+			versionID,
+			logs,
 		)
-		f.completion(t, execution.DeploymentID, events.RunbookSucceeded)
-		logs := string(
-			f.api(
-				t,
-				"GET",
-				fmt.Sprintf(
-					"%s/runbook-executions/%d/logs",
-					f.base(),
-					execution.ID,
-				),
-				nil,
-				200,
-			),
-		)
-		if !strings.Contains(logs, "snapshot="+snapshot.value) ||
-			strings.Contains(logs, "lifecycle-secret-sentinel") ||
-			strings.Contains(logs, "runbook-api-secret") ||
-			strings.Contains(logs, "runbook-web-secret") {
-			t.Fatalf(
-				"runbook version %d snapshot or redaction mismatch: %s",
-				snapshot.id,
-				logs,
-			)
-		}
 	}
 }

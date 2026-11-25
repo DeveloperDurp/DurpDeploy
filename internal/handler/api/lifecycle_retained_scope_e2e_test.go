@@ -71,70 +71,79 @@ func assertLifecycleRetainedScopeAndDuplicateReset(
 		"environment_id": f.environment.ID,
 	}, 201)
 	for _, webReset := range []bool{false, true} {
-		var selected struct{ ID int64 }
-		for range 2 {
-			decodeLifecycleTest(t, f.api(
-				t,
-				"POST",
-				f.base()+"/variables",
-				map[string]string{
-					"name":  "RESET_DUP",
-					"value": "local",
-				},
-				201,
-			), &selected)
-		}
-		var scoped struct{ ID int64 }
-		decodeLifecycleTest(
+		verifyLifecycleDuplicateReset(t, f, webReset)
+	}
+}
+
+func verifyLifecycleDuplicateReset(
+	t *testing.T,
+	f *artifactE2E,
+	webReset bool,
+) {
+	t.Helper()
+	var selected struct{ ID int64 }
+	for range 2 {
+		decodeLifecycleTest(t, f.api(
 			t,
-			f.api(t, "POST", f.base()+"/variables", map[string]any{
-				"name":           "RESET_DUP",
-				"value":          "scoped",
-				"environment_id": f.environment.ID,
-			}, 201),
-			&scoped,
-		)
-		path := fmt.Sprintf(
-			"%s/variables/%d?reset=inherit",
-			f.base(),
-			selected.ID,
-		)
-		if webReset {
-			f.web(
-				t,
-				"DELETE",
-				fmt.Sprintf("/projects/%d/variables/%d?reset=inherit",
-					f.project.ID, selected.ID),
-				nil,
-				200,
-			)
-		} else {
-			f.api(t, "DELETE", path, nil, 204)
-		}
-		locals, err := f.h.repo.Queries.ListVariablesByProject(
-			t.Context(),
-			f.project.ID,
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, local := range locals {
-			if local.Name == "RESET_DUP" && !local.EnvironmentID.Valid {
-				t.Fatal("reset left a duplicate override")
-			}
-		}
-		if _, err := f.h.repo.Queries.GetVariable(
-			t.Context(),
-			scoped.ID,
-		); err != nil {
-			t.Fatal("reset deleted another scope", err)
-		}
-		f.api(
+			"POST",
+			f.base()+"/variables",
+			map[string]string{
+				"name":  "RESET_DUP",
+				"value": "local",
+			},
+			201,
+		), &selected)
+	}
+	var scoped struct{ ID int64 }
+	decodeLifecycleTest(
+		t,
+		f.api(t, "POST", f.base()+"/variables", map[string]any{
+			"name":           "RESET_DUP",
+			"value":          "scoped",
+			"environment_id": f.environment.ID,
+		}, 201),
+		&scoped,
+	)
+	path := fmt.Sprintf(
+		"%s/variables/%d?reset=inherit",
+		f.base(),
+		selected.ID,
+	)
+	if webReset {
+		f.web(
 			t,
 			"DELETE",
-			fmt.Sprintf("%s/variables/%d", f.base(), scoped.ID),
+			fmt.Sprintf("/projects/%d/variables/%d?reset=inherit",
+				f.project.ID, selected.ID),
 			nil,
-			204,
+			200,
 		)
+	} else {
+		f.api(t, "DELETE", path, nil, 204)
 	}
+	locals, err := f.h.repo.Queries.ListVariablesByProject(
+		t.Context(),
+		f.project.ID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, local := range locals {
+		if local.Name == "RESET_DUP" && !local.EnvironmentID.Valid {
+			t.Fatal("reset left a duplicate override")
+		}
+	}
+	if _, err := f.h.repo.Queries.GetVariable(
+		t.Context(),
+		scoped.ID,
+	); err != nil {
+		t.Fatal("reset deleted another scope", err)
+	}
+	f.api(
+		t,
+		"DELETE",
+		fmt.Sprintf("%s/variables/%d", f.base(), scoped.ID),
+		nil,
+		204,
+	)
 }

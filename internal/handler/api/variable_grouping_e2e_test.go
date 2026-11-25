@@ -99,40 +99,71 @@ func checkVariableGroup(
 		{"tbody", "id", "variable-row-"},
 		{"li", "data-mobile-variable", ""},
 	} {
-		var groups int
-		for group := range document.Descendants() {
-			if group.Data != variant.tag || !slices.Contains(
-				group.Attr,
-				html.Attribute{Key: "data-variable-group", Val: name},
-			) {
-				continue
-			}
-			groups++
-			var labels int
-			var rows []string
-			for child := range group.Descendants() {
-				if child.Type == html.TextNode && child.Data == name {
-					labels++
-				}
-				for _, attr := range child.Attr {
-					if attr.Key == variant.attribute &&
-						strings.HasPrefix(attr.Val, variant.prefix) {
-						rows = append(rows, attr.Val)
-					}
-				}
-			}
-			var want []string
-			for _, id := range ids {
-				want = append(want, fmt.Sprintf("%s%d", variant.prefix, id))
-			}
-			if labels != 1 || !slices.Equal(rows, want) {
-				t.Errorf("%s group %s: labels=%d, rows=%v, want %v",
-					variant.tag, name, labels, rows, want)
-			}
+		verifyVariableGroupVariant(
+			t,
+			document,
+			name,
+			variant.tag,
+			variant.attribute,
+			variant.prefix,
+			ids,
+		)
+	}
+}
+
+func verifyVariableGroupVariant(
+	t *testing.T,
+	document *html.Node,
+	name, tag, attribute, prefix string,
+	ids []int64,
+) {
+	t.Helper()
+	var groups int
+	for group := range document.Descendants() {
+		if group.Data != tag || !slices.Contains(
+			group.Attr,
+			html.Attribute{Key: "data-variable-group", Val: name},
+		) {
+			continue
 		}
-		if groups != 1 {
-			t.Errorf("%s: expected one group for %s, got %d",
-				variant.tag, name, groups)
+		groups++
+		labels, rows := readVariableGroupContents(
+			group,
+			name,
+			attribute,
+			prefix,
+		)
+		var want []string
+		for _, id := range ids {
+			want = append(want, fmt.Sprintf("%s%d", prefix, id))
+		}
+		if labels != 1 || !slices.Equal(rows, want) {
+			t.Errorf("%s group %s: labels=%d, rows=%v, want %v",
+				tag, name, labels, rows, want)
 		}
 	}
+	if groups != 1 {
+		t.Errorf("%s: expected one group for %s, got %d",
+			tag, name, groups)
+	}
+}
+
+func readVariableGroupContents(
+	group *html.Node,
+	name, attribute, prefix string,
+) (int, []string) {
+	var labels int
+	var rows []string
+	for child := range group.Descendants() {
+		if child.Type == html.TextNode && child.Data == name {
+			labels++
+		}
+		for _, attr := range child.Attr {
+			if attr.Key == attribute &&
+				strings.HasPrefix(attr.Val, prefix) {
+				rows = append(rows, attr.Val)
+			}
+		}
+	}
+	return labels, rows
 }
