@@ -10,16 +10,17 @@ project_token_code() {
 project_tokens_e2e() {
     local first second foreign role created scoped token_id expected code
     local revoke_id revoke_token
+    local -r json_id='import json,sys; print(json.load(sys.stdin)["id"])'
     echo '=== Project-scoped API tokens ==='
     first=$(api_post "{\"name\":\"e2e-token-a-$E2E_RUN_ID\"}" "$BASE/api/v1/projects" |
-        python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+        python3 -c "$json_id")
     second=$(api_post "{\"name\":\"e2e-token-b-$E2E_RUN_ID\"}" "$BASE/api/v1/projects" |
-        python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+        python3 -c "$json_id")
     foreign=$(api_post "{\"name\":\"e2e-token-foreign-$E2E_RUN_ID\"}" "$BASE/api/v1/projects" |
-        python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+        python3 -c "$json_id")
     for role in viewer deployer maintainer admin; do
         created=$(api_post "{\"name\":\"e2e-project-$role-$E2E_RUN_ID\",\"scope\":\"scoped\",\"role\":\"$role\",\"project_ids\":[$first,$second]}" "$BASE/api/v1/tokens")
-        scoped=$(printf '%s' "$created" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+        scoped=$(printf '%s' "$created" | python3 -c "$json_id")
         token_id=$(printf '%s' "$created" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token_id"])')
         curl -fsS -H "Authorization: Bearer $scoped" "$BASE/api/v1/projects?limit=1" |
             python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["total"] == 2 and len(d["items"]) == 1'
@@ -50,7 +51,7 @@ project_tokens_e2e() {
     [[ "$code" == 422 ]] || { echo "FAIL: empty scoped selection returned $code"; return 1; }
     created=$(api_post "{\"name\":\"e2e-revoked-project-$E2E_RUN_ID\",\"scope\":\"scoped\",\"role\":\"viewer\",\"project_ids\":[$first]}" "$BASE/api/v1/tokens")
     revoke_id=$(printf '%s' "$created" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token_id"])')
-    revoke_token=$(printf '%s' "$created" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+    revoke_token=$(printf '%s' "$created" | python3 -c "$json_id")
     code=$(project_token_code "$API_TOKEN" DELETE "/tokens/$revoke_id")
     [[ "$code" == 204 ]] || return 1
     code=$(project_token_code "$revoke_token" GET "/projects/$first")

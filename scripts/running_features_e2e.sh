@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Sourced by e2e_db_test.sh. All writes target this run's own fixtures.
+RUNNING_JSON_ID='import sys,json; print(json.load(sys.stdin)["id"])'
 
 source "$SCRIPT_DIR/request_body_e2e.sh"
 source "$SCRIPT_DIR/project_members_e2e.sh"
@@ -56,7 +57,7 @@ RUNBOOK_V2=$(echo "$RUNBOOK_UPDATED" | python3 -c 'import sys,json; print(json.l
 api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/versions/$RUNBOOK_VERSION" \
     | python3 -c 'import sys,json; assert json.load(sys.stdin)["steps"][0]["script_body"] == "printf runbook-e2e-ok"'
 RUNBOOK_RETRY=$(api_post '{}' "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID/retry")
-RUNBOOK_RETRY_ID=$(echo "$RUNBOOK_RETRY" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+RUNBOOK_RETRY_ID=$(echo "$RUNBOOK_RETRY" | python3 -c "$RUNNING_JSON_ID")
 for i in {1..200}; do
     RUNBOOK_STATUS=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_RETRY_ID" | python3 -c 'import sys,json; print(json.load(sys.stdin)["status"])')
     [[ "$RUNBOOK_STATUS" =~ ^(succeeded|failed|cancelled|cleanup_unconfirmed)$ ]] && break
@@ -67,7 +68,7 @@ RUNBOOK_LOGS=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions
 [[ "$RUNBOOK_LOGS" == *runbook-e2e-ok* && "$RUNBOOK_LOGS" != *runbook-e2e-v2* ]] || { echo "FAIL: retry changed pinned runbook version"; exit 1; }
 RUNBOOK_SCHEDULE=$(api_post "{\"environment_id\":$API_ENV_ID,\"version_id\":$RUNBOOK_VERSION,\"cron\":\"0 3 * * *\"}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/schedules")
-RUNBOOK_SCHEDULE_ID=$(echo "$RUNBOOK_SCHEDULE" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+RUNBOOK_SCHEDULE_ID=$(echo "$RUNBOOK_SCHEDULE" | python3 -c "$RUNNING_JSON_ID")
 CODE=$(api_post_code '{}' "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/schedules/$RUNBOOK_SCHEDULE_ID/disable")
 [[ "$CODE" == 200 ]] || { echo "FAIL: disable runbook schedule=$CODE"; exit 1; }
 echo "  Immutable versions, pinned retry, and schedule disable: OK"
@@ -76,7 +77,7 @@ source "$SCRIPT_DIR/runbook_deletion_e2e.sh"
 
 echo "=== Verification and rollback ==="
 VERIFY_PROJECT=$(api_post "{\"name\":\"e2e-verify\"}" "$BASE/api/v1/projects")
-VERIFY_PROJECT_ID=$(echo "$VERIFY_PROJECT" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+VERIFY_PROJECT_ID=$(echo "$VERIFY_PROJECT" | python3 -c "$RUNNING_JSON_ID")
 VERIFY_ENV_ID=$TEST_ENV_ID
 VERIFY_ENV_RESTORE=$(api_get "$BASE/api/v1/environments/$VERIFY_ENV_ID" | python3 -c '
 import json,sys
@@ -88,7 +89,7 @@ print(json.dumps({k:text(d[k]) for k in ("name","description","tags","verificati
 VERIFY_ENV=$(echo "$VERIFY_ENV_RESTORE" | python3 -c 'import json,sys; d=json.load(sys.stdin); d.update(verification_type="bash",verification_target="printf verification-e2e-ok",verification_timeout_seconds=30); print(json.dumps(d))')
 api_put "$VERIFY_ENV" "$BASE/api/v1/environments/$VERIFY_ENV_ID" >/dev/null
 VERIFY_STEP=$(api_post "{\"name\":\"verify-step\",\"script_body\":\"printf release-v1\",\"container_image\":\"$BASH_IMAGE\"}" "$BASE/api/v1/projects/$VERIFY_PROJECT_ID/steps")
-VERIFY_STEP_ID=$(echo "$VERIFY_STEP" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+VERIFY_STEP_ID=$(echo "$VERIFY_STEP" | python3 -c "$RUNNING_JSON_ID")
 
 wait_running_deployment() {
     local id=$1 wanted=$2 status
@@ -109,22 +110,22 @@ wait_running_deployment() {
 
 source "$SCRIPT_DIR/step_variables_e2e.sh"
 VERIFY_RELEASE=$(api_post '{"version":"verified-v1"}' "$BASE/api/v1/projects/$VERIFY_PROJECT_ID/releases")
-VERIFY_RELEASE_ID=$(echo "$VERIFY_RELEASE" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+VERIFY_RELEASE_ID=$(echo "$VERIFY_RELEASE" | python3 -c "$RUNNING_JSON_ID")
 VERIFY_DEP=$(api_post "{\"release_id\":$VERIFY_RELEASE_ID,\"environment_id\":$VERIFY_ENV_ID}" "$BASE/api/v1/projects/$VERIFY_PROJECT_ID/deployments")
-VERIFY_GOOD_ID=$(echo "$VERIFY_DEP" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+VERIFY_GOOD_ID=$(echo "$VERIFY_DEP" | python3 -c "$RUNNING_JSON_ID")
 wait_running_deployment "$VERIFY_GOOD_ID" succeeded
 api_get "$BASE/api/v1/deployments/$VERIFY_GOOD_ID/verification" | python3 -c 'import sys,json; assert json.load(sys.stdin)["status"] == "succeeded"'
 VERIFY_LOGS=$(api_get "$BASE/api/v1/deployments/$VERIFY_GOOD_ID/logs")
 [[ "$VERIFY_LOGS" == *verification-e2e-ok* ]] || { echo "FAIL: verification output missing"; exit 1; }
 api_put "{\"name\":\"verify-step\",\"script_body\":\"exit 23\",\"container_image\":\"$BASH_IMAGE\"}" "$BASE/api/v1/projects/$VERIFY_PROJECT_ID/steps/$VERIFY_STEP_ID" >/dev/null
 VERIFY_RELEASE=$(api_post '{"version":"failed-v2"}' "$BASE/api/v1/projects/$VERIFY_PROJECT_ID/releases")
-VERIFY_RELEASE_ID=$(echo "$VERIFY_RELEASE" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+VERIFY_RELEASE_ID=$(echo "$VERIFY_RELEASE" | python3 -c "$RUNNING_JSON_ID")
 VERIFY_DEP=$(api_post "{\"release_id\":$VERIFY_RELEASE_ID,\"environment_id\":$VERIFY_ENV_ID}" "$BASE/api/v1/projects/$VERIFY_PROJECT_ID/deployments")
-VERIFY_FAILED_ID=$(echo "$VERIFY_DEP" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+VERIFY_FAILED_ID=$(echo "$VERIFY_DEP" | python3 -c "$RUNNING_JSON_ID")
 wait_running_deployment "$VERIFY_FAILED_ID" failed
 api_get "$BASE/api/v1/deployments/$VERIFY_FAILED_ID/rollback" | python3 -c 'import sys,json; assert json.load(sys.stdin)["target_deployment_id"] == int(sys.argv[1])' "$VERIFY_GOOD_ID"
 ROLLBACK=$(api_post "{\"target_deployment_id\":$VERIFY_GOOD_ID}" "$BASE/api/v1/deployments/$VERIFY_FAILED_ID/rollback")
-ROLLBACK_ID=$(echo "$ROLLBACK" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+ROLLBACK_ID=$(echo "$ROLLBACK" | python3 -c "$RUNNING_JSON_ID")
 wait_running_deployment "$ROLLBACK_ID" succeeded
 ROLLBACK_LOGS=$(api_get "$BASE/api/v1/deployments/$ROLLBACK_ID/logs")
 [[ "$ROLLBACK_LOGS" == *release-v1* && "$ROLLBACK_LOGS" == *verification-e2e-ok* ]] || { echo "FAIL: rollback lost snapshot or verification"; exit 1; }
@@ -143,9 +144,9 @@ SECRET_STEP_BODY=$(python3 -c 'import json,sys; print(json.dumps({"name":"verify
 api_put "$SECRET_STEP_BODY" \
     "$BASE/api/v1/projects/$VERIFY_PROJECT_ID/steps/$VERIFY_STEP_ID" >/dev/null
 SECRET_RELEASE=$(api_post '{"version":"masked-v3"}' "$BASE/api/v1/projects/$VERIFY_PROJECT_ID/releases")
-SECRET_RELEASE_ID=$(echo "$SECRET_RELEASE" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+SECRET_RELEASE_ID=$(echo "$SECRET_RELEASE" | python3 -c "$RUNNING_JSON_ID")
 SECRET_DEP=$(api_post "{\"release_id\":$SECRET_RELEASE_ID,\"environment_id\":$VERIFY_ENV_ID}" "$BASE/api/v1/projects/$VERIFY_PROJECT_ID/deployments")
-SECRET_DEP_ID=$(echo "$SECRET_DEP" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+SECRET_DEP_ID=$(echo "$SECRET_DEP" | python3 -c "$RUNNING_JSON_ID")
 wait_running_deployment "$SECRET_DEP_ID" succeeded
 SECRET_LOGS=$(api_get "$BASE/api/v1/deployments/$SECRET_DEP_ID/logs")
 [[ "$SECRET_LOGS" == *'[REDACTED]'* && "$SECRET_LOGS" != *e2e-masked-value* ]] || { echo "FAIL: secret value leaked or step did not print it"; exit 1; }

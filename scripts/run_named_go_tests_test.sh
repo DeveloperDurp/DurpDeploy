@@ -41,6 +41,7 @@ func TestPass(t *testing.T) {}
 EOF
 
 runner="$repo_root/scripts/run_named_go_tests.sh"
+readonly passing_test=TestPass
 package_one="./${fixture#"$repo_root/"}/one"
 package_two="./${fixture#"$repo_root/"}/two"
 
@@ -62,17 +63,17 @@ expect_fail() {
 
 expect_pass \
 	--packages "$package_one" \
-	--tests 'TestPass|TestParent' \
-	--require 'TestPass|TestParent/Leaf'
+	--tests "${passing_test}|TestParent" \
+	--require "${passing_test}|TestParent/Leaf"
 expect_pass --tags namedfixture --timeout 30s \
 	--packages "$package_one" --tests TestTagged --require TestTagged
 expect_fail --timeout invalid \
-	--packages "$package_one" --tests TestPass --require TestPass
+	--packages "$package_one" --tests "$passing_test" --require "$passing_test"
 expect_fail \
 	--packages "$package_one" --tests TestTagged --require TestTagged
 expect_fail \
 	--packages "$package_one" \
-	--tests 'TestPass' \
+	--tests "$passing_test" \
 	--require 'TestMissing'
 expect_fail \
 	--packages "$package_one" \
@@ -84,24 +85,24 @@ expect_fail \
 	--require 'TestSkipped'
 expect_fail \
 	--packages "$package_one $package_two" \
-	--tests 'TestPass' \
-	--require 'TestPass'
+	--tests "$passing_test" \
+	--require "$passing_test"
 
 require_file="$fixture/required.txt"
 : >"$require_file"
 expect_fail \
 	--packages "$package_one" \
-	--tests 'TestPass' \
+	--tests "$passing_test" \
 	--require-file "$require_file"
-printf 'TestPass\n' >"$require_file"
+printf '%s\n' "$passing_test" >"$require_file"
 expect_pass \
 	--packages "$package_one" \
-	--tests 'TestPass' \
+	--tests "$passing_test" \
 	--require-file "$require_file"
 expect_fail \
 	--packages "$package_one" \
-	--tests 'TestPass' \
-	--require 'TestPass' \
+	--tests "$passing_test" \
+	--require "$passing_test" \
 	--require-file "$require_file"
 
 printf 'run_named_go_tests adversarial contract: PASS\n'

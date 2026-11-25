@@ -125,10 +125,12 @@ run_failure_matrix() {
 	local scenario output lifecycle_flag
 	for scenario in "${EXPECTED[@]}"; do
 		output="$RUN_DIR/$scenario.txt"
-		lifecycle_flag=--lifecycle
 		case "$scenario" in
 		crash-before-first-pair-request|lost-first-phase-response|crash-before-server-activation|crash-before-cleanup-ack|lost-cleanup-ack-response)
 			lifecycle_flag=
+			;;
+		*)
+			lifecycle_flag=--lifecycle
 			;;
 		esac
 		if ! DURPDEPLOY_AGENT_WORKTREE="$agent_root" node \

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Sourced by e2e_test.sh after its authenticated API fixture is ready.
+BODY_HTTP_STATUS_FORMAT='%{http_code}'
 
 echo "=== Request body hardening: API and web ==="
 BODY_DIR="$TMP/request-bodies"
@@ -35,7 +36,7 @@ BODY_COUNT_BEFORE=$(api_get "$BASE/api/v1/environments" | python3 -c 'import sys
 for BODY_TYPE in '' text/plain application/x-www-form-urlencoded 'application/json; charset'; do
     CODE=$(curl -sS -H "Authorization: Bearer $API_TOKEN" \
         -H "Content-Type: $BODY_TYPE" --data-binary '{"name":"body-rejected"}' \
-        -o /dev/null -w '%{http_code}' "$BASE/api/v1/environments")
+        -o /dev/null -w "$BODY_HTTP_STATUS_FORMAT" "$BASE/api/v1/environments")
     [[ "$CODE" == 415 ]] || { echo "FAIL: JSON media type '$BODY_TYPE' got $CODE"; exit 1; }
 done
 for BODY_PARENT_LIST in variables steps runbooks project-templates; do
@@ -67,7 +68,7 @@ for BODY_ENCODING in known chunked; do
         CODE=$(curl -sS -H "Authorization: Bearer $API_TOKEN" \
             -H 'Content-Type: application/json' "${BODY_HEADERS[@]}" \
             --data-binary "@$BODY_DIR/$BODY_FILE" -o "$BODY_DIR/error.json" \
-            -w '%{http_code}' "$BASE/api/v1/environments")
+            -w "$BODY_HTTP_STATUS_FORMAT" "$BASE/api/v1/environments")
         [[ "$CODE" == 413 ]] || { echo "FAIL: $BODY_ENCODING oversized API body got $CODE"; exit 1; }
         python3 - "$BODY_DIR/error.json" <<'PY'
 import json, sys
@@ -81,7 +82,7 @@ PY
         fi
         CODE=$(curl -sS -b "$COOKIES" -H "X-CSRF-Token: $CSRF" \
             -H "Content-Type: $BODY_TYPE" "${BODY_HEADERS[@]}" \
-            --data-binary "@$BODY_DIR/$BODY_FILE" -o /dev/null -w '%{http_code}' \
+            --data-binary "@$BODY_DIR/$BODY_FILE" -o /dev/null -w "$BODY_HTTP_STATUS_FORMAT" \
             "$BASE/environments")
         [[ "$CODE" == 413 ]] || { echo "FAIL: $BODY_ENCODING oversized web body got $CODE"; exit 1; }
     done
@@ -92,7 +93,7 @@ BODY_COUNT_AFTER=$(api_get "$BASE/api/v1/environments" | python3 -c 'import sys,
 CODE=$(curl -sS -H "Authorization: Bearer $API_TOKEN" \
     -H 'Content-Type: application/json; charset=utf-8' \
     --data-binary "{\"name\":\"body-content-type-${E2E_RUN_ID:-${TMP##*/}}\"}" \
-    -o "$BODY_DIR/media-type.json" -w '%{http_code}' "$BASE/api/v1/environments")
+    -o "$BODY_DIR/media-type.json" -w "$BODY_HTTP_STATUS_FORMAT" "$BASE/api/v1/environments")
 [[ "$CODE" == 201 ]] || { echo "FAIL: parameterized JSON got $CODE"; exit 1; }
 BODY_MEDIA_ID=$(python3 -c 'import json,sys;print(int(json.load(open(sys.argv[1]))["id"]))' "$BODY_DIR/media-type.json")
 echo "  Parameterized JSON example: $BASE/environments/$BODY_MEDIA_ID/edit"
@@ -106,17 +107,17 @@ for BODY_TOKEN_SOURCE in form header; do
         BODY_HEADERS=(-H "X-CSRF-Token: $CSRF")
     fi
     CODE=$(curl -sS -b "$COOKIES" "${BODY_HEADERS[@]}" "${BODY_FIELDS[@]}" \
-        -F "name=body-multipart-$BODY_TOKEN_SOURCE" -o /dev/null -w '%{http_code}' \
+        -F "name=body-multipart-$BODY_TOKEN_SOURCE" -o /dev/null -w "$BODY_HTTP_STATUS_FORMAT" \
         "$BASE/environments")
     [[ "$CODE" == 303 ]] || { echo "FAIL: multipart $BODY_TOKEN_SOURCE token got $CODE"; exit 1; }
     BODY_ENV_ID=$(api_item_id_by_name "$BASE/api/v1/environments" "body-multipart-$BODY_TOKEN_SOURCE")
     CODE=$(curl -sS -H "Authorization: Bearer $API_TOKEN" -X DELETE \
-        -o /dev/null -w '%{http_code}' "$BASE/api/v1/environments/$BODY_ENV_ID")
+        -o /dev/null -w "$BODY_HTTP_STATUS_FORMAT" "$BASE/api/v1/environments/$BODY_ENV_ID")
     [[ "$CODE" == 204 ]] || { echo "FAIL: multipart form fields lost, got $CODE"; exit 1; }
 done
 
 CODE=$(curl -sS -H "Authorization: Bearer $API_TOKEN" -H 'Content-Type: application/json' \
-    --data-binary "@$BODY_DIR/maximum.json" -o "$BODY_DIR/created.json" -w '%{http_code}' \
+    --data-binary "@$BODY_DIR/maximum.json" -o "$BODY_DIR/created.json" -w "$BODY_HTTP_STATUS_FORMAT" \
     "$BASE/api/v1/templates")
 [[ "$CODE" == 201 ]] || { echo "FAIL: maximum-size JSON script got $CODE"; exit 1; }
 BODY_TEMPLATE_ID=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["id"])' "$BODY_DIR/created.json")
@@ -127,12 +128,12 @@ expected, actual = (json.load(open(path)) for path in sys.argv[1:])
 assert actual["script_body"] == expected["script_body"]
 PY
 CODE=$(curl -sS -H "Authorization: Bearer $API_TOKEN" -X DELETE \
-    -o /dev/null -w '%{http_code}' "$BASE/api/v1/templates/$BODY_TEMPLATE_ID")
+    -o /dev/null -w "$BODY_HTTP_STATUS_FORMAT" "$BASE/api/v1/templates/$BODY_TEMPLATE_ID")
 [[ "$CODE" == 204 ]] || { echo "FAIL: cleanup maximum-size template got $CODE"; exit 1; }
 
 CODE=$(curl -sS -b "$COOKIES" -H "X-CSRF-Token: $CSRF" \
     -H 'Content-Type: application/x-www-form-urlencoded' --data-binary "@$BODY_DIR/large.form" \
-    -o /dev/null -w '%{http_code}' "$BASE/templates")
+    -o /dev/null -w "$BODY_HTTP_STATUS_FORMAT" "$BASE/templates")
 [[ "$CODE" == 303 ]] || { echo "FAIL: large web script form got $CODE"; exit 1; }
 BODY_TEMPLATE_ID=$(api_item_id_by_name "$BASE/api/v1/templates" body-limit-web)
 api_get "$BASE/api/v1/templates/$BODY_TEMPLATE_ID" > "$BODY_DIR/stored.json"
@@ -141,9 +142,9 @@ import json, sys
 assert len(json.load(open(sys.argv[1]))["script_body"]) == 4 << 20
 PY
 CODE=$(curl -sS -H "Authorization: Bearer $API_TOKEN" -X DELETE \
-    -o /dev/null -w '%{http_code}' "$BASE/api/v1/templates/$BODY_TEMPLATE_ID")
+    -o /dev/null -w "$BODY_HTTP_STATUS_FORMAT" "$BASE/api/v1/templates/$BODY_TEMPLATE_ID")
 [[ "$CODE" == 204 ]] || { echo "FAIL: cleanup large web template got $CODE"; exit 1; }
 CODE=$(curl -sS -b "$COOKIES" -H 'Content-Type: application/json' \
-    -d '{"script":"echo hi","extra":true}' -o /dev/null -w '%{http_code}' "$BASE/api/lint")
+    -d '{"script":"echo hi","extra":true}' -o /dev/null -w "$BODY_HTTP_STATUS_FORMAT" "$BASE/api/lint")
 [[ "$CODE" == 400 ]] || { echo "FAIL: lint accepted unknown field, got $CODE"; exit 1; }
 echo "  Strict JSON, size boundaries, rejected mutations, and large scripts: OK"

@@ -5,23 +5,24 @@ deployment_list_e2e() {
     local prefix="list-access-$(date +%s)-$$" password="list-access-password-1234"
     local owned_dep foreign_dep role query body code previous_role=maintainer
     local project_prefix=$prefix
+    local -r json_id='import json,sys; print(json.load(sys.stdin)["id"])'
     [[ -z "${E2E_RUN_ID:-}" ]] || project_prefix=list-access
     echo "=== Deployment list authorization ==="
-    owned=$(api_post "{\"name\":\"$project_prefix-owned\"}" "$BASE/api/v1/projects" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
-    foreign=$(api_post "{\"name\":\"$project_prefix-foreign\"}" "$BASE/api/v1/projects" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+    owned=$(api_post "{\"name\":\"$project_prefix-owned\"}" "$BASE/api/v1/projects" | python3 -c "$json_id")
+    foreign=$(api_post "{\"name\":\"$project_prefix-foreign\"}" "$BASE/api/v1/projects" | python3 -c "$json_id")
     env=${ENV_ID:-}
     foreign_env=${LC_TEST_ID:-}
     if [[ -z "$env" ]]; then
-        env=$(api_post "{\"name\":\"$prefix-env\"}" "$BASE/api/v1/environments" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+        env=$(api_post "{\"name\":\"$prefix-env\"}" "$BASE/api/v1/environments" | python3 -c "$json_id")
     fi
     if [[ -z "$foreign_env" ]]; then
-        foreign_env=$(api_post "{\"name\":\"$prefix-foreign-env\"}" "$BASE/api/v1/environments" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+        foreign_env=$(api_post "{\"name\":\"$prefix-foreign-env\"}" "$BASE/api/v1/environments" | python3 -c "$json_id")
     fi
-    release=$(api_post '{"version":"1.0"}' "$BASE/api/v1/projects/$owned/releases" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
-    foreign_release=$(api_post '{"version":"1.0"}' "$BASE/api/v1/projects/$foreign/releases" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
-    owned_dep=$(api_post "{\"release_id\":$release,\"environment_id\":$env}" "$BASE/api/v1/projects/$owned/deployments" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
-    foreign_dep=$(api_post "{\"release_id\":$foreign_release,\"environment_id\":$foreign_env}" "$BASE/api/v1/projects/$foreign/deployments" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
-    user=$(api_post "{\"email\":\"$prefix@test.local\",\"name\":\"List User\",\"password\":\"$password\",\"role\":\"maintainer\"}" "$BASE/api/v1/admin/users" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+    release=$(api_post '{"version":"1.0"}' "$BASE/api/v1/projects/$owned/releases" | python3 -c "$json_id")
+    foreign_release=$(api_post '{"version":"1.0"}' "$BASE/api/v1/projects/$foreign/releases" | python3 -c "$json_id")
+    owned_dep=$(api_post "{\"release_id\":$release,\"environment_id\":$env}" "$BASE/api/v1/projects/$owned/deployments" | python3 -c "$json_id")
+    foreign_dep=$(api_post "{\"release_id\":$foreign_release,\"environment_id\":$foreign_env}" "$BASE/api/v1/projects/$foreign/deployments" | python3 -c "$json_id")
+    user=$(api_post "{\"email\":\"$prefix@test.local\",\"name\":\"List User\",\"password\":\"$password\",\"role\":\"maintainer\"}" "$BASE/api/v1/admin/users" | python3 -c "$json_id")
     jar="$TMP/list-access-cookies"
     code=$(curl -sS -c "$jar" -o /dev/null -w '%{http_code}' -X POST \
         --data-urlencode "email=$prefix@test.local" --data-urlencode "password=$password" "$BASE/login")

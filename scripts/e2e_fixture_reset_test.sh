@@ -6,7 +6,10 @@ trap 'rm -rf "$TMP"' EXIT
 BASE=http://test.local
 ADMIN_EMAIL=e2e-admin@test.local
 CSRF=test-token
-db_query() { sqlite3 "$TMP/test.db" "$1"; }
+db_query() {
+    local query=$1
+    sqlite3 "$TMP/test.db" "$query"
+}
 source "$SCRIPT_DIR/e2e_fixture_reset.sh"
 db_query "
 CREATE TABLE users(id INTEGER, email TEXT);

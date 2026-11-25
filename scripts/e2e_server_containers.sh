@@ -111,8 +111,9 @@ if [[ $scenario == all || $scenario == existing-server ]]; then
 		"$base$(grep -i '^location:' "$tmp/headers" | tr -d '\r' |
 			cut -d ' ' -f 2)" | grep -oE 'ddp_pat_[0-9a-f]{64}' | head -1)
 	api() {
+		local body=$1 path=$2
 		curl -fsS -H "Authorization: Bearer $token" \
-			-H 'Content-Type: application/json' -d "$1" "$base/api/v1/$2"
+			-H 'Content-Type: application/json' -d "$body" "$base/api/v1/$path"
 	}
 	project=$(api '{"name":"runtime-probe"}' projects |
 		python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
