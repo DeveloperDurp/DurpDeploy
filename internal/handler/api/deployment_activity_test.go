@@ -72,31 +72,7 @@ func TestDeploymentActivityAPI(t *testing.T) {
 			if rec.Code != http.StatusOK {
 				t.Fatalf("activity: %d %s", rec.Code, rec.Body.String())
 			}
-			var days []struct {
-				Date   string           `json:"date"`
-				Counts map[string]int64 `json:"counts"`
-			}
-			if err := json.Unmarshal(rec.Body.Bytes(), &days); err != nil {
-				t.Fatal(err)
-			}
-			if len(days) != 14 || days[0].Counts["cancelled"] != 1 ||
-				days[13].Counts["succeeded"] != 1 {
-				t.Fatalf("wrong window/counts: %s", rec.Body.String())
-			}
-			var failed int64
-			if role == "admin" {
-				failed = 1
-			}
-			if days[13].Counts["failed"] != failed ||
-				days[1].Counts == nil || len(days[1].Counts) != 0 {
-				t.Fatalf("scope/zero-fill: %s", rec.Body.String())
-			}
-			for i, day := range days {
-				want := today.AddDate(0, 0, i-13).Format(time.DateOnly)
-				if day.Date != want {
-					t.Fatalf("date %q, want %q", day.Date, want)
-				}
-			}
+			verifyDeploymentActivityWindow(t, role, today, rec.Body.Bytes())
 		})
 	}
 	rec := httptest.NewRecorder()
@@ -104,5 +80,39 @@ func TestDeploymentActivityAPI(t *testing.T) {
 		"GET", "/api/v1/deployments/activity", nil))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous activity: %d", rec.Code)
+	}
+}
+
+func verifyDeploymentActivityWindow(
+	t *testing.T,
+	role string,
+	today time.Time,
+	body []byte,
+) {
+	t.Helper()
+	var days []struct {
+		Date   string           `json:"date"`
+		Counts map[string]int64 `json:"counts"`
+	}
+	if err := json.Unmarshal(body, &days); err != nil {
+		t.Fatal(err)
+	}
+	if len(days) != 14 || days[0].Counts["cancelled"] != 1 ||
+		days[13].Counts["succeeded"] != 1 {
+		t.Fatalf("wrong window/counts: %s", string(body))
+	}
+	var failed int64
+	if role == "admin" {
+		failed = 1
+	}
+	if days[13].Counts["failed"] != failed ||
+		days[1].Counts == nil || len(days[1].Counts) != 0 {
+		t.Fatalf("scope/zero-fill: %s", string(body))
+	}
+	for i, day := range days {
+		want := today.AddDate(0, 0, i-13).Format(time.DateOnly)
+		if day.Date != want {
+			t.Fatalf("date %q, want %q", day.Date, want)
+		}
 	}
 }

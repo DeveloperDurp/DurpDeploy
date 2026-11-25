@@ -48,22 +48,8 @@ func TestGlobalDeploymentList_ProjectAccess(t *testing.T) {
 				}
 			}
 			_, token := seedAPIToken(t, h.repo, user.ID)
-			for _, value := range []string{"0", "-1", "bad", "9223372036854775808"} {
-				t.Run("invalid-project-"+value, func(t *testing.T) {
-					req := httptest.NewRequest(http.MethodGet,
-						"/api/v1/deployments?project_id="+value, nil)
-					req.Header.Set("Authorization", "Bearer "+token)
-					rec := httptest.NewRecorder()
-					router.ServeHTTP(rec, req)
-					if rec.Code != http.StatusBadRequest {
-						t.Fatalf("status = %d, want 400", rec.Code)
-					}
-				})
-			}
-			cases := []struct {
-				name, query string
-				total, rows int
-			}{
+			verifyInvalidDeploymentProjectFilters(t, router, token)
+			cases := []deploymentListFilterCase{
 				{"all", "", 2, 2},
 				{"page", "?limit=1", 2, 1},
 				{"offset", "?limit=1&offset=2", 2, 0},
@@ -86,64 +72,117 @@ func TestGlobalDeploymentList_ProjectAccess(t *testing.T) {
 			}
 			for _, tc := range cases {
 				t.Run(tc.name, func(t *testing.T) {
-					wantTotal, wantRows := tc.total, tc.rows
-					switch role {
-					case "nonmember":
-						wantTotal, wantRows = 0, 0
-					case "admin":
-						switch tc.name {
-						case "all", "dates":
-							wantTotal, wantRows = 4, 4
-						case "page", "offset":
-							wantTotal, wantRows = 4, 1
-						case "foreign", "environment":
-							wantTotal, wantRows = 2, 2
-						case "status":
-							wantTotal, wantRows = 2, 2
-						}
-					}
-					// When calling the public route with a real bearer credential.
-					req := httptest.NewRequest(http.MethodGet,
-						"/api/v1/deployments"+tc.query, nil)
-					req.Header.Set("Authorization", "Bearer "+token)
-					rec := httptest.NewRecorder()
-					router.ServeHTTP(rec, req)
-					// Then both rows and totals have the authorized scope.
-					if rec.Code != http.StatusOK {
-						t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
-					}
-					var result struct {
-						Items []db.ListDeploymentsWithRefsFilteredRow `json:"items"`
-						Total int                                     `json:"total"`
-					}
-					if err := json.Unmarshal(
-						rec.Body.Bytes(),
-						&result,
-					); err != nil {
-						t.Fatal(err)
-					}
-					if result.Total != wantTotal ||
-						len(result.Items) != wantRows {
-						t.Fatalf(
-							"total/rows = %d/%d, want %d/%d",
-							result.Total,
-							len(result.Items),
-							wantTotal,
-							wantRows,
-						)
-					}
-					if role != "admin" &&
-						strings.Contains(rec.Body.String(), foreign.Name) {
-						t.Fatal("foreign project metadata exposed")
-					}
-					if tc.name == "combined" && role != "nonmember" &&
-						result.Items[0].ID != pending.ID {
-						t.Fatal(
-							"combined filters returned the wrong deployment",
-						)
-					}
+					verifyDeploymentListFilter(
+						t,
+						router,
+						token,
+						role,
+						tc,
+						foreign.Name,
+						pending.ID,
+					)
 				})
 			}
 		})
 	}
+}
+
+type deploymentListFilterCase struct {
+	name, query string
+	total, rows int
+}
+
+func verifyInvalidDeploymentProjectFilters(
+	t *testing.T,
+	router http.Handler,
+	token string,
+) {
+	t.Helper()
+	for _, value := range []string{"0", "-1", "bad", "9223372036854775808"} {
+		t.Run("invalid-project-"+value, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet,
+				"/api/v1/deployments?project_id="+value, nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400", rec.Code)
+			}
+		})
+	}
+}
+
+func verifyDeploymentListFilter(
+	t *testing.T,
+	router http.Handler,
+	token, role string,
+	tc deploymentListFilterCase,
+	foreignName string,
+	pendingID int64,
+) {
+	t.Helper()
+	wantTotal, wantRows := expectedDeploymentListCounts(role, tc)
+	// When calling the public route with a real bearer credential.
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/deployments"+tc.query, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	// Then both rows and totals have the authorized scope.
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	var result struct {
+		Items []db.ListDeploymentsWithRefsFilteredRow `json:"items"`
+		Total int                                     `json:"total"`
+	}
+	if err := json.Unmarshal(
+		rec.Body.Bytes(),
+		&result,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if result.Total != wantTotal ||
+		len(result.Items) != wantRows {
+		t.Fatalf(
+			"total/rows = %d/%d, want %d/%d",
+			result.Total,
+			len(result.Items),
+			wantTotal,
+			wantRows,
+		)
+	}
+	if role != "admin" &&
+		strings.Contains(rec.Body.String(), foreignName) {
+		t.Fatal("foreign project metadata exposed")
+	}
+	if tc.name == "combined" && role != "nonmember" &&
+		result.Items[0].ID != pendingID {
+		t.Fatal(
+			"combined filters returned the wrong deployment",
+		)
+	}
+}
+
+func expectedDeploymentListCounts(
+	role string,
+	tc deploymentListFilterCase,
+) (int, int) {
+	wantTotal, wantRows := tc.total, tc.rows
+	switch role {
+	case "nonmember":
+		wantTotal, wantRows = 0, 0
+	case "admin":
+		switch tc.name {
+		case "all", "dates":
+			wantTotal, wantRows = 4, 4
+		case "page", "offset":
+			wantTotal, wantRows = 4, 1
+		case "foreign", "environment":
+			wantTotal, wantRows = 2, 2
+		case "status":
+			wantTotal, wantRows = 2, 2
+		}
+	}
+	return wantTotal, wantRows
 }

@@ -40,47 +40,57 @@ func assertDashboardRows(
 		return
 	}
 	for sectionID, expected := range wanted {
-		sections := dashboardElements(document, "id", sectionID)
-		if len(sections) != 1 {
-			t.Fatalf("expected one section %s", sectionID)
-		}
-		actual := make(map[int64]string)
-		for _, node := range dashboardElements(sections[0], "href", "") {
-			for _, attr := range node.Attr {
-				if attr.Key != "href" {
-					continue
-				}
-				id, err := strconv.ParseInt(
-					strings.TrimPrefix(attr.Val, "/deployments/"),
-					10,
-					64,
-				)
-				if err != nil {
-					t.Fatalf("invalid deployment link %q", attr.Val)
-				}
-				badges := dashboardElements(
-					node.Parent.Parent,
-					"class",
-					"badge",
-				)
-				if _, duplicate := actual[id]; duplicate {
-					t.Fatalf(
-						"duplicate deployment %d in section %s",
-						id,
-						sectionID,
-					)
-				}
-				actual[id] = dashboardCount(t, badges)
+		verifyDashboardSection(t, document, sectionID, expected)
+	}
+}
+
+func verifyDashboardSection(
+	t *testing.T,
+	document *html.Node,
+	sectionID string,
+	expected map[int64]string,
+) {
+	t.Helper()
+	sections := dashboardElements(document, "id", sectionID)
+	if len(sections) != 1 {
+		t.Fatalf("expected one section %s", sectionID)
+	}
+	actual := make(map[int64]string)
+	for _, node := range dashboardElements(sections[0], "href", "") {
+		for _, attr := range node.Attr {
+			if attr.Key != "href" {
+				continue
 			}
-		}
-		if !reflect.DeepEqual(actual, expected) {
-			t.Fatalf(
-				"section %s rows/statuses=%v, want %v",
-				sectionID,
-				actual,
-				expected,
+			id, err := strconv.ParseInt(
+				strings.TrimPrefix(attr.Val, "/deployments/"),
+				10,
+				64,
 			)
+			if err != nil {
+				t.Fatalf("invalid deployment link %q", attr.Val)
+			}
+			badges := dashboardElements(
+				node.Parent.Parent,
+				"class",
+				"badge",
+			)
+			if _, duplicate := actual[id]; duplicate {
+				t.Fatalf(
+					"duplicate deployment %d in section %s",
+					id,
+					sectionID,
+				)
+			}
+			actual[id] = dashboardCount(t, badges)
 		}
+	}
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf(
+			"section %s rows/statuses=%v, want %v",
+			sectionID,
+			actual,
+			expected,
+		)
 	}
 }
 

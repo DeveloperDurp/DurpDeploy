@@ -88,69 +88,90 @@ func TestDashboardProjectScopeAPIWebE2E(t *testing.T) {
 				}); err != nil {
 				t.Fatal(err)
 			}
-			// When: the same identity loads the page, refresh, list and activity API.
-			page := dashboardDocument(t, f.web(t, "GET", "/", nil, 200))
-			refresh := dashboardDocument(t,
-				f.web(t, "GET", "/dashboard/deployments", nil, 200))
-			var listed struct {
-				Data  []db.Deployment `json:"items"`
-				Total int             `json:"total"`
-			}
-			if err := json.Unmarshal(f.api(t, "GET", "/api/v1/deployments",
-				nil, 200), &listed); err != nil {
-				t.Fatal(err)
-			}
-			var activity []struct {
-				Counts map[string]int `json:"counts"`
-			}
-			if err := json.Unmarshal(f.api(t, "GET", "/api/v1/deployments/activity",
-				nil, 200), &activity); err != nil {
-				t.Fatal(err)
-			}
-			// Then: rows, statuses and counts agree with project access, not environment access.
-			allowed := make(map[int64]string)
-			wantedStatus := make(map[string]int)
-			wantedRows := map[string]map[int64]string{
-				"home-attention": {}, "home-running": {},
-			}
-			for _, i := range visible {
-				for _, deployment := range deployments[i] {
-					allowed[deployment.ID] = deployment.Status
-					wantedStatus[deployment.Status]++
-					switch deployment.Status {
-					case "queued", "pending", "running", "publishing_artifact":
-						wantedRows["home-running"][deployment.ID] = deployment.Status
-					case "pending_approval", "awaiting_artifact_approval",
-						"failed", "expired", "cleanup_unconfirmed":
-						wantedRows["home-attention"][deployment.ID] = deployment.Status
-					}
-				}
-			}
-			if listed.Total != len(allowed) ||
-				len(listed.Data) != len(allowed) {
-				t.Fatalf("API deployment total/data=%d/%d, want %d",
-					listed.Total, len(listed.Data), len(allowed))
-			}
-			for _, row := range listed.Data {
-				if allowed[row.ID] != row.Status {
-					t.Fatalf("API exposed unexpected deployment %d", row.ID)
-				}
-			}
-			actualStatus := make(map[string]int)
-			for _, day := range activity {
-				for status, count := range day.Counts {
-					actualStatus[status] += count
-				}
-			}
-			if !reflect.DeepEqual(actualStatus, wantedStatus) {
-				t.Fatalf(
-					"activity counts=%v, want %v",
-					actualStatus,
-					wantedStatus,
-				)
-			}
-			assertDashboardRows(t, page, wantedRows)
-			assertDashboardRows(t, refresh, wantedRows)
+			verifyDashboardProjectScope(t, f, deployments, visible)
 		})
 	}
+}
+
+func verifyDashboardProjectScope(
+	t *testing.T,
+	f *artifactE2E,
+	deployments [][]db.Deployment,
+	visible []int,
+) {
+	t.Helper()
+	// When: the same identity loads the page, refresh, list and activity API.
+	page := dashboardDocument(t, f.web(t, "GET", "/", nil, 200))
+	refresh := dashboardDocument(t,
+		f.web(t, "GET", "/dashboard/deployments", nil, 200))
+	var listed struct {
+		Data  []db.Deployment `json:"items"`
+		Total int             `json:"total"`
+	}
+	if err := json.Unmarshal(f.api(t, "GET", "/api/v1/deployments",
+		nil, 200), &listed); err != nil {
+		t.Fatal(err)
+	}
+	var activity []struct {
+		Counts map[string]int `json:"counts"`
+	}
+	if err := json.Unmarshal(f.api(t, "GET", "/api/v1/deployments/activity",
+		nil, 200), &activity); err != nil {
+		t.Fatal(err)
+	}
+	// Then: rows, statuses and counts agree with project access, not environment access.
+	allowed, wantedStatus, wantedRows := expectedDashboardDeployments(
+		deployments,
+		visible,
+	)
+	if listed.Total != len(allowed) ||
+		len(listed.Data) != len(allowed) {
+		t.Fatalf("API deployment total/data=%d/%d, want %d",
+			listed.Total, len(listed.Data), len(allowed))
+	}
+	for _, row := range listed.Data {
+		if allowed[row.ID] != row.Status {
+			t.Fatalf("API exposed unexpected deployment %d", row.ID)
+		}
+	}
+	actualStatus := make(map[string]int)
+	for _, day := range activity {
+		for status, count := range day.Counts {
+			actualStatus[status] += count
+		}
+	}
+	if !reflect.DeepEqual(actualStatus, wantedStatus) {
+		t.Fatalf(
+			"activity counts=%v, want %v",
+			actualStatus,
+			wantedStatus,
+		)
+	}
+	assertDashboardRows(t, page, wantedRows)
+	assertDashboardRows(t, refresh, wantedRows)
+}
+
+func expectedDashboardDeployments(
+	deployments [][]db.Deployment,
+	visible []int,
+) (map[int64]string, map[string]int, map[string]map[int64]string) {
+	allowed := make(map[int64]string)
+	wantedStatus := make(map[string]int)
+	wantedRows := map[string]map[int64]string{
+		"home-attention": {}, "home-running": {},
+	}
+	for _, i := range visible {
+		for _, deployment := range deployments[i] {
+			allowed[deployment.ID] = deployment.Status
+			wantedStatus[deployment.Status]++
+			switch deployment.Status {
+			case "queued", "pending", "running", "publishing_artifact":
+				wantedRows["home-running"][deployment.ID] = deployment.Status
+			case "pending_approval", "awaiting_artifact_approval",
+				"failed", "expired", "cleanup_unconfirmed":
+				wantedRows["home-attention"][deployment.ID] = deployment.Status
+			}
+		}
+	}
+	return allowed, wantedStatus, wantedRows
 }
