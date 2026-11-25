@@ -70,23 +70,40 @@ func TestAgentPairingFailureKeepsProtectedValuesPrivate(t *testing.T) {
 				recorder, request,
 			)
 
-			// Then: it returns 503 without exposing protected values.
-			if recorder.Code != http.StatusServiceUnavailable {
-				t.Fatalf("status=%d", recorder.Code)
-			}
-			var response map[string]string
-			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
-				t.Fatal(err)
-			}
-			if response["error"] == "" {
-				t.Fatal("missing API error")
-			}
-			for _, protected := range []string{code, address, fingerprint} {
-				if strings.Contains(logs.String(), protected) ||
-					strings.Contains(recorder.Body.String(), protected) {
-					t.Fatal("pairing failure exposed a protected value")
-				}
-			}
+			verifyPairingFailurePrivacy(
+				t,
+				recorder,
+				&logs,
+				code,
+				address,
+				fingerprint,
+			)
 		})
+	}
+}
+
+func verifyPairingFailurePrivacy(
+	t *testing.T,
+	recorder *httptest.ResponseRecorder,
+	logs *bytes.Buffer,
+	protectedValues ...string,
+) {
+	t.Helper()
+	// Then: it returns 503 without exposing protected values.
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d", recorder.Code)
+	}
+	var response map[string]string
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response["error"] == "" {
+		t.Fatal("missing API error")
+	}
+	for _, protected := range protectedValues {
+		if strings.Contains(logs.String(), protected) ||
+			strings.Contains(recorder.Body.String(), protected) {
+			t.Fatal("pairing failure exposed a protected value")
+		}
 	}
 }

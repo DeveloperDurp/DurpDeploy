@@ -152,6 +152,28 @@ func TestAgentFleetBrowserE2E(t *testing.T) {
 		browser.wait(t, `location.pathname === '/admin/agents/active'`)
 	}
 	checkFleetLabelMutations(t, h, srv, browser, user.ID)
+	verifyFleetPagesAtBreakpoints(t, browser, srv.URL)
+	fleetBrowserNavigate(t, browser, srv.URL+"/admin/agents/active")
+	browser.wait(
+		t,
+		`document.body.innerText.includes('No current work') && document.body.innerText.includes('Compatibility') && document.body.innerText.includes('version unverified') && document.body.innerText.includes('Ready container runtimes') && document.body.innerText.includes('podman')`,
+	)
+	// An adjacent security regression: viewers cannot open the admin pages.
+	fleetBrowserSession(t, browser, srv.URL, viewer.ID)
+	fleetBrowserNavigate(t, browser, srv.URL+"/admin/agents")
+	browser.wait(
+		t,
+		`!document.querySelector('form[action$="/drain"]') && document.body.innerText.includes('Unauthorized')`,
+	)
+	browser.screenshot(t, "fleet-viewer-forbidden")
+}
+
+func verifyFleetPagesAtBreakpoints(
+	t *testing.T,
+	browser *packageBrowser,
+	base string,
+) {
+	t.Helper()
 	// Then: health details and fleet states remain readable at every breakpoint.
 	for _, width := range []int{375, 768, 1280} {
 		browser.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
@@ -173,7 +195,7 @@ func TestAgentFleetBrowserE2E(t *testing.T) {
 			{"reference", "/admin/notifications/settings", true},
 		} {
 			previous := browser.evaluate(t, `location.pathname`)
-			fleetBrowserNavigate(t, browser, srv.URL+page.path)
+			fleetBrowserNavigate(t, browser, base+page.path)
 			if page.name == "draining" {
 				browser.wait(
 					t,
@@ -218,19 +240,6 @@ func TestAgentFleetBrowserE2E(t *testing.T) {
 			}
 		}
 	}
-	fleetBrowserNavigate(t, browser, srv.URL+"/admin/agents/active")
-	browser.wait(
-		t,
-		`document.body.innerText.includes('No current work') && document.body.innerText.includes('Compatibility') && document.body.innerText.includes('version unverified') && document.body.innerText.includes('Ready container runtimes') && document.body.innerText.includes('podman')`,
-	)
-	// An adjacent security regression: viewers cannot open the admin pages.
-	fleetBrowserSession(t, browser, srv.URL, viewer.ID)
-	fleetBrowserNavigate(t, browser, srv.URL+"/admin/agents")
-	browser.wait(
-		t,
-		`!document.querySelector('form[action$="/drain"]') && document.body.innerText.includes('Unauthorized')`,
-	)
-	browser.screenshot(t, "fleet-viewer-forbidden")
 }
 
 func checkFleetLabelMutations(
