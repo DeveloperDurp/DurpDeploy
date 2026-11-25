@@ -84,8 +84,8 @@ func TestRunTokensCreatePermissionLevels(t *testing.T) {
 		{Scope: "scoped", Role: "maintainer"},
 		{Scope: "global", Role: "owner"},
 	} {
-		if code := runTokens([]string{"create", "--user", email, "--name", "invalid",
-			"--scope", grant.Scope, "--role", grant.Role}); code == 0 {
+		if runTokens([]string{"create", "--user", email, "--name", "invalid",
+			"--scope", grant.Scope, "--role", grant.Role}) == 0 {
 			t.Fatal("invalid grant accepted")
 		}
 	}

@@ -129,8 +129,7 @@ func checkSelfPasswordChange(t *testing.T, surface, role string) {
 		"GET",
 		"/settings/security",
 		"",
-		"",
-		session,
+		permissionCredentials{session: session},
 		false,
 		200,
 	)
@@ -170,8 +169,7 @@ func checkSelfPasswordChange(t *testing.T, surface, role string) {
 		"GET",
 		"/api/v1/users/me",
 		"",
-		token,
-		"",
+		permissionCredentials{token: token},
 		false,
 		200,
 	)
@@ -180,8 +178,7 @@ func checkSelfPasswordChange(t *testing.T, surface, role string) {
 		"GET",
 		"/settings/security",
 		"",
-		"",
-		otherSession,
+		permissionCredentials{session: otherSession},
 		false,
 		200,
 	)
@@ -216,8 +213,7 @@ func submitSelfPasswordChange(
 			"POST",
 			"/api/v1/users/me/password",
 			passwordChangeJSON,
-			token,
-			"",
+			permissionCredentials{token: token},
 			false,
 			204,
 		)
@@ -290,8 +286,7 @@ func TestSelfPasswordChangeRejectionsE2E(t *testing.T) {
 			"POST",
 			"/api/v1/users/me/password",
 			input,
-			token,
-			"",
+			permissionCredentials{token: token},
 			false,
 			422,
 		)
@@ -302,8 +297,7 @@ func TestSelfPasswordChangeRejectionsE2E(t *testing.T) {
 			"POST",
 			"/api/v1/users/me/password",
 			body,
-			token,
-			"",
+			permissionCredentials{token: token},
 			false,
 			400,
 		)
@@ -313,8 +307,7 @@ func TestSelfPasswordChangeRejectionsE2E(t *testing.T) {
 		"POST",
 		"/api/v1/users/me/password",
 		strings.Repeat(" ", (4<<20)+1),
-		token,
-		"",
+		permissionCredentials{token: token},
 		false,
 		413,
 	)
@@ -375,8 +368,7 @@ func TestSelfPasswordChangeRejectionsE2E(t *testing.T) {
 			"POST",
 			"/api/v1/users/me/password",
 			passwordChangeJSON,
-			restricted,
-			"",
+			permissionCredentials{token: restricted},
 			false,
 			403,
 		)
@@ -396,8 +388,7 @@ func TestSelfPasswordChangeRejectionsE2E(t *testing.T) {
 		"POST",
 		"/api/v1/users/me/password",
 		passwordChangeJSON,
-		restricted,
-		"",
+		permissionCredentials{token: restricted},
 		false,
 		403,
 	)
@@ -405,7 +396,15 @@ func TestSelfPasswordChangeRejectionsE2E(t *testing.T) {
 	if err != nil || stored.PasswordHash != user.PasswordHash {
 		t.Fatal("rejection changed password")
 	}
-	f.request(t, "GET", "/settings/security", "", "", session, false, 200)
+	f.request(
+		t,
+		"GET",
+		"/settings/security",
+		"",
+		permissionCredentials{session: session},
+		false,
+		200,
+	)
 	if err := f.h.repo.Queries.MarkSessionReauthenticated(
 		t.Context(),
 		db.MarkSessionReauthenticatedParams{ID: session},
@@ -434,13 +433,20 @@ func TestSelfPasswordChangeRejectionsE2E(t *testing.T) {
 		"POST",
 		"/api/v1/users/me/password",
 		passwordChangeJSON,
-		token,
-		"",
+		permissionCredentials{token: token},
 		false,
 		422,
 	)
 	page := string(
-		f.request(t, "GET", "/settings/security", "", "", session, false, 200),
+		f.request(
+			t,
+			"GET",
+			"/settings/security",
+			"",
+			permissionCredentials{session: session},
+			false,
+			200,
+		),
 	)
 	if !strings.Contains(page, "SSO identity provider") ||
 		strings.Contains(page, `name="current_password"`) {
@@ -461,8 +467,7 @@ func assertSelfPasswordFormRejections(
 				"POST",
 				"/settings/security/password",
 				form.Encode(),
-				"",
-				session,
+				permissionCredentials{session: session},
 				false,
 				422,
 			),
@@ -513,7 +518,7 @@ func TestSelfPasswordChangeBrowserInputE2E(t *testing.T) {
 				t.Fatal(err)
 			}
 			f.request(t, "POST", "/api/v1/users/me/password",
-				string(body), token, "", false, 422)
+				string(body), permissionCredentials{token: token}, false, 422)
 		})
 	}
 	form := passwordChangeForm()
@@ -528,7 +533,15 @@ func TestSelfPasswordChangeBrowserInputE2E(t *testing.T) {
 	if err != nil || stored.PasswordHash != user.PasswordHash {
 		t.Fatal("rejection changed password")
 	}
-	f.request(t, "GET", "/settings/security", "", "", session, false, 200)
+	f.request(
+		t,
+		"GET",
+		"/settings/security",
+		"",
+		permissionCredentials{session: session},
+		false,
+		200,
+	)
 	if _, err := challenges.ResolveBound(t.Context(), mfa.ChallengeBinding{
 		Token: challenge.Token, CSRF: challenge.CSRF,
 		UserID: user.ID, SessionID: session,
@@ -566,7 +579,7 @@ func assertSelfPasswordBoundaryLogin(
 		t.Fatal(err)
 	}
 	f.request(t, "POST", "/api/v1/users/me/password", string(body),
-		token, "", false, 204)
+		permissionCredentials{token: token}, false, 204)
 	form = url.Values{
 		"email": {email}, "password": {password}, "csrf_token": {""},
 	}

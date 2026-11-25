@@ -57,7 +57,7 @@ func TestMigrationRouteSelection_SQLServerPrefixOverridesPostgresHeuristic(
 		t.Fatalf("isSQLServer(%q) = %v, want true", dsn, got)
 	}
 
-	if got := isPostgres(dsn); got == false {
+	if !isPostgres(dsn) {
 		t.Fatalf("isPostgres(%q) = false, want true", dsn)
 	}
 }

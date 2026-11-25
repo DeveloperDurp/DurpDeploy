@@ -36,8 +36,17 @@ func newUsersPhoneFixture(t *testing.T) usersPhoneFixture {
 			t.Fatal(err)
 		}
 		var user db.User
-		decodeStepLogTest(t, f.request(t, "POST", "/api/v1/admin/users",
-			string(body), f.token, "", false, 201), &user)
+		decodeStepLogTest(t, f.request(
+			t,
+			"POST",
+			"/api/v1/admin/users",
+			string(
+				body,
+			),
+			permissionCredentials{token: f.token},
+			false,
+			201,
+		), &user)
 		f.users = append(f.users, user)
 	}
 	return f
@@ -49,15 +58,24 @@ func (f usersPhoneFixture) listedUsers(t *testing.T) []db.User {
 		Items []db.User `json:"items"`
 	}
 	decodeStepLogTest(t, f.request(t, "GET", "/api/v1/admin/users",
-		"", f.token, "", false, 200), &result)
+		"", permissionCredentials{token: f.token}, false, 200), &result)
 	return result.Items
 }
 
 func TestUsersPhoneAPIWebE2E(t *testing.T) {
 	f := newUsersPhoneFixture(t)
 	listed := f.listedUsers(t)
-	page := string(f.request(t, "GET", "/admin/users", "", "",
-		f.session, false, 200))
+	page := string(
+		f.request(
+			t,
+			"GET",
+			"/admin/users",
+			"",
+			permissionCredentials{session: f.session},
+			false,
+			200,
+		),
+	)
 	for _, want := range f.users {
 		found := false
 		for _, user := range listed {
@@ -71,9 +89,24 @@ func TestUsersPhoneAPIWebE2E(t *testing.T) {
 	}
 	viewer := f.users[0]
 	_, token := seedAPIToken(t, f.h.repo, viewer.ID)
-	f.request(t, "GET", "/api/v1/admin/users", "", token, "", false, 403)
-	f.request(t, "GET", "/admin/users", "", "",
-		memberRoleSession(t, f.h, viewer.ID), false, 403)
+	f.request(
+		t,
+		"GET",
+		"/api/v1/admin/users",
+		"",
+		permissionCredentials{token: token},
+		false,
+		403,
+	)
+	f.request(
+		t,
+		"GET",
+		"/admin/users",
+		"",
+		permissionCredentials{session: memberRoleSession(t, f.h, viewer.ID)},
+		false,
+		403,
+	)
 	if strings.Contains(
 		page,
 		fmt.Sprintf(`hx-delete="/admin/users/%d"`, f.adminID),

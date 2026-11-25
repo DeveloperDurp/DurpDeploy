@@ -94,7 +94,15 @@ func (a routeAuditCase) checkRole(t *testing.T, role string) {
 	}
 	// Logout records directly and suppresses the middleware duplicate.
 	before := count()
-	f.request(t, "POST", "/logout", "", "", session, false, 200)
+	f.request(
+		t,
+		"POST",
+		"/logout",
+		"",
+		permissionCredentials{session: session},
+		false,
+		200,
+	)
 	assertEvent(before, true, user.ID, user.ID, "logout", "user")
 }
 
@@ -125,13 +133,12 @@ func (a routeAuditCase) checkProjectWrite(
 			"PUT",
 			"/api/v1"+path,
 			fmt.Sprintf(`{"name":%q}`, name),
-			token,
-			"",
+			permissionCredentials{token: token},
 			false,
 			want,
 		)
 	} else {
-		f.request(t, "PUT", path, url.Values{"name": {name}}.Encode(), "", session, false, want)
+		f.request(t, "PUT", path, url.Values{"name": {name}}.Encode(), permissionCredentials{session: session}, false, want)
 	}
 	assertEvent(
 		before,
@@ -161,8 +168,7 @@ func (a routeAuditCase) checkProjectWrite(
 			"PUT",
 			path,
 			"name=forged",
-			"",
-			session,
+			permissionCredentials{session: session},
 			true,
 			200,
 		)
@@ -194,9 +200,9 @@ func (a routeAuditCase) checkAdminWrite(
 		f.request(t, "PUT", "/api/v1"+path, fmt.Sprintf(
 			`{"name":"Audit target","email":%q,"role":"viewer"}`,
 			target.Email,
-		), token, "", false, want)
+		), permissionCredentials{token: token}, false, want)
 	} else {
-		f.request(t, "PUT", path, url.Values{"name": {"Audit target"}, "email": {target.Email}, "role": {"viewer"}}.Encode(), "", session, false, want)
+		f.request(t, "PUT", path, url.Values{"name": {"Audit target"}, "email": {target.Email}, "role": {"viewer"}}.Encode(), permissionCredentials{session: session}, false, want)
 	}
 	assertEvent(
 		before,
@@ -242,8 +248,7 @@ func (a routeAuditCase) checkScoped(
 		"PUT",
 		fmt.Sprintf("/api/v1/projects/%d", project.ID),
 		`{"name":"scoped author"}`,
-		token,
-		"",
+		permissionCredentials{token: token},
 		false,
 		want,
 	)
@@ -261,8 +266,7 @@ func (a routeAuditCase) checkScoped(
 		"PUT",
 		fmt.Sprintf("/api/v1/projects/%d", foreign.ID),
 		`{"name":"escaped"}`,
-		token,
-		"",
+		permissionCredentials{token: token},
 		false,
 		403,
 	)
@@ -271,8 +275,7 @@ func (a routeAuditCase) checkScoped(
 		"PUT",
 		fmt.Sprintf("/api/v1/admin/users/%d", target.ID),
 		`{}`,
-		token,
-		"",
+		permissionCredentials{token: token},
 		false,
 		403,
 	)

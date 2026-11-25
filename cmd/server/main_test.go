@@ -175,7 +175,7 @@ func TestRunAdminCreate_validationErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if code := runAdmin(tt.args); code == 0 {
+			if runAdmin(tt.args) == 0 {
 				t.Fatalf("runAdmin(%v) exit = 0, want non-zero", tt.args)
 			}
 		})
@@ -338,7 +338,7 @@ func TestRunTokensCreate_missingFlags(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if code := runTokens(tc.args); code == 0 {
+			if runTokens(tc.args) == 0 {
 				t.Fatalf("runTokens(%v) exit = 0, want non-zero", tc.args)
 			}
 		})
@@ -462,7 +462,7 @@ func TestRunTokensRevoke_successAndNoMatch(t *testing.T) {
 		t.Fatalf("token was not revoked: %+v", rows[0])
 	}
 
-	if code := runTokens([]string{"revoke", "ddp_pat_0000"}); code == 0 {
+	if runTokens([]string{"revoke", "ddp_pat_0000"}) == 0 {
 		t.Fatal("runTokens revoke no-match exit = 0, want non-zero")
 	}
 }

@@ -16,7 +16,7 @@ import (
 func TestUsersFormAccessibilityAPIWebE2E(t *testing.T) {
 	f := newUsersPhoneFixture(t)
 	assertUserFormLabels(t, f.request(t, "GET", "/admin/users/new", "",
-		"", f.session, false, 200), true)
+		permissionCredentials{session: f.session}, false, 200), true)
 	assertUserFormFragment(t, f, "/admin/users/new", true)
 	body := url.Values{
 		"email": {"accessible-user@example.test"},
@@ -27,7 +27,7 @@ func TestUsersFormAccessibilityAPIWebE2E(t *testing.T) {
 	}
 	for _, hx := range []bool{false, true} {
 		page := f.request(t, "POST", "/admin/users", body.Encode(),
-			"", f.session, hx, 422)
+			permissionCredentials{session: f.session}, hx, 422)
 		assertUserFormRejection(t, page, body, true, "Passwords do not match")
 	}
 	f.request(
@@ -35,8 +35,7 @@ func TestUsersFormAccessibilityAPIWebE2E(t *testing.T) {
 		"POST",
 		"/api/v1/admin/users",
 		`{"email":"accessible-user@example.test","name":"API invalid","role":"invalid","password":"Form-access-pass-1"}`,
-		f.token,
-		"",
+		permissionCredentials{token: f.token},
 		false,
 		400,
 	)
@@ -46,24 +45,38 @@ func TestUsersFormAccessibilityAPIWebE2E(t *testing.T) {
 		}
 	}
 	body.Set("password_confirmation", body.Get("password"))
-	f.request(t, "POST", "/admin/users", body.Encode(), "",
-		f.session, false, 200)
+	f.request(
+		t,
+		"POST",
+		"/admin/users",
+		body.Encode(),
+		permissionCredentials{session: f.session},
+		false,
+		200,
+	)
 	user := userWithRole(t, f, body.Get("email"), "maintainer")
 	for _, hx := range []bool{false, true} {
 		page := f.request(t, "POST", "/admin/users", body.Encode(),
-			"", f.session, hx, 422)
+			permissionCredentials{session: f.session}, hx, 422)
 		assertUserFormRejection(t, page, body, true,
 			"A user with that email already exists")
 	}
 	path := fmt.Sprintf("/admin/users/%d", user.ID)
 	assertUserFormLabels(t, f.request(t, "GET", path+"/edit", "",
-		"", f.session, false, 200), false)
+		permissionCredentials{session: f.session}, false, 200), false)
 	assertUserFormFragment(t, f, path+"/edit", false)
 	body.Set("name", "")
 	body.Set("password_confirmation", "mismatch")
 	for _, hx := range []bool{false, true} {
-		page := f.request(t, "PUT", path, body.Encode(), "",
-			f.session, hx, 422)
+		page := f.request(
+			t,
+			"PUT",
+			path,
+			body.Encode(),
+			permissionCredentials{session: f.session},
+			hx,
+			422,
+		)
 		assertUserFormRejection(t, page, body, false, "Name is required")
 	}
 	if saved := userWithRole(t, f, user.Email, "maintainer"); saved.Name != user.Name {

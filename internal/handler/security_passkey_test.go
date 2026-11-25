@@ -50,8 +50,7 @@ func TestSecurity_PasskeyRegistrationUsesFreshSession(t *testing.T) {
 		"/settings/security/passkeys/finish",
 		"{}",
 		h.authHandler.SecurityPasskeyFinishPost,
-		payload.Token,
-		payload.CSRF,
+		securityChallengeCredentials{token: payload.Token, csrf: payload.CSRF},
 	)
 
 	// Then

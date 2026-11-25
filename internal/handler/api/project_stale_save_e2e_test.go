@@ -51,7 +51,15 @@ func (f staleProjectSaveFixture) changeRole(
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.request(t, "PUT", path, string(body), f.adminToken, "", false, 200)
+	f.request(
+		t,
+		"PUT",
+		path,
+		string(body),
+		permissionCredentials{token: f.adminToken},
+		false,
+		200,
+	)
 }
 
 func (f staleProjectSaveFixture) assertDescription(
@@ -59,7 +67,15 @@ func (f staleProjectSaveFixture) assertDescription(
 ) {
 	t.Helper()
 	path := fmt.Sprintf("/api/v1/projects/%d", f.project.ID)
-	body := f.request(t, "GET", path, "", f.adminToken, "", false, 200)
+	body := f.request(
+		t,
+		"GET",
+		path,
+		"",
+		permissionCredentials{token: f.adminToken},
+		false,
+		200,
+	)
 	var project struct{ Description string }
 	if err := json.Unmarshal(body, &project); err != nil {
 		t.Fatal(err)
@@ -75,8 +91,15 @@ func TestProjectStaleSaveAPIWebE2E(t *testing.T) {
 			t.Run(scope+"/"+role, func(t *testing.T) {
 				f := newStaleProjectSaveFixture(t)
 				path := fmt.Sprintf("/projects/%d", f.project.ID)
-				f.request(t, "GET", path+"/edit", "", "",
-					f.session, false, 200)
+				f.request(
+					t,
+					"GET",
+					path+"/edit",
+					"",
+					permissionCredentials{session: f.session},
+					false,
+					200,
+				)
 				f.changeRole(t, scope, role)
 				body, err := json.Marshal(map[string]string{
 					"name": f.project.Name, "description": "rejected API edit",
@@ -85,7 +108,7 @@ func TestProjectStaleSaveAPIWebE2E(t *testing.T) {
 					t.Fatal(err)
 				}
 				f.request(t, "PUT", "/api/v1"+path, string(body),
-					f.token, "", false, 403)
+					permissionCredentials{token: f.token}, false, 403)
 				if scope == "global" {
 					_, err := f.h.repo.Queries.GetSession(t.Context(),
 						db.GetSessionParams{ID: f.session})
@@ -102,13 +125,29 @@ func TestProjectStaleSaveAPIWebE2E(t *testing.T) {
 						f.project.Name,
 					}, "description": {"rejected web edit"},
 				}.Encode()
-				f.request(t, "PUT", path, form, "", f.session, false, 403)
-				f.request(t, "PUT", path, form, "", f.session, true, 200)
+				f.request(
+					t,
+					"PUT",
+					path,
+					form,
+					permissionCredentials{session: f.session},
+					false,
+					403,
+				)
+				f.request(
+					t,
+					"PUT",
+					path,
+					form,
+					permissionCredentials{session: f.session},
+					true,
+					200,
+				)
 				f.assertDescription(t, f.project.Description.String)
 
 				f.changeRole(t, scope, "maintainer")
 				f.request(t, "PUT", "/api/v1"+path, string(body),
-					f.token, "", false, 200)
+					permissionCredentials{token: f.token}, false, 200)
 				f.assertDescription(t, "rejected API edit")
 			})
 		}

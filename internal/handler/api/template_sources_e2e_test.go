@@ -23,8 +23,7 @@ func TestTemplateSourcesAPIWebE2E(t *testing.T) {
 			"GET",
 			"/templates/project-source",
 			"",
-			"",
-			f.session,
+			permissionCredentials{session: f.session},
 			false,
 			200,
 		)
@@ -55,8 +54,7 @@ func TestTemplateSourcesAPIWebE2E(t *testing.T) {
 		"GET",
 		"/templates/project-source",
 		"",
-		"",
-		session,
+		permissionCredentials{session: session},
 		false,
 		200,
 	)
@@ -71,8 +69,7 @@ func TestTemplateSourcesAPIWebE2E(t *testing.T) {
 			"GET",
 			"/templates/project-source",
 			"",
-			"",
-			f.session,
+			permissionCredentials{session: f.session},
 			false,
 			403,
 		)

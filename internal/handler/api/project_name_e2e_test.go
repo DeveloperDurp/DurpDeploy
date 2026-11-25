@@ -36,7 +36,7 @@ func TestProjectNamesAPIWebE2E(t *testing.T) {
 		} {
 			body := f.request(t, target.method, target.path,
 				url.Values{"name": {name}, "description": {"draft"}}.Encode(),
-				"", f.session, false, 422)
+				permissionCredentials{session: f.session}, false, 422)
 			checkProjectNameError(t, string(body))
 			if !strings.Contains(string(body), "draft") {
 				t.Fatal("validation discarded description")
@@ -64,7 +64,15 @@ func TestProjectNamesAPIWebE2E(t *testing.T) {
 		map[string]string{"name": " "},
 		400,
 	)
-	f.request(t, "POST", "/projects", "name=", "", f.session, false, 422)
+	f.request(
+		t,
+		"POST",
+		"/projects",
+		"name=",
+		permissionCredentials{session: f.session},
+		false,
+		422,
+	)
 }
 
 func (f projectTemplateE2E) rejectProjectTemplateName(
@@ -91,7 +99,7 @@ func (f projectTemplateE2E) rejectProjectTemplateName(
 	}
 	checkProjectNameError(t, string(f.request(t, "POST",
 		strings.TrimPrefix(f.path, "/api/v1")+"/projects",
-		form.Encode(), "", f.session, false, 422)))
+		form.Encode(), permissionCredentials{session: f.session}, false, 422)))
 }
 
 func (f projectTemplateE2E) checkAcceptedProjectNames(t *testing.T) {
@@ -116,7 +124,7 @@ func (f projectTemplateE2E) checkAcceptedProjectNames(t *testing.T) {
 		f.jsonRequest(t, "PUT", "/api/v1"+createdPath, input, 200)
 		f.request(t, "PUT", createdPath,
 			url.Values{"name": {" " + name + " "}}.Encode(),
-			"", f.session, false, 200)
+			permissionCredentials{session: f.session}, false, 200)
 	}
 }
 

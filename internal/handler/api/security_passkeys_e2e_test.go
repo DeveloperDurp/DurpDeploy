@@ -33,7 +33,7 @@ func TestOwnPasskeyWarningsAPIWebE2E(t *testing.T) {
 			_, token := seedAPIToken(t, f.h.repo, owner.ID)
 			seedWarningPasskey(t, f, owner.ID)
 			data := f.request(t, "GET", "/api/v1/security/passkeys", "",
-				token, "", false, 200)
+				permissionCredentials{token: token}, false, 200)
 			var rows []map[string]any
 			if err := json.Unmarshal(data, &rows); err != nil {
 				t.Fatal(err)
@@ -45,15 +45,22 @@ func TestOwnPasskeyWarningsAPIWebE2E(t *testing.T) {
 				t.Fatalf("unexpected warning metadata: %s", data)
 			}
 			session := memberRoleSession(t, f.h, owner.ID)
-			page := f.request(t, "GET", "/settings/security", "", "",
-				session, false, 200)
+			page := f.request(
+				t,
+				"GET",
+				"/settings/security",
+				"",
+				permissionCredentials{session: session},
+				false,
+				200,
+			)
 			if !strings.Contains(string(page), "Counter warning") {
 				t.Fatal("owner cannot see the passkey warning")
 			}
 			foreign := seedAPIUser(t, f.h.repo, "other@warning.test", "admin")
 			row, otherToken := seedAPIToken(t, f.h.repo, foreign.ID)
 			data = f.request(t, "GET", "/api/v1/security/passkeys", "",
-				otherToken, "", false, 200)
+				permissionCredentials{token: otherToken}, false, 200)
 			if string(data) != "[]\n" {
 				t.Fatal("another user can see the owner's passkey")
 			}
@@ -63,9 +70,9 @@ func TestOwnPasskeyWarningsAPIWebE2E(t *testing.T) {
 				t.Fatal(err)
 			}
 			f.request(t, "GET", "/api/v1/security/passkeys", "",
-				otherToken, "", false, 403)
+				permissionCredentials{token: otherToken}, false, 403)
 			f.request(t, "GET", "/api/v1/security/passkeys", "",
-				"", session, false, 401)
+				permissionCredentials{session: session}, false, 401)
 		})
 	}
 }

@@ -43,8 +43,7 @@ func TestPermissionGuidanceBrowserE2E(t *testing.T) {
 				"PUT",
 				f.apiPath(fmt.Sprintf("/members/%d", actor.user.ID)),
 				`{"role":"maintainer"}`,
-				f.adminToken,
-				"",
+				permissionCredentials{token: f.adminToken},
 				false,
 				200,
 			)
@@ -62,8 +61,7 @@ func TestPermissionGuidanceBrowserE2E(t *testing.T) {
 				"PUT",
 				f.apiPath(""),
 				`{"name":"Recovered guidance project"}`,
-				actor.token,
-				"",
+				permissionCredentials{token: actor.token},
 				false,
 				200,
 			)

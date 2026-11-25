@@ -48,7 +48,7 @@ func userWithRole(
 func TestUsersDefaultRoleAPIWebE2E(t *testing.T) {
 	f := newUsersPhoneFixture(t)
 	assertUserFormRole(t, f.request(t, "GET", "/admin/users/new", "",
-		"", f.session, false, 200), "viewer")
+		permissionCredentials{session: f.session}, false, 200), "viewer")
 	for _, role := range []string{"", "invalid"} {
 		body := url.Values{
 			"email": {"invalid-default@example.test"}, "name": {"Invalid role"},
@@ -60,7 +60,7 @@ func TestUsersDefaultRoleAPIWebE2E(t *testing.T) {
 		}
 		for _, hx := range []bool{false, true} {
 			page := f.request(t, "POST", "/admin/users", body.Encode(),
-				"", f.session, hx, 422)
+				permissionCredentials{session: f.session}, hx, 422)
 			assertUserFormRole(t, page, "viewer")
 		}
 		payload := map[string]string{
@@ -75,13 +75,22 @@ func TestUsersDefaultRoleAPIWebE2E(t *testing.T) {
 			t.Fatal(err)
 		}
 		f.request(t, "POST", "/api/v1/admin/users", string(encoded),
-			f.token, "", false, 400)
+			permissionCredentials{token: f.token}, false, 400)
 	}
 	for _, user := range f.users {
 		userWithRole(t, f, user.Email, user.Role)
-		assertUserFormRole(t, f.request(t, "GET",
-			fmt.Sprintf("/admin/users/%d/edit", user.ID), "", "",
-			f.session, false, 200), user.Role)
+		assertUserFormRole(t, f.request(
+			t,
+			"GET",
+			fmt.Sprintf(
+				"/admin/users/%d/edit",
+				user.ID,
+			),
+			"",
+			permissionCredentials{session: f.session},
+			false,
+			200,
+		), user.Role)
 	}
 	for _, role := range []string{"viewer", "admin"} {
 		email := "created-default-" + role + "@example.test"
@@ -91,11 +100,11 @@ func TestUsersDefaultRoleAPIWebE2E(t *testing.T) {
 			"password_confirmation": {"mismatch"},
 		}
 		page := f.request(t, "POST", "/admin/users", body.Encode(),
-			"", f.session, false, 422)
+			permissionCredentials{session: f.session}, false, 422)
 		assertUserFormRole(t, page, role)
 		body.Set("password_confirmation", "Default-role-pass-1")
 		f.request(t, "POST", "/admin/users", body.Encode(),
-			"", f.session, false, 200)
+			permissionCredentials{session: f.session}, false, 200)
 		userWithRole(t, f, email, role)
 	}
 	for _, user := range f.listedUsers(t) {

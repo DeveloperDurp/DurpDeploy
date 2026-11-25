@@ -57,11 +57,11 @@ func TestSecurity_ReauthUpdatesOnlyCurrentSessionAfterPasswordOnlyEnrollment(
 	if !readSession(t, h, current.sessionToken).ReauthenticatedAt.Valid {
 		t.Fatal("current session was not refreshed")
 	}
-	if after := readSession(
+	if readSession(
 		t,
 		h,
 		other.sessionToken,
-	).ReauthenticatedAt; after != otherBefore {
+	).ReauthenticatedAt != otherBefore {
 		t.Fatal("reauthentication updated another browser session")
 	}
 }

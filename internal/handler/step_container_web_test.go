@@ -599,8 +599,8 @@ func (h *projectHarness) makeReleaseRaw(
 // messages; it consumes the body so callers should not use readBody
 // afterwards.
 func bodySnippet(response *http.Response) string {
-	const max = 400
-	buf := make([]byte, max)
+	const maxBytes = 400
+	buf := make([]byte, maxBytes)
 	n, _ := response.Body.Read(buf)
 	return strings.TrimSpace(string(buf[:n]))
 }

@@ -36,7 +36,15 @@ func (f projectTemplateE2E) jsonRequest(
 ) []byte {
 	t.Helper()
 	if input == nil {
-		return f.request(t, method, path, "", f.token, "", false, status)
+		return f.request(
+			t,
+			method,
+			path,
+			"",
+			permissionCredentials{token: f.token},
+			false,
+			status,
+		)
 	}
 	encoded, err := json.Marshal(input)
 	if err != nil {
@@ -47,8 +55,7 @@ func (f projectTemplateE2E) jsonRequest(
 		method,
 		path,
 		string(encoded),
-		f.token,
-		"",
+		permissionCredentials{token: f.token},
 		false,
 		status,
 	)
@@ -71,8 +78,7 @@ func newProjectTemplateE2E(t *testing.T) projectTemplateE2E {
 			"POST",
 			"/api/v1/environments",
 			`{"name":"template-environment"}`,
-			f.adminToken,
-			"",
+			permissionCredentials{token: f.adminToken},
 			false,
 			201,
 		),
@@ -181,8 +187,7 @@ func newProjectTemplateE2E(t *testing.T) projectTemplateE2E {
 		"PUT",
 		f.path+"/package-repository",
 		`{"url_template":"https://packages.example.test/{version}/app.zip","auth_type":"bearer","credential":"source-package-must-be-absent"}`,
-		f.adminToken,
-		"",
+		permissionCredentials{token: f.adminToken},
 		false,
 		200,
 	)
@@ -263,8 +268,7 @@ func TestProjectTemplatesUnifiedListAPIWebE2E(t *testing.T) {
 			"GET",
 			scenario.path,
 			"",
-			"",
-			f.session,
+			permissionCredentials{session: f.session},
 			false,
 			200,
 		)
@@ -284,8 +288,7 @@ func TestProjectTemplatesUnifiedListAPIWebE2E(t *testing.T) {
 		"GET",
 		"/templates?type=projects&offset=-1",
 		"",
-		"",
-		f.session,
+		permissionCredentials{session: f.session},
 		false,
 		400,
 	)
@@ -294,8 +297,7 @@ func TestProjectTemplatesUnifiedListAPIWebE2E(t *testing.T) {
 		"GET",
 		"/templates?type=projects&offset=bad",
 		"",
-		"",
-		f.session,
+		permissionCredentials{session: f.session},
 		false,
 		400,
 	)
@@ -304,8 +306,7 @@ func TestProjectTemplatesUnifiedListAPIWebE2E(t *testing.T) {
 		"GET",
 		"/project-templates?offset=50",
 		"",
-		"",
-		f.session,
+		permissionCredentials{session: f.session},
 		false,
 		200,
 	)
@@ -327,8 +328,7 @@ func TestProjectTemplatesUnifiedListAPIWebE2E(t *testing.T) {
 		"GET",
 		"/templates?type=projects",
 		"",
-		"",
-		session,
+		permissionCredentials{session: session},
 		false,
 		200,
 	)
@@ -381,13 +381,20 @@ func (f projectTemplateE2E) checkPreview(t *testing.T) {
 		"GET",
 		"/api/v1/project-templates?limit=1",
 		"",
-		f.token,
-		"",
+		permissionCredentials{token: f.token},
 		false,
 		200,
 	)
 	formPath := strings.TrimPrefix(f.path, "/api/v1")
-	page := f.request(t, "GET", formPath, "", "", f.session, false, 200)
+	page := f.request(
+		t,
+		"GET",
+		formPath,
+		"",
+		permissionCredentials{session: f.session},
+		false,
+		200,
+	)
 	if strings.Contains(string(page), "source-secret-must-be-absent") ||
 		!strings.Contains(string(page), "data-apply-project-template") {
 		t.Fatal("web preview leaked secrets or omitted form")
@@ -605,8 +612,7 @@ func (f projectTemplateE2E) checkCreationAudit(t *testing.T, createdID int64) {
 			"GET",
 			"/api/v1/admin/audit?limit=100",
 			"",
-			f.adminToken,
-			"",
+			permissionCredentials{token: f.adminToken},
 			false,
 			200,
 		),
@@ -660,8 +666,7 @@ func (f projectTemplateE2E) checkFormErrorSecrets(t *testing.T) {
 		"POST",
 		formPath+"/projects",
 		form.Encode(),
-		"",
-		f.session,
+		permissionCredentials{session: f.session},
 		false,
 		422,
 	)
@@ -689,8 +694,7 @@ func TestProjectTemplatesPermissionsAPIWebE2E(t *testing.T) {
 			"GET",
 			strings.TrimPrefix(f.path, "/api/v1"),
 			"",
-			"",
-			f.session,
+			permissionCredentials{session: f.session},
 			false,
 			200,
 		)
@@ -711,7 +715,15 @@ func TestProjectTemplatesPermissionsAPIWebE2E(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	f.request(t, "GET", f.path, "", scoped, "", false, 200)
+	f.request(
+		t,
+		"GET",
+		f.path,
+		"",
+		permissionCredentials{token: scoped},
+		false,
+		200,
+	)
 	input, err := json.Marshal(f.input)
 	if err != nil {
 		t.Fatal(err)
@@ -721,12 +733,19 @@ func TestProjectTemplatesPermissionsAPIWebE2E(t *testing.T) {
 		"POST",
 		f.path+"/projects",
 		string(input),
-		scoped,
-		"",
+		permissionCredentials{token: scoped},
 		false,
 		403,
 	)
-	f.request(t, "GET", "/api/v1/project-templates", "", scoped, "", false, 403)
+	f.request(
+		t,
+		"GET",
+		"/api/v1/project-templates",
+		"",
+		permissionCredentials{token: scoped},
+		false,
+		403,
+	)
 	outsider := seedAPIUser(
 		t,
 		f.h.repo,
@@ -742,8 +761,7 @@ func TestProjectTemplatesPermissionsAPIWebE2E(t *testing.T) {
 			"GET",
 			"/api/v1/project-templates",
 			"",
-			token,
-			"",
+			permissionCredentials{token: token},
 			false,
 			200,
 		),
@@ -752,14 +770,21 @@ func TestProjectTemplatesPermissionsAPIWebE2E(t *testing.T) {
 	if list.Total != 0 {
 		t.Fatal("outsider sees template metadata")
 	}
-	f.request(t, "GET", f.path, "", token, "", false, 403)
+	f.request(
+		t,
+		"GET",
+		f.path,
+		"",
+		permissionCredentials{token: token},
+		false,
+		403,
+	)
 	f.request(
 		t,
 		"POST",
 		f.path+"/projects",
 		string(input),
-		token,
-		"",
+		permissionCredentials{token: token},
 		false,
 		403,
 	)
@@ -769,7 +794,15 @@ func TestProjectTemplatesPermissionsAPIWebE2E(t *testing.T) {
 		foreign.ID,
 		f.templateID,
 	)
-	f.request(t, "GET", foreignPath, "", f.adminToken, "", false, 404)
+	f.request(
+		t,
+		"GET",
+		foreignPath,
+		"",
+		permissionCredentials{token: f.adminToken},
+		false,
+		404,
+	)
 	lifecycle, err := f.h.repo.Queries.CreateLifecycle(
 		t.Context(),
 		db.CreateLifecycleParams{Name: "template-lifecycle"},
@@ -788,8 +821,7 @@ func TestProjectTemplatesPermissionsAPIWebE2E(t *testing.T) {
 		"POST",
 		f.path+"/projects",
 		string(input),
-		f.adminToken,
-		"",
+		permissionCredentials{token: f.adminToken},
 		false,
 		422,
 	)
@@ -808,8 +840,7 @@ func TestProjectTemplatesPermissionsAPIWebE2E(t *testing.T) {
 		"POST",
 		f.path+"/projects",
 		string(input),
-		f.adminToken,
-		"",
+		permissionCredentials{token: f.adminToken},
 		false,
 		201,
 	)

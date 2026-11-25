@@ -21,15 +21,22 @@ func TestStaleFormBackBrowserE2E(t *testing.T) {
 				"POST",
 				"/api/v1"+path+"/steps",
 				`{"name":"Denied execution","script_body":"echo unexpected","container_image":"harbor.durp.info/dockerhub/library/bash:5.2"}`,
-				f.adminToken,
-				"",
+				permissionCredentials{token: f.adminToken},
 				false,
 				201,
 			)
 			var release db.Release
-			decodeStepLogTest(t, f.request(t, "POST",
-				"/api/v1"+path+"/releases", `{"version":"stale-v1"}`,
-				f.adminToken, "", false, 201), &release)
+			decodeStepLogTest(t, f.request(
+				t,
+				"POST",
+				"/api/v1"+path+"/releases",
+				`{"version":"stale-v1"}`,
+				permissionCredentials{
+					token: f.adminToken,
+				},
+				false,
+				201,
+			), &release)
 			env := seedEnv(t, f.h.repo)
 			b.setBackTestSession(t, f.server.URL, f.session)
 			b.navigateBackTest(t, f.server.URL+path)
@@ -106,7 +113,7 @@ return dialog ? !toast.visible &&
 			apiBody := fmt.Sprintf(`{"release_id":%d,"environment_id":%d}`,
 				release.ID, env.ID)
 			f.request(t, "POST", "/api/v1"+path+"/deployments", apiBody,
-				f.token, "", false, 403)
+				permissionCredentials{token: f.token}, false, 403)
 
 			deploy.call(t, "Page.reload", struct{}{}, &struct{}{})
 			deploy.wait(t, `!document.querySelector('form[action$="/deploy"]')
@@ -130,9 +137,15 @@ return dialog ? !toast.visible &&
 			deploy.waitBackTestURL(t, f.server.URL+path)
 			deploy.wait(t, `document.querySelector('#project-detail')`)
 			var deployments struct{ Total int }
-			decodeStepLogTest(t, f.request(t, "GET",
-				"/api/v1"+path+"/deployments", "", f.adminToken, "",
-				false, 200), &deployments)
+			decodeStepLogTest(t, f.request(
+				t,
+				"GET",
+				"/api/v1"+path+"/deployments",
+				"",
+				permissionCredentials{token: f.adminToken},
+				false,
+				200,
+			), &deployments)
 			if deployments.Total != 0 {
 				t.Fatal("denied stale forms created a deployment")
 			}
@@ -163,11 +176,21 @@ func checkGlobalStaleFormLogin(
 	}
 	f.assertDescription(t, f.project.Description.String)
 	f.request(t, "POST", "/api/v1"+path+"/deployments",
-		fmt.Sprintf(`{"release_id":%d,"environment_id":%d}`,
-			releaseID, environmentID), f.token, "", false, 403)
+		fmt.Sprintf(
+			`{"release_id":%d,"environment_id":%d}`,
+			releaseID,
+			environmentID,
+		), permissionCredentials{token: f.token}, false, 403)
 	var deployments struct{ Total int }
-	decodeStepLogTest(t, f.request(t, "GET", "/api/v1"+path+"/deployments",
-		"", f.adminToken, "", false, 200), &deployments)
+	decodeStepLogTest(t, f.request(
+		t,
+		"GET",
+		"/api/v1"+path+"/deployments",
+		"",
+		permissionCredentials{token: f.adminToken},
+		false,
+		200,
+	), &deployments)
 	if deployments.Total != 0 {
 		t.Fatal("revoked stale forms created a deployment")
 	}

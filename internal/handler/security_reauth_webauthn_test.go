@@ -54,8 +54,10 @@ func TestSecurity_ReauthPasskeyBeginPromotesBoundChallenge(t *testing.T) {
 		"/settings/security/reauth/webauthn/begin",
 		"",
 		h.authHandler.SecurityReauthWebAuthnBegin,
-		challenge.Get("challenge_token"),
-		challenge.Get("challenge_csrf"),
+		securityChallengeCredentials{
+			token: challenge.Get("challenge_token"),
+			csrf:  challenge.Get("challenge_csrf"),
+		},
 	)
 
 	// Then
@@ -166,8 +168,7 @@ func TestSecurity_ReauthPasskeyFinishRefreshesSessionAndRecordsCloneWarning(
 		"/settings/security/reauth/webauthn/finish",
 		string(assertion),
 		h.authHandler.SecurityReauthWebAuthnFinish,
-		pending.Token,
-		pending.CSRF,
+		securityChallengeCredentials{token: pending.Token, csrf: pending.CSRF},
 	)
 
 	// Then: the response is private, the current session is fresh, and the

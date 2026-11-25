@@ -22,6 +22,11 @@ type permissionFixture struct {
 	server *httptest.Server
 }
 
+type permissionCredentials struct {
+	token   string
+	session string
+}
+
 func newPermissionFixture(t *testing.T) permissionFixture {
 	t.Helper()
 	h := newAPIHarness(t)
@@ -32,8 +37,12 @@ func newPermissionFixture(t *testing.T) permissionFixture {
 	return permissionFixture{h: h, server: srv}
 }
 
-func (f permissionFixture) request(t *testing.T,
-	method, path, body, token, session string, hx bool, want int,
+func (f permissionFixture) request(
+	t *testing.T,
+	method, path, body string,
+	credentials permissionCredentials,
+	hx bool,
+	want int,
 ) []byte {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), method,
@@ -41,11 +50,11 @@ func (f permissionFixture) request(t *testing.T,
 	if err != nil {
 		t.Fatal(err)
 	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+	if credentials.token != "" {
+		req.Header.Set("Authorization", "Bearer "+credentials.token)
 		req.Header.Set("Content-Type", "application/json")
 	} else {
-		req.AddCookie(&http.Cookie{Name: "session", Value: session})
+		req.AddCookie(&http.Cookie{Name: "session", Value: credentials.session})
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.Header.Set("X-CSRF-Token", "member-role-csrf")
 	}
@@ -92,6 +101,7 @@ func TestPermissionRolesAPIProjectTokenMatrixE2E(t *testing.T) {
 					name := ownerRole + "/" + memberRole + "/" + scope + "/" + ceiling
 					t.Run(name, func(t *testing.T) {
 						row, token := seedAPIToken(t, f.h.repo, owner.ID)
+						credentials := permissionCredentials{token: token}
 						grant := repository.TokenScope{
 							Scope: scope,
 							Role:  ceiling,
@@ -104,13 +114,13 @@ func TestPermissionRolesAPIProjectTokenMatrixE2E(t *testing.T) {
 							t.Fatal(err)
 						}
 						base := fmt.Sprintf("/api/v1/projects/%d", p.ID)
-						f.request(t, "GET", base, "", token, "", false, 200)
+						f.request(t, "GET", base, "", credentials, false, 200)
 						want := 403
 						if ownerRole == "admin" && scope == "global" {
 							want = 200
 						}
 						f.request(t, "GET", fmt.Sprintf("/api/v1/projects/%d",
-							foreign.ID), "", token, "", false, want)
+							foreign.ID), "", credentials, false, want)
 						author := (ownerRole == "maintainer" || ownerRole == "admin") &&
 							(ownerRole == "admin" || memberRole == "maintainer" || memberRole == "admin") &&
 							(ceiling == "" || ceiling == "maintainer" || ceiling == "admin")
@@ -120,7 +130,7 @@ func TestPermissionRolesAPIProjectTokenMatrixE2E(t *testing.T) {
 						}
 						data := f.request(t, "POST", base+"/variables",
 							`{"name":"ROLE_MATRIX","value":"original"}`,
-							token, "", false, want)
+							credentials, false, want)
 						if author {
 							var variable struct {
 								ID int64 `json:"id"`
@@ -135,14 +145,13 @@ func TestPermissionRolesAPIProjectTokenMatrixE2E(t *testing.T) {
 							)
 							f.request(t, "PUT", path,
 								`{"name":"ROLE_MATRIX","value":"updated"}`,
-								token, "", false, 200)
+								credentials, false, 200)
 							f.request(
 								t,
 								"DELETE",
 								path,
 								"",
-								token,
-								"",
+								credentials,
 								false,
 								204,
 							)
@@ -156,7 +165,7 @@ func TestPermissionRolesAPIProjectTokenMatrixE2E(t *testing.T) {
 						}
 						f.request(t, "POST", base+"/members", fmt.Sprintf(
 							`{"user_id":%d,"role":"viewer"}`, target.ID),
-							token, "", false, want)
+							credentials, false, want)
 						if ceiling != "" {
 							for _, method := range []string{"GET", "POST", "PATCH", "DELETE"} {
 								path := "/api/v1/tokens"
@@ -168,8 +177,7 @@ func TestPermissionRolesAPIProjectTokenMatrixE2E(t *testing.T) {
 									method,
 									path,
 									`{}`,
-									token,
-									"",
+									credentials,
 									false,
 									403,
 								)
@@ -220,7 +228,7 @@ func TestPermissionRolesForgedBrowserAndAPIWritesE2E(t *testing.T) {
 			{"POST", "/admin/users"}, {"PUT", "/admin/users/1"},
 		} {
 			f.request(t, action.method, "/api/v1"+action.path, `{}`,
-				token, "", false, 403)
+				permissionCredentials{token: token}, false, 403)
 			webMethod, webPath := action.method, action.path
 			switch {
 			case strings.Contains(webPath, "/runbook-executions/"):
@@ -253,7 +261,7 @@ func TestPermissionRolesForgedBrowserAndAPIWritesE2E(t *testing.T) {
 					want = 200
 				}
 				f.request(t, webMethod, webPath, "name=forged",
-					"", session, hx, want)
+					permissionCredentials{session: session}, hx, want)
 			}
 		}
 	}

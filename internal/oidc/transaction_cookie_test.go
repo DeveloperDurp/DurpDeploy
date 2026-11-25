@@ -70,7 +70,7 @@ func TestTransactionCookie_SetsAndClearsBoundedSecureCookie(t *testing.T) {
 
 	// When
 	cookie, err := codec.NewCookie(loginTransaction())
-	clear := codec.ClearCookie()
+	cleared := codec.ClearCookie()
 
 	// Then
 	if err != nil {
@@ -87,13 +87,13 @@ func TestTransactionCookie_SetsAndClearsBoundedSecureCookie(t *testing.T) {
 		cookie.Expires.After(transactionNow.Add(5*time.Minute)) {
 		t.Fatalf("cookie exceeds five-minute bound: %+v", cookie)
 	}
-	if clear.Name != cookie.Name || clear.Path != cookie.Path ||
-		clear.MaxAge != -1 ||
-		!clear.Expires.Before(transactionNow) ||
-		!clear.HttpOnly ||
-		clear.SameSite != http.SameSiteLaxMode ||
-		!clear.Secure {
-		t.Fatalf("unexpected clear cookie attributes: %+v", clear)
+	if cleared.Name != cookie.Name || cleared.Path != cookie.Path ||
+		cleared.MaxAge != -1 ||
+		!cleared.Expires.Before(transactionNow) ||
+		!cleared.HttpOnly ||
+		cleared.SameSite != http.SameSiteLaxMode ||
+		!cleared.Secure {
+		t.Fatalf("unexpected clear cookie attributes: %+v", cleared)
 	}
 }
 

@@ -55,7 +55,7 @@ func TestProviderCachedVerifierDoesNotRetainRequestContextValues(t *testing.T) {
 	}
 
 	// Then
-	if retained := <-values; retained != nil {
+	if <-values != nil {
 		t.Fatal("cached verifier retained a request context value")
 	}
 }

@@ -63,7 +63,15 @@ func (f libraryE2E) json(
 		}
 		body = string(encoded)
 	}
-	return f.request(t, method, path, body, f.token, "", false, status)
+	return f.request(
+		t,
+		method,
+		path,
+		body,
+		permissionCredentials{token: f.token},
+		false,
+		status,
+	)
 }
 
 func libraryInput(
@@ -140,7 +148,7 @@ func (f libraryE2E) preview(
 	}
 	page := string(
 		f.request(t, "GET", strings.TrimPrefix(f.path, "/api/v1")+"/"+slug,
-			"", "", f.session, false, 200),
+			"", permissionCredentials{session: f.session}, false, 200),
 	)
 	for _, step := range entry.Snapshot.Steps {
 		_, err := interpreter.Validate(step.Interpreter)
@@ -320,8 +328,7 @@ func (f libraryE2E) checkLibraryAudit(
 		"GET",
 		"/api/v1/admin/audit?limit=100",
 		"",
-		f.adminToken,
-		"",
+		permissionCredentials{token: f.adminToken},
 		false,
 		200,
 	)
@@ -435,8 +442,7 @@ func TestTemplateLibraryValidationAPIWebE2E(t *testing.T) {
 		"POST",
 		strings.TrimPrefix(f.path, "/api/v1")+"/linux-service/apply",
 		form.Encode(),
-		"",
-		f.session,
+		permissionCredentials{session: f.session},
 		false,
 		422,
 	)

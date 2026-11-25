@@ -66,11 +66,11 @@ func TestOIDCReauthCallback_refreshesOnlyBoundSessionAndResumesContinuation(
 			"same-subject OIDC reauthentication did not refresh the bound session",
 		)
 	}
-	if after := readSession(
+	if readSession(
 		t,
 		h,
 		other.sessionToken,
-	).ReauthenticatedAt; after != otherBefore {
+	).ReauthenticatedAt != otherBefore {
 		t.Fatal("same-subject OIDC reauthentication refreshed another session")
 	}
 	if countSecurityRows(

@@ -39,19 +39,24 @@ func postSecurityForm(
 	return rec
 }
 
+type securityChallengeCredentials struct {
+	token string
+	csrf  string
+}
+
 func postSecurityJSON(
 	t *testing.T,
 	h *authHarness,
 	session *authedSession,
 	path, body string,
 	next http.HandlerFunc,
-	token, challengeCSRF string,
+	challenge securityChallengeCredentials,
 ) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-MFA-Challenge", token)
-	req.Header.Set("X-MFA-Challenge-CSRF", challengeCSRF)
+	req.Header.Set("X-MFA-Challenge", challenge.token)
+	req.Header.Set("X-MFA-Challenge-CSRF", challenge.csrf)
 	req.AddCookie(&http.Cookie{Name: "session", Value: session.sessionToken})
 	rec := httptest.NewRecorder()
 	auth.AuthMiddleware(h.repo)(next).ServeHTTP(rec, req)

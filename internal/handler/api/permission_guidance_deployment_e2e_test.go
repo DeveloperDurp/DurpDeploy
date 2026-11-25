@@ -31,8 +31,7 @@ func TestPermissionGuidanceDeploymentAPIWebE2E(t *testing.T) {
 			"GET",
 			project+"/deploy",
 			"",
-			"",
-			actor.session,
+			permissionCredentials{session: actor.session},
 			false,
 			200,
 		)
@@ -47,21 +46,29 @@ func TestPermissionGuidanceDeploymentAPIWebE2E(t *testing.T) {
 	for _, member := range []string{"viewer", "deployer"} {
 		actor := f.actor(t, "maintainer", member)
 		path := fmt.Sprintf("/deployments/%d/rollback", id)
-		page := f.request(t, "GET", path, "", "", actor.session, false, 200)
+		page := f.request(
+			t,
+			"GET",
+			path,
+			"",
+			permissionCredentials{session: actor.session},
+			false,
+			200,
+		)
 		assertRecoveryLinks(t, page, project, false, true)
 		f.request(t, "POST", "/api/v1"+path, `{}`,
-			actor.token, "", false, 403)
+			permissionCredentials{token: actor.token}, false, 403)
 		assertGuidanceDeploymentDenial(t, f, actor, path, project)
 		if member == "viewer" {
 			path = fmt.Sprintf("/deployments/%d/redeploy", id)
 			f.request(t, "POST", "/api/v1"+path, `{}`,
-				actor.token, "", false, 403)
+				permissionCredentials{token: actor.token}, false, 403)
 			assertGuidanceDeploymentDenial(t, f, actor, path, project)
 		}
 	}
 	var deployments struct{ Total int }
 	decodeStepLogTest(t, f.request(t, "GET", f.apiPath("/deployments"), "",
-		f.adminToken, "", false, 200), &deployments)
+		permissionCredentials{token: f.adminToken}, false, 200), &deployments)
 	if deployments.Total != 2 {
 		t.Fatal("denied deployment action created an execution")
 	}

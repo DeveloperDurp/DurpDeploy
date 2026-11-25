@@ -40,13 +40,29 @@ func newAuditIdentityFixture(
 		t.Fatal(err)
 	}
 	f.actor = &db.User{}
-	decodeStepLogTest(t, f.request(t, "POST", "/api/v1/admin/users",
-		string(body), setupToken, "", false, 201), f.actor)
+	decodeStepLogTest(t, f.request(
+		t,
+		"POST",
+		"/api/v1/admin/users",
+		string(
+			body,
+		),
+		permissionCredentials{token: setupToken},
+		false,
+		201,
+	), f.actor)
 	f.target = seedAPIUser(t, f.h.repo, "target@audit.test", "viewer")
 	_, f.token = seedAPIToken(t, f.h.repo, f.actor.ID)
 	f.session = memberRoleSession(t, f.h, f.actor.ID)
-	f.request(t, "PUT", fmt.Sprintf("/api/v1/admin/users/%d", f.target.ID),
-		`{"name":"Audit Target","role":"viewer"}`, f.token, "", false, 200)
+	f.request(
+		t,
+		"PUT",
+		fmt.Sprintf("/api/v1/admin/users/%d", f.target.ID),
+		`{"name":"Audit Target","role":"viewer"}`,
+		permissionCredentials{token: f.token},
+		false,
+		200,
+	)
 	return f
 }
 
@@ -56,7 +72,7 @@ func (f auditIdentityFixture) entries(
 	t.Helper()
 	var result struct{ Items []repository.AuditLogEntry }
 	body := f.request(t, "GET", "/api/v1/admin/audit?"+query,
-		"", f.token, "", false, 200)
+		"", permissionCredentials{token: f.token}, false, 200)
 	if err := json.Unmarshal(body, &result); err != nil {
 		t.Fatal(err)
 	}
@@ -83,8 +99,15 @@ func checkAuditWhitespaceOnlyName(t *testing.T) {
 		entries[0].ActorName != " " {
 		t.Fatalf("whitespace-only name disabled the filter: %+v", entries)
 	}
-	page := f.request(t, "GET", "/admin/audit?user=%20", "", "",
-		f.session, false, 200)
+	page := f.request(
+		t,
+		"GET",
+		"/admin/audit?user=%20",
+		"",
+		permissionCredentials{session: f.session},
+		false,
+		200,
+	)
 	if !strings.Contains(string(page), f.actor.Email) ||
 		strings.Contains(string(page), "setup@audit.test") {
 		t.Fatal("web whitespace-only name filter returned another actor")
@@ -114,7 +137,7 @@ func checkAuditIdentityFilter(
 		t.Fatalf("identity or stable IDs lost: %+v", entry)
 	}
 	page := f.request(t, "GET", "/admin/audit?"+query,
-		"", "", f.session, false, 200)
+		"", permissionCredentials{session: f.session}, false, 200)
 	if !strings.Contains(
 		string(page),
 		"Audit Operator &lt;Élodie&gt; 100%",
@@ -137,7 +160,7 @@ func checkAuditIdentityEdges(t *testing.T, f auditIdentityFixture) {
 		}
 	}
 	f.request(t, "DELETE", fmt.Sprintf("/api/v1/admin/users/%d", f.target.ID),
-		"", f.token, "", false, 204)
+		"", permissionCredentials{token: f.token}, false, 204)
 	entries := f.entries(t, "action=update_user")
 	if len(entries) != 1 || entries[0].EntityID.Int64 != f.target.ID ||
 		entries[0].TargetURL != "" {
@@ -153,11 +176,34 @@ func checkAuditIdentityPermissions(t *testing.T, f auditIdentityFixture) {
 	for _, role := range []string{"viewer", "deployer", "maintainer"} {
 		user := seedAPIUser(t, f.h.repo, role+"@audit.test", role)
 		_, token := seedAPIToken(t, f.h.repo, user.ID)
-		f.request(t, "GET", "/api/v1/admin/audit", "", token, "", false, 403)
-		f.request(t, "GET", "/admin/audit", "", "",
-			memberRoleSession(t, f.h, user.ID), false, 403)
+		f.request(
+			t,
+			"GET",
+			"/api/v1/admin/audit",
+			"",
+			permissionCredentials{token: token},
+			false,
+			403,
+		)
+		f.request(
+			t,
+			"GET",
+			"/admin/audit",
+			"",
+			permissionCredentials{session: memberRoleSession(t, f.h, user.ID)},
+			false,
+			403,
+		)
 	}
-	f.request(t, "GET", "/api/v1/admin/audit", "", "", "", false, 401)
+	f.request(
+		t,
+		"GET",
+		"/api/v1/admin/audit",
+		"",
+		permissionCredentials{},
+		false,
+		401,
+	)
 }
 
 func checkAuditIdentityMissingActor(t *testing.T, f auditIdentityFixture) {
@@ -177,7 +223,7 @@ func checkAuditIdentityMissingActor(t *testing.T, f auditIdentityFixture) {
 		t.Fatalf("missing actor or unsupported target: %+v", entries)
 	}
 	page := f.request(t, "GET", "/admin/audit?action=system_audit",
-		"", "", f.session, false, 200)
+		"", permissionCredentials{session: f.session}, false, 200)
 	if !strings.Contains(string(page), "No user ID") ||
 		strings.Contains(string(page), `href="https://evil.test"`) {
 		t.Fatal("missing actor fallback or target validation failed")

@@ -51,7 +51,7 @@ func TestAuditIdentitiesBrowserE2E(t *testing.T) {
 	)
 	b.screenshot(t, "audit-target-user")
 	f.request(t, "DELETE", fmt.Sprintf("/api/v1/admin/users/%d", f.target.ID),
-		"", f.token, "", false, 204)
+		"", permissionCredentials{token: f.token}, false, 204)
 	b.navigateBackTest(t, f.server.URL+"/admin/audit?action=update_user")
 	b.wait(t, `document.querySelectorAll('[data-audit-target]').length === 0`)
 	b.screenshot(t, "audit-deleted-target")

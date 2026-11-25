@@ -72,8 +72,7 @@ func TestUserModalPermissionFeedbackBrowserE2E(t *testing.T) {
 				"PUT",
 				fmt.Sprintf("/api/v1/admin/users/%d", f.adminID),
 				`{"name":"Downgraded admin","role":"viewer"}`,
-				adminToken,
-				"",
+				permissionCredentials{token: adminToken},
 				false,
 				200,
 			)
@@ -86,15 +85,14 @@ func TestUserModalPermissionFeedbackBrowserE2E(t *testing.T) {
 })()`)
 			b.waitBackTestURL(t, f.server.URL+"/login?next=%2Fadmin%2Fusers")
 			f.request(t, "GET", "/api/v1/admin/users", "",
-				f.token, "", false, 403)
+				permissionCredentials{token: f.token}, false, 403)
 			b.screenshot(t, fmt.Sprintf("user-modal-login-new-%t", isNew))
 			f.request(
 				t,
 				"PUT",
 				fmt.Sprintf("/api/v1/admin/users/%d", f.adminID),
 				`{"name":"Restored admin","role":"admin"}`,
-				adminToken,
-				"",
+				permissionCredentials{token: adminToken},
 				false,
 				200,
 			)
@@ -161,7 +159,7 @@ func TestMemberModalErrorFeedbackBrowserE2E(t *testing.T) {
 			members := fmt.Sprintf("/api/v1/projects/%d/members", f.project.ID)
 			f.request(t, "POST", members,
 				fmt.Sprintf(`{"user_id":%d,"role":"deployer"}`, member.ID),
-				f.adminToken, "", false, 201)
+				permissionCredentials{token: f.adminToken}, false, 201)
 			b.setBackTestSession(t, f.server.URL, f.session)
 			b.navigateBackTest(
 				t,
@@ -182,7 +180,15 @@ func TestMemberModalErrorFeedbackBrowserE2E(t *testing.T) {
 			expected := "Member not found"
 			path := fmt.Sprintf("%s/%d", members, member.ID)
 			if denial == "removed" {
-				f.request(t, "DELETE", path, "", f.adminToken, "", false, 204)
+				f.request(
+					t,
+					"DELETE",
+					path,
+					"",
+					permissionCredentials{token: f.adminToken},
+					false,
+					204,
+				)
 			} else {
 				f.changeRole(t, "project", "viewer")
 				expected = "project role"
@@ -226,7 +232,7 @@ func assertMemberFeedbackRoster(
 		}
 	}
 	decodeStepLogTest(t, f.request(t, "GET", path, "",
-		f.adminToken, "", false, 200), &saved)
+		permissionCredentials{token: f.adminToken}, false, 200), &saved)
 	found := false
 	for _, item := range saved.Items {
 		if item.UserID == memberID {

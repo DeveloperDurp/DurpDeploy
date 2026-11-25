@@ -34,13 +34,12 @@ func newPermissionGuidanceFixture(t *testing.T) permissionGuidanceFixture {
 		"POST",
 		f.apiPath("/steps"),
 		`{"name":"Guidance step","script_body":"echo guidance","container_image":"harbor.durp.info/dockerhub/library/bash:5.2"}`,
-		f.adminToken,
-		"",
+		permissionCredentials{token: f.adminToken},
 		false,
 		201,
 	)
 	f.request(t, "POST", f.apiPath("/releases"), `{"version":"guidance-v1"}`,
-		f.adminToken, "", false, 201)
+		permissionCredentials{token: f.adminToken}, false, 201)
 	return f
 }
 
@@ -58,7 +57,7 @@ func (f permissionGuidanceFixture) actor(
 	if member != "" {
 		body := fmt.Sprintf(`{"user_id":%d,"role":%q}`, user.ID, member)
 		f.request(t, "POST", f.apiPath("/members"), body,
-			f.adminToken, "", false, 201)
+			permissionCredentials{token: f.adminToken}, false, 201)
 	}
 	return permissionGuidanceActor{
 		user: user, member: member, token: token,
@@ -85,13 +84,13 @@ func (f permissionGuidanceFixture) checkGuidanceActor(
 	t.Helper()
 	var me struct{ Role string }
 	decodeStepLogTest(t, f.request(t, "GET", "/api/v1/users/me", "",
-		actor.token, "", false, 200), &me)
+		permissionCredentials{token: actor.token}, false, 200), &me)
 	if me.Role != actor.user.Role {
 		t.Fatal("current-user API lost the global role")
 	}
 	var members struct{ Items []db.ListProjectMembersRow }
 	decodeStepLogTest(t, f.request(t, "GET", f.apiPath("/members"), "",
-		actor.token, "", false, 200), &members)
+		permissionCredentials{token: actor.token}, false, 200), &members)
 	if actor.member != "" {
 		found := false
 		for _, member := range members.Items {
@@ -107,7 +106,15 @@ func (f permissionGuidanceFixture) checkGuidanceActor(
 		effective = actor.member
 	}
 	path := fmt.Sprintf("/projects/%d", f.project.ID)
-	page := f.request(t, "GET", path, "", "", actor.session, false, 200)
+	page := f.request(
+		t,
+		"GET",
+		path,
+		"",
+		permissionCredentials{session: actor.session},
+		false,
+		200,
+	)
 	document := dashboardDocument(t, string(page))
 	summary := dashboardElements(document, "data-project-permissions", "")
 	if len(summary) != 1 || !strings.Contains(dashboardText(summary[0]),
@@ -119,11 +126,18 @@ func (f permissionGuidanceFixture) checkGuidanceActor(
 	}
 	f.checkReadOnlyGuidance(t, actor, path, me.Role)
 	before := f.request(t, "GET", f.apiPath(""), "",
-		f.adminToken, "", false, 200)
-	f.request(t, "PUT", f.apiPath(""),
-		`{"name":"unauthorized guidance edit"}`, actor.token, "", false, 403)
+		permissionCredentials{token: f.adminToken}, false, 200)
+	f.request(
+		t,
+		"PUT",
+		f.apiPath(""),
+		`{"name":"unauthorized guidance edit"}`,
+		permissionCredentials{token: actor.token},
+		false,
+		403,
+	)
 	after := f.request(t, "GET", f.apiPath(""), "",
-		f.adminToken, "", false, 200)
+		permissionCredentials{token: f.adminToken}, false, 200)
 	if string(before) != string(after) {
 		t.Fatal("permission guidance enabled an unauthorized write")
 	}
@@ -136,8 +150,17 @@ func (f permissionGuidanceFixture) checkReadOnlyGuidance(
 ) {
 	t.Helper()
 	for _, suffix := range []string{"/steps-page", "/releases", "/edit"} {
-		page := string(f.request(t, "GET", path+suffix, "", "",
-			actor.session, false, 200))
+		page := string(
+			f.request(
+				t,
+				"GET",
+				path+suffix,
+				"",
+				permissionCredentials{session: actor.session},
+				false,
+				200,
+			),
+		)
 		document := dashboardDocument(t, page)
 		globalHelp := dashboardElements(document, "href", "/admin/users")
 		projectHelp := dashboardElements(
@@ -174,7 +197,15 @@ func (f permissionGuidanceFixture) checkGlobalGuidance(
 ) {
 	t.Helper()
 	if !roles.AtLeast(global, "maintainer") {
-		page := f.request(t, "GET", path, "", "", actor.session, false, 200)
+		page := f.request(
+			t,
+			"GET",
+			path,
+			"",
+			permissionCredentials{session: actor.session},
+			false,
+			200,
+		)
 		if !strings.Contains(
 			string(page),
 			"API tokens require a global Maintainer or Admin role.",
@@ -183,12 +214,29 @@ func (f permissionGuidanceFixture) checkGlobalGuidance(
 		}
 	}
 	if global == "maintainer" {
-		denied := string(f.request(t, "PUT", path, "name=blocked", "",
-			actor.session, false, 403))
+		denied := string(
+			f.request(
+				t,
+				"PUT",
+				path,
+				"name=blocked",
+				permissionCredentials{session: actor.session},
+				false,
+				403,
+			),
+		)
 		if !strings.Contains(denied, path+"/edit#project-members") ||
 			strings.Contains(denied, `href="/admin/users"`) {
 			t.Fatal("write denial points to the wrong role settings")
 		}
-		f.request(t, "PUT", path, "name=blocked", "", actor.session, true, 200)
+		f.request(
+			t,
+			"PUT",
+			path,
+			"name=blocked",
+			permissionCredentials{session: actor.session},
+			true,
+			200,
+		)
 	}
 }

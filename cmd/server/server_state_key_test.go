@@ -71,7 +71,7 @@ func TestServerStateRotationRejectsPlaintextAndRollsBack(t *testing.T) {
 					if err := f.rotate(t, plaintext); err == nil {
 						t.Fatal("unsafe rotation succeeded")
 					}
-					if got := store.ciphertext(t, f); got != value {
+					if store.ciphertext(t, f) != value {
 						t.Fatal("failed rotation changed state")
 					}
 					if !plaintext {

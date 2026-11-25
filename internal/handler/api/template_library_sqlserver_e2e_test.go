@@ -64,7 +64,15 @@ func TestTemplateLibrarySQLServerCaseConflictE2E(t *testing.T) {
 	}
 	path := fmt.Sprintf("/api/v1/projects/%d/template-library/%s/apply",
 		project.ID, entry.Slug)
-	response := f.request(t, "POST", path, string(body), token, "", false, 409)
+	response := f.request(
+		t,
+		"POST",
+		path,
+		string(body),
+		permissionCredentials{token: token},
+		false,
+		409,
+	)
 	if strings.Contains(string(response), "library-fresh-secret") ||
 		strings.Contains(string(response), "UNIQUE") {
 		t.Fatal("conflict response disclosed configuration or database details")
@@ -75,7 +83,7 @@ func TestTemplateLibrarySQLServerCaseConflictE2E(t *testing.T) {
 	}
 	session := memberRoleSession(t, &harness{repo: repo}, user.ID)
 	page := f.request(t, "POST", strings.TrimPrefix(path, "/api/v1"),
-		form.Encode(), "", session, false, 409)
+		form.Encode(), permissionCredentials{session: session}, false, 409)
 	if strings.Contains(string(page), "library-fresh-secret") ||
 		strings.Contains(string(page), "UNIQUE") {
 		t.Fatal("web conflict disclosed configuration or database details")

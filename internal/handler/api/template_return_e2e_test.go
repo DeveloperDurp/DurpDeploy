@@ -43,8 +43,7 @@ func (f projectTemplateE2E) checkTemplateSaveReturn(
 		"GET",
 		path+"/new?"+form.Encode(),
 		"",
-		"",
-		f.session,
+		permissionCredentials{session: f.session},
 		false,
 		200,
 	)
@@ -52,7 +51,15 @@ func (f projectTemplateE2E) checkTemplateSaveReturn(
 	if !strings.Contains(string(page), marker) {
 		t.Fatal("save form did not retain its allowed destination")
 	}
-	page = f.request(t, "POST", path, form.Encode(), "", f.session, false, 422)
+	page = f.request(
+		t,
+		"POST",
+		path,
+		form.Encode(),
+		permissionCredentials{session: f.session},
+		false,
+		422,
+	)
 	if !strings.Contains(string(page), marker) {
 		t.Fatal("validation error lost the allowed return destination")
 	}

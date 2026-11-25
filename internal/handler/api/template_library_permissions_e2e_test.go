@@ -45,8 +45,7 @@ func checkLibraryPermissionDenied(t *testing.T, scope, role string) {
 		"GET",
 		strings.TrimPrefix(f.path, "/api/v1")+"/http-health-check",
 		"",
-		"",
-		f.session,
+		permissionCredentials{session: f.session},
 		false,
 		200,
 	)
@@ -70,8 +69,7 @@ func checkLibraryPermissionDenied(t *testing.T, scope, role string) {
 			"/api/v1",
 		)+"/http-health-check/apply",
 		libraryForm(entry).Encode(),
-		"",
-		f.session,
+		permissionCredentials{session: f.session},
 		hx,
 		want,
 	)
@@ -83,8 +81,7 @@ func checkLibraryPermissionDenied(t *testing.T, scope, role string) {
 			"/api/v1",
 		)+"/http-health-check/apply",
 		libraryForm(entry).Encode(),
-		"",
-		f.session,
+		permissionCredentials{session: f.session},
 		true,
 		200,
 	)
@@ -96,8 +93,7 @@ func checkLibraryPermissionDenied(t *testing.T, scope, role string) {
 			"GET",
 			"/api/v1/admin/audit?action=apply_library_template",
 			"",
-			f.adminToken,
-			"",
+			permissionCredentials{token: f.adminToken},
 			false,
 			200,
 		),
@@ -131,16 +127,56 @@ func TestTemplateLibraryScopedTokenAPIWebE2E(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.request(t, "GET", "/api/v1/template-library", "", token, "", false, 403)
-	f.request(t, "GET", f.path, "", token, "", false, 200)
-	f.request(t, "GET", f.path+"/http-health-check", "", token, "", false, 200)
+	f.request(
+		t,
+		"GET",
+		"/api/v1/template-library",
+		"",
+		permissionCredentials{token: token},
+		false,
+		403,
+	)
+	f.request(
+		t,
+		"GET",
+		f.path,
+		"",
+		permissionCredentials{token: token},
+		false,
+		200,
+	)
+	f.request(
+		t,
+		"GET",
+		f.path+"/http-health-check",
+		"",
+		permissionCredentials{token: token},
+		false,
+		200,
+	)
 	foreign := seedProject(t, f.h.repo)
 	foreignPath := fmt.Sprintf(
 		"/api/v1/projects/%d/template-library",
 		foreign.ID,
 	)
-	f.request(t, "GET", foreignPath, "", token, "", false, 403)
-	f.request(t, "GET", foreignPath, "", f.token, "", false, 403)
+	f.request(
+		t,
+		"GET",
+		foreignPath,
+		"",
+		permissionCredentials{token: token},
+		false,
+		403,
+	)
+	f.request(
+		t,
+		"GET",
+		foreignPath,
+		"",
+		permissionCredentials{token: f.token},
+		false,
+		403,
+	)
 	input, err := json.Marshal(libraryInput(entry))
 	if err != nil {
 		t.Fatal(err)
@@ -150,8 +186,7 @@ func TestTemplateLibraryScopedTokenAPIWebE2E(t *testing.T) {
 		"POST",
 		foreignPath+"/http-health-check/apply",
 		string(input),
-		token,
-		"",
+		permissionCredentials{token: token},
 		false,
 		403,
 	)
@@ -175,13 +210,20 @@ func TestTemplateLibraryScopedTokenAPIWebE2E(t *testing.T) {
 			"POST",
 			f.path+"/http-health-check/apply",
 			string(input),
-			token,
-			"",
+			permissionCredentials{token: token},
 			false,
 			status,
 		)
 	}
-	f.request(t, "GET", "/api/v1/template-library", "", "", "", false, 401)
+	f.request(
+		t,
+		"GET",
+		"/api/v1/template-library",
+		"",
+		permissionCredentials{},
+		false,
+		401,
+	)
 }
 
 func TestTemplateLibraryCSRFAPIWebE2E(t *testing.T) {
