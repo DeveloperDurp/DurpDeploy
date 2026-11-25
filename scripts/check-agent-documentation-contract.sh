@@ -2,7 +2,8 @@
 set -euo pipefail
 
 require_text() {
-	grep -Fq -- "$2" "$1" || { echo "agent documentation contract: $3" >&2; exit 1; }
+	local file=$1 text=$2 description=$3
+	grep -Fq -- "$text" "$file" || { echo "agent documentation contract: $description" >&2; exit 1; }
 }
 
 require_text README.md 'No SSH-based deployment targets' 'README still describes remote deployment as unsupported'

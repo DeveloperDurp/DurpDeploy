@@ -3,7 +3,8 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 workflow=${1:-$root/.gitlab/ci/security.yml}
 require() {
-  grep -Fq -- "$2" "$1" || { printf 'Security contract missing: %s\n' "$2" >&2; exit 1; }
+  local file=$1 text=$2
+  grep -Fq -- "$text" "$file" || { printf 'Security contract missing: %s\n' "$text" >&2; exit 1; }
 }
 for token in 'security-scan:' 'container-security:' 'timeout: 30 minutes' \
   'when: always' 'expire_in: 7 days' 'make security-scan-test' \
