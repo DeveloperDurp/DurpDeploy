@@ -13,89 +13,12 @@ func TestSQLServer_MigrationsAndQueries(t *testing.T) {
 	ctx := context.Background()
 	dbConn := newSQLServerTestDB(t)
 	queries := db.New(dbConn)
-	project, err := queries.CreateProject(ctx, db.CreateProjectParams{
-		Name:        "mssql-project",
-		Description: sql.NullString{String: "created", Valid: true},
-	})
-	requireNoError(t, err, "create project")
-	if project.ID == 0 || project.Name != "mssql-project" ||
-		!project.Description.Valid || project.Description.String != "created" ||
-		project.CreatedAt <= 0 || project.LifecycleID.Valid {
-		t.Fatalf("created project = %#v", project)
-	}
-
-	updatedProject, err := queries.UpdateProject(ctx, db.UpdateProjectParams{
-		ID: project.ID, Name: "mssql-project-updated",
-	})
-	requireNoError(t, err, "update project")
-	if updatedProject.ID != project.ID ||
-		updatedProject.Name != "mssql-project-updated" ||
-		updatedProject.Description.Valid {
-		t.Fatalf("updated project = %#v", updatedProject)
-	}
-	persistedProject, err := queries.GetProject(ctx, project.ID)
-	requireNoError(t, err, "get updated project")
-	if persistedProject != updatedProject {
-		t.Fatalf(
-			"persisted project = %#v, want %#v",
-			persistedProject,
-			updatedProject,
-		)
-	}
-	lifecycle, err := queries.CreateLifecycle(
-		ctx, db.CreateLifecycleParams{Name: "mssql-lifecycle"},
-	)
-	requireNoError(t, err, "create lifecycle")
-	err = queries.SetProjectLifecycle(ctx, db.SetProjectLifecycleParams{
-		ID: project.ID,
-		LifecycleID: sql.NullInt64{
-			Int64: lifecycle.ID,
-			Valid: true,
-		},
-	})
-	requireNoError(t, err, "set project lifecycle")
-	err = queries.DeleteLifecycle(ctx, lifecycle.ID)
-	requireNoError(t, err, "delete lifecycle")
-	persistedProject, err = queries.GetProject(ctx, project.ID)
-	requireNoError(t, err, "get project after lifecycle deletion")
-	if persistedProject.LifecycleID.Valid {
-		t.Fatalf(
-			"project lifecycle after deletion = %#v, want NULL",
-			persistedProject.LifecycleID,
-		)
-	}
-
-	verifyMSSQLProjectPagination(t, ctx, queries)
-
-	user, err := queries.CreateUser(ctx, db.CreateUserParams{
-		Email:        "mssql-user@example.com",
-		PasswordHash: "hash",
-		Name:         "MSSQL User",
-		Role:         "deployer",
-	})
-	requireNoError(t, err, "create user")
-	if user.CreatedAt <= 0 || user.UpdatedAt <= 0 || user.LastLoginAt.Valid {
-		t.Fatalf("created user = %#v", user)
-	}
-	const loginAt = int64(1_700_000_000)
-	err = queries.UpdateUserLastLogin(ctx, db.UpdateUserLastLoginParams{
-		ID: user.ID, LastLoginAt: sql.NullInt64{Int64: loginAt, Valid: true},
-	})
-	requireNoError(t, err, "update user login timestamp")
-	persistedUser, err := queries.GetUserByID(ctx, user.ID)
-	requireNoError(t, err, "get updated user")
-	if !persistedUser.LastLoginAt.Valid ||
-		persistedUser.LastLoginAt.Int64 != loginAt {
-		t.Fatalf(
-			"persisted user login timestamp = %#v",
-			persistedUser.LastLoginAt,
-		)
-	}
+	project, user := verifyMSSQLProjectAndUserQueries(t, ctx, queries)
 
 	member := db.AddProjectMemberParams{
 		ProjectID: project.ID, UserID: user.ID, Role: "admin",
 	}
-	err = queries.AddProjectMember(ctx, member)
+	err := queries.AddProjectMember(ctx, member)
 	requireNoError(t, err, "add project member")
 	member.Role = "deployer"
 	err = queries.AddProjectMember(ctx, member)
@@ -233,4 +156,91 @@ func requireNoError(t *testing.T, err error, operation string) {
 	if err != nil {
 		t.Fatalf("%s: %v", operation, err)
 	}
+}
+
+func verifyMSSQLProjectAndUserQueries(
+	t *testing.T,
+	ctx context.Context,
+	queries *db.Queries,
+) (db.Project, db.User) {
+	t.Helper()
+	project, err := queries.CreateProject(ctx, db.CreateProjectParams{
+		Name:        "mssql-project",
+		Description: sql.NullString{String: "created", Valid: true},
+	})
+	requireNoError(t, err, "create project")
+	if project.ID == 0 || project.Name != "mssql-project" ||
+		!project.Description.Valid || project.Description.String != "created" ||
+		project.CreatedAt <= 0 || project.LifecycleID.Valid {
+		t.Fatalf("created project = %#v", project)
+	}
+
+	updatedProject, err := queries.UpdateProject(ctx, db.UpdateProjectParams{
+		ID: project.ID, Name: "mssql-project-updated",
+	})
+	requireNoError(t, err, "update project")
+	if updatedProject.ID != project.ID ||
+		updatedProject.Name != "mssql-project-updated" ||
+		updatedProject.Description.Valid {
+		t.Fatalf("updated project = %#v", updatedProject)
+	}
+	persistedProject, err := queries.GetProject(ctx, project.ID)
+	requireNoError(t, err, "get updated project")
+	if persistedProject != updatedProject {
+		t.Fatalf(
+			"persisted project = %#v, want %#v",
+			persistedProject,
+			updatedProject,
+		)
+	}
+	lifecycle, err := queries.CreateLifecycle(
+		ctx, db.CreateLifecycleParams{Name: "mssql-lifecycle"},
+	)
+	requireNoError(t, err, "create lifecycle")
+	err = queries.SetProjectLifecycle(ctx, db.SetProjectLifecycleParams{
+		ID: project.ID,
+		LifecycleID: sql.NullInt64{
+			Int64: lifecycle.ID,
+			Valid: true,
+		},
+	})
+	requireNoError(t, err, "set project lifecycle")
+	err = queries.DeleteLifecycle(ctx, lifecycle.ID)
+	requireNoError(t, err, "delete lifecycle")
+	persistedProject, err = queries.GetProject(ctx, project.ID)
+	requireNoError(t, err, "get project after lifecycle deletion")
+	if persistedProject.LifecycleID.Valid {
+		t.Fatalf(
+			"project lifecycle after deletion = %#v, want NULL",
+			persistedProject.LifecycleID,
+		)
+	}
+
+	verifyMSSQLProjectPagination(t, ctx, queries)
+
+	user, err := queries.CreateUser(ctx, db.CreateUserParams{
+		Email:        "mssql-user@example.com",
+		PasswordHash: "hash",
+		Name:         "MSSQL User",
+		Role:         "deployer",
+	})
+	requireNoError(t, err, "create user")
+	if user.CreatedAt <= 0 || user.UpdatedAt <= 0 || user.LastLoginAt.Valid {
+		t.Fatalf("created user = %#v", user)
+	}
+	const loginAt = int64(1_700_000_000)
+	err = queries.UpdateUserLastLogin(ctx, db.UpdateUserLastLoginParams{
+		ID: user.ID, LastLoginAt: sql.NullInt64{Int64: loginAt, Valid: true},
+	})
+	requireNoError(t, err, "update user login timestamp")
+	persistedUser, err := queries.GetUserByID(ctx, user.ID)
+	requireNoError(t, err, "get updated user")
+	if !persistedUser.LastLoginAt.Valid ||
+		persistedUser.LastLoginAt.Int64 != loginAt {
+		t.Fatalf(
+			"persisted user login timestamp = %#v",
+			persistedUser.LastLoginAt,
+		)
+	}
+	return project, user
 }

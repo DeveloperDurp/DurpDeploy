@@ -173,8 +173,22 @@ func TestMSSQL_MFASchemaParity(t *testing.T) {
 		t.Fatalf("reauthenticated_at = %#v", session.ReauthenticatedAt)
 	}
 
+	verifyMSSQLMFACleanupAndRollback(
+		t, ctx, conn, queries, user.ID, credentialID, recoveryHash,
+	)
+}
+
+func verifyMSSQLMFACleanupAndRollback(
+	t *testing.T,
+	ctx context.Context,
+	conn *sql.DB,
+	queries *db.Queries,
+	userID int64,
+	credentialID, recoveryHash []byte,
+) {
+	t.Helper()
 	// When SQL Server's intentional NO ACTION session FK blocks direct deletion.
-	err = queries.DeleteSession(ctx, "mssql-mfa-session")
+	err := queries.DeleteSession(ctx, "mssql-mfa-session")
 	if err == nil {
 		t.Fatal("session deletion with a bound challenge succeeded")
 	}
@@ -189,14 +203,14 @@ func TestMSSQL_MFASchemaParity(t *testing.T) {
 
 	// Then user-scoped cleanup supports later transactional invalidation.
 	_, err = queries.CreateSession(ctx, db.CreateSessionParams{
-		ID: "mssql-user-cleanup-session", UserID: user.ID, CsrfToken: "csrf-2",
+		ID: "mssql-user-cleanup-session", UserID: userID, CsrfToken: "csrf-2",
 		ExpiresAt: 1_700_003_600, IpAddress: sql.NullString{}, UserAgent: sql.NullString{},
 	})
 	requireNoError(t, err, "create cleanup session")
 	cleanupHash := make([]byte, 32)
 	cleanupHash[0] = 2
 	_, err = queries.CreateMFAChallenge(ctx, db.CreateMFAChallengeParams{
-		TokenHash: cleanupHash, UserID: user.ID,
+		TokenHash: cleanupHash, UserID: userID,
 		SessionID: sql.NullString{
 			String: "mssql-user-cleanup-session",
 			Valid:  true,
@@ -205,12 +219,12 @@ func TestMSSQL_MFASchemaParity(t *testing.T) {
 		Attempts: 0, ExpiresAt: 1_700_003_600,
 	})
 	requireNoError(t, err, "create user cleanup challenge")
-	deleted, err = queries.DeleteMFAChallengesByUserID(ctx, user.ID)
+	deleted, err = queries.DeleteMFAChallengesByUserID(ctx, userID)
 	requireNoError(t, err, "delete challenges by user")
 	if deleted != 1 {
 		t.Fatalf("deleted user challenges = %d, want 1", deleted)
 	}
-	requireNoError(t, queries.DeleteSessionsByUser(ctx, user.ID),
+	requireNoError(t, queries.DeleteSessionsByUser(ctx, userID),
 		"delete sessions after user challenge cleanup")
 
 	requireNoError(t, queries.DeleteWebAuthnCredential(ctx, credentialID),
@@ -224,14 +238,14 @@ func TestMSSQL_MFASchemaParity(t *testing.T) {
 	) {
 		t.Fatalf("get deleted credential error = %v, want sql.ErrNoRows", err)
 	}
-	deleted, err = queries.DeleteTOTP(ctx, user.ID)
+	deleted, err = queries.DeleteTOTP(ctx, userID)
 	requireNoError(t, err, "delete TOTP")
 	if deleted != 1 {
 		t.Fatalf("deleted TOTP rows = %d, want 1", deleted)
 	}
 	if _, err := queries.GetTOTPByUserID(
 		ctx,
-		user.ID,
+		userID,
 	); !errors.Is(
 		err,
 		sql.ErrNoRows,
@@ -242,7 +256,7 @@ func TestMSSQL_MFASchemaParity(t *testing.T) {
 	resetHash := make([]byte, 32)
 	resetHash[0] = 4
 	_, err = queries.CreateMFAChallenge(ctx, db.CreateMFAChallengeParams{
-		TokenHash: resetHash, UserID: user.ID, Purpose: "admin_mfa_reset",
+		TokenHash: resetHash, UserID: userID, Purpose: "admin_mfa_reset",
 		CsrfHash: recoveryHash, CeremonyJson: "{}", Attempts: 0,
 		ExpiresAt: 1_700_003_600,
 	})

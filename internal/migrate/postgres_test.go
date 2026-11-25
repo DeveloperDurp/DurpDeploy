@@ -76,6 +76,12 @@ func TestPostgres_MigrationsRun(t *testing.T) {
 	}
 	t.Logf("today count=%d", cnt)
 
+	userID := verifyPostgresTOTP(t, ctx, db)
+	verifyPostgresWebAuthn(t, ctx, db, userID)
+}
+
+func verifyPostgresTOTP(t *testing.T, ctx context.Context, db *sql.DB) int64 {
+	t.Helper()
 	// Given the PostgreSQL migration has created every MFA table.
 	for _, table := range []string{
 		"mfa_totp", "webauthn_users", "webauthn_credentials",
@@ -94,7 +100,7 @@ func TestPostgres_MigrationsRun(t *testing.T) {
 		}
 	}
 	var userID int64
-	err = db.QueryRow(
+	err := db.QueryRow(
 		"INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?) RETURNING id",
 		"postgres-mfa@example.com",
 		"hash",
@@ -136,10 +142,19 @@ func TestPostgres_MigrationsRun(t *testing.T) {
 	); err != nil {
 		t.Fatalf("delete TOTP: %v", err)
 	}
+	return userID
+}
 
+func verifyPostgresWebAuthn(
+	t *testing.T,
+	ctx context.Context,
+	db *sql.DB,
+	userID int64,
+) {
+	t.Helper()
 	// Given binary WebAuthn fields and a fresh browser session.
 	queries := generated.New(db)
-	_, err = queries.CreateSession(ctx, generated.CreateSessionParams{
+	_, err := queries.CreateSession(ctx, generated.CreateSessionParams{
 		ID: "postgres-mfa-session", UserID: userID, CsrfToken: "csrf",
 		ExpiresAt: 1_700_003_600,
 	})

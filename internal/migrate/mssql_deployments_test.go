@@ -52,6 +52,43 @@ func verifyMSSQLDeploymentQueries(
 		t.Fatalf("created notification event = %#v", notificationEvent)
 	}
 
+	verifyMSSQLDeploymentFilters(t, fixture)
+
+	approval, err := fixture.queries.CreateApproval(
+		fixture.ctx,
+		db.CreateApprovalParams{
+			DeploymentID: fixture.deployment.ID,
+			ApprovedBy:   "mssql-user@example.com",
+			ApproverUserID: sql.NullInt64{
+				Int64: fixture.userID,
+				Valid: true,
+			},
+			RequiredApproverRole: "admin",
+		},
+	)
+	requireNoError(t, err, "create deployment approval")
+	if approval.ID == 0 || approval.ApprovedAt <= 0 {
+		t.Fatalf("created deployment approval = %#v", approval)
+	}
+	persistedApproval, err := fixture.queries.GetApprovalByDeployment(
+		fixture.ctx,
+		fixture.deployment.ID,
+	)
+	requireNoError(t, err, "get deployment approval")
+	if persistedApproval != approval {
+		t.Fatalf(
+			"persisted deployment approval = %#v, want %#v",
+			persistedApproval,
+			approval,
+		)
+	}
+}
+
+func verifyMSSQLDeploymentFilters(
+	t *testing.T,
+	fixture mssqlDeploymentFixture,
+) {
+	t.Helper()
 	filter := db.ListDeploymentsWithRefsFilteredParams{
 		IsAdmin:    1,
 		FProjectID: sql.NullInt64{Int64: fixture.projectID, Valid: true},
@@ -142,34 +179,5 @@ func verifyMSSQLDeploymentQueries(
 				}
 			}
 		})
-	}
-
-	approval, err := fixture.queries.CreateApproval(
-		fixture.ctx,
-		db.CreateApprovalParams{
-			DeploymentID: fixture.deployment.ID,
-			ApprovedBy:   "mssql-user@example.com",
-			ApproverUserID: sql.NullInt64{
-				Int64: fixture.userID,
-				Valid: true,
-			},
-			RequiredApproverRole: "admin",
-		},
-	)
-	requireNoError(t, err, "create deployment approval")
-	if approval.ID == 0 || approval.ApprovedAt <= 0 {
-		t.Fatalf("created deployment approval = %#v", approval)
-	}
-	persistedApproval, err := fixture.queries.GetApprovalByDeployment(
-		fixture.ctx,
-		fixture.deployment.ID,
-	)
-	requireNoError(t, err, "get deployment approval")
-	if persistedApproval != approval {
-		t.Fatalf(
-			"persisted deployment approval = %#v, want %#v",
-			persistedApproval,
-			approval,
-		)
 	}
 }

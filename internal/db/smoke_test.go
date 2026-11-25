@@ -60,58 +60,7 @@ func TestSmoke(t *testing.T) {
 		t.Fatalf("environment name mismatch")
 	}
 
-	// steps
-	step, err := queries.CreateStep(ctx, db.CreateStepParams{
-		ProjectID:  proj.ID,
-		Name:       "test-step",
-		ScriptBody: "echo hello",
-		SortOrder:  1,
-	})
-	if err != nil {
-		t.Fatalf("create step: %v", err)
-	}
-	if step.ID == 0 {
-		t.Fatal("step id should not be zero")
-	}
-	step2, err := queries.GetStep(ctx, step.ID)
-	if err != nil {
-		t.Fatalf("get step: %v", err)
-	}
-	if step2.Name != step.Name {
-		t.Fatalf("step name mismatch")
-	}
-	if step2.Interpreter != "bash" {
-		t.Fatalf("step interpreter = %q, want bash", step2.Interpreter)
-	}
-	_, err = dbConn.ExecContext(
-		ctx,
-		"UPDATE steps SET interpreter = 'ruby' WHERE id = ?",
-		step.ID,
-	)
-	if err == nil {
-		t.Fatal("update step with invalid interpreter succeeded")
-	}
-
-	// variables
-	variable, err := queries.CreateVariable(ctx, db.CreateVariableParams{
-		ProjectID:     proj.ID,
-		Name:          "test-var",
-		Value:         sql.NullString{String: "val", Valid: true},
-		EnvironmentID: sql.NullInt64{Int64: env.ID, Valid: true},
-	})
-	if err != nil {
-		t.Fatalf("create variable: %v", err)
-	}
-	if variable.ID == 0 {
-		t.Fatal("variable id should not be zero")
-	}
-	variable2, err := queries.GetVariable(ctx, variable.ID)
-	if err != nil {
-		t.Fatalf("get variable: %v", err)
-	}
-	if variable2.Name != variable.Name {
-		t.Fatalf("variable name mismatch")
-	}
+	verifySmokeProjectInputs(t, ctx, dbConn, queries, proj.ID, env.ID)
 
 	// releases
 	release, err := queries.CreateRelease(ctx, db.CreateReleaseParams{
@@ -157,47 +106,7 @@ func TestSmoke(t *testing.T) {
 		t.Fatalf("release variable name mismatch")
 	}
 
-	// deployments
-	deployment, err := queries.CreateDeployment(ctx, db.CreateDeploymentParams{
-		ReleaseID:     release.ID,
-		EnvironmentID: env.ID,
-		Status:        "pending",
-		StartedAt:     sql.NullInt64{Int64: 0, Valid: false},
-		FinishedAt:    sql.NullInt64{Int64: 0, Valid: false},
-	})
-	if err != nil {
-		t.Fatalf("create deployment: %v", err)
-	}
-	if deployment.ID == 0 {
-		t.Fatal("deployment id should not be zero")
-	}
-	deployment2, err := queries.GetDeployment(ctx, deployment.ID)
-	if err != nil {
-		t.Fatalf("get deployment: %v", err)
-	}
-	if deployment2.Status != deployment.Status {
-		t.Fatalf("deployment status mismatch")
-	}
-
-	// deployment_logs
-	log, err := queries.CreateDeploymentLog(ctx, db.CreateDeploymentLogParams{
-		DeploymentID: deployment.ID,
-		StepName:     sql.NullString{String: "step1", Valid: true},
-		Line:         "log line",
-	})
-	if err != nil {
-		t.Fatalf("create deployment log: %v", err)
-	}
-	if log.ID == 0 {
-		t.Fatal("deployment log id should not be zero")
-	}
-	log2, err := queries.GetDeploymentLog(ctx, log.ID)
-	if err != nil {
-		t.Fatalf("get deployment log: %v", err)
-	}
-	if log2.Line != log.Line {
-		t.Fatalf("deployment log line mismatch")
-	}
+	verifySmokeDeployment(t, ctx, queries, release.ID, env.ID)
 
 	// scheduled_deployments
 	sched, err := queries.CreateScheduledDeployment(
@@ -240,5 +149,117 @@ func TestSmoke(t *testing.T) {
 			"scheduled deployment enabled mismatch: got %d",
 			sched2.Enabled,
 		)
+	}
+}
+
+func verifySmokeProjectInputs(
+	t *testing.T,
+	ctx context.Context,
+	dbConn *sql.DB,
+	queries *db.Queries,
+	projectID, environmentID int64,
+) {
+	t.Helper()
+	// steps
+	step, err := queries.CreateStep(ctx, db.CreateStepParams{
+		ProjectID:  projectID,
+		Name:       "test-step",
+		ScriptBody: "echo hello",
+		SortOrder:  1,
+	})
+	if err != nil {
+		t.Fatalf("create step: %v", err)
+	}
+	if step.ID == 0 {
+		t.Fatal("step id should not be zero")
+	}
+	step2, err := queries.GetStep(ctx, step.ID)
+	if err != nil {
+		t.Fatalf("get step: %v", err)
+	}
+	if step2.Name != step.Name {
+		t.Fatalf("step name mismatch")
+	}
+	if step2.Interpreter != "bash" {
+		t.Fatalf("step interpreter = %q, want bash", step2.Interpreter)
+	}
+	_, err = dbConn.ExecContext(
+		ctx,
+		"UPDATE steps SET interpreter = 'ruby' WHERE id = ?",
+		step.ID,
+	)
+	if err == nil {
+		t.Fatal("update step with invalid interpreter succeeded")
+	}
+
+	// variables
+	variable, err := queries.CreateVariable(ctx, db.CreateVariableParams{
+		ProjectID:     projectID,
+		Name:          "test-var",
+		Value:         sql.NullString{String: "val", Valid: true},
+		EnvironmentID: sql.NullInt64{Int64: environmentID, Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("create variable: %v", err)
+	}
+	if variable.ID == 0 {
+		t.Fatal("variable id should not be zero")
+	}
+	variable2, err := queries.GetVariable(ctx, variable.ID)
+	if err != nil {
+		t.Fatalf("get variable: %v", err)
+	}
+	if variable2.Name != variable.Name {
+		t.Fatalf("variable name mismatch")
+	}
+}
+
+func verifySmokeDeployment(
+	t *testing.T,
+	ctx context.Context,
+	queries *db.Queries,
+	releaseID, environmentID int64,
+) {
+	t.Helper()
+	// deployments
+	deployment, err := queries.CreateDeployment(ctx, db.CreateDeploymentParams{
+		ReleaseID:     releaseID,
+		EnvironmentID: environmentID,
+		Status:        "pending",
+		StartedAt:     sql.NullInt64{Int64: 0, Valid: false},
+		FinishedAt:    sql.NullInt64{Int64: 0, Valid: false},
+	})
+	if err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+	if deployment.ID == 0 {
+		t.Fatal("deployment id should not be zero")
+	}
+	deployment2, err := queries.GetDeployment(ctx, deployment.ID)
+	if err != nil {
+		t.Fatalf("get deployment: %v", err)
+	}
+	if deployment2.Status != deployment.Status {
+		t.Fatalf("deployment status mismatch")
+	}
+
+	// deployment_logs
+	log, err := queries.CreateDeploymentLog(ctx, db.CreateDeploymentLogParams{
+		DeploymentID: deployment.ID,
+		StepName:     sql.NullString{String: "step1", Valid: true},
+		Line:         "log line",
+	})
+	if err != nil {
+		t.Fatalf("create deployment log: %v", err)
+	}
+	if log.ID == 0 {
+		t.Fatal("deployment log id should not be zero")
+	}
+	log2, err := queries.GetDeploymentLog(ctx, log.ID)
+	if err != nil {
+		t.Fatalf("get deployment log: %v", err)
+	}
+	if log2.Line != log.Line {
+		t.Fatalf("deployment log line mismatch")
 	}
 }
