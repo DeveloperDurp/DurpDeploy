@@ -114,66 +114,75 @@ func Middleware(repo *repository.Repository) func(http.Handler) http.Handler {
 				return
 			}
 
-			action, entityType := deriveAction(r)
-			if action == "" {
-				return
-			}
-			if action == "apply_library_template" &&
-				state.libraryTemplate == nil {
-				// Project permission toasts return 200 without applying a template.
-				return
-			}
-			// HTMX permission denials return 200 without a mutation.
-			if entityType == "project_group" &&
-				state.projectGroupChange == nil {
-				return
-			}
-			if (action == "update_credential_metadata" || action == "rotate_credential" || action == "create_credential" || action == "enroll_credential" || action == "delete_credential") &&
-				state.overridden == nil {
-				return
-			}
-
-			var userID sql.NullInt64
-			if u := auth.UserFromContext(r.Context()); u != nil {
-				userID = sql.NullInt64{Int64: u.ID, Valid: true}
-			}
-
-			var entityID sql.NullInt64
-			routeID := chi.URLParam(r, "id")
-			if action == "delete_release" {
-				routeID = chi.URLParam(r, "releaseId")
-				if routeID == "" {
-					routeID = chi.URLParam(r, "relId")
-				}
-			}
-			if routeID != "" {
-				if v, err := strconv.ParseInt(routeID, 10, 64); err == nil {
-					entityID = sql.NullInt64{Int64: v, Valid: true}
-				}
-			} else if m := entityIDRe.FindStringSubmatch(r.URL.Path); m != nil {
-				if v, err := strconv.ParseInt(m[1], 10, 64); err == nil {
-					entityID = sql.NullInt64{Int64: v, Valid: true}
-				}
-			}
-			reason := ""
-			if state.overridden != nil {
-				action = state.overridden.action
-				entityType = state.overridden.entityType
-				entityID = state.overridden.entityID
-				reason = state.overridden.reason
-			}
-
-			Record(r.Context(), repo, Entry{
-				UserID:     userID,
-				Action:     action,
-				EntityType: entityType,
-				EntityID:   entityID,
-				Details: buildDetails(r, requestOutcome{
-					status: ww.Status(), action: action, reason: reason,
-				}),
-			})
+			recordSuccessfulWrite(r, repo, state, ww.Status())
 		})
 	}
+}
+
+func recordSuccessfulWrite(
+	r *http.Request,
+	repo *repository.Repository,
+	state *requestState,
+	status int,
+) {
+	action, entityType := deriveAction(r)
+	if action == "" {
+		return
+	}
+	if action == "apply_library_template" &&
+		state.libraryTemplate == nil {
+		// Project permission toasts return 200 without applying a template.
+		return
+	}
+	// HTMX permission denials return 200 without a mutation.
+	if entityType == "project_group" &&
+		state.projectGroupChange == nil {
+		return
+	}
+	if (action == "update_credential_metadata" || action == "rotate_credential" || action == "create_credential" || action == "enroll_credential" || action == "delete_credential") &&
+		state.overridden == nil {
+		return
+	}
+
+	var userID sql.NullInt64
+	if u := auth.UserFromContext(r.Context()); u != nil {
+		userID = sql.NullInt64{Int64: u.ID, Valid: true}
+	}
+
+	var entityID sql.NullInt64
+	routeID := chi.URLParam(r, "id")
+	if action == "delete_release" {
+		routeID = chi.URLParam(r, "releaseId")
+		if routeID == "" {
+			routeID = chi.URLParam(r, "relId")
+		}
+	}
+	if routeID != "" {
+		if v, err := strconv.ParseInt(routeID, 10, 64); err == nil {
+			entityID = sql.NullInt64{Int64: v, Valid: true}
+		}
+	} else if m := entityIDRe.FindStringSubmatch(r.URL.Path); m != nil {
+		if v, err := strconv.ParseInt(m[1], 10, 64); err == nil {
+			entityID = sql.NullInt64{Int64: v, Valid: true}
+		}
+	}
+	reason := ""
+	if state.overridden != nil {
+		action = state.overridden.action
+		entityType = state.overridden.entityType
+		entityID = state.overridden.entityID
+		reason = state.overridden.reason
+	}
+
+	Record(r.Context(), repo, Entry{
+		UserID:     userID,
+		Action:     action,
+		EntityType: entityType,
+		EntityID:   entityID,
+		Details: buildDetails(r, requestOutcome{
+			status: status, action: action, reason: reason,
+		}),
+	})
 }
 
 func isStateChanging(method string) bool {
