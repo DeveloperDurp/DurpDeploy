@@ -37,38 +37,15 @@ func TestDeploymentStepPanelsBrowserE2E(t *testing.T) {
 		{"succeeded", "unknown", "State unavailable"},
 	} {
 		t.Run("initial-"+scenario.state, func(t *testing.T) {
-			d := seedDeployment(t, f.h.repo, release.ID,
-				f.environment.ID, scenario.status)
-			output := "No output yet."
-			if scenario.state != "pending" {
-				output = "initial output"
-				_, err := f.h.repo.Queries.CreateStepDeploymentLog(t.Context(),
-					db.CreateStepDeploymentLogParams{
-						DeploymentID: d.ID, Line: output,
-						StepIndex: sql.NullInt64{Valid: true},
-						StepState: sql.NullString{
-							String: scenario.state, Valid: scenario.state != "unknown",
-						},
-					})
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
-			b.openStepLogPage(t, fmt.Sprintf(
-				"%s/deployments/%d", f.baseURL, d.ID))
-			if string(b.evaluate(t, fmt.Sprintf(`(() => {
- const panels = [...document.querySelectorAll('details[data-step-index]')]
-   .filter(panel => panel.dataset.stepIndex !== '-1');
- return panels.length === 2 && panels.every(panel => !panel.open) &&
- panels[0].querySelector('summary').textContent.includes('Open manually') &&
- panels[0].querySelector('.badge').textContent === %q &&
- panels[0].textContent.includes(%q) &&
- document.querySelector('[role="status"]').getBoundingClientRect().height > 0;
-})()`, scenario.label, output))) != "true" {
-				t.Fatal(
-					"initial panels expanded or hid their summary information",
-				)
-			}
+			verifyInitialStepLogPanels(
+				t,
+				f,
+				b,
+				release.ID,
+				scenario.status,
+				scenario.state,
+				scenario.label,
+			)
 		})
 	}
 
@@ -161,4 +138,46 @@ func TestDeploymentStepPanelsBrowserE2E(t *testing.T) {
 		)
 	}
 	b.captureStepLogs(t, "manual-retained-output")
+}
+
+func verifyInitialStepLogPanels(
+	t *testing.T,
+	f *artifactE2E,
+	b *packageBrowser,
+	releaseID int64,
+	status, state, label string,
+) {
+	t.Helper()
+	d := seedDeployment(t, f.h.repo, releaseID,
+		f.environment.ID, status)
+	output := "No output yet."
+	if state != "pending" {
+		output = "initial output"
+		_, err := f.h.repo.Queries.CreateStepDeploymentLog(t.Context(),
+			db.CreateStepDeploymentLogParams{
+				DeploymentID: d.ID, Line: output,
+				StepIndex: sql.NullInt64{Valid: true},
+				StepState: sql.NullString{
+					String: state, Valid: state != "unknown",
+				},
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	b.openStepLogPage(t, fmt.Sprintf(
+		"%s/deployments/%d", f.baseURL, d.ID))
+	if string(b.evaluate(t, fmt.Sprintf(`(() => {
+ const panels = [...document.querySelectorAll('details[data-step-index]')]
+   .filter(panel => panel.dataset.stepIndex !== '-1');
+ return panels.length === 2 && panels.every(panel => !panel.open) &&
+ panels[0].querySelector('summary').textContent.includes('Open manually') &&
+ panels[0].querySelector('.badge').textContent === %q &&
+ panels[0].textContent.includes(%q) &&
+ document.querySelector('[role="status"]').getBoundingClientRect().height > 0;
+})()`, label, output))) != "true" {
+		t.Fatal(
+			"initial panels expanded or hid their summary information",
+		)
+	}
 }

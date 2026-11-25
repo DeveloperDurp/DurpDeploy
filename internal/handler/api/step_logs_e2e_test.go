@@ -59,65 +59,84 @@ func TestDeploymentStepLogOutcomesAPIWebE2E(t *testing.T) {
 				&deployment,
 			)
 			if test.cancel {
-				deadline := time.Now().Add(15 * time.Second)
-				for {
-					logs, err := f.h.repo.Queries.ListDeploymentLogsByDeployment(
-						t.Context(),
-						deployment.ID,
-					)
-					if err != nil {
-						t.Fatal(err)
-					}
-					started := false
-					for _, log := range logs {
-						if log.StepState.String == "running" {
-							started = true
-						}
-					}
-					if started {
-						break
-					}
-					if time.Now().After(deadline) {
-						t.Fatal("step never started")
-					}
-					time.Sleep(20 * time.Millisecond)
-				}
-				f.api(
-					t,
-					"POST",
-					fmt.Sprintf("/api/v1/deployments/%d/cancel", deployment.ID),
-					nil,
-					200,
-				)
+				cancelStartedStepLogDeployment(t, f, deployment.ID)
 			}
-			logs := f.readStepLogs(
-				t,
-				fmt.Sprintf(
-					"/api/v1/deployments/%d/logs/stream?format=structured",
-					deployment.ID,
-				),
-				"",
-			)
-			var states []string
-			for _, log := range logs {
-				if log.State != "" {
-					states = append(states, log.State)
-				}
-			}
-			if strings.Join(states, ",") != test.states {
-				t.Fatalf("states=%v, expected %s", states, test.states)
-			}
-			page := f.web(
-				t,
-				"GET",
-				fmt.Sprintf("/deployments/%d", deployment.ID),
-				nil,
-				200,
-			)
-			if !strings.Contains(page, `data-step-index="0"`) {
-				t.Fatal("terminal outcome lost its step panel")
-			}
+			verifyStepLogOutcome(t, f, deployment.ID, test.states)
 		})
+	}
+}
+
+func cancelStartedStepLogDeployment(
+	t *testing.T,
+	f *artifactE2E,
+	deploymentID int64,
+) {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		logs, err := f.h.repo.Queries.ListDeploymentLogsByDeployment(
+			t.Context(),
+			deploymentID,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		started := false
+		for _, log := range logs {
+			if log.StepState.String == "running" {
+				started = true
+			}
+		}
+		if started {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("step never started")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	f.api(
+		t,
+		"POST",
+		fmt.Sprintf("/api/v1/deployments/%d/cancel", deploymentID),
+		nil,
+		200,
+	)
+}
+
+func verifyStepLogOutcome(
+	t *testing.T,
+	f *artifactE2E,
+	deploymentID int64,
+	expectedStates string,
+) {
+	t.Helper()
+	logs := f.readStepLogs(
+		t,
+		fmt.Sprintf(
+			"/api/v1/deployments/%d/logs/stream?format=structured",
+			deploymentID,
+		),
+		"",
+	)
+	var states []string
+	for _, log := range logs {
+		if log.State != "" {
+			states = append(states, log.State)
+		}
+	}
+	if strings.Join(states, ",") != expectedStates {
+		t.Fatalf("states=%v, expected %s", states, expectedStates)
+	}
+	page := f.web(
+		t,
+		"GET",
+		fmt.Sprintf("/deployments/%d", deploymentID),
+		nil,
+		200,
+	)
+	if !strings.Contains(page, `data-step-index="0"`) {
+		t.Fatal("terminal outcome lost its step panel")
 	}
 }
 

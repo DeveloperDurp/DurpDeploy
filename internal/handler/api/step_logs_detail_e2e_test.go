@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/httpstream"
 )
 
 func TestDeploymentStepLogsAPIWebE2E(t *testing.T) {
@@ -46,6 +47,53 @@ func TestDeploymentStepLogsAPIWebE2E(t *testing.T) {
 	decodeStepLogTest(t, f.api(t, "GET", fmt.Sprintf(
 		"/api/v1/deployments/%d/logs", deployment.ID,
 	), nil, 200), &storedLogs)
+	verifyStoredStepLogEvents(t, logs, storedLogs)
+	verifyStepLogStreamRecovery(t, f, path, logs)
+	// When: reading the deployment page and its release through HTTP.
+	page := f.web(
+		t,
+		"GET",
+		fmt.Sprintf("/deployments/%d", deployment.ID),
+		nil,
+		200,
+	)
+	for _, marker := range []string{`data-step-index="0"`, `data-step-index="1"`, "Step logs", "Succeeded", "first-only"} {
+		if !strings.Contains(page, marker) {
+			t.Fatalf("web log panel omitted %s", marker)
+		}
+	}
+	// Then: logs remain on the page and definitions remain in the API snapshot.
+	if strings.Contains(page, `aria-label="Step definitions"`) {
+		t.Fatal("deployment page still renders the step definitions")
+	}
+	var snapshot struct {
+		StepsJSON string `json:"steps_json"`
+	}
+	decodeStepLogTest(t, f.api(t, "GET", fmt.Sprintf(
+		"%s/releases/%d", f.base(), release.ID), nil, 200), &snapshot)
+	var steps []struct {
+		Name       string `json:"name"`
+		ScriptBody string `json:"script_body"`
+	}
+	if err := json.Unmarshal([]byte(snapshot.StepsJSON), &steps); err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != len(scripts) {
+		t.Fatal("release API lost its step definitions")
+	}
+	for index, step := range steps {
+		if step.Name != "Duplicate name" || step.ScriptBody != scripts[index] {
+			t.Fatalf("release API changed step %d: %+v", index, step)
+		}
+	}
+}
+
+func verifyStoredStepLogEvents(
+	t *testing.T,
+	logs []httpstream.StepLog,
+	storedLogs []db.DeploymentLog,
+) {
+	t.Helper()
 	storedByID := make(map[int64]db.DeploymentLog, len(storedLogs))
 	for _, log := range storedLogs {
 		storedByID[log.ID] = log
@@ -55,14 +103,7 @@ func TestDeploymentStepLogsAPIWebE2E(t *testing.T) {
 	var previous int64
 	for _, log := range logs {
 		stored, ok := storedByID[log.ID]
-		if !ok || log.CreatedAt != stored.CreatedAt ||
-			log.DisplayTimestamp != time.Unix(stored.CreatedAt, 0).
-				Format("2006-01-02 15:04:05") {
-			t.Fatalf("stream timestamp differs from stored log: %+v", log)
-		}
-		if log.ID <= previous || log.StepIndex == nil {
-			t.Fatalf("invalid ordered step event: %+v", log)
-		}
+		verifyStepLogIdentityAndTimestamp(t, log, stored, ok, previous)
 		previous = log.ID
 		if log.State != "" {
 			states[*log.StepIndex] = append(states[*log.StepIndex], log.State)
@@ -79,6 +120,33 @@ func TestDeploymentStepLogsAPIWebE2E(t *testing.T) {
 	if !spoof {
 		t.Fatal("script output was confused with trusted lifecycle metadata")
 	}
+}
+
+func verifyStepLogIdentityAndTimestamp(
+	t *testing.T,
+	log httpstream.StepLog,
+	stored db.DeploymentLog,
+	ok bool,
+	previous int64,
+) {
+	t.Helper()
+	if !ok || log.CreatedAt != stored.CreatedAt ||
+		log.DisplayTimestamp != time.Unix(stored.CreatedAt, 0).
+			Format("2006-01-02 15:04:05") {
+		t.Fatalf("stream timestamp differs from stored log: %+v", log)
+	}
+	if log.ID <= previous || log.StepIndex == nil {
+		t.Fatalf("invalid ordered step event: %+v", log)
+	}
+}
+
+func verifyStepLogStreamRecovery(
+	t *testing.T,
+	f *artifactE2E,
+	path string,
+	logs []httpstream.StepLog,
+) {
+	t.Helper()
 	resumed := f.readStepLogs(t, path+"&after=0", fmt.Sprint(logs[1].ID))
 	if len(resumed) != len(logs)-2 || resumed[0].ID != logs[2].ID {
 		t.Fatal("resumed stream duplicated or omitted events")
@@ -122,42 +190,5 @@ func TestDeploymentStepLogsAPIWebE2E(t *testing.T) {
 	f.token = adminToken
 	if denied["error"] == "" {
 		t.Fatal("non-member denial omitted its JSON error envelope")
-	}
-	// When: reading the deployment page and its release through HTTP.
-	page := f.web(
-		t,
-		"GET",
-		fmt.Sprintf("/deployments/%d", deployment.ID),
-		nil,
-		200,
-	)
-	for _, marker := range []string{`data-step-index="0"`, `data-step-index="1"`, "Step logs", "Succeeded", "first-only"} {
-		if !strings.Contains(page, marker) {
-			t.Fatalf("web log panel omitted %s", marker)
-		}
-	}
-	// Then: logs remain on the page and definitions remain in the API snapshot.
-	if strings.Contains(page, `aria-label="Step definitions"`) {
-		t.Fatal("deployment page still renders the step definitions")
-	}
-	var snapshot struct {
-		StepsJSON string `json:"steps_json"`
-	}
-	decodeStepLogTest(t, f.api(t, "GET", fmt.Sprintf(
-		"%s/releases/%d", f.base(), release.ID), nil, 200), &snapshot)
-	var steps []struct {
-		Name       string `json:"name"`
-		ScriptBody string `json:"script_body"`
-	}
-	if err := json.Unmarshal([]byte(snapshot.StepsJSON), &steps); err != nil {
-		t.Fatal(err)
-	}
-	if len(steps) != len(scripts) {
-		t.Fatal("release API lost its step definitions")
-	}
-	for index, step := range steps {
-		if step.Name != "Duplicate name" || step.ScriptBody != scripts[index] {
-			t.Fatalf("release API changed step %d: %+v", index, step)
-		}
 	}
 }
