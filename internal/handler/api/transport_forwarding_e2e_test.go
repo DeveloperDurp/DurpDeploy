@@ -37,6 +37,15 @@ func TestTransportForwardingPeerE2E(t *testing.T) {
 		original+"/api/v1/admin/audit?action=login", "")
 	req.Header.Set("Authorization", "Bearer "+f.Token)
 	_, body := transportResponse(t, client, req, 200)
+	verifyTransportForwardingAudit(t, body, marker, f.ExpectedIP)
+}
+
+func verifyTransportForwardingAudit(
+	t *testing.T,
+	body []byte,
+	marker, expectedIP string,
+) {
+	t.Helper()
 	var records struct {
 		Items []struct{ Details sql.NullString }
 	}
@@ -53,7 +62,7 @@ func TestTransportForwardingPeerE2E(t *testing.T) {
 			t.Fatal("forwarding audit record was invalid")
 		}
 		if details.UserAgent == marker {
-			if details.IP != f.ExpectedIP {
+			if details.IP != expectedIP {
 				t.Fatal(
 					"proxy chain did not select the canonical client address",
 				)

@@ -72,33 +72,50 @@ func TestTransportAgentBoundaryE2E(t *testing.T) {
 	}
 	for _, mode := range []string{"no-certificate", "unpaired", "tls12"} {
 		t.Run(mode, func(t *testing.T) {
-			client := f.client(t)
-			config := client.Transport.(*http.Transport).TLSClientConfig
-			config.RootCAs = roots
-			config.MinVersion = tls.VersionTLS13
-			serverVerified := false
-			config.VerifyConnection = func(tls.ConnectionState) error {
-				serverVerified = true
-				return nil
-			}
-			if mode != "no-certificate" {
-				config.Certificates = []tls.Certificate{unpaired.Certificate}
-			}
-			if mode == "tls12" {
-				config.MinVersion, config.MaxVersion = tls.VersionTLS12, tls.VersionTLS12
-			}
-			res, err := client.Do(transportRequest(t, "POST",
-				f.AgentURL+"/agent/v1/poll", ""))
-			if res != nil {
-				res.Body.Close()
-			}
-			if err == nil ||
-				!strings.Contains(err.Error(), "remote error: tls:") ||
-				(mode != "tls12" && !serverVerified) {
-				t.Fatal(
-					"agent rejection did not prove the expected TLS boundary",
-				)
-			}
+			verifyTransportAgentTLSRejection(
+				t,
+				f,
+				roots,
+				unpaired.Certificate,
+				mode,
+			)
 		})
+	}
+}
+
+func verifyTransportAgentTLSRejection(
+	t *testing.T,
+	f transportFixture,
+	roots *x509.CertPool,
+	unpairedCertificate tls.Certificate,
+	mode string,
+) {
+	t.Helper()
+	client := f.client(t)
+	config := client.Transport.(*http.Transport).TLSClientConfig
+	config.RootCAs = roots
+	config.MinVersion = tls.VersionTLS13
+	serverVerified := false
+	config.VerifyConnection = func(tls.ConnectionState) error {
+		serverVerified = true
+		return nil
+	}
+	if mode != "no-certificate" {
+		config.Certificates = []tls.Certificate{unpairedCertificate}
+	}
+	if mode == "tls12" {
+		config.MinVersion, config.MaxVersion = tls.VersionTLS12, tls.VersionTLS12
+	}
+	res, err := client.Do(transportRequest(t, "POST",
+		f.AgentURL+"/agent/v1/poll", ""))
+	if res != nil {
+		res.Body.Close()
+	}
+	if err == nil ||
+		!strings.Contains(err.Error(), "remote error: tls:") ||
+		(mode != "tls12" && !serverVerified) {
+		t.Fatal(
+			"agent rejection did not prove the expected TLS boundary",
+		)
 	}
 }
