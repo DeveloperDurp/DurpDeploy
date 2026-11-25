@@ -588,6 +588,14 @@ func (h *DeploymentHandler) CancelDeployment(
 		}
 	}
 
+	h.renderCancellationStatus(w, r, id)
+}
+
+func (h *DeploymentHandler) renderCancellationStatus(
+	w http.ResponseWriter,
+	r *http.Request,
+	id int64,
+) {
 	deployment, err := h.repo.Queries.GetDeployment(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
