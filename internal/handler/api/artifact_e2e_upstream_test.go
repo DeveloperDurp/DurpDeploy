@@ -84,70 +84,7 @@ func artifactHTTPSFixture(
 				w.WriteHeader(401)
 				return
 			}
-			if text == "missing" {
-				w.WriteHeader(404)
-				return
-			}
-			if text == "slow-headers" || text == "slow-body" {
-				if text == "slow-body" {
-					w.WriteHeader(http.StatusOK)
-					w.(http.Flusher).Flush()
-				}
-				select {
-				case <-time.After(1500 * time.Millisecond):
-				case <-r.Context().Done():
-					// Do not finish a cancelled download as an empty HTTP 200.
-					panic(http.ErrAbortHandler)
-				}
-			}
-			if text == "invalid" {
-				if _, err := io.WriteString(w, "not a ZIP"); err != nil {
-					t.Error(err)
-				}
-				return
-			}
-			if strings.HasPrefix(text, "file:") ||
-				strings.HasPrefix(text, "blocked:") {
-				serveArtifactArchive(t, w, r, text)
-				return
-			}
-			var buffer bytes.Buffer
-			writer := zip.NewWriter(&buffer)
-			if text == "metadata-heavy" {
-				comment := strings.Repeat("x", 65535)
-				for i := 0; i < 300; i++ {
-					if _, err := writer.CreateHeader(
-						&zip.FileHeader{
-							Name:    fmt.Sprintf("item-%d", i),
-							Comment: comment,
-						},
-					); err != nil {
-						t.Error(err)
-						return
-					}
-				}
-			} else {
-				name := "app.txt"
-				if text == "long-name" {
-					name = strings.Repeat("n", 256)
-				}
-				entry, err := writer.Create(name)
-				if err != nil {
-					t.Error(err)
-					return
-				}
-				if _, err := io.WriteString(entry, text); err != nil {
-					t.Error(err)
-					return
-				}
-			}
-			if err := writer.Close(); err != nil {
-				t.Error(err)
-				return
-			}
-			if _, err := w.Write(buffer.Bytes()); err != nil {
-				t.Error(err)
-			}
+			serveArtifactFixtureResponse(t, w, r, text)
 		}),
 	)
 	if err := srv.Listener.Close(); err != nil {
@@ -179,6 +116,88 @@ func artifactHTTPSFixture(
 	return srv.URL, client,
 		func(value string) { mu.Lock(); contents = value; mu.Unlock() },
 		func(value string) { mu.Lock(); credential = value; mu.Unlock() }
+}
+
+func serveArtifactFixtureResponse(
+	t *testing.T,
+	w http.ResponseWriter,
+	r *http.Request,
+	text string,
+) {
+	t.Helper()
+	if text == "missing" {
+		w.WriteHeader(404)
+		return
+	}
+	if text == "slow-headers" || text == "slow-body" {
+		if text == "slow-body" {
+			w.WriteHeader(http.StatusOK)
+			w.(http.Flusher).Flush()
+		}
+		select {
+		case <-time.After(1500 * time.Millisecond):
+		case <-r.Context().Done():
+			// Do not finish a cancelled download as an empty HTTP 200.
+			panic(http.ErrAbortHandler)
+		}
+	}
+	if text == "invalid" {
+		if _, err := io.WriteString(w, "not a ZIP"); err != nil {
+			t.Error(err)
+		}
+		return
+	}
+	if strings.HasPrefix(text, "file:") ||
+		strings.HasPrefix(text, "blocked:") {
+		serveArtifactArchive(t, w, r, text)
+		return
+	}
+	serveGeneratedArtifactArchive(t, w, text)
+}
+
+func serveGeneratedArtifactArchive(
+	t *testing.T,
+	w http.ResponseWriter,
+	text string,
+) {
+	t.Helper()
+	var buffer bytes.Buffer
+	writer := zip.NewWriter(&buffer)
+	if text == "metadata-heavy" {
+		comment := strings.Repeat("x", 65535)
+		for i := 0; i < 300; i++ {
+			if _, err := writer.CreateHeader(
+				&zip.FileHeader{
+					Name:    fmt.Sprintf("item-%d", i),
+					Comment: comment,
+				},
+			); err != nil {
+				t.Error(err)
+				return
+			}
+		}
+	} else {
+		name := "app.txt"
+		if text == "long-name" {
+			name = strings.Repeat("n", 256)
+		}
+		entry, err := writer.Create(name)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if _, err := io.WriteString(entry, text); err != nil {
+			t.Error(err)
+			return
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Error(err)
+		return
+	}
+	if _, err := w.Write(buffer.Bytes()); err != nil {
+		t.Error(err)
+	}
 }
 
 func serveArtifactArchive(
