@@ -114,8 +114,7 @@ type authedSession struct {
 func seedSession(
 	t *testing.T,
 	repo *repository.Repository,
-	serverURL string,
-	role string,
+	serverURL, role string,
 ) *authedSession {
 	t.Helper()
 	ctx := context.Background()

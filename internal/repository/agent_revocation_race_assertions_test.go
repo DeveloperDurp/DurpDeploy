@@ -7,8 +7,7 @@ import (
 func assertRevocationRaceOutcome(
 	t *testing.T,
 	repo *Repository,
-	operation string,
-	order string,
+	operation, order string,
 	fixture revocationRaceFixture,
 ) {
 	t.Helper()

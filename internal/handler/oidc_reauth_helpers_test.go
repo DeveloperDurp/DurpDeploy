@@ -161,8 +161,7 @@ func seedOIDCReauthIdentity(
 	t *testing.T,
 	h *authHarness,
 	userID int64,
-	issuer string,
-	subject string,
+	issuer, subject string,
 ) {
 	t.Helper()
 	if _, err := h.repo.Queries.CreateOIDCIdentity(

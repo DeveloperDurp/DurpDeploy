@@ -194,8 +194,7 @@ func startPackageBrowser(t *testing.T, privateProcess ...bool) *packageBrowser {
 func (b *packageBrowser) call(
 	t *testing.T,
 	method string,
-	parameters any,
-	result any,
+	parameters, result any,
 ) {
 	t.Helper()
 	if err := b.wire.call(method, b.session, parameters, result); err != nil {

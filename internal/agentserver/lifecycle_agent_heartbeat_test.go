@@ -44,8 +44,7 @@ func setOldAgentHeartbeat(t *testing.T, fixture agentFixture) {
 func assertLifecycleHeartbeat(
 	t *testing.T,
 	fixture agentFixture,
-	deploymentID string,
-	claim string,
+	deploymentID, claim string,
 ) {
 	t.Helper()
 	start := postAgent(t, fixture, strings.ReplaceAll(

@@ -45,7 +45,7 @@ func restorePrivatePort(t *testing.T, c testcontainers.Container) {
 	}
 }
 
-func restoreAppDSN(t *testing.T, admin string, password string) string {
+func restoreAppDSN(t *testing.T, admin, password string) string {
 	t.Helper()
 	u, err := url.Parse(admin)
 	if err != nil {

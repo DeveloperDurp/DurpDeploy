@@ -251,8 +251,7 @@ func TestOIDCRoutes_ExposePublicStartAndCallback_when_enabled(t *testing.T) {
 
 func (h *oidcRouterHarness) createUser(
 	t *testing.T,
-	email string,
-	passwordHash string,
+	email, passwordHash string,
 ) int64 {
 	t.Helper()
 	user, err := h.repo.Queries.CreateUser(

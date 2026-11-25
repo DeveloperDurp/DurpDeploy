@@ -22,8 +22,7 @@ func agentTestToken(id string) string {
 func seedAgentRouteUser(
 	t *testing.T,
 	h *oidcRouterHarness,
-	role string,
-	id string,
+	role, id string,
 ) {
 	t.Helper()
 	user, err := h.repo.Queries.CreateUser(t.Context(), db.CreateUserParams{
@@ -84,9 +83,7 @@ WHERE id='agent-a'`, strings.Repeat("a", 64))
 }
 
 func browserFormRequest(
-	method string,
-	path string,
-	session string,
+	method, path, session string,
 	form url.Values,
 ) *http.Request {
 	req := httptest.NewRequest(method, path, strings.NewReader(form.Encode()))

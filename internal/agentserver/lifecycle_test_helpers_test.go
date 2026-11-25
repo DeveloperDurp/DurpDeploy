@@ -99,8 +99,7 @@ func agentState(
 func postAgent(
 	t *testing.T,
 	fixture agentFixture,
-	path string,
-	body string,
+	path, body string,
 	headers ...http.Header,
 ) *http.Response {
 	t.Helper()

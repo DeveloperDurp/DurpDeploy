@@ -82,7 +82,7 @@ func assertSplitCredentialIngress(
 	read := newPrefixPublicReader(t, f, id)
 	live := openPrefixStreams(t, read)
 	text := "0" + credential + "\n"
-	post := func(sequence int, line string, identity string, want int) {
+	post := func(sequence int, line, identity string, want int) {
 		t.Helper()
 		body := strings.TrimSuffix(identity, "}") + fmt.Sprintf(
 			`,"events":[{"sequence":%d,"line":%q}]}`, sequence, line)

@@ -152,8 +152,7 @@ func (w *packageBrowserWire) readMessage() ([]byte, error) {
 
 func (w *packageBrowserWire) call(
 	method, session string,
-	parameters any,
-	result any,
+	parameters, result any,
 ) error {
 	w.sequence++
 	request := struct {

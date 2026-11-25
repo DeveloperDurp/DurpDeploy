@@ -239,9 +239,7 @@ func assertNoPairingState(t *testing.T, fixture *pairingFixture) {
 func mustPairingInput(
 	t *testing.T,
 	fixture *pairingFixture,
-	address string,
-	code string,
-	fingerprint string,
+	address, code, fingerprint string,
 ) PairingInput {
 	t.Helper()
 	input, err := ParsePairingInput(address, code, fingerprint)

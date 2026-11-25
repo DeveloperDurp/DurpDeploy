@@ -97,8 +97,7 @@ func buildHarness(t *testing.T) string {
 
 func startHarness(
 	t *testing.T,
-	binary string,
-	readyFile string,
+	binary, readyFile string,
 	args ...string,
 ) (*exec.Cmd, <-chan error) {
 	t.Helper()

@@ -131,8 +131,7 @@ func raceClaimParamsQueries(
 
 func runRevocationFirst(
 	t *testing.T,
-	operationRepo *Repository,
-	revocationRepo *Repository,
+	operationRepo, revocationRepo *Repository,
 	operation revocationOperation,
 	fixture revocationRaceFixture,
 ) (bool, error) {
@@ -170,8 +169,7 @@ type raceOperationResult struct {
 
 func runOperationFirst(
 	t *testing.T,
-	operationRepo *Repository,
-	revocationRepo *Repository,
+	operationRepo, revocationRepo *Repository,
 	operation revocationOperation,
 	fixture revocationRaceFixture,
 ) (bool, error) {

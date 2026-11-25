@@ -352,8 +352,7 @@ func lifecycleFixture(
 func assertFailedLifecycle(
 	t *testing.T,
 	repo *repository.Repository,
-	state string,
-	reason string,
+	state, reason string,
 ) {
 	t.Helper()
 	claim, err := repo.Queries.GetRemoteDeploymentClaim(t.Context(), 1)

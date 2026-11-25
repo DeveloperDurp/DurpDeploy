@@ -100,8 +100,7 @@ esac
 func addAgentInterpreter(
 	t *testing.T,
 	repo *repository.Repository,
-	agentID string,
-	interpreter string,
+	agentID, interpreter string,
 ) {
 	t.Helper()
 	if err := repo.Queries.ClearAgentStagingCapability(t.Context(), agentID); err != nil {

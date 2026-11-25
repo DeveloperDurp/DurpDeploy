@@ -28,8 +28,7 @@ func TestArtifactCapabilityWithdrawalFailsWaitingPackage(t *testing.T) {
 
 func testWaitingPollCannotBorrowTransferCapability(
 	t *testing.T,
-	packaged bool,
-	withdraw bool,
+	packaged, withdraw bool,
 ) {
 	f := newAgentFixtureWithDSN(
 		t,

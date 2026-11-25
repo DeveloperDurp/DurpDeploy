@@ -160,8 +160,7 @@ func (f *testFixture) attachLifecycle(projectID, lifecycleID int64) {
 }
 
 func (f *testFixture) addLifecycleStage(
-	lifecycleID, envID int64,
-	sortOrder int64,
+	lifecycleID, envID, sortOrder int64,
 ) {
 	f.t.Helper()
 	_, err := f.repo.Queries.CreateLifecycleStage(
@@ -178,8 +177,7 @@ func (f *testFixture) addLifecycleStage(
 }
 
 func (f *testFixture) addLifecycleStageWithApproval(
-	lifecycleID, envID int64,
-	sortOrder int64,
+	lifecycleID, envID, sortOrder int64,
 ) {
 	f.t.Helper()
 	_, err := f.repo.Queries.CreateLifecycleStage(

@@ -251,7 +251,7 @@ func TestSecurityPage_renders_factor_specific_enrollment_actions(t *testing.T) {
 	}
 }
 
-func enrollmentButton(content string, action string, label string) string {
+func enrollmentButton(content, action, label string) string {
 	pattern := regexp.MustCompile(
 		`(?s)<form[^>]*action="` + regexp.QuoteMeta(action) +
 			`"[^>]*>.*?(<button[^>]*>` + regexp.QuoteMeta(label) + `</button>)`,

@@ -43,11 +43,9 @@ func postSecurityJSON(
 	t *testing.T,
 	h *authHarness,
 	session *authedSession,
-	path string,
-	body string,
+	path, body string,
 	next http.HandlerFunc,
-	token string,
-	challengeCSRF string,
+	token, challengeCSRF string,
 ) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))

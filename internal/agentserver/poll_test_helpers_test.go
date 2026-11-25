@@ -19,8 +19,7 @@ const pollBody = `{"protocol":"agent/1","agent_version":"test-v1"}`
 func seedPollPayload(
 	t *testing.T,
 	fixture agentFixture,
-	status string,
-	agentID string,
+	status, agentID string,
 ) int64 {
 	t.Helper()
 	ctx := t.Context()

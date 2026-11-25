@@ -36,7 +36,7 @@ func TestNewHTTPClientDialsValidatedResolvedIP(t *testing.T) {
 			lookupNetwork, lookupHost = network, host
 			return []net.IP{resolvedIP}, nil
 		},
-		func(_ context.Context, _ string, address string) (net.Conn, error) {
+		func(_ context.Context, _, address string) (net.Conn, error) {
 			dialAddress = address
 			return nil, dialErr
 		},

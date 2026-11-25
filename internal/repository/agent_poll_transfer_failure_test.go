@@ -37,8 +37,7 @@ func TestAgentPollTransferWriteFailureRollsBack(t *testing.T) {
 
 func testAgentPollTransferWriteFailure(
 	t *testing.T,
-	table string,
-	operation string,
+	table, operation string,
 ) {
 	t.Helper()
 	// Given
