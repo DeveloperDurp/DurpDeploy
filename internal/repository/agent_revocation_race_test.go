@@ -34,35 +34,12 @@ func TestRevocationRaceMatrixAcrossDatabases(t *testing.T) {
 			} {
 				order := order
 				t.Run(operation.name+"/"+order, func(t *testing.T) {
-					fixture := seedRevocationRaceFixture(
-						t, primary, operation.name+order,
-					)
-					operation.setup(t, primary, fixture)
-					if order == "RevocationFirst" {
-						wrote, err := runRevocationFirst(
-							t, primary, revoker, operation, fixture,
-						)
-						if wrote || err == nil && operation.name != "Poll" {
-							t.Fatalf(
-								"post-revocation wrote=%v err=%v",
-								wrote,
-								err,
-							)
-						}
-					} else {
-						wrote, err := runOperationFirst(
-							t, primary, revoker, operation, fixture,
-						)
-						if err != nil || !wrote {
-							t.Fatalf(
-								"operation-first wrote=%v err=%v",
-								wrote,
-								err,
-							)
-						}
-					}
-					assertRevocationRaceOutcome(
-						t, primary, operation.name, order, fixture,
+					verifyRevocationRaceOrder(
+						t,
+						primary,
+						revoker,
+						operation,
+						order,
 					)
 				})
 			}
@@ -184,3 +161,42 @@ func revocationOperations() []revocationOperation {
 }
 
 func noRaceSetup(*testing.T, *Repository, revocationRaceFixture) {}
+
+func verifyRevocationRaceOrder(
+	t *testing.T,
+	primary, revoker *Repository,
+	operation revocationOperation,
+	order string,
+) {
+	t.Helper()
+	fixture := seedRevocationRaceFixture(
+		t, primary, operation.name+order,
+	)
+	operation.setup(t, primary, fixture)
+	if order == "RevocationFirst" {
+		wrote, err := runRevocationFirst(
+			t, primary, revoker, operation, fixture,
+		)
+		if wrote || err == nil && operation.name != "Poll" {
+			t.Fatalf(
+				"post-revocation wrote=%v err=%v",
+				wrote,
+				err,
+			)
+		}
+	} else {
+		wrote, err := runOperationFirst(
+			t, primary, revoker, operation, fixture,
+		)
+		if err != nil || !wrote {
+			t.Fatalf(
+				"operation-first wrote=%v err=%v",
+				wrote,
+				err,
+			)
+		}
+	}
+	assertRevocationRaceOutcome(
+		t, primary, operation.name, order, fixture,
+	)
+}

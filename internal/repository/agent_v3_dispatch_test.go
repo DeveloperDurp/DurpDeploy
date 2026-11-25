@@ -15,10 +15,17 @@ func TestAgentV3MixedFleetAndClaimRecheck(t *testing.T) {
 		{"host", "bash", 3}, {"host", "python3", 1}, {"container", "bash", 1}, {"container", "pwsh", 1},
 	} {
 		t.Run(test.mode+"/"+test.interpreter, func(t *testing.T) {
-			r := remoteFixture(t)
-			_, err := r.DB.ExecContext(
-				t.Context(),
-				`
+			verifyAgentV3Dispatch(t, test.mode, test.interpreter, test.want)
+		})
+	}
+}
+
+func verifyAgentV3Dispatch(t *testing.T, mode, interpreter string, want int64) {
+	t.Helper()
+	r := remoteFixture(t)
+	_, err := r.DB.ExecContext(
+		t.Context(),
+		`
                 INSERT INTO agents(id,name,endpoint,status,certificate_pem,certificate_fingerprint,encrypted_identity)
                     SELECT 'c','c',endpoint,status,certificate_pem,lower(hex(zeroblob(32))),encrypted_identity FROM agents WHERE id='b';
                 INSERT INTO agent_pairings(agent_id,pairing_code_hash,agent_public_identity,agent_pin,
@@ -40,76 +47,84 @@ func TestAgentV3MixedFleetAndClaimRecheck(t *testing.T) {
                 UPDATE deployment_steps SET agent_execution_mode=?1, interpreter=?2,
                     container_image=CASE WHEN ?1='container' THEN 'harbor.durp.info/dockerhub/library/alpine:3.20' ELSE '' END
                     WHERE deployment_id=3 AND step_index=0;`,
-				test.mode,
-				test.interpreter,
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
-			created, err := r.QueueRemoteStepRuns(t.Context(), 3, 0)
-			if err != nil || created != test.want {
-				t.Fatalf("created=%d want=%d error=%v", created, test.want, err)
-			}
-			runs, err := r.Queries.ListRemoteStepRuns(
+		mode,
+		interpreter,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := r.QueueRemoteStepRuns(t.Context(), 3, 0)
+	if err != nil || created != want {
+		t.Fatalf("created=%d want=%d error=%v", created, want, err)
+	}
+	runs, err := r.Queries.ListRemoteStepRuns(
+		t.Context(),
+		db.ListRemoteStepRunsParams{DeploymentID: 3, StepIndex: 0},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode == "container" && runs[0].AgentID != "c" {
+		t.Fatalf("container targets=%+v", runs)
+	}
+	verifyAgentV3ClaimRecheck(t, r, mode, runs)
+	t.Logf(
+		"%s %s routed to %d compatible agents",
+		mode,
+		interpreter,
+		created,
+	)
+}
+
+func verifyAgentV3ClaimRecheck(
+	t *testing.T,
+	r *repository.Repository,
+	mode string,
+	runs []db.RemoteStepRun,
+) {
+	t.Helper()
+	// Eligibility must be checked again when labels or readiness change after fan-out.
+	for _, mutation := range []string{
+		"DELETE FROM agent_labels WHERE label='other'",
+		"DELETE FROM agent_environment_labels",
+		"DELETE FROM agent_container_runtimes",
+	} {
+		if mutation == "DELETE FROM agent_container_runtimes" &&
+			mode != "container" {
+			continue
+		}
+		if _, err := r.DB.ExecContext(t.Context(), mutation); err != nil {
+			t.Fatal(err)
+		}
+		for _, run := range runs {
+			_, claimed, err := r.ClaimRemoteStepPayload(
 				t.Context(),
-				db.ListRemoteStepRunsParams{DeploymentID: 3, StepIndex: 0},
+				run.AgentID,
+				func(repository.RemotePayloadSnapshot) (repository.RemotePreparedClaim, error) {
+					t.Fatal("ineligible work reached encryption")
+					return repository.RemotePreparedClaim{}, nil
+				},
 			)
-			if err != nil {
-				t.Fatal(err)
+			if err != nil || claimed {
+				t.Fatalf(
+					"claim=%v error=%v after %s",
+					claimed,
+					err,
+					mutation,
+				)
 			}
-			if test.mode == "container" && runs[0].AgentID != "c" {
-				t.Fatalf("container targets=%+v", runs)
-			}
-			// Eligibility must be checked again when labels or readiness change after fan-out.
-			for _, mutation := range []string{
-				"DELETE FROM agent_labels WHERE label='other'",
-				"DELETE FROM agent_environment_labels",
-				"DELETE FROM agent_container_runtimes",
-			} {
-				if mutation == "DELETE FROM agent_container_runtimes" &&
-					test.mode != "container" {
-					continue
-				}
-				if _, err := r.DB.ExecContext(t.Context(), mutation); err != nil {
-					t.Fatal(err)
-				}
-				for _, run := range runs {
-					_, claimed, err := r.ClaimRemoteStepPayload(
-						t.Context(),
-						run.AgentID,
-						func(repository.RemotePayloadSnapshot) (repository.RemotePreparedClaim, error) {
-							t.Fatal("ineligible work reached encryption")
-							return repository.RemotePreparedClaim{}, nil
-						},
-					)
-					if err != nil || claimed {
-						t.Fatalf(
-							"claim=%v error=%v after %s",
-							claimed,
-							err,
-							mutation,
-						)
-					}
-				}
-				var restore string
-				switch mutation {
-				case "DELETE FROM agent_labels WHERE label='other'":
-					restore = "INSERT INTO agent_labels VALUES('a','other'),('b','other'),('c','other')"
-				case "DELETE FROM agent_environment_labels":
-					restore = "INSERT INTO agent_environment_labels(agent_id,environment_id) VALUES('a',2),('b',2),('c',2)"
-				case "DELETE FROM agent_container_runtimes":
-					restore = "INSERT INTO agent_container_runtimes VALUES('c','podman')"
-				}
-				if _, err := r.DB.ExecContext(t.Context(), restore); err != nil {
-					t.Fatal(err)
-				}
-			}
-			t.Logf(
-				"%s %s routed to %d compatible agents",
-				test.mode,
-				test.interpreter,
-				created,
-			)
-		})
+		}
+		var restore string
+		switch mutation {
+		case "DELETE FROM agent_labels WHERE label='other'":
+			restore = "INSERT INTO agent_labels VALUES('a','other'),('b','other'),('c','other')"
+		case "DELETE FROM agent_environment_labels":
+			restore = "INSERT INTO agent_environment_labels(agent_id,environment_id) VALUES('a',2),('b',2),('c',2)"
+		case "DELETE FROM agent_container_runtimes":
+			restore = "INSERT INTO agent_container_runtimes VALUES('c','podman')"
+		}
+		if _, err := r.DB.ExecContext(t.Context(), restore); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

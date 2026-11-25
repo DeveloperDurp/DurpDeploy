@@ -29,16 +29,12 @@ func assertRevocationRaceOutcome(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if operation == "Result" && claim.State == "succeeded" {
-		if deployment.Status != "succeeded" {
-			t.Fatalf("deployment=%s", deployment.Status)
-		}
-		return
-	}
-	if operation == "Cancelled" && claim.State == "cancelled" {
-		if deployment.Status != "cancelled" {
-			t.Fatalf("deployment=%s", deployment.Status)
-		}
+	if assertRevocationTerminalState(
+		t,
+		operation,
+		claim.State,
+		deployment.Status,
+	) {
 		return
 	}
 	if deployment.Status != "failed" ||
@@ -55,4 +51,24 @@ func assertRevocationRaceOutcome(
 			t.Fatalf("logs=%d err=%v", count, err)
 		}
 	}
+}
+
+func assertRevocationTerminalState(
+	t *testing.T,
+	operation, claimState, deploymentStatus string,
+) bool {
+	t.Helper()
+	if operation == "Result" && claimState == "succeeded" {
+		if deploymentStatus != "succeeded" {
+			t.Fatalf("deployment=%s", deploymentStatus)
+		}
+		return true
+	}
+	if operation == "Cancelled" && claimState == "cancelled" {
+		if deploymentStatus != "cancelled" {
+			t.Fatalf("deployment=%s", deploymentStatus)
+		}
+		return true
+	}
+	return false
 }
