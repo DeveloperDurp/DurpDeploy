@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -42,40 +43,8 @@ func main() {
 		required[name] = eventCounts{}
 	}
 
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Buffer(make([]byte, 64*1024), 16*1024*1024)
-	line := 0
-	for scanner.Scan() {
-		line++
-		var event testEvent
-		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
-			fmt.Fprintf(
-				os.Stderr,
-				"invalid go test JSON event at line %d: %v\n",
-				line,
-				err,
-			)
-			os.Exit(1)
-		}
-		counts, wanted := required[event.Test]
-		if !wanted {
-			continue
-		}
-		switch event.Action {
-		case "pass":
-			counts.terminal++
-			counts.pass++
-		case "skip":
-			counts.terminal++
-			counts.skip++
-		case "fail":
-			counts.terminal++
-			counts.fail++
-		}
-		required[event.Test] = counts
-	}
-	if err := scanner.Err(); err != nil {
-		fmt.Fprintf(os.Stderr, "read go test JSON events: %v\n", err)
+	if err := countEvents(os.Stdin, required); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
@@ -100,4 +69,41 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Fprintf(os.Stderr, "named-go-tests: PASS required=%d\n", len(required))
+}
+
+func countEvents(input io.Reader, required map[string]eventCounts) error {
+	scanner := bufio.NewScanner(input)
+	scanner.Buffer(make([]byte, 64*1024), 16*1024*1024)
+	line := 0
+	for scanner.Scan() {
+		line++
+		var event testEvent
+		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
+			return fmt.Errorf(
+				"invalid go test JSON event at line %d: %w",
+				line,
+				err,
+			)
+		}
+		counts, wanted := required[event.Test]
+		if !wanted {
+			continue
+		}
+		switch event.Action {
+		case "pass":
+			counts.terminal++
+			counts.pass++
+		case "skip":
+			counts.terminal++
+			counts.skip++
+		case "fail":
+			counts.terminal++
+			counts.fail++
+		}
+		required[event.Test] = counts
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("read go test JSON events: %w", err)
+	}
+	return nil
 }

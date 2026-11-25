@@ -114,18 +114,10 @@ func probes(input io.Reader) ([]finding, error) {
 			dialer := net.Dialer{Timeout: time.Second}
 			conn, dialErr := dialer.DialContext(ctx, "tcp",
 				net.JoinHostPort(target.IP, strconv.Itoa(port)))
-			open := dialErr == nil
-			if open {
-				if err := conn.Close(); err != nil {
-					cancel()
-					return nil, errors.New("probe cleanup failed")
-				}
-			} else if !errors.Is(dialErr, syscall.ECONNREFUSED) {
-				var timeout net.Error
-				if !errors.As(dialErr, &timeout) || !timeout.Timeout() {
-					cancel()
-					return nil, errors.New("probe incomplete")
-				}
+			open, err := probeOpen(conn, dialErr)
+			if err != nil {
+				cancel()
+				return nil, err
 			}
 			want := (target.Name == "app" && (port == 8080 || port == 23187)) ||
 				(target.Name == "caddy" && (port == 80 || port == 443))
@@ -135,6 +127,23 @@ func probes(input io.Reader) ([]finding, error) {
 		cancel()
 	}
 	return result, nil
+}
+
+func probeOpen(conn net.Conn, dialErr error) (bool, error) {
+	if dialErr == nil {
+		if err := conn.Close(); err != nil {
+			return false, errors.New("probe cleanup failed")
+		}
+		return true, nil
+	}
+	if errors.Is(dialErr, syscall.ECONNREFUSED) {
+		return false, nil
+	}
+	var timeout net.Error
+	if !errors.As(dialErr, &timeout) || !timeout.Timeout() {
+		return false, errors.New("probe incomplete")
+	}
+	return false, nil
 }
 
 type listenerTable struct {
@@ -158,36 +167,48 @@ func listeners(input io.Reader) ([]finding, error) {
 			return nil, errors.New("invalid listener table")
 		}
 		seen[key] = true
-		lines := strings.Split(strings.TrimSpace(table.Data), "\n")
-		if len(lines) == 0 || !strings.Contains(lines[0], "local_address") {
-			return nil, errors.New("missing listener data")
-		}
-		for _, line := range lines[1:] {
-			fields := strings.Fields(line)
-			if len(fields) < 10 {
-				return nil, errors.New("malformed listener data")
-			}
-			if strings.HasPrefix(table.Protocol, "tcp") && fields[3] != "0A" {
-				continue
-			}
-			if strings.HasPrefix(table.Protocol, "udp") &&
-				strings.Trim(fields[2], "0:") != "" {
-				continue // Connected client sockets are not listeners.
-			}
-			pass, port, err := allowedListener(
-				table.Target,
-				table.Protocol,
-				fields[1],
-			)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, finding{table.Target,
-				table.Protocol + "-" + strconv.Itoa(port), pass})
+		var err error
+		result, err = appendTableListeners(result, table)
+		if err != nil {
+			return nil, err
 		}
 	}
 	if len(seen) != 8 || len(result) == 0 {
 		return nil, errors.New("incomplete listener inventory")
+	}
+	return result, nil
+}
+
+func appendTableListeners(
+	result []finding,
+	table listenerTable,
+) ([]finding, error) {
+	lines := strings.Split(strings.TrimSpace(table.Data), "\n")
+	if len(lines) == 0 || !strings.Contains(lines[0], "local_address") {
+		return nil, errors.New("missing listener data")
+	}
+	for _, line := range lines[1:] {
+		fields := strings.Fields(line)
+		if len(fields) < 10 {
+			return nil, errors.New("malformed listener data")
+		}
+		if strings.HasPrefix(table.Protocol, "tcp") && fields[3] != "0A" {
+			continue
+		}
+		if strings.HasPrefix(table.Protocol, "udp") &&
+			strings.Trim(fields[2], "0:") != "" {
+			continue // Connected client sockets are not listeners.
+		}
+		pass, port, err := allowedListener(
+			table.Target,
+			table.Protocol,
+			fields[1],
+		)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, finding{table.Target,
+			table.Protocol + "-" + strconv.Itoa(port), pass})
 	}
 	return result, nil
 }
