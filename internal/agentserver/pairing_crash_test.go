@@ -73,28 +73,33 @@ func TestPairingCrashCheckpointRecovery(t *testing.T) {
 		{name: "RejectedCleanupResponse", status: 503},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			fixture := newPairingFixture(t)
-			failed := true
-			fixture.post = func(request agentproto.PairRequest) (int, error) {
-				if request.CompletionAck && failed {
-					failed = false
-					return test.status, test.err
-				}
-				return 204, nil
-			}
-			result, err := fixture.pair(t)
-			if err != nil || result.State != PairingStatePaired {
-				t.Fatalf("result=%+v error=%v", result, err)
-			}
-			agent, err := fixture.repo.Queries.GetAgent(
-				t.Context(), result.AgentID,
-			)
-			if err != nil || agent.Status != "active" {
-				t.Fatalf("agent=%+v error=%v", agent, err)
-			}
-			if _, err := fixture.pair(t); err != nil {
-				t.Fatal(err)
-			}
+			verifyPairingCleanupRetry(t, test.status, test.err)
 		})
+	}
+}
+
+func verifyPairingCleanupRetry(t *testing.T, status int, postErr error) {
+	t.Helper()
+	fixture := newPairingFixture(t)
+	failed := true
+	fixture.post = func(request agentproto.PairRequest) (int, error) {
+		if request.CompletionAck && failed {
+			failed = false
+			return status, postErr
+		}
+		return 204, nil
+	}
+	result, err := fixture.pair(t)
+	if err != nil || result.State != PairingStatePaired {
+		t.Fatalf("result=%+v error=%v", result, err)
+	}
+	agent, err := fixture.repo.Queries.GetAgent(
+		t.Context(), result.AgentID,
+	)
+	if err != nil || agent.Status != "active" {
+		t.Fatalf("agent=%+v error=%v", agent, err)
+	}
+	if _, err := fixture.pair(t); err != nil {
+		t.Fatal(err)
 	}
 }

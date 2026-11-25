@@ -67,36 +67,39 @@ func TestDuplicateLifecycleDoesNotResetTimestamps(t *testing.T) {
 		}
 	})
 
-	t.Run("Heartbeat", func(t *testing.T) {
-		fixture := newAgentFixture(t)
-		seedAgentLifecycle(t, fixture.repo)
-		startPath := strings.ReplaceAll(agentproto.StartPath, "{id}", "1")
-		start := postAgent(t, fixture, startPath,
-			`{"protocol":"agent/1","claim_token":"claim-one"}`)
-		if start.StatusCode != http.StatusNoContent {
-			t.Fatalf("start status=%d", start.StatusCode)
+	t.Run("Heartbeat", verifyDuplicateHeartbeatTimestamps)
+}
+
+func verifyDuplicateHeartbeatTimestamps(t *testing.T) {
+	t.Helper()
+	fixture := newAgentFixture(t)
+	seedAgentLifecycle(t, fixture.repo)
+	startPath := strings.ReplaceAll(agentproto.StartPath, "{id}", "1")
+	start := postAgent(t, fixture, startPath,
+		`{"protocol":"agent/1","claim_token":"claim-one"}`)
+	if start.StatusCode != http.StatusNoContent {
+		t.Fatalf("start status=%d", start.StatusCode)
+	}
+	path := strings.ReplaceAll(agentproto.HeartbeatPath, "{id}", "1")
+	body := `{"protocol":"agent/1","claim_token":"claim-one"}`
+	for range 2 {
+		response := postAgent(t, fixture, path, body)
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("heartbeat status=%d", response.StatusCode)
 		}
-		path := strings.ReplaceAll(agentproto.HeartbeatPath, "{id}", "1")
-		body := `{"protocol":"agent/1","claim_token":"claim-one"}`
-		for range 2 {
-			response := postAgent(t, fixture, path, body)
-			if response.StatusCode != http.StatusOK {
-				t.Fatalf("heartbeat status=%d", response.StatusCode)
-			}
-		}
-		claim, err := fixture.repo.Queries.GetRemoteDeploymentClaim(
-			t.Context(),
-			1,
+	}
+	claim, err := fixture.repo.Queries.GetRemoteDeploymentClaim(
+		t.Context(),
+		1,
+	)
+	if err != nil || claim.StartedAt != claim.LastHeartbeatAt &&
+		claim.StartedAt.Int64 > claim.LastHeartbeatAt.Int64 {
+		t.Fatalf(
+			"heartbeat reset lifecycle timestamps: %+v err=%v",
+			claim,
+			err,
 		)
-		if err != nil || claim.StartedAt != claim.LastHeartbeatAt &&
-			claim.StartedAt.Int64 > claim.LastHeartbeatAt.Int64 {
-			t.Fatalf(
-				"heartbeat reset lifecycle timestamps: %+v err=%v",
-				claim,
-				err,
-			)
-		}
-	})
+	}
 }
 
 func TestLifecycleRejectsWrongClaimToken(t *testing.T) {
