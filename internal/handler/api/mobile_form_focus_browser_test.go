@@ -73,75 +73,15 @@ func TestMobileFormFocusBrowserE2E(t *testing.T) {
 			t.Run(
 				fmt.Sprintf("%s/touch=%t", scenario.name, touch),
 				func(t *testing.T) {
-					b.navigateBackTest(t, f.baseURL+scenario.path)
-					b.evaluate(
+					verifyMobileFormFocus(
 						t,
-						`document.querySelector('[data-template-create-menu] > summary')?.click(); true`,
-					)
-					b.evaluate(t, fmt.Sprintf(
-						`[...document.querySelectorAll(%q)].find(e => e.getClientRects().length).click(); true`,
+						b,
+						f.baseURL+scenario.path,
+						scenario.name,
 						scenario.opener,
-					))
-					b.wait(t, fmt.Sprintf(
-						`document.querySelector(%q)?.closest('dialog').matches(':modal') && !document.querySelector('.htmx-request, .htmx-settling')`,
 						scenario.field,
-					))
-					if string(b.evaluate(t, fmt.Sprintf(`(() => {
- const field = document.querySelector(%q);
- return %t ? !document.activeElement.matches('input, textarea, select') &&
- field.closest('dialog').contains(document.activeElement) : document.activeElement === field;
-})()`, scenario.field, touch))) != "true" {
-						t.Fatal(
-							"automatic field focus does not match the input device",
-						)
-					}
-					if touch && scenario.name == "project edit" {
-						b.wait(
-							t,
-							`document.getAnimations().every(a => a.playState !== 'running')`,
-						)
-						b.screenshot(t, "mobile-project-no-autofocus")
-					}
-					// Deliberate field interaction remains available on touch devices.
-					b.evaluate(
-						t,
-						fmt.Sprintf(
-							`document.querySelector(%q).focus(); true`,
-							scenario.field,
-						),
+						touch,
 					)
-					b.wait(
-						t,
-						fmt.Sprintf(
-							`document.activeElement === document.querySelector(%q)`,
-							scenario.field,
-						),
-					)
-					if scenario.name == "step edit" {
-						b.evaluate(
-							t,
-							`[...document.querySelectorAll('#step-edit-content button')].find(e => e.textContent === 'Fullscreen').click(); true`,
-						)
-						b.wait(
-							t,
-							`document.querySelector('[x-ref=modal]').matches(':modal') && document.querySelector('[x-ref=modalTextarea]').getClientRects().length > 0`,
-						)
-						if string(b.evaluate(t, fmt.Sprintf(
-							`%t ? document.activeElement.textContent === 'Close' : document.activeElement === document.querySelector('[x-ref=modalTextarea]')`,
-							touch,
-						))) != "true" {
-							t.Fatalf(
-								"fullscreen editor focus mismatch: %s",
-								b.evaluate(
-									t,
-									`JSON.stringify({tag: document.activeElement.tagName, ref: document.activeElement.getAttribute('x-ref')})`,
-								),
-							)
-						}
-						if touch {
-							b.screenshot(t, "mobile-fullscreen-no-autofocus")
-						}
-					}
 				},
 			)
 		}
@@ -173,6 +113,84 @@ func TestMobileFormFocusBrowserE2E(t *testing.T) {
  const focus = panel.querySelector(%q);
  return panel.open && document.activeElement === focus;
 })()`, map[bool]string{true: "summary", false: "input[name=name]"}[touch]))
+		}
+	}
+}
+
+func verifyMobileFormFocus(
+	t *testing.T,
+	b *packageBrowser,
+	address, name, opener, field string,
+	touch bool,
+) {
+	t.Helper()
+	b.navigateBackTest(t, address)
+	b.evaluate(
+		t,
+		`document.querySelector('[data-template-create-menu] > summary')?.click(); true`,
+	)
+	b.evaluate(t, fmt.Sprintf(
+		`[...document.querySelectorAll(%q)].find(e => e.getClientRects().length).click(); true`,
+		opener,
+	))
+	b.wait(t, fmt.Sprintf(
+		`document.querySelector(%q)?.closest('dialog').matches(':modal') && !document.querySelector('.htmx-request, .htmx-settling')`,
+		field,
+	))
+	if string(b.evaluate(t, fmt.Sprintf(`(() => {
+ const field = document.querySelector(%q);
+ return %t ? !document.activeElement.matches('input, textarea, select') &&
+ field.closest('dialog').contains(document.activeElement) : document.activeElement === field;
+})()`, field, touch))) != "true" {
+		t.Fatal(
+			"automatic field focus does not match the input device",
+		)
+	}
+	if touch && name == "project edit" {
+		b.wait(
+			t,
+			`document.getAnimations().every(a => a.playState !== 'running')`,
+		)
+		b.screenshot(t, "mobile-project-no-autofocus")
+	}
+	// Deliberate field interaction remains available on touch devices.
+	b.evaluate(
+		t,
+		fmt.Sprintf(
+			`document.querySelector(%q).focus(); true`,
+			field,
+		),
+	)
+	b.wait(
+		t,
+		fmt.Sprintf(
+			`document.activeElement === document.querySelector(%q)`,
+			field,
+		),
+	)
+	if name == "step edit" {
+		b.evaluate(
+			t,
+			`[...document.querySelectorAll('#step-edit-content button')].find(e => e.textContent === 'Fullscreen').click(); true`,
+		)
+		b.wait(
+			t,
+			`document.querySelector('[x-ref=modal]').matches(':modal') && document.querySelector('[x-ref=modalTextarea]').getClientRects().length > 0`,
+		)
+		if string(b.evaluate(t, fmt.Sprintf(
+			`%t ? document.activeElement.textContent === 'Close' : document.activeElement === document.querySelector('[x-ref=modalTextarea]')`,
+			touch,
+		))) != "true" {
+			t.Fatalf(
+				"fullscreen editor focus mismatch: %s",
+				b.evaluate(
+					t,
+					`JSON.stringify({tag: document.activeElement.tagName, ref: document.activeElement.getAttribute('x-ref')})`,
+				),
+			)
+		}
+		if touch {
+			b.screenshot(t, "mobile-fullscreen-no-autofocus")
 		}
 	}
 }
