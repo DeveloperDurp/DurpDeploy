@@ -41,56 +41,8 @@ func (r *Repository) CreateRunbookExecution(
 		return r.withQueueTx(
 			ctx,
 			func(ctx context.Context, q *db.Queries) error {
-				if err := lockRunbookAdmission(ctx, q, arg); err != nil {
+				if err := prepareRunbookExecutionAdmission(ctx, q, arg); err != nil {
 					return err
-				}
-				if arg.RetrySourceDeploymentID != 0 {
-					source, err := q.GetDeployment(
-						ctx,
-						arg.RetrySourceDeploymentID,
-					)
-					if err != nil {
-						return fmt.Errorf(
-							"get retry source deployment: %w",
-							err,
-						)
-					}
-					unconfirmed, err := q.HasUnconfirmedContainerCleanup(
-						ctx,
-						source.ID,
-					)
-					if err != nil {
-						return err
-					}
-					if unconfirmed != 0 {
-						return ErrContainerCleanupUnconfirmed
-					}
-					active, err := q.HasUnconfirmedRunbookRemoteOutcome(
-						ctx, arg.RetrySourceDeploymentID)
-					if err != nil {
-						return err
-					}
-					if active != 0 {
-						return ErrRunbookRemoteOutcomeUnconfirmed
-					}
-				}
-				if arg.ScheduleID.Valid {
-					changed, err := q.AdvanceRunbookSchedule(ctx,
-						db.AdvanceRunbookScheduleParams{
-							NextRunAt: arg.ScheduleNextRunAt,
-							LastFiredAt: sql.NullInt64{
-								Int64: arg.FiredAt,
-								Valid: true,
-							},
-							ID:          arg.ScheduleID.Int64,
-							NextRunAt_2: arg.ScheduleExpectedRunAt,
-						})
-					if err != nil {
-						return err
-					}
-					if changed != 1 {
-						return ErrRunbookScheduleConflict
-					}
 				}
 				var version db.RunbookVersion
 				var err error
@@ -170,6 +122,65 @@ func (r *Repository) CreateRunbookExecution(
 			fmt.Errorf("create runbook execution: %w", err)
 	}
 	return execution, result, nil
+}
+
+func prepareRunbookExecutionAdmission(
+	ctx context.Context,
+	q *db.Queries,
+	arg RunbookExecutionRequest,
+) error {
+	if err := lockRunbookAdmission(ctx, q, arg); err != nil {
+		return err
+	}
+	if arg.RetrySourceDeploymentID != 0 {
+		source, err := q.GetDeployment(
+			ctx,
+			arg.RetrySourceDeploymentID,
+		)
+		if err != nil {
+			return fmt.Errorf(
+				"get retry source deployment: %w",
+				err,
+			)
+		}
+		unconfirmed, err := q.HasUnconfirmedContainerCleanup(
+			ctx,
+			source.ID,
+		)
+		if err != nil {
+			return err
+		}
+		if unconfirmed != 0 {
+			return ErrContainerCleanupUnconfirmed
+		}
+		active, err := q.HasUnconfirmedRunbookRemoteOutcome(
+			ctx, arg.RetrySourceDeploymentID)
+		if err != nil {
+			return err
+		}
+		if active != 0 {
+			return ErrRunbookRemoteOutcomeUnconfirmed
+		}
+	}
+	if arg.ScheduleID.Valid {
+		changed, err := q.AdvanceRunbookSchedule(ctx,
+			db.AdvanceRunbookScheduleParams{
+				NextRunAt: arg.ScheduleNextRunAt,
+				LastFiredAt: sql.NullInt64{
+					Int64: arg.FiredAt,
+					Valid: true,
+				},
+				ID:          arg.ScheduleID.Int64,
+				NextRunAt_2: arg.ScheduleExpectedRunAt,
+			})
+		if err != nil {
+			return err
+		}
+		if changed != 1 {
+			return ErrRunbookScheduleConflict
+		}
+	}
+	return nil
 }
 
 func (r *Repository) ListRunbookLogs(
