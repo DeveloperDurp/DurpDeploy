@@ -73,15 +73,10 @@ func (r *DeploymentRunner) runStepAttempt(
 			containerenv.StageVariable,
 		)
 	}
-	for _, stage := range []artifactStage{request.artifact, request.handoff, request.approved} {
-		if stage.volume == "" {
-			continue
-		}
-		output, err := r.engine.command(runCtx, "inspect", "--format={{.State.Running}}", stage.keeper).
-			Output()
-		if err != nil || strings.TrimSpace(string(output)) != "true" {
-			return errors.New("staging container is unavailable")
-		}
+	if err := r.checkLocalStepStaging(
+		runCtx, request.artifact, request.handoff, request.approved,
+	); err != nil {
+		return err
 	}
 	if err := stepdefinition.Definition(request.step).ValidateKind(); err != nil {
 		return err
@@ -244,6 +239,22 @@ func (r *DeploymentRunner) runStepAttempt(
 		}
 	}
 	return err
+}
+
+func (r *DeploymentRunner) checkLocalStepStaging(
+	ctx context.Context, stages ...artifactStage,
+) error {
+	for _, stage := range stages {
+		if stage.volume == "" {
+			continue
+		}
+		output, err := r.engine.command(ctx, "inspect", "--format={{.State.Running}}", stage.keeper).
+			Output()
+		if err != nil || strings.TrimSpace(string(output)) != "true" {
+			return errors.New("staging container is unavailable")
+		}
+	}
+	return nil
 }
 
 func (r *DeploymentRunner) localContainerArgs(
