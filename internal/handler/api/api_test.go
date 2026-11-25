@@ -1323,34 +1323,39 @@ func TestStreamLogs_StructuredReplayAcrossBatchBoundary(t *testing.T) {
 			if test.status != 200 {
 				return
 			}
-			count := 0
-			for _, frame := range strings.Split(string(body), "\n\n") {
-				if !strings.Contains(frame, "event: log\n") {
-					continue
-				}
-				_, data, found := strings.Cut(frame, "data: ")
-				var log httpstream.StepLog
-				if !found || json.Unmarshal([]byte(data), &log) != nil {
-					t.Fatalf("invalid log event %q", frame)
-				}
-				index := test.start + count
-				if index >= len(ids) || log.ID != ids[index] ||
-					log.StepIndex == nil ||
-					*log.StepIndex != 1 ||
-					log.Step != "duplicate" ||
-					log.Line != fmt.Sprintf("line-%d", index) {
-					t.Fatalf("replay entry=%+v expected index=%d", log, index)
-				}
-				count++
-			}
-			if count != len(ids)-test.start ||
-				!strings.Contains(
-					string(body),
-					"event: complete\ndata: {\"status\":\"succeeded\"}",
-				) {
-				t.Fatalf("incomplete stream: count=%d", count)
-			}
+			verifyStructuredReplay(t, body, ids, test.start)
 		})
+	}
+}
+
+func verifyStructuredReplay(t *testing.T, body []byte, ids []int64, start int) {
+	t.Helper()
+	count := 0
+	for _, frame := range strings.Split(string(body), "\n\n") {
+		if !strings.Contains(frame, "event: log\n") {
+			continue
+		}
+		_, data, found := strings.Cut(frame, "data: ")
+		var log httpstream.StepLog
+		if !found || json.Unmarshal([]byte(data), &log) != nil {
+			t.Fatalf("invalid log event %q", frame)
+		}
+		index := start + count
+		if index >= len(ids) || log.ID != ids[index] ||
+			log.StepIndex == nil ||
+			*log.StepIndex != 1 ||
+			log.Step != "duplicate" ||
+			log.Line != fmt.Sprintf("line-%d", index) {
+			t.Fatalf("replay entry=%+v expected index=%d", log, index)
+		}
+		count++
+	}
+	if count != len(ids)-start ||
+		!strings.Contains(
+			string(body),
+			"event: complete\ndata: {\"status\":\"succeeded\"}",
+		) {
+		t.Fatalf("incomplete stream: count=%d", count)
 	}
 }
 

@@ -261,35 +261,15 @@ func TestSwagger_AllPathParamsDeclared(t *testing.T) {
 			if method == "parameters" {
 				continue
 			}
-			var op struct {
-				Parameters []struct {
-					Name string `json:"name"`
-					In   string `json:"in"`
-				} `json:"parameters"`
-			}
-			if err := json.Unmarshal(raw, &op); err != nil {
-				t.Fatalf("failed to parse %s %s: %v", method, path, err)
-			}
-			declared := map[string]struct{}{}
-			for _, p := range op.Parameters {
-				if p.In == "path" {
-					declared[p.Name] = struct{}{}
-				}
-			}
-			for name := range expected {
-				if _, ok := declared[name]; !ok {
-					missing = append(missing,
-						method+" "+path+" missing path param {"+name+"}")
-				}
-			}
-			for name := range declared {
-				if _, ok := expected[name]; !ok {
-					over = append(over,
-						method+" "+path+" declares path param "+name+
-							" but path placeholders are ["+
-							strings.Join(sortedKeys(expected), ",")+"]")
-				}
-			}
+			pathMissing, pathOver := compareSwaggerPathParameters(
+				t,
+				path,
+				method,
+				raw,
+				expected,
+			)
+			missing = append(missing, pathMissing...)
+			over = append(over, pathOver...)
 		}
 	}
 
@@ -303,6 +283,46 @@ func TestSwagger_AllPathParamsDeclared(t *testing.T) {
 		t.Errorf("over-declared path parameters (%d):\n  %s",
 			len(over), strings.Join(over, "\n  "))
 	}
+}
+
+func compareSwaggerPathParameters(
+	t *testing.T,
+	path, method string,
+	raw json.RawMessage,
+	expected map[string]struct{},
+) ([]string, []string) {
+	t.Helper()
+	var missing, over []string
+	var op struct {
+		Parameters []struct {
+			Name string `json:"name"`
+			In   string `json:"in"`
+		} `json:"parameters"`
+	}
+	if err := json.Unmarshal(raw, &op); err != nil {
+		t.Fatalf("failed to parse %s %s: %v", method, path, err)
+	}
+	declared := map[string]struct{}{}
+	for _, p := range op.Parameters {
+		if p.In == "path" {
+			declared[p.Name] = struct{}{}
+		}
+	}
+	for name := range expected {
+		if _, ok := declared[name]; !ok {
+			missing = append(missing,
+				method+" "+path+" missing path param {"+name+"}")
+		}
+	}
+	for name := range declared {
+		if _, ok := expected[name]; !ok {
+			over = append(over,
+				method+" "+path+" declares path param "+name+
+					" but path placeholders are ["+
+					strings.Join(sortedKeys(expected), ",")+"]")
+		}
+	}
+	return missing, over
 }
 
 func sortedKeys(m map[string]struct{}) []string {

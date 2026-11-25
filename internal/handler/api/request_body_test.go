@@ -24,11 +24,7 @@ func TestAPI_RequestBodyRejectsInvalidInputBeforeMutation(t *testing.T) {
 		handler.NewAuthHandler(h.repo))
 	const limit = 4 << 20
 	for _, path := range []string{"/api/v1/environments", "/api/v1/tokens"} {
-		for _, tc := range []struct {
-			name   string
-			body   string
-			status int
-		}{
+		for _, tc := range []invalidRequestBodyCase{
 			{"unknown field", `{"name":"rejected","extra":true}`, 400},
 			{"multiple documents", `{"name":"rejected"} {}`, 400},
 			{"trailing junk", `{"name":"rejected"} junk`, 400},
@@ -46,65 +42,91 @@ func TestAPI_RequestBodyRejectsInvalidInputBeforeMutation(t *testing.T) {
 						unknownLength,
 					),
 					func(t *testing.T) {
-						var before int
-						table := "environments"
-						if path == "/api/v1/tokens" {
-							table = "api_tokens"
-						}
-						if err := h.repo.DB.QueryRow("SELECT count(*) FROM " + table).Scan(&before); err != nil {
-							t.Fatal(err)
-						}
-						req := httptest.NewRequest(
-							http.MethodPost,
+						verifyInvalidRequestBodyRejection(
+							t,
+							h,
+							router,
+							token,
 							path,
-							strings.NewReader(tc.body),
+							tc,
+							unknownLength,
 						)
-						req.Header.Set("Authorization", "Bearer "+token)
-						req.Header.Set("Content-Type", "application/json")
-						if unknownLength {
-							req.ContentLength = -1
-						}
-						rec := httptest.NewRecorder()
-						// When
-						router.ServeHTTP(rec, req)
-						// Then
-						if rec.Code != tc.status {
-							t.Fatalf(
-								"status=%d body=%.200s",
-								rec.Code,
-								rec.Body.String(),
-							)
-						}
-						var after int
-						if err := h.repo.DB.QueryRow("SELECT count(*) FROM " + table).Scan(&after); err != nil {
-							t.Fatal(err)
-						}
-						if after != before {
-							t.Fatalf("mutation: count %d -> %d", before, after)
-						}
-						message := "Invalid JSON body"
-						if tc.status == 413 {
-							message = "Request body too large"
-						}
-						want := fmt.Sprintf(`{"error":%q}`, message)
-						if strings.TrimSpace(rec.Body.String()) != want {
-							t.Fatalf(
-								"unstable error: %.200s",
-								rec.Body.String(),
-							)
-						}
-						count, err := h.repo.Queries.CountAuditLogs(t.Context())
-						if err != nil || count != 0 {
-							t.Fatalf(
-								"rejected request audited: count=%d err=%v",
-								count,
-								err,
-							)
-						}
 					},
 				)
 			}
 		}
+	}
+}
+
+type invalidRequestBodyCase struct {
+	name   string
+	body   string
+	status int
+}
+
+func verifyInvalidRequestBodyRejection(
+	t *testing.T,
+	h *harness,
+	router http.Handler,
+	token, path string,
+	tc invalidRequestBodyCase,
+	unknownLength bool,
+) {
+	t.Helper()
+	var before int
+	table := "environments"
+	if path == "/api/v1/tokens" {
+		table = "api_tokens"
+	}
+	if err := h.repo.DB.QueryRow("SELECT count(*) FROM " + table).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(
+		http.MethodPost,
+		path,
+		strings.NewReader(tc.body),
+	)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	if unknownLength {
+		req.ContentLength = -1
+	}
+	rec := httptest.NewRecorder()
+	// When
+	router.ServeHTTP(rec, req)
+	// Then
+	if rec.Code != tc.status {
+		t.Fatalf(
+			"status=%d body=%.200s",
+			rec.Code,
+			rec.Body.String(),
+		)
+	}
+	var after int
+	if err := h.repo.DB.QueryRow("SELECT count(*) FROM " + table).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if after != before {
+		t.Fatalf("mutation: count %d -> %d", before, after)
+	}
+	message := "Invalid JSON body"
+	if tc.status == 413 {
+		message = "Request body too large"
+	}
+	want := fmt.Sprintf(`{"error":%q}`, message)
+	if strings.TrimSpace(rec.Body.String()) != want {
+		t.Fatalf(
+			"unstable error: %.200s",
+			rec.Body.String(),
+		)
+	}
+	count, err := h.repo.Queries.CountAuditLogs(t.Context())
+	if err != nil || count != 0 {
+		t.Fatalf(
+			"rejected request audited: count=%d err=%v",
+			count,
+			err,
+		)
 	}
 }
 

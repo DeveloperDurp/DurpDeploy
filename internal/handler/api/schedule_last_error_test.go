@@ -66,10 +66,6 @@ func TestScheduleAPI_ExposesLegacyFailureAfterSchedulerDisables(t *testing.T) {
 	)
 	router := server.NewRouter(h.repo, h.runner, parser,
 		handler.NewAuthHandler(h.repo))
-	type scheduleState struct {
-		Enabled   int64  `json:"enabled"`
-		LastError string `json:"last_error"`
-	}
 	for _, test := range []struct {
 		path string
 		list bool
@@ -78,52 +74,66 @@ func TestScheduleAPI_ExposesLegacyFailureAfterSchedulerDisables(t *testing.T) {
 		{fmt.Sprintf("/api/v1/projects/%d/runbooks/%d/schedules", project.ID, book.ID), true},
 	} {
 		t.Run(test.path, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodGet, test.path, nil)
-			request.Header.Set("Authorization", "Bearer "+token)
-			response := httptest.NewRecorder()
-			router.ServeHTTP(response, request)
-			if response.Code != http.StatusOK {
-				t.Fatalf(
-					"GET %s: %d %s",
-					test.path,
-					response.Code,
-					response.Body.String(),
-				)
-			}
-			var row scheduleState
-			if test.list {
-				var items []scheduleState
-				if err := json.Unmarshal(
-					response.Body.Bytes(),
-					&items,
-				); err != nil {
-					t.Fatal(err)
-				}
-				if len(items) != 1 {
-					t.Fatalf(
-						"GET %s: schedules=%d want 1",
-						test.path,
-						len(items),
-					)
-				}
-				row = items[0]
-			} else {
-				if err := json.Unmarshal(
-					response.Body.Bytes(),
-					&row,
-				); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if row.Enabled != 0 ||
-				!strings.Contains(row.LastError,
-					"recreate the step and create a new release") {
-				t.Fatalf(
-					"GET %s: no actionable disabled state: %+v",
-					test.path,
-					row,
-				)
-			}
+			verifyDisabledLegacySchedule(t, router, token, test.path, test.list)
 		})
+	}
+}
+
+func verifyDisabledLegacySchedule(
+	t *testing.T,
+	router http.Handler,
+	token, path string,
+	list bool,
+) {
+	t.Helper()
+	type scheduleState struct {
+		Enabled   int64  `json:"enabled"`
+		LastError string `json:"last_error"`
+	}
+	request := httptest.NewRequest(http.MethodGet, path, nil)
+	request.Header.Set("Authorization", "Bearer "+token)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf(
+			"GET %s: %d %s",
+			path,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+	var row scheduleState
+	if list {
+		var items []scheduleState
+		if err := json.Unmarshal(
+			response.Body.Bytes(),
+			&items,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if len(items) != 1 {
+			t.Fatalf(
+				"GET %s: schedules=%d want 1",
+				path,
+				len(items),
+			)
+		}
+		row = items[0]
+	} else {
+		if err := json.Unmarshal(
+			response.Body.Bytes(),
+			&row,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if row.Enabled != 0 ||
+		!strings.Contains(row.LastError,
+			"recreate the step and create a new release") {
+		t.Fatalf(
+			"GET %s: no actionable disabled state: %+v",
+			path,
+			row,
+		)
 	}
 }

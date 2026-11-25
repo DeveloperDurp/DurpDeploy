@@ -76,16 +76,21 @@ func TestBuildInfoAPIWebE2E(t *testing.T) {
 				t.Fatalf("API build = %+v, want %+v", got, want)
 			}
 			body := string(request("/settings/version", "", session, 200))
-			for _, value := range []string{
-				"DurpDeploy version", got.Version, got.Commit,
-				got.BuildNumber, `href="/settings/version"`,
-			} {
-				if !strings.Contains(body, html.EscapeString(value)) &&
-					!strings.Contains(body, value) {
-					t.Fatalf("web version omitted %q", value)
-				}
-			}
+			verifyWebBuildInfo(t, body, got)
 			request("/api/v1/version", "", session, 401)
 		})
+	}
+}
+
+func verifyWebBuildInfo(t *testing.T, body string, got buildinfo.Info) {
+	t.Helper()
+	for _, value := range []string{
+		"DurpDeploy version", got.Version, got.Commit,
+		got.BuildNumber, `href="/settings/version"`,
+	} {
+		if !strings.Contains(body, html.EscapeString(value)) &&
+			!strings.Contains(body, value) {
+			t.Fatalf("web version omitted %q", value)
+		}
 	}
 }
