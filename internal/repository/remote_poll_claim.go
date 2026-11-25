@@ -35,6 +35,9 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 ) (RemoteClaim, bool, error) {
 	var result RemoteClaim
 	claimed := false
+	recordClaim := func(claim RemoteClaim) {
+		result, claimed = claim, true
+	}
 	err := withPollClaimRetry(ctx, func() error {
 		result = RemoteClaim{}
 		claimed = false
@@ -50,145 +53,9 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 			ctx,
 			candidate,
 			func(ctx context.Context, q *db.Queries) error {
-				locked, err := q.LockClaimAgent(ctx, agentID)
-				if err != nil {
-					return fmt.Errorf("lock active agent: %w", err)
-				}
-				if locked == 0 {
-					return nil
-				}
-				agent, err := q.GetAgent(ctx, agentID)
-				if err != nil || agent.Draining != 0 {
-					return err
-				}
-				now, err := q.CurrentUnixTime(ctx)
-				if err != nil {
-					return fmt.Errorf("read database time: %w", err)
-				}
-				waiting, err := q.ListWaitingRemoteDeploymentClaims(
-					ctx,
-					agentID,
+				return r.claimRemoteDeploymentPayload(
+					ctx, q, agentID, candidate, prepare, recordClaim,
 				)
-				if err != nil {
-					return fmt.Errorf("list waiting remote claims: %w", err)
-				}
-				if len(waiting) == 0 ||
-					waiting[0] != candidate {
-					return nil
-				}
-				locked, err = q.LockWaitingRemoteDeploymentClaim(
-					ctx,
-					db.LockWaitingRemoteDeploymentClaimParams{
-						DeploymentID: candidate,
-						AgentID:      agentID,
-					},
-				)
-				if err != nil {
-					return fmt.Errorf("lock waiting remote claim: %w", err)
-				}
-				if locked == 0 {
-					return nil
-				}
-				locked, err = q.LockPendingRemoteDeployment(
-					ctx,
-					db.LockPendingRemoteDeploymentParams{
-						DeploymentID: candidate,
-						AgentID: sql.NullString{
-							String: agentID,
-							Valid:  true,
-						},
-					},
-				)
-				if err != nil {
-					return fmt.Errorf("lock pending deployment: %w", err)
-				}
-				if locked == 0 {
-					return nil
-				}
-				snapshot, err := r.remotePayloadSnapshot(
-					ctx,
-					q,
-					agentID,
-					candidate,
-				)
-				if errors.Is(err, agentexecution.ErrLimits) {
-					// The claim schema uses a shared capability failure category.
-					// Keep the exact validation error in the deployment log.
-					if _, err := q.CreateDeploymentLog(ctx, db.CreateDeploymentLogParams{
-						DeploymentID: candidate, Line: err.Error(),
-					}); err != nil {
-						return err
-					}
-					return failWaitingRemotePayload(
-						ctx,
-						q,
-						candidate,
-						agentID,
-						now,
-						"remote_execution_capability_unavailable",
-					)
-				}
-				if err != nil {
-					return err
-				}
-				prepared, err := prepare(snapshot)
-				if err != nil {
-					if errors.Is(err, containerenv.ErrEnvironment) {
-						if _, logErr := q.CreateDeploymentLog(ctx, db.CreateDeploymentLogParams{
-							DeploymentID: candidate, Line: err.Error(),
-						}); logErr != nil {
-							return logErr
-						}
-						return failWaitingRemotePayload(
-							ctx,
-							q,
-							candidate,
-							agentID,
-							now,
-							"remote_execution_capability_unavailable",
-						)
-					}
-					if errors.Is(err, agentproto.ErrUnsupportedProtocol) {
-						return failWaitingRemotePayload(
-							ctx,
-							q,
-							candidate,
-							agentID,
-							now,
-							"remote_payload_requires_agent_3",
-						)
-					}
-					return err
-				}
-				changed, err := q.ClaimRemoteDeployment(
-					ctx,
-					db.ClaimRemoteDeploymentParams{
-						ClaimTokenHash: prepared.TokenHash,
-						Ciphertext: sql.NullString{
-							String: string(prepared.Ciphertext),
-							Valid:  true,
-						},
-						ClaimExpiresAt: now + int64(
-							agentproto.PreStartClaimTimeout/time.Second,
-						),
-						Now:          now,
-						DeploymentID: candidate,
-						AgentID:      agentID,
-					},
-				)
-				if err != nil {
-					return fmt.Errorf("claim remote deployment: %w", err)
-				}
-				if changed == 0 {
-					return nil
-				}
-				claimed = true
-				result = RemoteClaim{
-					DeploymentID: candidate,
-					Token:        prepared.Token,
-					Ciphertext:   prepared.Ciphertext,
-				}
-				return nil
 			},
 		)
 	})
@@ -196,6 +63,154 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 		return RemoteClaim{}, false, err
 	}
 	return result, claimed, nil
+}
+
+func (r *Repository) claimRemoteDeploymentPayload(
+	ctx context.Context,
+	q *db.Queries,
+	agentID string,
+	candidate int64,
+	prepare func(RemotePayloadSnapshot) (RemotePreparedClaim, error),
+	recordClaim func(RemoteClaim),
+) error {
+	locked, err := q.LockClaimAgent(ctx, agentID)
+	if err != nil {
+		return fmt.Errorf("lock active agent: %w", err)
+	}
+	if locked == 0 {
+		return nil
+	}
+	agent, err := q.GetAgent(ctx, agentID)
+	if err != nil || agent.Draining != 0 {
+		return err
+	}
+	now, err := q.CurrentUnixTime(ctx)
+	if err != nil {
+		return fmt.Errorf("read database time: %w", err)
+	}
+	waiting, err := q.ListWaitingRemoteDeploymentClaims(
+		ctx,
+		agentID,
+	)
+	if err != nil {
+		return fmt.Errorf("list waiting remote claims: %w", err)
+	}
+	if len(waiting) == 0 ||
+		waiting[0] != candidate {
+		return nil
+	}
+	locked, err = q.LockWaitingRemoteDeploymentClaim(
+		ctx,
+		db.LockWaitingRemoteDeploymentClaimParams{
+			DeploymentID: candidate,
+			AgentID:      agentID,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("lock waiting remote claim: %w", err)
+	}
+	if locked == 0 {
+		return nil
+	}
+	locked, err = q.LockPendingRemoteDeployment(
+		ctx,
+		db.LockPendingRemoteDeploymentParams{
+			DeploymentID: candidate,
+			AgentID: sql.NullString{
+				String: agentID,
+				Valid:  true,
+			},
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("lock pending deployment: %w", err)
+	}
+	if locked == 0 {
+		return nil
+	}
+	snapshot, err := r.remotePayloadSnapshot(
+		ctx,
+		q,
+		agentID,
+		candidate,
+	)
+	if errors.Is(err, agentexecution.ErrLimits) {
+		// The claim schema uses a shared capability failure category.
+		// Keep the exact validation error in the deployment log.
+		if _, err := q.CreateDeploymentLog(ctx, db.CreateDeploymentLogParams{
+			DeploymentID: candidate, Line: err.Error(),
+		}); err != nil {
+			return err
+		}
+		return failWaitingRemotePayload(
+			ctx,
+			q,
+			candidate,
+			agentID,
+			now,
+			"remote_execution_capability_unavailable",
+		)
+	}
+	if err != nil {
+		return err
+	}
+	prepared, err := prepare(snapshot)
+	if err != nil {
+		if errors.Is(err, containerenv.ErrEnvironment) {
+			if _, logErr := q.CreateDeploymentLog(ctx, db.CreateDeploymentLogParams{
+				DeploymentID: candidate, Line: err.Error(),
+			}); logErr != nil {
+				return logErr
+			}
+			return failWaitingRemotePayload(
+				ctx,
+				q,
+				candidate,
+				agentID,
+				now,
+				"remote_execution_capability_unavailable",
+			)
+		}
+		if errors.Is(err, agentproto.ErrUnsupportedProtocol) {
+			return failWaitingRemotePayload(
+				ctx,
+				q,
+				candidate,
+				agentID,
+				now,
+				"remote_payload_requires_agent_3",
+			)
+		}
+		return err
+	}
+	changed, err := q.ClaimRemoteDeployment(
+		ctx,
+		db.ClaimRemoteDeploymentParams{
+			ClaimTokenHash: prepared.TokenHash,
+			Ciphertext: sql.NullString{
+				String: string(prepared.Ciphertext),
+				Valid:  true,
+			},
+			ClaimExpiresAt: now + int64(
+				agentproto.PreStartClaimTimeout/time.Second,
+			),
+			Now:          now,
+			DeploymentID: candidate,
+			AgentID:      agentID,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("claim remote deployment: %w", err)
+	}
+	if changed == 0 {
+		return nil
+	}
+	recordClaim(RemoteClaim{
+		DeploymentID: candidate,
+		Token:        prepared.Token,
+		Ciphertext:   prepared.Ciphertext,
+	})
+	return nil
 }
 
 func failWaitingRemotePayload(ctx context.Context, q *db.Queries,
