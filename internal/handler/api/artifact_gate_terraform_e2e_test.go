@@ -60,39 +60,8 @@ func terraformGateNetwork(t *testing.T, stale bool) {
 		}
 		stagingRuntime(t, "image", "rm", image)
 	})
-	var mutex sync.Mutex
-	var state []byte
-	var writes, locks int
-	backend := verificationUpstream(
-		t,
-		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			mutex.Lock()
-			defer mutex.Unlock()
-			switch r.Method {
-			case "GET":
-				if state == nil {
-					w.WriteHeader(404)
-				} else {
-					if _, err := w.Write(state); err != nil {
-						return
-					}
-				}
-			case "POST":
-				var err error
-				state, err = io.ReadAll(r.Body)
-				if err != nil {
-					w.WriteHeader(500)
-					return
-				}
-				writes++
-			case "LOCK":
-				locks++
-			case "UNLOCK":
-			default:
-				w.WriteHeader(405)
-			}
-		}),
-	)
+	var backendState terraformGateBackendState
+	backend := verificationUpstream(t, http.HandlerFunc(backendState.serveHTTP))
 	if os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME") == "podman" {
 		address, err := url.Parse(backend)
 		if err != nil {
@@ -178,18 +147,18 @@ terraform apply -input=false "$DURPDEPLOY_APPROVED_DIR/context/tfplan"`,
 	if hex.EncodeToString(hash[:]) != gate.SHA256 || gate.Review.Create != 1 {
 		t.Fatal("plan identity/review mismatch")
 	}
-	mutex.Lock()
-	before := writes
-	mutex.Unlock()
+	backendState.mutex.Lock()
+	before := backendState.writes
+	backendState.mutex.Unlock()
 	if before != 0 {
 		t.Fatal("Terraform applied before approval")
 	}
 	if stale {
-		mutex.Lock()
-		state = []byte(
+		backendState.mutex.Lock()
+		backendState.state = []byte(
 			`{"version":4,"terraform_version":"1.13.5","serial":1,"lineage":"ad93c268-710a-49a0-841b-02ce7a28e124","outputs":{},"resources":[]}`,
 		)
-		mutex.Unlock()
+		backendState.mutex.Unlock()
 	}
 	// When: this saved plan is approved through the public API.
 	f.api(
@@ -202,25 +171,40 @@ terraform apply -input=false "$DURPDEPLOY_APPROVED_DIR/context/tfplan"`,
 	// Then: Terraform applies it over the network, with backend locking.
 	if stale {
 		f.completion(t, deployment.ID, events.DeploymentFailed)
-		mutex.Lock()
-		defer mutex.Unlock()
-		if writes != 0 {
+		backendState.mutex.Lock()
+		defer backendState.mutex.Unlock()
+		if backendState.writes != 0 {
 			t.Fatal("a stale saved plan changed the backend")
 		}
 		return
 	}
 	f.completion(t, deployment.ID, events.DeploymentSucceeded)
-	mutex.Lock()
-	defer mutex.Unlock()
-	if writes != 1 || locks < 2 || len(state) == 0 {
-		t.Fatalf("backend writes=%d locks=%d", writes, locks)
+	verifyTerraformGateBackendResult(t, f, deployment.ID, &backendState)
+}
+
+func verifyTerraformGateBackendResult(
+	t *testing.T,
+	f *artifactE2E,
+	deploymentID int64,
+	backendState *terraformGateBackendState,
+) {
+	t.Helper()
+	backendState.mutex.Lock()
+	defer backendState.mutex.Unlock()
+	if backendState.writes != 1 || backendState.locks < 2 ||
+		len(backendState.state) == 0 {
+		t.Fatalf(
+			"backend writes=%d locks=%d",
+			backendState.writes,
+			backendState.locks,
+		)
 	}
 	var saved struct {
 		Outputs map[string]struct {
 			Value string `json:"value"`
 		} `json:"outputs"`
 	}
-	if err := json.Unmarshal(state, &saved); err != nil {
+	if err := json.Unmarshal(backendState.state, &saved); err != nil {
 		t.Fatal("invalid saved state")
 	}
 	password := saved.Outputs["password"].Value
@@ -230,7 +214,7 @@ terraform apply -input=false "$DURPDEPLOY_APPROVED_DIR/context/tfplan"`,
 	logs := f.api(
 		t,
 		"GET",
-		fmt.Sprintf("/api/v1/deployments/%d/logs.txt", deployment.ID),
+		fmt.Sprintf("/api/v1/deployments/%d/logs.txt", deploymentID),
 		nil,
 		200,
 	)
@@ -239,9 +223,46 @@ terraform apply -input=false "$DURPDEPLOY_APPROVED_DIR/context/tfplan"`,
 		t.Fatal("unsafe or missing progress logs")
 	}
 	if strings.Contains(
-		string(f.api(t, "GET", gateAPIPath(deployment.ID), nil, 200)),
+		string(f.api(t, "GET", gateAPIPath(deploymentID), nil, 200)),
 		password,
 	) {
 		t.Fatal("generated sensitive value leaked into review")
+	}
+}
+
+type terraformGateBackendState struct {
+	mutex         sync.Mutex
+	state         []byte
+	writes, locks int
+}
+
+func (b *terraformGateBackendState) serveHTTP(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+	switch r.Method {
+	case "GET":
+		if b.state == nil {
+			w.WriteHeader(404)
+		} else {
+			if _, err := w.Write(b.state); err != nil {
+				return
+			}
+		}
+	case "POST":
+		var err error
+		b.state, err = io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(500)
+			return
+		}
+		b.writes++
+	case "LOCK":
+		b.locks++
+	case "UNLOCK":
+	default:
+		w.WriteHeader(405)
 	}
 }

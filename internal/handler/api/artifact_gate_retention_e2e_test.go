@@ -84,24 +84,7 @@ printf '{"create":1}' > "$DURPDEPLOY_STAGE_DIR/review.json"`
 	f.completion(t, deployment.ID, events.ArtifactAwaitingApproval)
 	scope := os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME") + ":" +
 		os.Getenv("DURPDEPLOY_CONTAINER_NAMESPACE") + ":gate-images"
-	holders := stagingRuntime(t, "ps", "--all", "--quiet",
-		"--filter=label=io.durpdeploy.namespace="+scope)
-	if len(strings.Fields(holders)) != 2 {
-		t.Fatalf("expected two image references: %s", holders)
-	}
-	var imageVolumes []string
-	for _, id := range strings.Fields(holders) {
-		var mounts []struct{ Name string }
-		if err := json.Unmarshal([]byte(stagingRuntime(t, "inspect",
-			"--format={{json .Mounts}}", id)), &mounts); err != nil {
-			t.Fatal(err)
-		}
-		for _, mount := range mounts {
-			if mount.Name != "" {
-				imageVolumes = append(imageVolumes, mount.Name)
-			}
-		}
-	}
+	imageVolumes := artifactGateHolderVolumes(t, scope)
 	pinned, err := f.h.repo.Queries.GetArtifactGateImage(t.Context(),
 		db.GetArtifactGateImageParams{
 			DeploymentID: deployment.ID, StepIndex: 1,
@@ -145,6 +128,34 @@ printf '{"create":1}' > "$DURPDEPLOY_STAGE_DIR/review.json"`
 		"--filter=ancestor="+image); ids != "" {
 		t.Fatalf("terminal deployment retained image holders: %s", ids)
 	}
+	verifyArtifactGatePrunedVolumes(t, imageVolumes)
+}
+
+func artifactGateHolderVolumes(t *testing.T, scope string) []string {
+	t.Helper()
+	holders := stagingRuntime(t, "ps", "--all", "--quiet",
+		"--filter=label=io.durpdeploy.namespace="+scope)
+	if len(strings.Fields(holders)) != 2 {
+		t.Fatalf("expected two image references: %s", holders)
+	}
+	var imageVolumes []string
+	for _, id := range strings.Fields(holders) {
+		var mounts []struct{ Name string }
+		if err := json.Unmarshal([]byte(stagingRuntime(t, "inspect",
+			"--format={{json .Mounts}}", id)), &mounts); err != nil {
+			t.Fatal(err)
+		}
+		for _, mount := range mounts {
+			if mount.Name != "" {
+				imageVolumes = append(imageVolumes, mount.Name)
+			}
+		}
+	}
+	return imageVolumes
+}
+
+func verifyArtifactGatePrunedVolumes(t *testing.T, imageVolumes []string) {
+	t.Helper()
 	volumes := strings.Fields(stagingRuntime(t, "volume", "ls", "--quiet"))
 	for _, expectedRemoved := range imageVolumes {
 		for _, remaining := range volumes {
