@@ -13,6 +13,7 @@ import (
 
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
 	agentartifact "github.com/DeveloperDurp/durpdeploy-agent/artifact"
 	"github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
@@ -97,7 +98,14 @@ func (s *Server) Artifact(w http.ResponseWriter, r *http.Request) {
 			)
 		}
 	}()
-	if !s.artifactClaimLive(w, r, claim) {
+	if err := s.repository.AuthorizeRemoteStepInput(
+		r.Context(),
+		repository.RemoteLifecycleClaim{
+			DeploymentID: claim.DeploymentID, AgentID: claim.AgentID,
+			ClaimTokenHash: claim.ClaimTokenHash,
+		},
+	); err != nil {
+		writeStagingError(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/zip")

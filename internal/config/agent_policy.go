@@ -2,8 +2,7 @@ package config
 
 import "github.com/DeveloperDurp/durpdeploy-agent/resourcepolicy"
 
-// AgentPolicy selects the shared fields from the captured server snapshot.
-// Server-only settings do not affect agent compatibility.
+// AgentPolicy adapts the captured server limits to the shared library type.
 func (l Limits) AgentPolicy() resourcepolicy.Limits {
 	return resourcepolicy.Limits{
 		Execution: resourcepolicy.Execution(l.Execution),

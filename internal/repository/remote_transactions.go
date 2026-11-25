@@ -50,9 +50,6 @@ func (r *Repository) claimRemoteDeployment(
 	if err != nil || locked == 0 {
 		return 0, err
 	}
-	if _, err := r.remoteResourcePolicy(ctx, q, arg.AgentID); err != nil {
-		return 0, err
-	}
 	return q.ClaimRemoteDeployment(ctx, arg)
 }
 

@@ -40,7 +40,7 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
     fi
     bash scripts/ensure_fixture_image.sh \
       harbor.durp.info/dockerhub/library/python:3.12 "${fixture_runtime[@]}"
-    bash scripts/go_test.sh -tags=e2e -count=1 -run '^(TestConfiguredContainer(PIDs|Resources|ResourcesRemoteRejection)APIE2E|TestConfiguredPIDRemoteRejectionAPIE2E|TestConfiguredArtifact(SafetyContainer|ApprovalNodes|ApprovalResume)APIE2E|TestConfiguredDefaultTimeout(API|RemoteAPI)E2E)$' ./internal/handler/api
+    bash scripts/go_test.sh -tags=e2e -count=1 -run '^(TestConfiguredContainer(PIDs|Resources|ResourcesRemoteAdmission)APIE2E|TestConfiguredPIDRemoteAdmissionAPIE2E|TestConfiguredArtifact(SafetyContainer|ApprovalNodes|ApprovalResume)APIE2E|TestConfiguredDefaultTimeout(API|RemoteAPI)E2E)$' ./internal/handler/api
     )
     (
     export DURPDEPLOY_CONTAINER_RUNTIME=docker

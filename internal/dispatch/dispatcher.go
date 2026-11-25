@@ -21,9 +21,8 @@ type Dispatcher struct {
 // PollRequest includes capabilities reported outside the JSON envelope.
 type PollRequest struct {
 	agentproto.PollRequest
-	Staging        bool
-	Artifact       bool
-	ResourcePolicy string
+	Staging  bool
+	Artifact bool
 }
 
 func New(repo *repository.Repository) *Dispatcher {
@@ -35,9 +34,6 @@ func (d *Dispatcher) Poll(
 	agentID agentproto.AgentID,
 	request PollRequest,
 ) (agentproto.PollResponse, bool, error) {
-	if err := d.repository.ResourceLimits().AgentPolicy().CheckCompatibility(request.ResourcePolicy); err != nil {
-		return agentproto.PollResponse{}, false, err
-	}
 	response, claimed, err := d.claim(ctx, agentID, request)
 	if errors.Is(err, errStaleAgentPoll) {
 		return agentproto.PollResponse{}, false, nil
@@ -121,7 +117,12 @@ func (d *Dispatcher) Maintain(ctx context.Context) error {
 			if _, err := q.ExpireAgentPairings(ctx, now); err != nil {
 				return err
 			}
-			if _, err := q.ExpireRemoteStepClaims(ctx, now); err != nil {
+			if err := expireRemoteStepClaims(ctx, q, now); err != nil {
+				return err
+			}
+			if err := q.CancelExpiredPrestartTransfers(
+				ctx, sql.NullInt64{Int64: now, Valid: true},
+			); err != nil {
 				return err
 			}
 			cancelStaleBefore := now - int64(
@@ -169,6 +170,43 @@ func (d *Dispatcher) Maintain(ctx context.Context) error {
 	}
 	if err := d.repository.MaintainRemoteLifecycle(ctx); err != nil {
 		return fmt.Errorf("maintain remote deployment lifecycle: %w", err)
+	}
+	return nil
+}
+
+func expireRemoteStepClaims(
+	ctx context.Context,
+	q *db.Queries,
+	now int64,
+) error {
+	deployments, err := q.ListRetriedRemoteStepClaimExpirations(
+		ctx, sql.NullInt64{Int64: now, Valid: true},
+	)
+	if err != nil {
+		return err
+	}
+	for _, id := range deployments {
+		if _, err := q.LockDeploymentLogStream(ctx, id); err != nil {
+			return err
+		}
+	}
+	expired, err := q.ExpireRemoteStepClaims(ctx, now)
+	if err != nil {
+		return err
+	}
+	for _, claim := range expired {
+		if claim.State != "failed" {
+			continue
+		}
+		if _, err := q.CreateDeploymentLog(ctx, db.CreateDeploymentLogParams{
+			DeploymentID: claim.DeploymentID,
+			Line: fmt.Sprintf(
+				"Agent %q did not start the remote step after two claims.",
+				claim.AgentID,
+			),
+		}); err != nil {
+			return err
+		}
 	}
 	return nil
 }

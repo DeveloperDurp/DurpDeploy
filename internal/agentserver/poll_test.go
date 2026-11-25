@@ -104,7 +104,7 @@ func TestPollPayloadRoundTrip(t *testing.T) {
 func TestPollReplacesInterpreterCapabilitiesByProtocol(t *testing.T) {
 	// Given
 	fixture := newAgentFixture(t)
-	seedPollPayload(t, fixture, "pending", "test-agent")
+	id := seedPollPayload(t, fixture, "pending", "test-agent")
 
 	// When
 	response := postAgent(
@@ -122,9 +122,11 @@ func TestPollReplacesInterpreterCapabilitiesByProtocol(t *testing.T) {
 	}
 	assertAgentInterpreters(t, fixture, []string{"bash", "python3"})
 
-	if _, err := fixture.repo.Queries.ExpireRemoteClaims(
+	if _, err := fixture.repo.Queries.ExpireRemoteClaim(
 		t.Context(),
-		1<<62,
+		db.ExpireRemoteClaimParams{
+			Now: 1 << 62, DeploymentID: id, AgentID: "test-agent",
+		},
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -296,9 +298,12 @@ func TestLostPollResponseBlocksUntilExpiry(t *testing.T) {
 		claim.LastHeartbeatAt.Int64 != 60 {
 		t.Fatalf("lost response claim=%+v", claim)
 	}
-	if _, err := fixture.repo.Queries.ExpireRemoteClaims(
+	if _, err := fixture.repo.Queries.ExpireRemoteClaim(
 		second.Request.Context(),
-		claim.ClaimExpiresAt.Int64,
+		db.ExpireRemoteClaimParams{
+			Now: claim.ClaimExpiresAt.Int64, DeploymentID: firstID,
+			AgentID: "test-agent",
+		},
 	); err != nil {
 		t.Fatal(err)
 	}

@@ -141,7 +141,7 @@ func acknowledgeRemoteStepCancellation(
 	rows, err := q.AcknowledgeRemoteStepCancellation(
 		ctx,
 		db.AcknowledgeRemoteStepCancellationParams{
-			Now:          sql.NullInt64{Int64: now, Valid: true},
+			Now:          now,
 			DeploymentID: run.DeploymentID, StepIndex: run.StepIndex,
 			AgentID: run.AgentID, ClaimTokenHash: identity.ClaimTokenHash,
 		},

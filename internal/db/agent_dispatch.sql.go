@@ -95,7 +95,9 @@ WHERE remote_deployment_claims.deployment_id = ?5
               AND capability.execution_mode = s.agent_execution_mode))
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs busy
       WHERE busy.agent_id = remote_deployment_claims.agent_id
-        AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+        AND ((busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+          OR (busy.state = 'cancel_requested' AND busy.started_at IS NULL
+            AND busy.prestart_input = 1)))
   AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy
       WHERE busy.agent_id = remote_deployment_claims.agent_id
         AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
@@ -221,7 +223,12 @@ func (q *Queries) ExpireRemoteCancellationClaim(ctx context.Context, arg ExpireR
 }
 
 const expireRemoteClaim = `-- name: ExpireRemoteClaim :execrows
-UPDATE remote_deployment_claims SET state = 'waiting', reason = NULL,
+UPDATE remote_deployment_claims SET
+    state = CASE WHEN expired_claims = 0 THEN 'waiting' ELSE 'cancelled' END, -- NOSONAR: schema state literals are shared across portable SQL statements.
+    reason = CASE WHEN expired_claims = 0 THEN NULL ELSE 'remote_agent_did_not_start' END,
+    finished_at = CASE WHEN expired_claims = 0 THEN NULL ELSE ?1 END,
+    cancel_requested_at = CASE WHEN expired_claims = 0 THEN NULL ELSE ?1 END,
+    expired_claims = expired_claims + 1,
     claim_token_hash = NULL, ciphertext = NULL, claim_expires_at = NULL,
     last_heartbeat_at = NULL, updated_at = ?1
 WHERE deployment_id = ?2
@@ -244,22 +251,6 @@ func (q *Queries) ExpireRemoteClaim(ctx context.Context, arg ExpireRemoteClaimPa
 	return result.RowsAffected()
 }
 
-const expireRemoteClaims = `-- name: ExpireRemoteClaims :execrows
-UPDATE remote_deployment_claims SET state = 'waiting', reason = NULL,
-    claim_token_hash = NULL, ciphertext = NULL, claim_expires_at = NULL,
-    last_heartbeat_at = NULL, updated_at = ?1
-WHERE state = 'claimed' AND started_at IS NULL
-  AND claim_expires_at <= ?1
-`
-
-func (q *Queries) ExpireRemoteClaims(ctx context.Context, now int64) (int64, error) {
-	result, err := q.db.ExecContext(ctx, expireRemoteClaims, now)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const failRemoteDeploymentStatus = `-- name: FailRemoteDeploymentStatus :execrows
 UPDATE deployments SET status = 'failed', finished_at = ?1
 WHERE id = ?2
@@ -275,6 +266,26 @@ type FailRemoteDeploymentStatusParams struct {
 
 func (q *Queries) FailRemoteDeploymentStatus(ctx context.Context, arg FailRemoteDeploymentStatusParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, failRemoteDeploymentStatus, arg.Now, arg.DeploymentID, arg.AgentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const failUnstartedRemoteDeploymentStatus = `-- name: FailUnstartedRemoteDeploymentStatus :execrows
+UPDATE deployments SET status = 'failed', finished_at = ?1
+WHERE id = ?2
+  AND assigned_agent_id = ?3 AND status = 'pending'
+`
+
+type FailUnstartedRemoteDeploymentStatusParams struct {
+	Now          sql.NullInt64  `json:"now"`
+	DeploymentID int64          `json:"deployment_id"`
+	AgentID      sql.NullString `json:"agent_id"`
+}
+
+func (q *Queries) FailUnstartedRemoteDeploymentStatus(ctx context.Context, arg FailUnstartedRemoteDeploymentStatusParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, failUnstartedRemoteDeploymentStatus, arg.Now, arg.DeploymentID, arg.AgentID)
 	if err != nil {
 		return 0, err
 	}
@@ -423,7 +434,7 @@ func (q *Queries) FinishRemoteDeploymentStatus(ctx context.Context, arg FinishRe
 }
 
 const getRemoteDeploymentClaim = `-- name: GetRemoteDeploymentClaim :one
-SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, cleanup_confirmed_at FROM remote_deployment_claims WHERE deployment_id = ?
+SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, cleanup_confirmed_at, expired_claims FROM remote_deployment_claims WHERE deployment_id = ?
 `
 
 func (q *Queries) GetRemoteDeploymentClaim(ctx context.Context, deploymentID int64) (RemoteDeploymentClaim, error) {
@@ -445,6 +456,7 @@ func (q *Queries) GetRemoteDeploymentClaim(ctx context.Context, deploymentID int
 		&i.UpdatedAt,
 		&i.LogBufferCiphertext,
 		&i.CleanupConfirmedAt,
+		&i.ExpiredClaims,
 	)
 	return i, err
 }
@@ -484,7 +496,7 @@ func (q *Queries) HeartbeatRemoteDeployment(ctx context.Context, arg HeartbeatRe
 }
 
 const listRemoteLifecycleClaims = `-- name: ListRemoteLifecycleClaims :many
-SELECT deployment_id, agent_id FROM remote_deployment_claims
+SELECT deployment_id, agent_id, state FROM remote_deployment_claims
 WHERE state IN ('claimed', 'started', 'cancel_requested')
 ORDER BY agent_id ASC, deployment_id ASC
 `
@@ -492,6 +504,7 @@ ORDER BY agent_id ASC, deployment_id ASC
 type ListRemoteLifecycleClaimsRow struct {
 	DeploymentID int64  `json:"deployment_id"`
 	AgentID      string `json:"agent_id"`
+	State        string `json:"state"`
 }
 
 func (q *Queries) ListRemoteLifecycleClaims(ctx context.Context) ([]ListRemoteLifecycleClaimsRow, error) {
@@ -503,7 +516,7 @@ func (q *Queries) ListRemoteLifecycleClaims(ctx context.Context) ([]ListRemoteLi
 	var items []ListRemoteLifecycleClaimsRow
 	for rows.Next() {
 		var i ListRemoteLifecycleClaimsRow
-		if err := rows.Scan(&i.DeploymentID, &i.AgentID); err != nil {
+		if err := rows.Scan(&i.DeploymentID, &i.AgentID, &i.State); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -530,7 +543,9 @@ WHERE c.agent_id = ?1 AND c.state = 'waiting'
             AND capability.interpreter = s.interpreter
             AND capability.execution_mode = s.agent_execution_mode))
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs busy WHERE busy.agent_id = c.agent_id
-      AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+      AND ((busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+        OR (busy.state = 'cancel_requested' AND busy.started_at IS NULL
+          AND busy.prestart_input = 1)))
   AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy WHERE busy.agent_id = c.agent_id
       AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
 ORDER BY c.created_at ASC, c.deployment_id ASC

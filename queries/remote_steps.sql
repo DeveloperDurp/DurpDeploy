@@ -39,13 +39,16 @@ WHERE r.agent_id = sqlc.arg(agent_id) AND r.state = 'waiting'
         AND legacy.state IN ('claimed', 'started', 'cancel_requested')
   )
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs busy WHERE busy.agent_id = r.agent_id
-      AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+      AND ((busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+        OR (busy.state = 'cancel_requested' AND busy.started_at IS NULL
+          AND busy.prestart_input = 1)))
   AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy WHERE busy.agent_id = r.agent_id
       AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
 ORDER BY r.created_at ASC, r.deployment_id ASC, r.step_index ASC;
 
 -- name: ClaimRemoteStepRun :execrows
 UPDATE remote_step_runs SET state = 'claimed',
+    prestart_input = 0,
     claim_token_hash = sqlc.arg(claim_token_hash),
     ciphertext = sqlc.arg(ciphertext),
     claim_expires_at = sqlc.arg(claim_expires_at),
@@ -65,7 +68,9 @@ WHERE remote_step_runs.deployment_id = sqlc.arg(deployment_id)
   )
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs busy
       WHERE busy.agent_id = remote_step_runs.agent_id
-        AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+        AND ((busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+          OR (busy.state = 'cancel_requested' AND busy.started_at IS NULL
+            AND busy.prestart_input = 1)))
   AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy
       WHERE busy.agent_id = remote_step_runs.agent_id
         AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL);
@@ -95,15 +100,36 @@ WHERE id = sqlc.arg(deployment_id) AND status = 'running'
       WHERE r.deployment_id = deployments.id
         AND r.state IN ('waiting', 'claimed', 'started', 'cancel_requested'));
 
--- name: ExpireRemoteStepClaims :execrows
-UPDATE remote_step_runs SET state = 'waiting', claim_token_hash = NULL,
+-- name: ListRetriedRemoteStepClaimExpirations :many
+SELECT DISTINCT deployment_id FROM remote_step_runs
+WHERE state = 'claimed' AND started_at IS NULL
+  AND claim_expires_at <= sqlc.arg(now) AND expired_claims > 0
+  AND prestart_input = 0
+ORDER BY deployment_id ASC;
+
+-- name: ExpireRemoteStepClaims :many
+UPDATE remote_step_runs SET
+    state = CASE WHEN expired_claims = 0 THEN 'waiting' ELSE 'failed' END,
+    finished_at = CASE WHEN expired_claims = 0 THEN NULL ELSE sqlc.arg(now) END,
+    expired_claims = expired_claims + 1,
+    claim_token_hash = NULL,
     ciphertext = NULL, claim_expires_at = NULL, last_heartbeat_at = NULL,
     updated_at = sqlc.arg(now)
 WHERE state = 'claimed' AND started_at IS NULL
-  AND claim_expires_at <= sqlc.arg(now);
+  AND claim_expires_at <= sqlc.arg(now) AND prestart_input = 0
+RETURNING deployment_id, agent_id, state;
+
+-- name: CancelExpiredPrestartTransfers :exec
+UPDATE remote_step_runs SET state = 'cancel_requested',
+    cancel_requested_at = sqlc.arg(now), updated_at = sqlc.arg(now)
+WHERE state = 'claimed' AND started_at IS NULL
+  AND claim_expires_at <= sqlc.arg(now) AND prestart_input = 1;
 
 -- name: ExpireRemoteStepCancellations :execrows
-UPDATE remote_step_runs SET state = 'cancel_unconfirmed', finished_at = sqlc.arg(now),
+UPDATE remote_step_runs SET
+    state = CASE WHEN started_at IS NULL AND prestart_input = 1
+        THEN 'cleanup_unconfirmed' ELSE 'cancel_unconfirmed' END,
+    finished_at = sqlc.arg(now),
     updated_at = sqlc.arg(now), log_buffer_ciphertext = NULL
 WHERE state = 'cancel_requested'
   AND cancel_requested_at <= sqlc.arg(stale_before);
@@ -115,7 +141,7 @@ WHERE state = 'started'
   AND last_heartbeat_at <= sqlc.arg(stale_before);
 
 -- name: GetRemoteStepRunByClaim :one
-SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, recovery_cancelled, cleanup_confirmed_at FROM remote_step_runs
+SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, recovery_cancelled, cleanup_confirmed_at, expired_claims, prestart_input FROM remote_step_runs
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND agent_id = sqlc.arg(agent_id)
   AND claim_token_hash = sqlc.arg(claim_token_hash);
@@ -158,22 +184,36 @@ WHERE deployment_id = sqlc.arg(deployment_id)
 
 -- name: RequestRemoteStepCancellation :execrows
 UPDATE remote_step_runs SET
-    state = CASE WHEN state = 'waiting' THEN 'cancelled'
+    state = CASE WHEN state = 'waiting' OR (state = 'claimed' AND prestart_input = 0)
+        THEN 'cancelled'
         ELSE 'cancel_requested' END,
     cancel_requested_at = sqlc.arg(now),
-    finished_at = CASE WHEN state = 'waiting' THEN sqlc.arg(now)
+    finished_at = CASE WHEN state = 'waiting' OR (state = 'claimed' AND prestart_input = 0)
+        THEN sqlc.arg(now)
         ELSE finished_at END,
     updated_at = sqlc.arg(now)
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND state IN ('waiting', 'claimed', 'started');
 
+-- name: MarkPrestartRemoteStepInput :exec
+UPDATE remote_step_runs SET prestart_input = 1
+WHERE deployment_id = sqlc.arg(deployment_id)
+  AND step_index = sqlc.arg(step_index) AND agent_id = sqlc.arg(agent_id)
+  AND state = 'claimed';
+
 -- name: AcknowledgeRemoteStepCancellation :execrows
-UPDATE remote_step_runs SET state = 'cancelled', finished_at = sqlc.arg(now),
+UPDATE remote_step_runs SET
+    state = CASE WHEN state = 'cleanup_unconfirmed' THEN state ELSE 'cancelled' END,
+    finished_at = CASE WHEN state = 'cleanup_unconfirmed'
+        THEN finished_at ELSE sqlc.arg(now) END,
+    cleanup_confirmed_at = CASE WHEN state = 'cleanup_unconfirmed'
+        THEN COALESCE(cleanup_confirmed_at, sqlc.arg(now)) ELSE cleanup_confirmed_at END,
     updated_at = sqlc.arg(now)
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND step_index = sqlc.arg(step_index) AND agent_id = sqlc.arg(agent_id)
   AND claim_token_hash = sqlc.arg(claim_token_hash)
-  AND state IN ('cancel_requested', 'cancel_unconfirmed');
+  AND (state IN ('cancel_requested', 'cancel_unconfirmed')
+      OR (state = 'cleanup_unconfirmed' AND started_at IS NULL AND prestart_input = 1));
 
 -- name: GetRemoteStepLogBySequence :one
 SELECT l.* FROM deployment_logs l

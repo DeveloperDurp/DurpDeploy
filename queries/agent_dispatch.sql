@@ -29,7 +29,7 @@ WHERE deployment_id = sqlc.arg(deployment_id)
   AND agent_id = sqlc.arg(agent_id);
 
 -- name: ListRemoteLifecycleClaims :many
-SELECT deployment_id, agent_id FROM remote_deployment_claims
+SELECT deployment_id, agent_id, state FROM remote_deployment_claims
 WHERE state IN ('claimed', 'started', 'cancel_requested')
 ORDER BY agent_id ASC, deployment_id ASC;
 
@@ -46,7 +46,9 @@ WHERE c.agent_id = sqlc.arg(agent_id) AND c.state = 'waiting'
             AND capability.interpreter = s.interpreter
             AND capability.execution_mode = s.agent_execution_mode))
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs busy WHERE busy.agent_id = c.agent_id
-      AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+      AND ((busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+        OR (busy.state = 'cancel_requested' AND busy.started_at IS NULL
+          AND busy.prestart_input = 1)))
   AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy WHERE busy.agent_id = c.agent_id
       AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
 ORDER BY c.created_at ASC, c.deployment_id ASC;
@@ -127,26 +129,31 @@ WHERE remote_deployment_claims.deployment_id = sqlc.arg(deployment_id)
               AND capability.execution_mode = s.agent_execution_mode))
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs busy
       WHERE busy.agent_id = remote_deployment_claims.agent_id
-        AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+        AND ((busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+          OR (busy.state = 'cancel_requested' AND busy.started_at IS NULL
+            AND busy.prestart_input = 1)))
   AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy
       WHERE busy.agent_id = remote_deployment_claims.agent_id
         AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL);
 
--- name: ExpireRemoteClaims :execrows
-UPDATE remote_deployment_claims SET state = 'waiting', reason = NULL,
-    claim_token_hash = NULL, ciphertext = NULL, claim_expires_at = NULL,
-    last_heartbeat_at = NULL, updated_at = sqlc.arg(now)
-WHERE state = 'claimed' AND started_at IS NULL
-  AND claim_expires_at <= sqlc.arg(now);
-
 -- name: ExpireRemoteClaim :execrows
-UPDATE remote_deployment_claims SET state = 'waiting', reason = NULL,
+UPDATE remote_deployment_claims SET
+    state = CASE WHEN expired_claims = 0 THEN 'waiting' ELSE 'cancelled' END, -- NOSONAR: schema state literals are shared across portable SQL statements.
+    reason = CASE WHEN expired_claims = 0 THEN NULL ELSE 'remote_agent_did_not_start' END,
+    finished_at = CASE WHEN expired_claims = 0 THEN NULL ELSE sqlc.arg(now) END,
+    cancel_requested_at = CASE WHEN expired_claims = 0 THEN NULL ELSE sqlc.arg(now) END,
+    expired_claims = expired_claims + 1,
     claim_token_hash = NULL, ciphertext = NULL, claim_expires_at = NULL,
     last_heartbeat_at = NULL, updated_at = sqlc.arg(now)
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND agent_id = sqlc.arg(agent_id)
   AND state = 'claimed' AND started_at IS NULL
   AND claim_expires_at <= sqlc.arg(now);
+
+-- name: FailUnstartedRemoteDeploymentStatus :execrows
+UPDATE deployments SET status = 'failed', finished_at = sqlc.arg(now)
+WHERE id = sqlc.arg(deployment_id)
+  AND assigned_agent_id = sqlc.arg(agent_id) AND status = 'pending';
 
 -- name: StartRemoteDeployment :execrows
 UPDATE remote_deployment_claims SET state = 'started',

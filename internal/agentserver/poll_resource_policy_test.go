@@ -1,6 +1,7 @@
 package agentserver_test
 
 import (
+	"database/sql"
 	"io"
 	"net/http"
 	"strings"
@@ -23,7 +24,9 @@ func TestPollResourcePolicyRejectsBeforeMutation(t *testing.T) {
 		"empty-last":  {advertisement, ""},
 		"joined":      {advertisement + ", " + advertisement},
 		"unknown":     {"resource-policy/2;sha256=" + strings.Repeat("a", 64)},
-		"mismatch":    {"resource-policy/1;sha256=" + strings.Repeat("a", 64)},
+		"short":       {"resource-policy/1;sha256=" + strings.Repeat("a", 63)},
+		"invalid-hex": {"resource-policy/1;sha256=" + strings.Repeat("g", 64)},
+		"uppercase":   {"resource-policy/1;sha256=" + strings.Repeat("A", 64)},
 		"malformed":   {"untrusted-policy-do-not-echo"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -71,7 +74,9 @@ func TestPollResourcePolicyRejectsBeforeMutation(t *testing.T) {
 }
 
 func TestPollResourcePolicyAcknowledgesClaim(t *testing.T) {
-	advertisement, err := resourcepolicy.Defaults().Advertisement()
+	limits := resourcepolicy.Defaults()
+	limits.Container.TmpfsBytes = 512 << 20
+	advertisement, err := limits.Advertisement()
 	require.NoError(t, err)
 	for _, legacy := range []bool{false, true} {
 		t.Run(
@@ -87,13 +92,17 @@ func TestPollResourcePolicyAcknowledgesClaim(t *testing.T) {
 				require.Equal(t, http.StatusOK, response.StatusCode)
 				require.Equal(
 					t,
-					[]string{advertisement},
+					headers,
 					response.Header.Values(resourcepolicy.CapabilityHeader),
 				)
 				poll := decodePollResponse(t, response)
 				require.Equal(t, id, int64(poll.DeploymentID))
 				require.NotEmpty(t, poll.ClaimToken)
 				require.NotEmpty(t, poll.Payload)
+				_, err := f.repo.Queries.GetAgentResourcePolicy(
+					t.Context(), "test-agent",
+				)
+				require.ErrorIs(t, err, sql.ErrNoRows)
 			},
 		)
 	}
@@ -108,22 +117,15 @@ func TestPollResourcePolicyCustomIdle(t *testing.T) {
 		nil,
 		settings,
 	)
-	advertisement, err := settings.Limits.AgentPolicy().Advertisement()
-	require.NoError(t, err)
 	defaults, err := resourcepolicy.Defaults().Advertisement()
 	require.NoError(t, err)
-	for _, headers := range [][]string{nil, {defaults}} {
-		response := pollWithResourcePolicy(t, f, headers)
-		response.Body.Close()
-		require.Equal(t, http.StatusConflict, response.StatusCode)
-	}
 	f.client.Timeout = 27 * time.Second
-	response := pollWithResourcePolicy(t, f, []string{advertisement})
+	response := pollWithResourcePolicy(t, f, []string{defaults})
 	defer response.Body.Close()
 	require.Equal(t, http.StatusNoContent, response.StatusCode)
 	require.Equal(
 		t,
-		[]string{advertisement},
+		[]string{defaults},
 		response.Header.Values(resourcepolicy.CapabilityHeader),
 	)
 }

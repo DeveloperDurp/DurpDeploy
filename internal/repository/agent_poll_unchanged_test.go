@@ -32,12 +32,6 @@ func TestAgentPollUnchangedCapabilitiesAvoidWrites(t *testing.T) {
 		Staging: true, Artifact: true,
 	}
 	report.ExecutionModes = []agentproto.ExecutionMode{agentproto.ExecutionHost}
-	report.ResourcePolicy, err = repo.ResourceLimits().
-		AgentPolicy().
-		Advertisement()
-	if err != nil {
-		t.Fatal(err)
-	}
 	if _, err := repo.RecordAgentPollCapabilities(t.Context(), heartbeat, report); err != nil {
 		t.Fatal(err)
 	}

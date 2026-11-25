@@ -148,6 +148,17 @@ func TestAgentArtifactServesVerifiedZIPForLiveClaim(t *testing.T) {
 	if strings.Contains(fmt.Sprint(response.Header), "private-credential") {
 		t.Fatal("credential exposed")
 	}
+	runs, err := f.repo.Queries.ListRemoteStepRuns(
+		t.Context(),
+		db.ListRemoteStepRunsParams{DeploymentID: id, StepIndex: 0},
+	)
+	if err != nil || len(runs) != 1 || runs[0].PrestartInput != 1 {
+		t.Fatalf(
+			"pre-start artifact transfer was not recorded: %v, %v",
+			runs,
+			err,
+		)
+	}
 }
 
 func TestAgentArtifactRejectsInvalidOrExpiredClaim(t *testing.T) {

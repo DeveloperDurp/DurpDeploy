@@ -31,7 +31,7 @@ func TestCustomArtifactPolicyRequiresMatchingAgent(t *testing.T) {
 					case "fetch timeout":
 						settings.Limits.Artifact.FetchTimeoutSeconds++
 					}
-					testCustomResourcePolicyBlocksRemoteQueueAndClaims(
+					testLocalResourcePolicyClaims(
 						t,
 						settings,
 						withPackage,

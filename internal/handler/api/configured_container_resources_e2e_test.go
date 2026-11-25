@@ -128,7 +128,7 @@ while True:
     time.sleep(0.05)
 `
 
-func TestConfiguredContainerResourcesRemoteRejectionAPIE2E(t *testing.T) {
+func TestConfiguredContainerResourcesRemoteAdmissionAPIE2E(t *testing.T) {
 	for _, field := range []string{"tmpfs", "helper CPUs", "helper memory"} {
 		t.Run(field, func(t *testing.T) {
 			limits := config.Defaults().Limits.Container
@@ -140,7 +140,7 @@ func TestConfiguredContainerResourcesRemoteRejectionAPIE2E(t *testing.T) {
 			case "helper memory":
 				limits.HelperMemoryOverheadBytes = 8 << 20
 			}
-			testConfiguredRemoteContainerRejection(
+			testConfiguredRemoteContainerAdmission(
 				t,
 				limits,
 			)

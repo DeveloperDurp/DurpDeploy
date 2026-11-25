@@ -5,7 +5,6 @@ package api_test
 import (
 	"archive/zip"
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -171,33 +170,12 @@ func TestConfiguredArtifactDownloadAPIWebE2E(t *testing.T) {
 func TestConfiguredArtifactDownloadRemoteAPIE2E(t *testing.T) {
 	f := newArtifactDownloadFixture(t, 2048)
 	f.environment = seedEnv(t, f.h.repo)
-	seedIncompatiblePolicyAgent(t, f)
+	seedUnadvertisedAgent(t, f)
 	f.api(t, "POST", f.base()+"/steps", map[string]any{
 		"name": "Remote package policy", "script_body": "echo must-not-run",
 		"execution_target": "agent", "agent_execution_mode": "host",
 	}, 201)
 	release := verificationRelease(t, f, "1")
 	deployment := verificationDeploy(t, f, release)
-	path := fmt.Sprintf("/api/v1/deployments/%d", deployment.ID)
-	require.Eventually(t, func() bool {
-		var current db.Deployment
-		require.NoError(
-			t,
-			json.Unmarshal(f.api(t, "GET", path, nil, 200), &current),
-		)
-		return current.Status == "failed"
-	}, 10*time.Second, 20*time.Millisecond)
-	logs := f.api(t, "GET", path+"/logs", nil, 200)
-	require.Contains(
-		t,
-		string(logs),
-		"resource policy is incompatible",
-	)
-	var runs int
-	require.NoError(
-		t,
-		f.h.repo.DB.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM remote_step_runs WHERE deployment_id = ?", deployment.ID).
-			Scan(&runs),
-	)
-	require.Zero(t, runs)
+	assertUnadvertisedAgentQueued(t, f, deployment.ID)
 }

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"durpdeploy/internal/config"
-	"durpdeploy/internal/db"
+	"github.com/DeveloperDurp/durpdeploy-agent/resourcepolicy"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,8 +32,7 @@ func TestPollCustomPolicyClaims(t *testing.T) {
 					id,
 				)
 				require.NoError(t, err)
-				advertisement, err := settings.Limits.AgentPolicy().
-					Advertisement()
+				advertisement, err := resourcepolicy.Defaults().Advertisement()
 				require.NoError(t, err)
 				if step {
 					deployment, err := f.repo.Queries.GetDeployment(
@@ -49,16 +48,6 @@ INSERT INTO agent_environment_labels(agent_id,environment_id) VALUES('test-agent
 INSERT INTO deployment_step_selectors(deployment_id,step_index,label) VALUES(?,0,'custom');`,
 						id, id, deployment.EnvironmentID, id)
 					require.NoError(t, err)
-					// Admission requires the current policy before work is queued.
-					require.NoError(
-						t,
-						f.repo.Queries.AddAgentResourcePolicy(
-							t.Context(),
-							db.AddAgentResourcePolicyParams{
-								AgentID: "test-agent", Advertisement: advertisement,
-							},
-						),
-					)
 					n, err := f.repo.QueueRemoteStepRuns(t.Context(), id, 0)
 					require.NoError(t, err)
 					require.EqualValues(t, 1, n)

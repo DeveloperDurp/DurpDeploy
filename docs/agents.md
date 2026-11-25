@@ -4,7 +4,7 @@ Server and agent workload containers default to 64 MiB of private `/tmp` capacit
 Each process reads its own `limits.container.tmpfs_bytes` startup setting.
 Use `DURPDEPLOY_LIMITS_CONTAINER_TMPFS_BYTES` for the server environment setting.
 Use `DURPDEPLOY_AGENT_LIMITS_CONTAINER_TMPFS_BYTES` for the agent environment setting.
-Configure matching server and agent resource policies before remote execution.
+Set scratch capacity independently on each executor.
 
 Supervisor container limits do not automatically constrain workload containers.
 Host-mode scripts use the agent operator's host resources.
@@ -590,18 +590,12 @@ the server first, then enable container agents. Prefer the exact agent revision
 pinned by the server. This change pins the merged configuration revision.
 The agent tag is a later release step.
 
-This dependency update retains the default shared resource limits.
-Custom agent policies require matching server acknowledgment before work can execute.
-The server checks the advertised shared policy before heartbeat updates and dispatch.
-Successful polls return one matching `X-DurpDeploy-Resource-Policy` acknowledgement.
-Malformed, repeated, empty, unknown, and mismatched headers return `409` without changing waiting claims.
-Legacy agents can omit this header only when the server uses the default shared policy.
-The server stores accepted advertisements in the durable capability snapshot.
-Claim preparation rejects stale polls that report a different advertisement from the stored snapshot.
-A legacy default poll clears the explicit advertisement. Revocation, re-pairing, and deletion also clear it.
-Custom remote dispatch requires a matching stored policy from every target agent.
-Queue admission rolls back all new fan-out runs when any target policy is incompatible.
-Claim preparation rechecks compatibility under the agent claim lock before issuing work.
+Configure resource limits independently on each agent.
+The agent enforces its startup limits for execution, containers, and transfers.
+Use `DURPDEPLOY_AGENT_LIMITS_CONTAINER_TMPFS_BYTES` to set the agent's workload `/tmp` capacity.
+Keep the identity directory and pairing when you restart an agent after changing its limits.
+If a deployment fails because its claim did not start, check the agent log for the reason.
+See [independent agent limits](configuration.md#independent-agent-limits) for the configuration rules.
 
 Create the service account and private state directory:
 

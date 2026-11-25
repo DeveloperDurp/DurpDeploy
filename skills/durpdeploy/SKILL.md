@@ -263,15 +263,11 @@ The JSON object has no wrapper and uses `Cache-Control: no-store`.
 Project-scoped tokens and roles below administrator receive `403`. Missing or invalid bearer tokens receive `401`.
 Restart the server to apply environment or YAML changes.
 The endpoint reports server policy, without attesting to agent compatibility or external runtime enforcement.
-Agent mTLS polls check `X-DurpDeploy-Resource-Policy` before heartbeat updates or dispatch.
-Successful polls acknowledge the complete shared policy with one matching header.
-Invalid or mismatched advertisements return `409` without changing waiting claims.
-Legacy polls without this header require the default shared policy.
-Accepted advertisements persist with agent capabilities. Legacy default polls clear the explicit advertisement.
-Claim preparation checks that the polling request matches the stored policy snapshot.
-Revocation, re-pairing, and agent deletion clear the stored advertisement.
-Custom remote execution requires matching stored policies from every target agent.
-Queue admission rejects incompatible targets without partial fan-out runs. Claim preparation rechecks policy under the agent claim lock.
+The server and each agent enforce their own resource settings.
+Successful mTLS polls echo a valid version 1 `X-DurpDeploy-Resource-Policy` header when supplied.
+Legacy polls can omit the header. Invalid or repeated headers return `409`.
+An unstarted claim can be issued again once. If both claims expire, the deployment fails.
+Check the agent log when a remote step fails before it starts.
 The artifact timeout fields control server-side repository tests and package retrieval after a restart.
 A repository test that exceeds an applicable timeout returns `502` without exposing credentials.
 
@@ -815,7 +811,7 @@ Use `limits.execution.max_retries` and `limits.execution.max_timeout_seconds` in
 Keep the default timeout within the maximum timeout.
 Read the captured limits through `GET /api/v1/admin/resource-config` with administrator authorization.
 Explicit positive step timeouts retain their saved values.
-Custom execution policies require matching stored agent policies before queueing and claims.
+Each agent checks received step settings against its local execution limits.
 These limits apply to project steps, runbook steps, and immutable execution snapshots.
 Invalid step API input returns 400.
 Invalid runbook or execution snapshot input returns 422.
@@ -1554,7 +1550,7 @@ Excess input fails the step with `staging merge budget exceeded` before downstre
 Cleanup still runs. The final merged tree must satisfy the captured staging payload, entry, and archive budgets.
 Archive and output-count checks precede input decryption. Entry-visit checks precede output comparison and content copying.
 Restart the server after changing budgets. Create a new deployment to repeat a failed merge.
-These server-only merge settings permit remote work with unchanged shared policies.
+These merge settings apply to the server.
 
 Staging uploads, staging downloads, and agent package downloads share one admission budget per server process.
 By default, the server admits four concurrent transfers, with one active request per authenticated agent.
@@ -1594,8 +1590,7 @@ Server container process and thread budgets use the startup settings `limits.con
 Their defaults are 128 for workloads and 32 for staging helpers.
 The environment variables are `DURPDEPLOY_LIMITS_CONTAINER_PIDS` and `DURPDEPLOY_LIMITS_CONTAINER_HELPER_PIDS`.
 Both values require positive integers and a server restart.
-Custom values require matching stored policies from all target agents before queueing and claims.
-Configure matching shared settings on the server and target agents before restarting them.
+Configure container limits independently on the server and each agent.
 Host-mode scripts do not receive a container PID budget.
 
 Server `/tmp` capacity uses `limits.container.tmpfs_bytes`.
@@ -1610,9 +1605,9 @@ Lower budgets can reject saved contexts without changing their encrypted data.
 Staging capacity includes one page per entry. Its inode budget is twice the entry count plus two.
 The runtime rounds filesystem capacity to whole pages. Helper memory adds its configured overhead.
 The logical snapshot budget is smaller than this filesystem allowance.
-Custom staging and archive budgets require matching policies on the server and target agents.
+Each process enforces its local staging and archive budgets.
 The environment variables use the `DURPDEPLOY_LIMITS_CONTAINER_` prefix and the uppercase field name.
-All settings require a restart. Custom container values require matching policies on the server and target agents.
+Restart the executor after changing its container settings.
 
 The server purges transfer snapshots when the deployment succeeds, fails, or is canceled.
 Agents remove their private staging files before reporting completion or cancellation.
@@ -1796,7 +1791,7 @@ Lower budgets can reject existing snapshots and approval contexts without rewrit
 Approval restore checks the saved archive size before decrypting chunks.
 Approval decisions return `409` when their saved context exceeds the current archive budget.
 Raise the startup budget or cancel that deployment before creating a new plan.
-Custom staging budgets require a matching stored agent policy before new remote execution.
+Each process enforces its own staging budget.
 
 The container image uses native `TMPDIR=/data/tmp` on its writable data volume,
 not Compose's 64 MiB `/tmp` mount. Reserve about 1.3 GiB of workspace per

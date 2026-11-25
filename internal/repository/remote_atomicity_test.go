@@ -53,7 +53,9 @@ func runRemoteAtomicity(t *testing.T, repo *repository.Repository) {
 	expired.Now = ni(110)
 	n, err := repo.Queries.StartRemoteDeployment(ctx, expired)
 	assertZero(t, n, err)
-	n, err = repo.Queries.ExpireRemoteClaims(ctx, 110)
+	n, err = repo.Queries.ExpireRemoteClaim(ctx, db.ExpireRemoteClaimParams{
+		Now: 110, DeploymentID: old.DeploymentID, AgentID: old.AgentID,
+	})
 	assertOne(t, n, err)
 	next.Now, next.ClaimExpiresAt = 110, 120
 	n, err = repo.ClaimRemoteDeployment(ctx, next)

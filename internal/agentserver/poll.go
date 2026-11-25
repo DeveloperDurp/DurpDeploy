@@ -1,7 +1,10 @@
 package agentserver
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
+	"strings"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/dispatch"
@@ -19,18 +22,11 @@ func (s *Server) Poll(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	policy := s.repository.ResourceLimits().AgentPolicy()
-	values := r.Header.Values(resourcepolicy.CapabilityHeader)
-	advertisement := ""
-	if len(values) > 1 || (len(values) == 1 && values[0] == "") {
+	acknowledgement, ok := legacyPolicyAcknowledgement(
+		r.Header.Values(resourcepolicy.CapabilityHeader),
+	)
+	if !ok {
 		w.WriteHeader(http.StatusConflict)
-		return
-	}
-	if len(values) == 1 {
-		advertisement = values[0]
-	}
-	if err := policy.CheckCompatibility(advertisement); err != nil {
-		writePollErrorStatus(w, err)
 		return
 	}
 	agentID, _ := AgentIDFromContext(r.Context())
@@ -53,10 +49,9 @@ func (s *Server) Poll(w http.ResponseWriter, r *http.Request) {
 			CertificateFingerprint: nullableString(fingerprint),
 		},
 		repository.AgentPollCapabilities{
-			PollRequest:    request,
-			Staging:        stagingSupported,
-			Artifact:       artifactSupported,
-			ResourcePolicy: advertisement,
+			PollRequest: request,
+			Staging:     stagingSupported,
+			Artifact:    artifactSupported,
 		},
 	)
 	if !writeTransitionStatus(w, changed, err) {
@@ -66,10 +61,9 @@ func (s *Server) Poll(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 		agentID,
 		dispatch.PollRequest{
-			PollRequest:    request,
-			Staging:        stagingSupported,
-			Artifact:       artifactSupported,
-			ResourcePolicy: advertisement,
+			PollRequest: request,
+			Staging:     stagingSupported,
+			Artifact:    artifactSupported,
 		},
 	)
 	if err != nil {
@@ -78,15 +72,33 @@ func (s *Server) Poll(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	acknowledgement, err := policy.Advertisement()
-	if err != nil {
-		writePollErrorStatus(w, err)
-		return
+	if acknowledgement != "" {
+		w.Header().Set(resourcepolicy.CapabilityHeader, acknowledgement)
 	}
-	w.Header().Set(resourcepolicy.CapabilityHeader, acknowledgement)
 	if !claimed {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	writeJSON(w, response)
+}
+
+// Version 1 clients expect their own digest on a successful poll.
+func legacyPolicyAcknowledgement(values []string) (string, bool) {
+	if len(values) == 0 {
+		return "", true
+	}
+	if len(values) != 1 {
+		return "", false
+	}
+	digest, ok := strings.CutPrefix(
+		values[0], resourcepolicy.Capability+";sha256=",
+	)
+	if !ok || len(digest) != sha256.Size*2 ||
+		digest != strings.ToLower(digest) {
+		return "", false
+	}
+	if _, err := hex.DecodeString(digest); err != nil {
+		return "", false
+	}
+	return values[0], true
 }

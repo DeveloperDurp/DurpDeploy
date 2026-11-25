@@ -31,9 +31,8 @@ func (r *Repository) RecordAgentPollWithStaging(
 
 type AgentPollCapabilities struct {
 	agentproto.PollRequest
-	Staging        bool
-	Artifact       bool
-	ResourcePolicy string
+	Staging  bool
+	Artifact bool
 }
 
 func (r *Repository) RecordAgentPollCapabilities(
@@ -41,9 +40,6 @@ func (r *Repository) RecordAgentPollCapabilities(
 	heartbeat db.HeartbeatAgentParams,
 	request AgentPollCapabilities,
 ) (int64, error) {
-	if err := r.ResourceLimits().AgentPolicy().CheckCompatibility(request.ResourcePolicy); err != nil {
-		return 0, err
-	}
 	if request.Protocol == agentproto.AgentV1 {
 		request.SupportedInterpreters = []agentproto.Interpreter{
 			agentproto.InterpreterBash,

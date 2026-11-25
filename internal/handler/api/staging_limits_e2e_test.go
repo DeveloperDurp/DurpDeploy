@@ -186,25 +186,11 @@ func TestConfiguredStagingRemoteAPIE2E(t *testing.T) {
 	f := newArtifactPolicyFixture(t, s)
 	f.api(t, "DELETE", f.base()+"/package-repository", nil, 204)
 	f.environment = seedEnv(t, f.h.repo)
-	seedIncompatiblePolicyAgent(t, f)
+	seedUnadvertisedAgent(t, f)
 	f.api(t, "POST", f.base()+"/steps", map[string]any{
-		"name": "Unsupported staging policy", "execution_target": "agent",
+		"name": "Custom staging limit", "execution_target": "agent",
 		"agent_execution_mode": "host", "script_body": "echo must-not-run",
 	}, 201)
 	d := verificationDeploy(t, f, verificationRelease(t, f, "remote-staging"))
-	waitVerificationStatus(t, f, d.ID, "failed")
-	logs := string(
-		f.api(
-			t,
-			"GET",
-			fmt.Sprintf("/api/v1/deployments/%d/logs", d.ID),
-			nil,
-			200,
-		),
-	)
-	require.Contains(
-		t,
-		logs,
-		"resource policy is incompatible",
-	)
+	assertUnadvertisedAgentQueued(t, f, d.ID)
 }

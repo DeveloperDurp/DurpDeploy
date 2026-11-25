@@ -27,7 +27,8 @@ func (r *Repository) StartRemoteStep(
 				return err
 			}
 			handled = true
-			if run.State == "started" || run.State == "cancel_requested" {
+			if run.State == "started" ||
+				(run.State == "cancel_requested" && run.StartedAt.Valid) {
 				return nil
 			}
 			now, err := q.CurrentUnixTime(ctx)

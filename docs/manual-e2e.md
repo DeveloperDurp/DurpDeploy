@@ -424,52 +424,35 @@ Retain a separate running-instance example for manual review.
 Use a disposable paired agent with its scoped mTLS identity and server certificate trust.
 Keep the existing demo and runtime socket unchanged.
 
-1. Start both peers with the default shared resource settings.
+1. Set different scratch limits on the server and the disposable agent.
 2. Queue a disposable remote deployment through the public API.
-3. Send a poll with an unknown or mismatched `X-DurpDeploy-Resource-Policy` value.
+3. Send a poll with an unknown `X-DurpDeploy-Resource-Policy` version.
 4. Confirm `409`, no acknowledgement header, and no echoed value.
 5. Confirm that the waiting claim, agent heartbeat, and capabilities remain unchanged.
 6. Repeat with repeated, empty, and comma-joined policy header values.
-7. Send a poll with the matching `resourcepolicy.Limits.Advertisement()` value.
+7. Send a poll with the agent's `resourcepolicy.Limits.Advertisement()` value.
 8. Confirm `200`, one matching acknowledgement header, and the expected encrypted claim.
 9. Poll again while the first claim remains active.
 10. Confirm `204` with one matching acknowledgement header.
-11. Repeat the default-policy claim with a legacy poll that omits the header.
-12. Start a separate server with a custom shared setting and no queued work.
-13. Confirm that absent and default-policy headers return `409`.
-14. Send an idle poll with the matching custom policy advertisement.
-15. Confirm `204` with one matching acknowledgement header.
+11. Repeat with a legacy poll that omits the header.
+12. Confirm that the legacy response omits the acknowledgement header.
 
-Test stale polling requests with the default shared policy:
+Set the server's workload scratch to 364 MiB.
+Set the two agent workload sizes to 4 MiB and 512 MiB.
+Use the public API to create a deployment with a server step and a remote fan-out step.
+Use `df -Pk /tmp` in both steps.
+Confirm that the logs show 372736, 4096, and 524288 KiB.
+Confirm that the 4 MiB agent fails a step that fills its scratch above its local limit.
+Restart one agent with a different scratch size and the same identity directory.
+Deploy again and check the new capacity in the logs.
 
-1. Start an idle legacy poll without the policy header.
-2. Send a second poll with the matching policy advertisement for the same agent.
-3. Cancel the second idle request after the server records its heartbeat.
-4. Queue a disposable remote deployment through the public API.
-5. Confirm that the first request returns `204` without claiming the deployment.
-6. Send a new poll with the matching advertisement.
-7. Confirm that the new request receives the queued claim.
-8. Repeat with a first advertised poll and a second legacy poll.
-9. Repeat both directions with a remote step in a mixed deployment.
+Set one agent's retry ceiling to zero.
+Deploy a step with one retry to that agent.
+Confirm that its log reports the local validation error.
+Confirm that DurpDeploy reports a failed deployment after the repeated claim expires.
+Confirm that its logs identify the agent that failed to start.
 
-Restart the server and confirm that an accepted advertisement remains in the capability snapshot.
-Revoke, re-pair, or delete the disposable agent and confirm that its stored advertisement is removed.
-
-Test matching custom remote policies:
-
-1. Set `DURPDEPLOY_LIMITS_CONTAINER_PIDS=96` before starting the disposable server.
-2. Set `DURPDEPLOY_AGENT_LIMITS_CONTAINER_PIDS=96` before starting each disposable agent.
-3. Keep all other shared settings equal on both peers.
-4. Wait for each agent to complete a matching poll.
-5. Create a disposable project through the public API.
-6. Add an agent container step that checks `/sys/fs/cgroup/pids.max` for `96`.
-7. Create a release and deployment through the public API.
-8. Confirm that the deployment succeeds and its staging data is removed.
-9. Repeat with host-to-container package handoff, fan-out, script failure, and cancellation.
-10. Configure one target with different limits and confirm that its polls return `409` without claims.
-11. Confirm that a fan-out queue rejects an incompatible stored target policy without leaving partial runs.
-
-Run `TestConfiguredSharedPolicyRemoteAPIE2E` with the documented agent binary and Podman setup for the automated API scenarios.
+Run `TestIndependentAgentLimitsAPIE2E` and `TestLegacyAgentWithoutResourcePolicyAPIE2E` with the documented agent binary and Podman setup.
 Retain the disposable instances, databases, identities, and HTTP transcripts for manual review.
 
 ## Captured resource policy
@@ -1931,7 +1914,7 @@ Confirm that complete output succeeds and remains available in exports.
 Keep all examples and history. Keep schedules disabled.
 
 Automated checks include `TestConfiguredLogsAPIWebE2E`, `TestConfiguredPendingLogsAPIE2E`, and `TestConfiguredLogsBrowserE2E`.
-`TestConfiguredLogsRemoteAPIE2E` checks remote execution with custom server log budgets and unchanged shared policies.
+`TestConfiguredLogsRemoteAPIE2E` checks remote execution with custom server log budgets.
 
 ### Runbook deletion
 
@@ -2998,17 +2981,14 @@ Restart with workload 160 and helper 48, then repeat the checks.
 Expect the runtime limits and bounded creation to use the new values.
 Expect startup to reject zero or negative PID settings.
 
-Create an agent step with either custom PID setting.
-If the target agent lacks a matching policy, expect rejection before remote queueing or payload encryption.
-Configure matching shared limits on the target agent and restart it.
-Wait for a successful poll, then deploy again.
-Expect successful remote execution and confirmed cleanup.
-For legacy agents without policy advertisements, keep the default workload 128 and helper 32.
+Configure different PID limits on the server and the target agent.
+Create an agent step through the deployment API.
+Expect successful remote execution with the agent's local PID limits.
 
 Run the focused API and runtime checks:
 
 ```bash
-bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestConfigured(ContainerPIDs|PIDRemoteRejection)APIE2E$' ./internal/handler/api
+bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestConfigured(ContainerPIDs|PIDRemoteAdmission)APIE2E$' ./internal/handler/api
 ```
 
 ### Configured server container resources
@@ -3027,15 +3007,13 @@ Confirm the `cancelled` status and removal of its containers and staging volumes
 
 Repeat with 134217728 temporary bytes, 1.5 helper CPUs, and 268435456 overhead bytes.
 Repeat with an approval-generation step and expect the artifact download budget in addition to temporary bytes.
-Attempt remote execution with each custom container setting and an incompatible target agent.
-Expect a policy incompatibility diagnostic before queueing or payload encryption.
-Configure matching shared policies on both peers and restart them.
-Repeat remote execution and confirm successful completion and cleanup.
+Deploy to a target agent with different container settings.
+Confirm successful completion and cleanup under the agent's local limits.
 
 Run the repeatable API acceptance tests:
 
 ```bash
-bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestConfiguredContainer(Resources|ResourcesRemoteRejection)APIE2E$' ./internal/handler/api
+bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestConfiguredContainer(Resources|ResourcesRemoteAdmission)APIE2E$' ./internal/handler/api
 ```
 
 ## Configured HTTP body limits
@@ -3683,7 +3661,7 @@ Keep both servers and their private HTTPS upstream running for manual review.
 
 The automated API check also accepts a prefixed ZIP above the old 300 MiB ceiling.
 Unit checks cover exact boundaries, streaming bodies, private-file cleanup, and extraction above that ceiling.
-Custom download budgets require matching stored agent policies before remote queueing and claims.
+The server and agent each enforce their local download budgets.
 Other artifact, staging, and execution budgets remain separate.
 
 ## Configured artifact safety budgets
@@ -3714,7 +3692,7 @@ The approval test cancels the accepted deployment and confirms its terminal stat
 The resume test lowers the node budget before approval and expects failure without a downstream attempt.
 The same test verifies successful resume with a matching budget and preserves stored hashes and encrypted chunks.
 Raised-limit unit checks exceed the previous byte, entry, node, and metadata defaults.
-Remote package queues and payload claims require matching stored agent policies for custom safety budgets.
+The server and agent each enforce their local package safety budgets.
 
 ## Captured default step timeout
 
@@ -3727,14 +3705,12 @@ The server preserves explicit positive timeouts and stored release snapshots.
 | 6 seconds | `http://localhost:56657/deployments/1` | The same four-second script succeeds. |
 | 600 seconds | `http://localhost:40747/deployments/1` | A zero-timeout step uses the raised default and succeeds. |
 | Explicit 12 seconds | `http://localhost:47961/deployments/2` | The four-second script succeeds despite the three-second default. |
-| Remote compatibility | `http://localhost:47961/deployments/3` | The custom execution policy fails before remote dispatch. |
 
 Keep the credentials private in `.opencode/optimization-roadmap/resource-config/execution/default-<seconds>/credentials.json`.
 Open the retained project from each deployment.
 Create another deployment from the retained release and environment.
 Expect the same terminal status and confirmed cleanup.
 Inspect the failed local deployment log for `timed out after 3s`.
-Inspect the remote example for the resource-policy compatibility diagnostic.
 
 Open a step form and inspect the timeout field.
 Confirm that its label says `0 = configured default`.
@@ -3790,7 +3766,7 @@ Use releases `refresh-api` and `refresh-web` in the same project for the refresh
 The server now uses a three-second maximum. Deployment #1 retains its original 600-second timeout and two retries.
 Keep that instance's credentials private in `.opencode/optimization-roadmap/resource-config/execution-validation/r2/precision/credentials.json`.
 The automated checks also cover schedules, retries, project-template application, frozen snapshots, overflow, and remote compatibility.
-Custom execution policies require matching stored agent policies before remote queueing and claims.
+The agent checks received steps against its local limits.
 
 ## Captured staging payload and entry budgets
 
@@ -3826,8 +3802,8 @@ Expect approval at 24 payload bytes and three entries.
 Cancel the review after checking it.
 
 The focused API tests cover both deployment surfaces, exact boundaries, current-policy restore, preserved encrypted data, and cleanup.
-Repository tests reject incompatible agent policies before remote queueing, direct claims, or payload encryption.
-Matching agent policies permit remote staging with the configured budgets.
+Repository tests verify that remote queueing and claims accept independently configured agents.
+Each process applies its local staging budgets.
 
 ## Captured staging archive budgets
 

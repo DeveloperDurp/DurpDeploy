@@ -33,6 +33,7 @@ type stagingE2E struct {
 	token         string
 	directories   []string
 	notifications <-chan events.Event
+	agentLogs     map[string]string
 }
 
 func newStagingE2E(t *testing.T) *stagingE2E {
@@ -56,6 +57,7 @@ type stagingFixtureConfig struct {
 	wrap             func(http.Handler) http.Handler
 	serverContainers bool
 	mergeLimits      *startupconfig.MergeLimits
+	agentEnv         map[string][]string
 }
 
 func newStagingE2EConfigured(
@@ -158,15 +160,20 @@ func newStagingE2EConfigured(
 		),
 	)
 	t.Cleanup(app.Close)
-	s := &stagingE2E{f: f, app: app, token: token, notifications: notifications}
+	s := &stagingE2E{
+		f: f, app: app, token: token, notifications: notifications,
+		agentLogs: make(map[string]string),
+	}
 	if config.wrap != nil {
 		f.server.Config.Handler = config.wrap(f.server.Config.Handler)
 	}
-	s.startStagingAgents(t, binary)
+	s.startStagingAgents(t, binary, config.agentEnv)
 	return s
 }
 
-func (s *stagingE2E) startAgent(t *testing.T, binary, id, directory string) {
+func (s *stagingE2E) startAgent(
+	t *testing.T, binary, id, directory string, env ...string,
+) {
 	t.Helper()
 	state, err := agentstate.New(
 		s.f.server.URL,
@@ -190,11 +197,13 @@ func (s *stagingE2E) startAgent(t *testing.T, binary, id, directory string) {
 		"DURPDEPLOY_AGENT_CONTAINER_RUNTIME=podman",
 		"DURPDEPLOY_AGENT_CONTAINER_SOCKET="+os.Getenv("AGENT_TEST_SOCKET"),
 	)
+	command.Env = append(command.Env, env...)
 	log, err := os.Create(filepath.Join(t.TempDir(), id+".log"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	command.Stdout, command.Stderr = log, log
+	s.agentLogs[id] = log.Name()
 	if err := command.Start(); err != nil {
 		t.Fatal(err)
 	}

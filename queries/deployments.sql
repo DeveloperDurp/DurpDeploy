@@ -157,12 +157,14 @@ ORDER BY d.created_at ASC;
 
 -- name: CancelOrphanedRemoteStepRuns :execrows
 UPDATE remote_step_runs SET
-    state = CASE WHEN state = 'waiting' THEN 'cancelled'
+    state = CASE WHEN state = 'waiting' OR (state = 'claimed' AND prestart_input = 0)
+        THEN 'cancelled'
         ELSE 'cancel_requested' END,
     recovery_cancelled = 1,
     cancel_requested_at = CASE WHEN state = 'cancel_requested'
         THEN cancel_requested_at ELSE sqlc.arg(now) END,
-    finished_at = CASE WHEN state = 'waiting' THEN sqlc.arg(now)
+    finished_at = CASE WHEN state = 'waiting' OR (state = 'claimed' AND prestart_input = 0)
+        THEN sqlc.arg(now)
         ELSE finished_at END,
     updated_at = sqlc.arg(now)
 WHERE state IN ('waiting', 'claimed', 'started', 'cancel_requested')
@@ -191,6 +193,18 @@ UPDATE deployments SET status = CASE WHEN EXISTS (
 WHERE (status = 'running' OR (status = 'failed' AND EXISTS (
     SELECT 1 FROM remote_step_runs r WHERE r.deployment_id = deployments.id
       AND r.state = 'cleanup_unconfirmed'))) AND assigned_agent_id IS NULL
+  -- Let the runner clean up its staging before publishing this failure.
+  AND (status <> 'running' OR EXISTS (
+      SELECT 1 FROM remote_step_runs recovery
+      WHERE recovery.deployment_id = deployments.id
+        AND recovery.recovery_cancelled = 1
+  ) OR NOT EXISTS (
+      SELECT 1 FROM remote_step_runs r
+      WHERE r.deployment_id = deployments.id
+        AND ((r.state = 'failed' AND r.expired_claims > 1)
+          OR (r.state = 'cleanup_unconfirmed' AND r.started_at IS NULL
+            AND r.prestart_input = 1))
+  ))
   AND EXISTS (
       SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id

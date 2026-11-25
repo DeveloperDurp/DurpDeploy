@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"durpdeploy/internal/db"
@@ -129,6 +130,11 @@ func (r *Repository) maintainRemoteClaim(
 				DeploymentID: candidate.DeploymentID,
 				AgentID:      candidate.AgentID,
 			}
+			if candidate.State == "claimed" {
+				if _, err := q.LockDeploymentLogStream(ctx, candidate.DeploymentID); err != nil {
+					return err
+				}
+			}
 			claim, deployment, err := lockRemoteLifecycle(
 				ctx,
 				q,
@@ -145,15 +151,7 @@ func (r *Repository) maintainRemoteClaim(
 			case "claimed":
 				if claim.ClaimExpiresAt.Valid &&
 					claim.ClaimExpiresAt.Int64 <= now {
-					changed, err := q.ExpireRemoteClaim(ctx,
-						db.ExpireRemoteClaimParams{
-							Now:          now,
-							DeploymentID: claim.DeploymentID,
-							AgentID:      claim.AgentID,
-						})
-					if err != nil || changed != 1 {
-						return transitionError(err)
-					}
+					return expireUnstartedRemoteClaim(ctx, q, now, claim)
 				}
 			case "started":
 				return loseStaleRemoteClaim(
@@ -167,6 +165,44 @@ func (r *Repository) maintainRemoteClaim(
 			return nil
 		},
 	)
+}
+
+func expireUnstartedRemoteClaim(
+	ctx context.Context,
+	q *db.Queries,
+	now int64,
+	claim db.RemoteDeploymentClaim,
+) error {
+	changed, err := q.ExpireRemoteClaim(ctx, db.ExpireRemoteClaimParams{
+		Now:          now,
+		DeploymentID: claim.DeploymentID,
+		AgentID:      claim.AgentID,
+	})
+	if err != nil || changed != 1 {
+		return transitionError(err)
+	}
+	if claim.ExpiredClaims == 0 {
+		return nil
+	}
+	changed, err = q.FailUnstartedRemoteDeploymentStatus(
+		ctx,
+		db.FailUnstartedRemoteDeploymentStatusParams{
+			Now:          sql.NullInt64{Int64: now, Valid: true},
+			DeploymentID: claim.DeploymentID,
+			AgentID:      sql.NullString{String: claim.AgentID, Valid: true},
+		},
+	)
+	if err != nil || changed != 1 {
+		return transitionError(err)
+	}
+	_, err = q.CreateDeploymentLog(ctx, db.CreateDeploymentLogParams{
+		DeploymentID: claim.DeploymentID,
+		Line: fmt.Sprintf(
+			"Agent %q did not start the deployment after two claims.",
+			claim.AgentID,
+		),
+	})
+	return err
 }
 
 func loseStaleRemoteClaim(

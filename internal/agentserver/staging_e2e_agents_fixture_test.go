@@ -10,9 +10,11 @@ import (
 	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
 )
 
-func (s *stagingE2E) startStagingAgents(t *testing.T, binary string) {
+func (s *stagingE2E) startStagingAgents(
+	t *testing.T, binary string, env map[string][]string,
+) {
 	t.Helper()
-	s.startAgent(t, binary, "test-agent", s.f.identityDir)
+	s.startAgent(t, binary, "test-agent", s.f.identityDir, env["test-agent"]...)
 	directory := t.TempDir()
 	identity, err := agenttls.LoadOrCreate(directory, "https://second-agent")
 	if err != nil {
@@ -43,7 +45,7 @@ func (s *stagingE2E) startStagingAgents(t *testing.T, binary string) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	s.startAgent(t, binary, "second-agent", directory)
+	s.startAgent(t, binary, "second-agent", directory, env["second-agent"]...)
 	for _, id := range []string{"test-agent", "second-agent"} {
 		deadline := time.Now().Add(time.Minute)
 		for {

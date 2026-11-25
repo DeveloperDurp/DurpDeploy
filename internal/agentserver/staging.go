@@ -118,7 +118,7 @@ func (s *Server) DownloadStaging(w http.ResponseWriter, r *http.Request) {
 		writeStagingError(w, err)
 		return
 	}
-	if _, err := s.repository.LiveStagingRun(r.Context(), claim); err != nil {
+	if err := s.repository.AuthorizeRemoteStepInput(r.Context(), claim); err != nil {
 		writeStagingError(w, err)
 		return
 	}

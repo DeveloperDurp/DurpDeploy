@@ -556,6 +556,7 @@ type RemoteDeploymentClaim struct {
 	UpdatedAt           int64          `json:"updated_at"`
 	LogBufferCiphertext sql.NullString `json:"log_buffer_ciphertext"`
 	CleanupConfirmedAt  sql.NullInt64  `json:"cleanup_confirmed_at"`
+	ExpiredClaims       int64          `json:"expired_claims"`
 }
 
 type RemoteStepLogSequence struct {
@@ -583,6 +584,8 @@ type RemoteStepRun struct {
 	LogBufferCiphertext sql.NullString `json:"log_buffer_ciphertext"`
 	RecoveryCancelled   int64          `json:"recovery_cancelled"`
 	CleanupConfirmedAt  sql.NullInt64  `json:"cleanup_confirmed_at"`
+	ExpiredClaims       int64          `json:"expired_claims"`
+	PrestartInput       int64          `json:"prestart_input"`
 }
 
 type Runbook struct {

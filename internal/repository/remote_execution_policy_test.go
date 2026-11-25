@@ -19,7 +19,7 @@ func TestCustomExecutionPolicyBlocksRemoteQueueAndClaims(t *testing.T) {
 		t.Run(fmt.Sprint(limits), func(t *testing.T) {
 			settings := config.Defaults()
 			settings.Limits.Execution = limits
-			testCustomResourcePolicyBlocksRemoteQueueAndClaims(
+			testLocalResourcePolicyClaims(
 				t,
 				settings,
 				false,

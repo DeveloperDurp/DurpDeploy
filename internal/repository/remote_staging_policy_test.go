@@ -24,7 +24,7 @@ func TestCustomStagingPolicyBlocksRemoteQueueAndClaims(t *testing.T) {
 			case "archive higher":
 				settings.Limits.Staging.ArchiveBytes++
 			}
-			testCustomResourcePolicyBlocksRemoteQueueAndClaims(
+			testLocalResourcePolicyClaims(
 				t,
 				settings,
 				false,

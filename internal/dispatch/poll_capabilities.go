@@ -28,7 +28,6 @@ func pollCapabilitiesMatch(
 	}
 	return (!snapshot.Staging || request.Staging) &&
 		(snapshot.Artifact == nil || request.Artifact) &&
-		request.ResourcePolicy == snapshot.ResourcePolicy &&
 		protocol == string(request.Protocol) &&
 		sameCapabilities(host, snapshot.HostInterpreters) &&
 		sameCapabilities(modes, snapshot.ExecutionModes) &&

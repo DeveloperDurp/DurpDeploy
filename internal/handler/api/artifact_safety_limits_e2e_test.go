@@ -122,7 +122,7 @@ func TestConfiguredArtifactSafetyAPIWebE2E(t *testing.T) {
 func TestConfiguredArtifactSafetyRemoteAPIE2E(t *testing.T) {
 	f := newArtifactSafetyFixture(t, "files", true)
 	f.environment = seedEnv(t, f.h.repo)
-	seedIncompatiblePolicyAgent(t, f)
+	seedUnadvertisedAgent(t, f)
 	f.api(
 		t,
 		"POST",
@@ -137,17 +137,7 @@ func TestConfiguredArtifactSafetyRemoteAPIE2E(t *testing.T) {
 	)
 	release := verificationRelease(t, f, "1")
 	deployment := verificationDeploy(t, f, release)
-	path := fmt.Sprintf("/api/v1/deployments/%d", deployment.ID)
-	require.Eventually(t, func() bool {
-		var d db.Deployment
-		require.NoError(t, json.Unmarshal(f.api(t, "GET", path, nil, 200), &d))
-		return d.Status == "failed"
-	}, 10*time.Second, 20*time.Millisecond)
-	require.Contains(
-		t,
-		string(f.api(t, "GET", path+"/logs", nil, 200)),
-		"resource policy is incompatible",
-	)
+	assertUnadvertisedAgentQueued(t, f, deployment.ID)
 }
 
 func TestConfiguredArtifactSafetyContainerAPIE2E(t *testing.T) {

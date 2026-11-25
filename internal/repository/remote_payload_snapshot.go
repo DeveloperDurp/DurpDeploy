@@ -24,7 +24,6 @@ type RemotePayloadSnapshot struct {
 	ExecutionModes        []string
 	ContainerRuntimes     []string
 	ContainerInterpreters []string
-	ResourcePolicy        string
 }
 
 func (r *Repository) remotePayloadSnapshot(
@@ -36,10 +35,6 @@ func (r *Repository) remotePayloadSnapshot(
 	agent, err := q.GetAgent(ctx, agentID)
 	if err != nil {
 		return RemotePayloadSnapshot{}, fmt.Errorf("get claim agent: %w", err)
-	}
-	policy, err := r.remoteResourcePolicy(ctx, q, agentID)
-	if err != nil {
-		return RemotePayloadSnapshot{}, err
 	}
 	host, err := q.ListAgentInterpreters(ctx, agentID)
 	if err != nil {
@@ -126,6 +121,5 @@ func (r *Repository) remotePayloadSnapshot(
 		Variables:        variables,
 		HostInterpreters: host, ExecutionModes: modes,
 		ContainerRuntimes: runtimes, ContainerInterpreters: container,
-		ResourcePolicy: policy,
 	}, nil
 }

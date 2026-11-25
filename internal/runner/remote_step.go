@@ -230,16 +230,16 @@ func (r *DeploymentRunner) observeRemoteStepRuns(
 	elapsed := now.Sub(progress.lastChecked)
 	progress.lastChecked = now
 	for _, run := range runs {
-		if !progress.started && run.StartedAt.Valid {
-			if err := request.logWriter.state("running"); err != nil {
-				return remoteStepObservation{}, err
-			}
-			progress.started = true
+		if err := progress.recordStart(run.StartedAt.Valid, request.logWriter); err != nil {
+			return remoteStepObservation{}, err
 		}
 		switch run.State {
 		case "succeeded":
 		case "cancelled":
 			observation.allSucceeded = false
+			if !operatorCancelled && progress.failureAgent == "" {
+				progress.failureAgent = run.AgentID
+			}
 			observation.hasFailure = observation.hasFailure ||
 				!operatorCancelled
 		case "failed", "lost", "cancel_unconfirmed", "cleanup_unconfirmed":
@@ -265,6 +265,19 @@ func (r *DeploymentRunner) observeRemoteStepRuns(
 		}
 	}
 	return observation, nil
+}
+
+func (progress *remoteStepProgress) recordStart(
+	started bool, logWriter *broadcastWriter,
+) error {
+	if progress.started || !started {
+		return nil
+	}
+	if err := logWriter.state("running"); err != nil {
+		return err
+	}
+	progress.started = true
+	return nil
 }
 
 func (r *DeploymentRunner) consumeRemoteAgentBudget(

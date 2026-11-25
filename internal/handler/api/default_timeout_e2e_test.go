@@ -108,33 +108,12 @@ func TestConfiguredDefaultTimeoutAPIE2E(t *testing.T) {
 
 func TestConfiguredDefaultTimeoutRemoteAPIE2E(t *testing.T) {
 	f := newDefaultTimeoutFixture(t, 600)
-	seedIncompatiblePolicyAgent(t, f)
+	seedUnadvertisedAgent(t, f)
 	f.api(t, "POST", f.base()+"/steps", map[string]any{
-		"name": "Unsupported default deadline", "execution_target": "agent",
-		"agent_execution_mode": "host", "script_body": "echo must-not-run",
+		"name": "Default deadline", "execution_target": "agent",
+		"agent_execution_mode": "host", "script_body": "echo remote",
 	}, 201)
 	release := verificationRelease(t, f, "remote-default-timeout")
 	deployment := verificationDeploy(t, f, release)
-	waitVerificationStatus(t, f, deployment.ID, "failed")
-	logs := string(
-		f.api(
-			t,
-			"GET",
-			fmt.Sprintf("/api/v1/deployments/%d/logs", deployment.ID),
-			nil,
-			200,
-		),
-	)
-	require.Contains(
-		t,
-		logs,
-		"resource policy is incompatible",
-	)
-	var issued int
-	require.NoError(
-		t,
-		f.h.repo.DB.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM remote_step_runs WHERE deployment_id=?", deployment.ID).
-			Scan(&issued),
-	)
-	require.Zero(t, issued)
+	assertUnadvertisedAgentQueued(t, f, deployment.ID)
 }

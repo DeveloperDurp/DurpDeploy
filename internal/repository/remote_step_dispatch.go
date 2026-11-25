@@ -38,15 +38,7 @@ func (r *Repository) QueueRemoteStepRuns(
 				db.CreateRemoteStepRunsParams{
 					DeploymentID: deploymentID, StepIndex: stepIndex,
 				})
-			if err != nil {
-				return err
-			}
-			return r.validateQueuedRemotePolicies(
-				ctx,
-				q,
-				deploymentID,
-				stepIndex,
-			)
+			return err
 		},
 	)
 	if err != nil {

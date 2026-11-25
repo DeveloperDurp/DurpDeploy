@@ -16,47 +16,40 @@ import (
 
 const configuredPIDImage = "harbor.durp.info/dockerhub/library/python:3.12"
 
-func TestConfiguredPIDRemoteRejectionAPIE2E(t *testing.T) {
+func TestConfiguredPIDRemoteAdmissionAPIE2E(t *testing.T) {
 	limits := config.Defaults().Limits.Container
 	limits.PIDs, limits.HelperPIDs = 8, 8
-	testConfiguredRemoteContainerRejection(
+	testConfiguredRemoteContainerAdmission(
 		t,
 		limits,
 	)
 }
 
-func testConfiguredRemoteContainerRejection(
+func testConfiguredRemoteContainerAdmission(
 	t *testing.T,
 	limits config.ContainerLimits,
 ) {
 	t.Helper()
 	f := newConfiguredArtifactE2E(t, &limits)
-	seedIncompatiblePolicyAgent(t, f)
+	seedUnadvertisedAgent(t, f)
 	f.api(t, "POST", f.base()+"/steps", map[string]any{
-		"name": "Unsupported remote policy", "script_body": "echo must-not-run",
+		"name": "Remote step", "script_body": "echo remote",
 		"execution_target": "agent", "agent_execution_mode": "host",
 	}, 201)
 	release := verificationRelease(t, f, "remote-pids")
 	deployment := verificationDeploy(t, f, release)
-	f.completion(t, deployment.ID, events.DeploymentFailed)
-	logs := string(
-		f.api(
-			t,
-			"GET",
-			fmt.Sprintf("/api/v1/deployments/%d/logs", deployment.ID),
-			nil,
-			200,
-		),
-	)
-	if !strings.Contains(
-		logs,
-		"resource policy is incompatible",
-	) {
-		t.Fatalf("missing remote policy rejection: %s", logs)
-	}
+	assertUnadvertisedAgentQueued(t, f, deployment.ID)
 }
 
-func seedIncompatiblePolicyAgent(t *testing.T, f *artifactE2E) {
+func assertUnadvertisedAgentQueued(t *testing.T, f *artifactE2E, id int64) {
+	t.Helper()
+	path := fmt.Sprintf("/api/v1/deployments/%d", id)
+	waitVerificationLog(t, f, path, "queued for 1 matching agent(s)")
+	f.api(t, "POST", path+"/cancel", nil, 200)
+	waitVerificationStatus(t, f, id, "cancelled")
+}
+
+func seedUnadvertisedAgent(t *testing.T, f *artifactE2E) {
 	t.Helper()
 	pin := strings.Repeat("a", 64)
 	if _, err := f.h.repo.DB.ExecContext(t.Context(), `

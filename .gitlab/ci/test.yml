@@ -287,7 +287,7 @@ agent-container-podman:
     pwsh -NoLogo -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion'
     DURPDEPLOY_AGENT_E2E_BINARY="$CI_PROJECT_DIR/artifacts/agent-build/agent" \
       bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 -timeout=20m -v \
-      -run '^(TestDeploymentPackageAdmissionAPIE2E|TestDeploymentStaging(Admission|MergeBudget|EncryptionCancellation|Transfer|ImportFailure|TransferPausesStepTimeout|Audit|ArtifactGate|Package|PackageAgentOnly|PackageLegacyAgent)APIE2E|TestConfiguredStagingMergeAPIE2E|TestConfiguredLogsRemoteAPIE2E|TestConfiguredSharedPolicyRemoteAPIE2E|TestDeploymentEnvironment(Preflight|Identity)APIE2E|TestExecutionLocationAPIWebE2E|TestLegacyExecutionLocationAPIWebE2E)$' ./internal/agentserver
+      -run '^(TestDeploymentPackageAdmissionAPIE2E|TestDeploymentStaging(Admission|MergeBudget|EncryptionCancellation|Transfer|ImportFailure|TransferPausesStepTimeout|Audit|ArtifactGate|Package|PackageAgentOnly|PackageLegacyAgent)APIE2E|TestConfiguredStagingMergeAPIE2E|TestConfiguredLogsRemoteAPIE2E|TestConfiguredSharedPolicyRemoteAPIE2E|TestIndependentAgentLimitsAPIE2E|TestLegacyAgentWithoutResourcePolicyAPIE2E|TestDeploymentEnvironment(Preflight|Identity)APIE2E|TestExecutionLocationAPIWebE2E|TestLegacyExecutionLocationAPIWebE2E)$' ./internal/agentserver
     ROOTLESS
 e2e:
   extends: .mr-built-app

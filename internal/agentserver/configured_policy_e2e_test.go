@@ -3,6 +3,7 @@
 package agentserver_test
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -39,12 +40,9 @@ func TestConfiguredSharedPolicyRemoteAPIE2E(t *testing.T) {
 	))
 	require.EqualValues(t, 11, effective.Execution.MaxRetries)
 	require.EqualValues(t, 96, effective.Container.PIDs)
-	advertisement, err := effective.AgentPolicy().Advertisement()
-	require.NoError(t, err)
 	for _, id := range []string{"test-agent", "second-agent"} {
-		stored, err := s.f.repo.Queries.GetAgentResourcePolicy(t.Context(), id)
-		require.NoError(t, err)
-		require.Equal(t, advertisement, stored)
+		_, err := s.f.repo.Queries.GetAgentResourcePolicy(t.Context(), id)
+		require.ErrorIs(t, err, sql.ErrNoRows)
 	}
 	for _, scenario := range []string{"agent-first", "failure", "cancel"} {
 		t.Run(

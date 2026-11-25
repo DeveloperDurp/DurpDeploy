@@ -9,8 +9,7 @@ Both HTTP listeners use the resolved header, read, write, and idle timeouts.
 Live log streams use the resolved per-event write timeout.
 Artifact clients use the captured fetch, dial, TLS, and response-header timeouts.
 
-Agent polls check the shared policy digest before heartbeat updates or dispatch.
-Custom remote execution requires a matching policy from every target agent.
+The server and each agent enforce their own startup resource limits.
 The server accepts nondefault telemetry, HTTP, server container, and transfer admission settings.
 It also accepts all artifact download, ZIP safety, and transport settings.
 It accepts the default step timeout, maximum step timeout, and maximum retries.
@@ -18,33 +17,20 @@ It accepts staging payload, entry, and archive budgets.
 It accepts aggregate merge archive, entry-visit, and agent-output budgets.
 It accepts all six log settings described below.
 
-## Agent policy handshake
+## Independent agent limits
 
-The mTLS poll endpoint uses the `X-DurpDeploy-Resource-Policy` header.
-The digest covers execution, artifact, staging, transfer idle timeout, and container settings.
-Server-only admission, merge, HTTP, log, and token telemetry settings do not affect this digest.
-Both peers must use the same complete shared snapshot, including artifact transport timeouts.
+Configure resource settings independently on the server and each agent.
+Use the `DURPDEPLOY_AGENT_LIMITS_` prefix with the same field suffixes as server variables.
+Restart each process after you change its startup settings.
+The agent validates received work against its local limits before execution.
+The server enforces its own limits when it runs steps, prepares work, or handles data.
 
-An absent header permits only the default shared policy for legacy agents.
-An advertised policy must match the server snapshot exactly.
-Repeated, empty, malformed, unknown, and mismatched headers return `409` before heartbeat updates or dispatch.
-Rejections leave waiting claims unchanged and do not echo untrusted header values.
-Successful `200` and `204` polls return one matching acknowledgement header.
-The existing mTLS certificate and pairing checks still authenticate every request.
+To upgrade the server to independent resource limits, drain active deployments first.
+Stop old server processes before starting the upgraded server.
 
-The server stores accepted advertisements with the agent capability snapshot.
-The record survives a server restart. A legacy default poll removes the explicit advertisement.
-Claim preparation compares the request policy with the stored snapshot while holding the agent claim lock.
-A stale poll receives no work when another poll changes that agent's policy advertisement.
-Revocation, re-pairing, and registration deletion remove the stored advertisement.
-Unchanged reports update the heartbeat without rewriting capability records.
-
-Custom execution, container, staging, and package limits support remote dispatch after a matching agent poll.
-Queue admission validates every selected fan-out target and rolls back the queue when any target has an incompatible policy.
-Claim preparation rechecks the stored policy under the agent claim lock before preparing a token or encrypted payload.
-Missing or incompatible records reject custom policies, including jobs without a package.
-Configure the same shared values on the server and agents before restarting them.
-Agent environment variables use the `DURPDEPLOY_AGENT_LIMITS_` prefix and the same field suffixes as server variables.
+The mTLS poll endpoint accepts legacy agents with or without the `X-DurpDeploy-Resource-Policy` header.
+See [the agent protocol](agent-protocol.md#bounds-and-timing) for acknowledgement and claim behavior.
+Check the agent log when the agent rejects work before starting a claim.
 
 ## Log settings
 
@@ -78,7 +64,7 @@ Excess pending output cancels the attempt, discards ambiguous bytes, and records
 The pending buffer also bounds each incoming write before newline processing.
 Small values can reject an incoming chunk even when it contains complete lines.
 Agent protocol event and batch bounds remain protocol constants.
-These server-only log settings permit remote execution with unchanged shared policies.
+These log settings apply to the server.
 
 Higher budgets can increase query memory, browser memory, and pending output memory.
 Smaller batches can increase database query counts.
@@ -118,7 +104,7 @@ Startup migrations remove the historical database archive ceiling without changi
 The database still requires positive sizes. The server enforces the captured archive budget.
 Rollback restores the historical ceiling only if all saved snapshot sizes fit that ceiling.
 An unsafe rollback fails atomically and preserves the migrated schema and stored data.
-Remote queueing and claims require matching stored agent policies for custom staging budgets.
+The server and the agent each enforce their local staging budgets.
 Restart the server after changing these settings.
 
 Set `DURPDEPLOY_LIMITS_MERGE_ARCHIVE_BYTES` to change aggregate input archive bytes per remote step.
@@ -135,7 +121,7 @@ Entry-visit checks precede each output's comparison and content copying.
 Excess input fails the step with `staging merge budget exceeded` before downstream execution.
 Normal deployment cleanup removes owned transfers, staging, and workload resources.
 
-These server-only budgets permit remote work with unchanged shared policies.
+These merge budgets apply to the server.
 The staging budgets still govern each archive and the final merged tree.
 Higher merge budgets can increase database reads, temporary storage, and comparison work.
 Restart the server after changing merge settings.
@@ -150,8 +136,7 @@ ZIP validation and extraction also use captured extracted-byte, entry-count, sta
 Larger downloads can increase temporary disk use and approval-container temporary filesystem capacity.
 Lower budgets can reject existing pinned packages before execution.
 The server preserves stored pins and removes failed download spools.
-Remote package dispatch requires matching download, ZIP safety, and transport budgets on the server and target agents.
-The complete shared policy must match for work with or without a package.
+Each process applies its download, ZIP safety, and transport budgets to the packages it retrieves.
 
 Set `DURPDEPLOY_LIMITS_EXECUTION_DEFAULT_TIMEOUT_SECONDS` to change the default server step timeout.
 Use `limits.execution.default_timeout_seconds` in YAML.
@@ -180,7 +165,7 @@ Each retry receives a new timeout. Higher defaults can keep scripts and their re
 Lower defaults can end existing zero-timeout steps sooner.
 
 Restart the server after changing the default.
-Remote queueing and claims require matching stored agent policies for custom execution limits.
+Each agent validates the received step against its own execution limits.
 
 Set the ZIP safety budgets with these environment variables:
 
@@ -251,7 +236,6 @@ Project-scoped tokens and roles below administrator receive `403`.
 Requests without a valid bearer token receive `401`.
 The endpoint has no write operation.
 It reports server settings, without attesting to agent compatibility or external runtime enforcement.
-Matching stored agent policies remain required for custom remote execution.
 
 ## Existing server settings
 
@@ -399,10 +383,7 @@ Higher filesystem and helper memory values can increase host memory use.
 Lower helper CPU values can slow transfer and cleanup operations.
 The runtime rounds filesystem capacity to its allocation units.
 
-Remote queueing and claims reject incompatible agent policies before issuing work.
-The deployment log reports the policy incompatibility.
-Configure matching container limits on the server and target agents before remote execution.
-Already issued claims retain their original execution policy.
+Each agent applies its local container limits to the workloads it starts.
 
 Telemetry limits apply to each API router in one server process.
 Full admission capacity skips usage recording without delaying authentication.
@@ -498,4 +479,3 @@ Normal workload CPU and memory quotas retain their existing behavior.
 The application does not replace operating-system or third-party configuration.
 Preserve runtime socket fallbacks, `HOME`, XDG directories, proxy variables, TLS trust, and database-driver environment variables.
 Keep deployment-script variables and stored project settings outside the startup configuration file.
-Configure matching shared values on all peers, then restart the server and agents.

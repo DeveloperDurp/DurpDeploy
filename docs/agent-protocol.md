@@ -82,10 +82,20 @@ material, certificate bodies, or secret values.
 
 ## Bounds and timing
 
+The poll endpoint accepts an omitted `X-DurpDeploy-Resource-Policy` header.
+For a valid version 1 header, successful `200` and `204` responses echo the supplied value.
+The server checks the header format and keeps resource settings local to each process.
+Malformed, repeated, empty, or unsupported headers return `409` before heartbeat or claim changes.
+
+If an unstarted claim has transferred no input, the server can reissue it after its first expiry.
+If both claims expire before start, the deployment fails and its log identifies the agent.
+Check the agent log for a local validation failure.
+Cancellation ends an unstarted claim immediately if input transfer has not begun.
+If a claim expires after input transfer starts, the server waits for cleanup acknowledgement.
+
 Server and agent workload containers use separate startup configurations.
 Both default to a 64 MiB `/tmp` filesystem through `limits.container.tmpfs_bytes`.
-Configure matching policies before remote execution.
-The server rejects incompatible agent policies before issuing work.
+Each executor applies its own scratch capacity when it starts a workload.
 Server approval generation and approved-context execution add the artifact download budget to `/tmp` capacity.
 
 Host-mode agent scripts do not receive a container tmpfs limit.
@@ -209,10 +219,12 @@ and are sent only to compatible `agent/2` agents.
 | From | Allowed next state | Meaning |
 | --- | --- | --- |
 | `waiting` | `claimed` | A matching agent owns the pre-start claim. |
-| `claimed` | `waiting` | Only the 60-second pre-start expiry can reclaim it. |
-| `claimed` | `started`, `cancel_requested` | The agent starts, or cancellation overlays the claim. |
+| `claimed` | `waiting` | The first 60-second pre-start expiry lets the server reissue the claim. |
+| `claimed` | `failed` | A second unstarted claim expires. Legacy deployment claims use `cancelled` and fail the deployment. |
+| `claimed` | `started`, `cancelled`, `cancel_requested` | The agent starts or the server cancels the claim. An exposed input transfer requires cleanup acknowledgement. |
 | `started` | `succeeded`, `failed`, `cancelled`, `lost`, `cancel_requested` | Started work reaches a terminal state, becomes lost after missed heartbeats, or receives cancellation. |
 | `cancel_requested` | `cancelled`, `cancel_unconfirmed`, `lost` | The agent acknowledges cancellation, misses the 30-second acknowledgement deadline, or is lost. |
+| `cancel_requested` | `cleanup_unconfirmed` | A claim that exposed input before start misses the cancellation acknowledgement deadline. |
 | `lost`, `cancel_unconfirmed` | `succeeded`, `failed`, `cleanup_unconfirmed` | The same authenticated claim reports its durable outcome after recovery; a failed deployment stays failed unless cleanup is uncertain. |
 | `cancel_unconfirmed` | `cancelled` | The same authenticated claim replays its durable cancellation acknowledgement; the deployment stays failed. |
 
@@ -221,11 +233,12 @@ claim may be reclaimed, but started work is never automatically replayed or
 requeued and does not fall back to local execution. Recovery is an explicit new
 deployment.
 
-Terminal reports are idempotent for the same claim token and outcome. A changed
-outcome is rejected. Cleanup uncertainty remains blocked until the same paired
-agent reconciles containers and sends a ready v3 poll; that confirmation does
-not change the reported terminal outcome. A waiting poll whose protocol or
-capabilities have changed receives no work and must poll again.
+Terminal reports are idempotent for the same claim token and outcome.
+A changed outcome is rejected.
+The same paired agent can confirm cleanup by reconciling containers and sending a ready v3 poll.
+For an exposed pre-start claim, the agent can also acknowledge cleanup with the original claim token.
+Both confirmations preserve the reported terminal outcome.
+A waiting poll whose protocol or capabilities have changed receives no work and must poll again.
 
 ## Transport trust
 

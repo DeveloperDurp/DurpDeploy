@@ -11,20 +11,26 @@ import (
 )
 
 const acknowledgeRemoteStepCancellation = `-- name: AcknowledgeRemoteStepCancellation :execrows
-UPDATE remote_step_runs SET state = 'cancelled', finished_at = ?1,
+UPDATE remote_step_runs SET
+    state = CASE WHEN state = 'cleanup_unconfirmed' THEN state ELSE 'cancelled' END,
+    finished_at = CASE WHEN state = 'cleanup_unconfirmed'
+        THEN finished_at ELSE ?1 END,
+    cleanup_confirmed_at = CASE WHEN state = 'cleanup_unconfirmed'
+        THEN COALESCE(cleanup_confirmed_at, ?1) ELSE cleanup_confirmed_at END,
     updated_at = ?1
 WHERE deployment_id = ?2
   AND step_index = ?3 AND agent_id = ?4
   AND claim_token_hash = ?5
-  AND state IN ('cancel_requested', 'cancel_unconfirmed')
+  AND (state IN ('cancel_requested', 'cancel_unconfirmed')
+      OR (state = 'cleanup_unconfirmed' AND started_at IS NULL AND prestart_input = 1))
 `
 
 type AcknowledgeRemoteStepCancellationParams struct {
-	Now            sql.NullInt64 `json:"now"`
-	DeploymentID   int64         `json:"deployment_id"`
-	StepIndex      int64         `json:"step_index"`
-	AgentID        string        `json:"agent_id"`
-	ClaimTokenHash []byte        `json:"claim_token_hash"`
+	Now            int64  `json:"now"`
+	DeploymentID   int64  `json:"deployment_id"`
+	StepIndex      int64  `json:"step_index"`
+	AgentID        string `json:"agent_id"`
+	ClaimTokenHash []byte `json:"claim_token_hash"`
 }
 
 func (q *Queries) AcknowledgeRemoteStepCancellation(ctx context.Context, arg AcknowledgeRemoteStepCancellationParams) (int64, error) {
@@ -41,8 +47,21 @@ func (q *Queries) AcknowledgeRemoteStepCancellation(ctx context.Context, arg Ack
 	return result.RowsAffected()
 }
 
+const cancelExpiredPrestartTransfers = `-- name: CancelExpiredPrestartTransfers :exec
+UPDATE remote_step_runs SET state = 'cancel_requested',
+    cancel_requested_at = ?1, updated_at = ?1
+WHERE state = 'claimed' AND started_at IS NULL
+  AND claim_expires_at <= ?1 AND prestart_input = 1
+`
+
+func (q *Queries) CancelExpiredPrestartTransfers(ctx context.Context, now sql.NullInt64) error {
+	_, err := q.db.ExecContext(ctx, cancelExpiredPrestartTransfers, now)
+	return err
+}
+
 const claimRemoteStepRun = `-- name: ClaimRemoteStepRun :execrows
 UPDATE remote_step_runs SET state = 'claimed',
+    prestart_input = 0,
     claim_token_hash = ?1,
     ciphertext = ?2,
     claim_expires_at = ?3,
@@ -62,7 +81,9 @@ WHERE remote_step_runs.deployment_id = ?5
   )
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs busy
       WHERE busy.agent_id = remote_step_runs.agent_id
-        AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+        AND ((busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+          OR (busy.state = 'cancel_requested' AND busy.started_at IS NULL
+            AND busy.prestart_input = 1)))
   AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy
       WHERE busy.agent_id = remote_step_runs.agent_id
         AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
@@ -168,7 +189,10 @@ func (q *Queries) CreateRemoteStepRuns(ctx context.Context, arg CreateRemoteStep
 }
 
 const expireRemoteStepCancellations = `-- name: ExpireRemoteStepCancellations :execrows
-UPDATE remote_step_runs SET state = 'cancel_unconfirmed', finished_at = ?1,
+UPDATE remote_step_runs SET
+    state = CASE WHEN started_at IS NULL AND prestart_input = 1
+        THEN 'cleanup_unconfirmed' ELSE 'cancel_unconfirmed' END,
+    finished_at = ?1,
     updated_at = ?1, log_buffer_ciphertext = NULL
 WHERE state = 'cancel_requested'
   AND cancel_requested_at <= ?2
@@ -187,20 +211,46 @@ func (q *Queries) ExpireRemoteStepCancellations(ctx context.Context, arg ExpireR
 	return result.RowsAffected()
 }
 
-const expireRemoteStepClaims = `-- name: ExpireRemoteStepClaims :execrows
-UPDATE remote_step_runs SET state = 'waiting', claim_token_hash = NULL,
+const expireRemoteStepClaims = `-- name: ExpireRemoteStepClaims :many
+UPDATE remote_step_runs SET
+    state = CASE WHEN expired_claims = 0 THEN 'waiting' ELSE 'failed' END,
+    finished_at = CASE WHEN expired_claims = 0 THEN NULL ELSE ?1 END,
+    expired_claims = expired_claims + 1,
+    claim_token_hash = NULL,
     ciphertext = NULL, claim_expires_at = NULL, last_heartbeat_at = NULL,
     updated_at = ?1
 WHERE state = 'claimed' AND started_at IS NULL
-  AND claim_expires_at <= ?1
+  AND claim_expires_at <= ?1 AND prestart_input = 0
+RETURNING deployment_id, agent_id, state
 `
 
-func (q *Queries) ExpireRemoteStepClaims(ctx context.Context, now int64) (int64, error) {
-	result, err := q.db.ExecContext(ctx, expireRemoteStepClaims, now)
+type ExpireRemoteStepClaimsRow struct {
+	DeploymentID int64  `json:"deployment_id"`
+	AgentID      string `json:"agent_id"`
+	State        string `json:"state"`
+}
+
+func (q *Queries) ExpireRemoteStepClaims(ctx context.Context, now int64) ([]ExpireRemoteStepClaimsRow, error) {
+	rows, err := q.db.QueryContext(ctx, expireRemoteStepClaims, now)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected()
+	defer rows.Close()
+	var items []ExpireRemoteStepClaimsRow
+	for rows.Next() {
+		var i ExpireRemoteStepClaimsRow
+		if err := rows.Scan(&i.DeploymentID, &i.AgentID, &i.State); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const failInvalidRemoteStepDeployment = `-- name: FailInvalidRemoteStepDeployment :exec
@@ -354,7 +404,7 @@ func (q *Queries) GetRemoteStepLogBySequence(ctx context.Context, arg GetRemoteS
 }
 
 const getRemoteStepRunByClaim = `-- name: GetRemoteStepRunByClaim :one
-SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, recovery_cancelled, cleanup_confirmed_at FROM remote_step_runs
+SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, recovery_cancelled, cleanup_confirmed_at, expired_claims, prestart_input FROM remote_step_runs
 WHERE deployment_id = ?1
   AND agent_id = ?2
   AND claim_token_hash = ?3
@@ -386,6 +436,8 @@ func (q *Queries) GetRemoteStepRunByClaim(ctx context.Context, arg GetRemoteStep
 		&i.LogBufferCiphertext,
 		&i.RecoveryCancelled,
 		&i.CleanupConfirmedAt,
+		&i.ExpiredClaims,
+		&i.PrestartInput,
 	)
 	return i, err
 }
@@ -421,7 +473,7 @@ func (q *Queries) HeartbeatRemoteStepRun(ctx context.Context, arg HeartbeatRemot
 }
 
 const listRemoteStepRuns = `-- name: ListRemoteStepRuns :many
-SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, recovery_cancelled, cleanup_confirmed_at FROM remote_step_runs
+SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, recovery_cancelled, cleanup_confirmed_at, expired_claims, prestart_input FROM remote_step_runs
 WHERE deployment_id = ? AND step_index = ? ORDER BY agent_id
 `
 
@@ -456,6 +508,8 @@ func (q *Queries) ListRemoteStepRuns(ctx context.Context, arg ListRemoteStepRuns
 			&i.LogBufferCiphertext,
 			&i.RecoveryCancelled,
 			&i.CleanupConfirmedAt,
+			&i.ExpiredClaims,
+			&i.PrestartInput,
 		); err != nil {
 			return nil, err
 		}
@@ -516,6 +570,37 @@ func (q *Queries) ListRemoteStepRunsForRunner(ctx context.Context, arg ListRemot
 	return items, nil
 }
 
+const listRetriedRemoteStepClaimExpirations = `-- name: ListRetriedRemoteStepClaimExpirations :many
+SELECT DISTINCT deployment_id FROM remote_step_runs
+WHERE state = 'claimed' AND started_at IS NULL
+  AND claim_expires_at <= ?1 AND expired_claims > 0
+  AND prestart_input = 0
+ORDER BY deployment_id ASC
+`
+
+func (q *Queries) ListRetriedRemoteStepClaimExpirations(ctx context.Context, now sql.NullInt64) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listRetriedRemoteStepClaimExpirations, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var deployment_id int64
+		if err := rows.Scan(&deployment_id); err != nil {
+			return nil, err
+		}
+		items = append(items, deployment_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWaitingRemoteStepRuns = `-- name: ListWaitingRemoteStepRuns :many
 SELECT r.deployment_id, r.step_index FROM remote_step_runs r
 JOIN deployments d ON d.id = r.deployment_id
@@ -530,7 +615,9 @@ WHERE r.agent_id = ?1 AND r.state = 'waiting'
         AND legacy.state IN ('claimed', 'started', 'cancel_requested')
   )
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs busy WHERE busy.agent_id = r.agent_id
-      AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+      AND ((busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+        OR (busy.state = 'cancel_requested' AND busy.started_at IS NULL
+          AND busy.prestart_input = 1)))
   AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy WHERE busy.agent_id = r.agent_id
       AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
 ORDER BY r.created_at ASC, r.deployment_id ASC, r.step_index ASC
@@ -605,12 +692,32 @@ func (q *Queries) LoseStaleRemoteStepRuns(ctx context.Context, arg LoseStaleRemo
 	return result.RowsAffected()
 }
 
+const markPrestartRemoteStepInput = `-- name: MarkPrestartRemoteStepInput :exec
+UPDATE remote_step_runs SET prestart_input = 1
+WHERE deployment_id = ?1
+  AND step_index = ?2 AND agent_id = ?3
+  AND state = 'claimed'
+`
+
+type MarkPrestartRemoteStepInputParams struct {
+	DeploymentID int64  `json:"deployment_id"`
+	StepIndex    int64  `json:"step_index"`
+	AgentID      string `json:"agent_id"`
+}
+
+func (q *Queries) MarkPrestartRemoteStepInput(ctx context.Context, arg MarkPrestartRemoteStepInputParams) error {
+	_, err := q.db.ExecContext(ctx, markPrestartRemoteStepInput, arg.DeploymentID, arg.StepIndex, arg.AgentID)
+	return err
+}
+
 const requestRemoteStepCancellation = `-- name: RequestRemoteStepCancellation :execrows
 UPDATE remote_step_runs SET
-    state = CASE WHEN state = 'waiting' THEN 'cancelled'
+    state = CASE WHEN state = 'waiting' OR (state = 'claimed' AND prestart_input = 0)
+        THEN 'cancelled'
         ELSE 'cancel_requested' END,
     cancel_requested_at = ?1,
-    finished_at = CASE WHEN state = 'waiting' THEN ?1
+    finished_at = CASE WHEN state = 'waiting' OR (state = 'claimed' AND prestart_input = 0)
+        THEN ?1
         ELSE finished_at END,
     updated_at = ?1
 WHERE deployment_id = ?2
