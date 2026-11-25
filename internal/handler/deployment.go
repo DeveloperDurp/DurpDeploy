@@ -21,6 +21,11 @@ import (
 	"durpdeploy/views/pages"
 )
 
+const (
+	deploymentCannotCancelMessage = "Deployment cannot be cancelled in its current state"
+	projectNotFoundMessage        = "Project not found"
+)
+
 type DeploymentHandler struct {
 	repo   *repository.Repository
 	runner *runner.DeploymentRunner
@@ -63,7 +68,7 @@ func (h *DeploymentHandler) NewDeploymentPage(
 	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			http.Error(w, "Project not found", http.StatusNotFound)
+			http.Error(w, projectNotFoundMessage, http.StatusNotFound)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -395,7 +400,7 @@ func (h *DeploymentHandler) deploymentSelection(
 	release, err := h.repo.Queries.GetDeploymentRelease(r.Context(), releaseID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "Release not found", http.StatusBadRequest)
+			http.Error(w, releaseNotFoundMessage, http.StatusBadRequest)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -414,7 +419,7 @@ func (h *DeploymentHandler) deploymentSelection(
 	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "Project not found", http.StatusBadRequest)
+			http.Error(w, projectNotFoundMessage, http.StatusBadRequest)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -428,7 +433,7 @@ func writeDeploymentCreationError(w http.ResponseWriter, err error) {
 		return
 	}
 	if errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, "Release not found", http.StatusNotFound)
+		http.Error(w, releaseNotFoundMessage, http.StatusNotFound)
 		return
 	}
 	if errors.Is(err, repository.ErrLegacyServerStep) {
@@ -532,7 +537,7 @@ func (h *DeploymentHandler) CancelDeployment(
 		if _, err := h.runner.CancelPrestart(r.Context(), id); err != nil {
 			http.Error(
 				w,
-				"Deployment cannot be cancelled in its current state",
+				deploymentCannotCancelMessage,
 				http.StatusConflict,
 			)
 			return
@@ -557,7 +562,7 @@ func (h *DeploymentHandler) CancelDeployment(
 		if errors.Is(err, repository.ErrRemoteLifecycleConflict) {
 			http.Error(
 				w,
-				"Deployment cannot be cancelled in its current state",
+				deploymentCannotCancelMessage,
 				http.StatusBadRequest,
 			)
 			return
@@ -572,7 +577,7 @@ func (h *DeploymentHandler) CancelDeployment(
 			deployment.Status != "pending_approval" {
 			http.Error(
 				w,
-				"Deployment cannot be cancelled in its current state",
+				deploymentCannotCancelMessage,
 				http.StatusBadRequest,
 			)
 			return
@@ -713,7 +718,7 @@ func (h *DeploymentHandler) RedeployDeployment(
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			http.Error(w, "Release not found", http.StatusNotFound)
+			http.Error(w, releaseNotFoundMessage, http.StatusNotFound)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -721,7 +726,7 @@ func (h *DeploymentHandler) RedeployDeployment(
 	}
 	project, err := h.repo.Queries.GetProject(r.Context(), release.ProjectID)
 	if err != nil {
-		http.Error(w, "Project not found", http.StatusNotFound)
+		http.Error(w, projectNotFoundMessage, http.StatusNotFound)
 		return
 	}
 	blocked, reason, requiresApproval, err := gate.CheckAndApproval(

@@ -16,6 +16,7 @@ import (
 )
 
 const environmentsContentTarget = "#environments-content"
+const invalidEnvironmentIDMessage = "invalid id"
 
 type EnvironmentHandler struct {
 	Repo *repository.Repository
@@ -159,7 +160,7 @@ func (h *EnvironmentHandler) EditEnvironment(
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "invalid id", http.StatusBadRequest)
+		http.Error(w, invalidEnvironmentIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -188,7 +189,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "invalid id", http.StatusBadRequest)
+		http.Error(w, invalidEnvironmentIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -287,7 +288,7 @@ func (h *EnvironmentHandler) DeleteEnvironment(
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "invalid id", http.StatusBadRequest)
+		http.Error(w, invalidEnvironmentIDMessage, http.StatusBadRequest)
 		return
 	}
 

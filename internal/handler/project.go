@@ -234,7 +234,7 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 ) {
 	id, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -290,7 +290,7 @@ func (h *ProjectHandler) GetProjectNotifications(
 ) {
 	id, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -319,7 +319,7 @@ func (h *ProjectHandler) EditProject(w http.ResponseWriter, r *http.Request) {
 		var err error
 		id, err = parseProjectID(r)
 		if err != nil {
-			http.Error(w, "Invalid project ID", http.StatusBadRequest)
+			http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 			return
 		}
 	}
@@ -351,7 +351,7 @@ func (h *ProjectHandler) EditProject(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	id, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -561,7 +561,7 @@ func ApplyLifecycleSelection(
 func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	id, err := parseProjectID(r)
 	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		http.Error(w, invalidProjectIDMessage, http.StatusBadRequest)
 		return
 	}
 
