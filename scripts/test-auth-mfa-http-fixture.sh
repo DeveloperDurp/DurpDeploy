@@ -130,7 +130,8 @@ done
 [[ "$SERVER_READY" == 1 ]] || fail "throwaway server did not become ready"
 
 db_query() {
-    sqlite3 "$TMP/state.db" "$1"
+    local query=$1
+    sqlite3 "$TMP/state.db" "$query"
 }
 
 sqlite3 "$TMP/state.db" <<'SQL'

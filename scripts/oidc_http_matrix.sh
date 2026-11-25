@@ -24,7 +24,8 @@ matrix_parse_args() {
     case $# in
     0) ;;
     1)
-        [[ $1 == --force-failure ]] || {
+        local option=$1
+        [[ $option == --force-failure ]] || {
             matrix_usage
             return 2
         }
@@ -72,7 +73,8 @@ matrix_write_failure_artifact() {
 }
 
 matrix_clear_artifact() {
-    rm -rf -- "$MATRIX_ARTIFACT_DIR/$1"
+    local scenario=$1
+    rm -rf -- "$MATRIX_ARTIFACT_DIR/$scenario"
 }
 
 matrix_go_test() {
@@ -87,7 +89,8 @@ matrix_go_test() {
 }
 
 matrix_expect_test_status() {
-    [[ $MATRIX_LAST_TEST_STATUS == "$1" ]]
+    local expected=$1
+    [[ $MATRIX_LAST_TEST_STATUS == "$expected" ]]
 }
 
 matrix_run() {

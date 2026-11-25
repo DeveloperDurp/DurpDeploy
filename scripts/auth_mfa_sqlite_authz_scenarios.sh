@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 
 authz_scenario_init() {
-    auth_mfa_fixture_init "$1" "$DURPDEPLOY_BASE_URL" authz_db_query \
+    local scenario=$1
+    auth_mfa_fixture_init "$scenario" "$DURPDEPLOY_BASE_URL" authz_db_query \
         "$DURPDEPLOY_AUTH_MFA_SERVER_LOG"
 }
 
 authz_db_query() {
-    sqlite3 "$DURPDEPLOY_AUTH_MFA_DB" "$1"
+    local query=$1
+    sqlite3 "$DURPDEPLOY_AUTH_MFA_DB" "$query"
 }
 
 authz_json_error() {
@@ -45,6 +47,7 @@ authz_browser_login() {
 matrix_csrf_viewer_role_write_rejection() {
     local admin_jar admin_csrf admin_token deployer_jar deployer_csrf viewer_jar
     local viewer_token admin_id deployer_id viewer_id projects_before admin_project_id
+    local -r htmx_header='HX-Request: true'
 
     authz_scenario_init csrf-viewer-role-write-rejection
     admin_jar=$(auth_mfa_cookie_jar admin)
@@ -85,20 +88,20 @@ matrix_csrf_viewer_role_write_rejection() {
     auth_mfa_assert_body_contains "viewer back link" 'href="/projects" x-data="backNavigation" @click="back"'
 
     auth_mfa_http_request "$viewer_jar" POST /projects '{"name":"viewer-htmx"}' \
-        application/json 'HX-Request: true'
+        application/json "$htmx_header"
     auth_mfa_assert_status 200
     auth_mfa_assert_header_contains HX-Trigger makeToast
     auth_mfa_assert_header_contains HX-Trigger 'Viewers cannot perform write operations'
 
     auth_mfa_http_request "$viewer_jar" PUT /projects/1 '{"name":"viewer-put"}' \
-        application/json 'HX-Request: true'
+        application/json "$htmx_header"
     auth_mfa_assert_status 200
     auth_mfa_assert_header_contains HX-Trigger makeToast
     auth_mfa_http_request "$viewer_jar" PATCH /lifecycles/1/stages/1 '{"requires_approval":true}' \
-        application/json 'HX-Request: true'
+        application/json "$htmx_header"
     auth_mfa_assert_status 200
     auth_mfa_assert_header_contains HX-Trigger makeToast
-    auth_mfa_http_request "$viewer_jar" DELETE /projects/1 '' '' 'HX-Request: true'
+    auth_mfa_http_request "$viewer_jar" DELETE /projects/1 '' '' "$htmx_header"
     auth_mfa_assert_status 200
     auth_mfa_assert_header_contains HX-Trigger makeToast
     auth_mfa_assert_db_count "viewer writes leave projects unchanged" "$projects_before" \
@@ -109,7 +112,7 @@ matrix_csrf_viewer_role_write_rejection() {
     auth_mfa_assert_status 403
     auth_mfa_assert_body_contains "non-member project denial" "You don't have access to this"
     auth_mfa_http_request "$deployer_jar" GET "/projects/$admin_project_id" '' '' \
-        'HX-Request: true'
+        "$htmx_header"
     auth_mfa_assert_status 200
     auth_mfa_assert_header_contains HX-Trigger "You don't have access to this"
 

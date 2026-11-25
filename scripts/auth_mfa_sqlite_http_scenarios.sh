@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 matrix_scenario_init() {
-    auth_mfa_fixture_init "$1" "$DURPDEPLOY_BASE_URL" matrix_db_query \
+    local scenario=$1
+    auth_mfa_fixture_init "$scenario" "$DURPDEPLOY_BASE_URL" matrix_db_query \
         "$DURPDEPLOY_AUTH_MFA_SERVER_LOG"
 }
 
@@ -24,7 +25,8 @@ PY
 }
 
 matrix_totp_code() {
-    python3 - "$1" <<'PY'
+    local seed=$1
+    python3 - "$seed" <<'PY'
 import base64
 import hashlib
 import hmac
@@ -46,7 +48,8 @@ matrix_next_totp_code() {
 
     seconds=$((30 - $(date +%s) % 30))
     sleep "$seconds"
-    matrix_totp_code "$1"
+    local seed=$1
+    matrix_totp_code "$seed"
 }
 
 matrix_assert_no_final_session() {
@@ -427,7 +430,7 @@ matrix_security_reauth_factors() {
 }
 
 matrix_admin_mfa_reset_continuation() {
-    local admin_jar admin_csrf admin_token admin_id target_token target_csrf
+    local admin_jar admin_csrf admin_id target_token target_csrf
 
     matrix_scenario_init admin-mfa-reset-continuation
     matrix_create_mfa_user admin-reset-target maintainer

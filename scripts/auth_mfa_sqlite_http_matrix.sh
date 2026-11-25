@@ -48,7 +48,8 @@ matrix_require_environment() {
 }
 
 matrix_db_query() {
-    sqlite3 "$DURPDEPLOY_AUTH_MFA_DB" "$1"
+    local query=$1
+    sqlite3 "$DURPDEPLOY_AUTH_MFA_DB" "$query"
 }
 
 matrix_emit() {
@@ -101,7 +102,8 @@ matrix_parse_args() {
     case $# in
     0) ;;
     1)
-        [[ $1 == --force-failure ]] || {
+        local option=$1
+        [[ $option == --force-failure ]] || {
             matrix_usage
             return 2
         }

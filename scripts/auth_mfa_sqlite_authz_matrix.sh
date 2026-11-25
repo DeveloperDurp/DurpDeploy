@@ -17,9 +17,9 @@ command -v sqlite3 >/dev/null 2>&1 || { echo "auth/MFA authorization matrix: sql
 passed=0
 failed=0
 run() {
-    local id=$1
+    local id=$1 scenario_function=$2
     set +e
-    ( set -e; trap 'auth_mfa_fixture_cleanup || true' EXIT; "$2" )
+    ( set -e; trap 'auth_mfa_fixture_cleanup || true' EXIT; "$scenario_function" )
     if (( $? == 0 )); then
         passed=$((passed + 1)); printf '{"scenario_id":"%s","engine":"sqlite","result":"pass"}\n' "$id"
     else
