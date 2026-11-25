@@ -631,33 +631,9 @@ func runAudit(args []string) int {
 	if !ok {
 		return 1
 	}
-	days := *daysPtr
-	daysExplicit := false
-	pruneCmd.Visit(func(f *flag.Flag) {
-		if f.Name == "days" {
-			daysExplicit = true
-		}
-	})
-	if days <= 0 {
-		if daysExplicit {
-			fmt.Fprintln(os.Stderr, "error: --days must be greater than 0")
-			return 1
-		}
-		// Fall back to env, then to the hard-coded default.
-		if envDays, _ := settings.LookupEnv(
-			"DURPDEPLOY_AUDIT_RETENTION_DAYS",
-		); envDays != "" {
-			n, err := fmt.Sscanf(envDays, "%d", &days)
-			if err != nil || n != 1 || days <= 0 {
-				fmt.Fprintln(
-					os.Stderr,
-					"error: DURPDEPLOY_AUDIT_RETENTION_DAYS must be a positive integer",
-				)
-				return 1
-			}
-		} else {
-			days = defaultAuditRetentionDays
-		}
+	days, ok := auditRetentionDays(pruneCmd, *daysPtr, settings.LookupEnv)
+	if !ok {
+		return 1
 	}
 
 	ctx := context.Background()
@@ -682,6 +658,41 @@ func runAudit(args []string) int {
 		time.Unix(cutoff, 0).Format(time.RFC3339),
 	)
 	return 0
+}
+
+func auditRetentionDays(
+	pruneCmd *flag.FlagSet,
+	days int,
+	lookup startupconfig.Lookup,
+) (int, bool) {
+	daysExplicit := false
+	pruneCmd.Visit(func(f *flag.Flag) {
+		if f.Name == "days" {
+			daysExplicit = true
+		}
+	})
+	if days <= 0 {
+		if daysExplicit {
+			fmt.Fprintln(os.Stderr, "error: --days must be greater than 0")
+			return 0, false
+		}
+		// Fall back to env, then to the hard-coded default.
+		if envDays, _ := lookup(
+			"DURPDEPLOY_AUDIT_RETENTION_DAYS",
+		); envDays != "" {
+			n, err := fmt.Sscanf(envDays, "%d", &days)
+			if err != nil || n != 1 || days <= 0 {
+				fmt.Fprintln(
+					os.Stderr,
+					"error: DURPDEPLOY_AUDIT_RETENTION_DAYS must be a positive integer",
+				)
+				return 0, false
+			}
+		} else {
+			days = defaultAuditRetentionDays
+		}
+	}
+	return days, true
 }
 
 func parseKeyRotationArgs(args []string) (bool, bool) {
@@ -938,183 +949,11 @@ func runTokens(args []string) int {
 	defer closeOnExit(dbConn)
 	repo := repository.New(dbConn)
 
-	fmtTime := func(ts int64) string {
-		return time.Unix(ts, 0).Format(time.RFC3339)
-	}
-	fmtNullTime := func(n sql.NullInt64) string {
-		if !n.Valid {
-			return ""
-		}
-		return time.Unix(n.Int64, 0).Format(time.RFC3339)
-	}
-
 	switch fs.Arg(0) {
 	case "create":
-		createCmd := flag.NewFlagSet("tokens create", flag.ExitOnError)
-		userEmail := createCmd.String("user", "", "user email")
-		name := createCmd.String("name", "", "token name")
-		scope := createCmd.String("scope", "", "global or scoped access")
-		role := createCmd.String(
-			"role",
-			"",
-			"viewer, deployer, maintainer, or admin ceiling",
-		)
-		var projectIDs []int64
-		createCmd.Func(
-			"project-id",
-			"selected project ID (repeatable)",
-			func(value string) error {
-				id, err := strconv.ParseInt(value, 10, 64)
-				if err != nil || id <= 0 {
-					return fmt.Errorf("invalid project ID")
-				}
-				projectIDs = append(projectIDs, id)
-				return nil
-			},
-		)
-		if err := createCmd.Parse(fs.Args()[1:]); err != nil {
-			return 1
-		}
-		if *userEmail == "" {
-			fmt.Fprintln(os.Stderr, "error: --user is required")
-			return 1
-		}
-		if *name == "" {
-			fmt.Fprintln(os.Stderr, "error: --name is required")
-			return 1
-		}
-
-		user, err := repo.Queries.GetUserByEmail(ctx, *userEmail)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				fmt.Fprintf(
-					os.Stderr,
-					"error: user not found: %s\n",
-					*userEmail,
-				)
-				return 1
-			}
-			fmt.Fprintf(os.Stderr, "error: lookup user: %v\n", err)
-			return 1
-		}
-
-		grant, err := repo.ValidateTokenMint(ctx, user, repository.TokenScope{
-			Scope: *scope, Role: *role, ProjectIDs: projectIDs,
-		})
-		if err != nil {
-			fmt.Fprintln(
-				os.Stderr,
-				"error: select a valid scope, role, and accessible projects:",
-				err,
-			)
-			return 1
-		}
-		full, prefix, hash, err := auth.MintApiToken()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: mint token: %v\n", err)
-			return 1
-		}
-
-		tx, err := repo.DB.BeginTx(ctx, nil)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: create token: %v\n", err)
-			return 1
-		}
-		defer tx.Rollback() //nolint:errcheck // Commit closes successful writes.
-		q := repo.Queries.WithTx(tx)
-		id := uuid.NewString()
-		if _, err := q.CreateApiToken(ctx, db.CreateApiTokenParams{
-			ID:          id,
-			UserID:      user.ID,
-			Name:        *name,
-			TokenPrefix: prefix,
-			TokenHash:   hash,
-			Scope:       grant.Scope,
-			ExpiresAt:   sql.NullInt64{Valid: false},
-		}); err != nil {
-			fmt.Fprintf(os.Stderr, "error: create token: %v\n", err)
-			return 1
-		}
-		if err := repository.SaveTokenScope(ctx, q, id, grant); err != nil {
-			fmt.Fprintf(os.Stderr, "error: save token permissions: %v\n", err)
-			return 1
-		}
-		if err := tx.Commit(); err != nil {
-			fmt.Fprintf(os.Stderr, "error: commit token: %v\n", err)
-			return 1
-		}
-
-		fmt.Println(full)
-		fmt.Fprintln(
-			os.Stderr,
-			"warning: this is the only time the plaintext token is shown",
-		)
-		return 0
-
+		return createTokenCommand(ctx, repo, fs.Args()[1:])
 	case "list":
-		listCmd := flag.NewFlagSet("tokens list", flag.ExitOnError)
-		userEmail := listCmd.String("user", "", "user email")
-		if err := listCmd.Parse(fs.Args()[1:]); err != nil {
-			return 1
-		}
-
-		if *userEmail != "" {
-			user, err := repo.Queries.GetUserByEmail(ctx, *userEmail)
-			if err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
-					fmt.Fprintf(
-						os.Stderr,
-						"error: user not found: %s\n",
-						*userEmail,
-					)
-					return 1
-				}
-				fmt.Fprintf(os.Stderr, "error: lookup user: %v\n", err)
-				return 1
-			}
-			rows, err := repo.Queries.ListApiTokensByUser(ctx, user.ID)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "error: list tokens: %v\n", err)
-				return 1
-			}
-			fmt.Println(
-				"PREFIX\tNAME\tCREATED_AT\tLAST_USED_AT\tEXPIRES_AT\tREVOKED_AT",
-			)
-			for _, r := range rows {
-				fmt.Printf(
-					"%s\t%s\t%s\t%s\t%s\t%s\n",
-					r.TokenPrefix,
-					r.Name,
-					fmtTime(r.CreatedAt),
-					fmtNullTime(r.LastUsedAt),
-					fmtNullTime(r.ExpiresAt),
-					fmtNullTime(r.RevokedAt),
-				)
-			}
-			return 0
-		}
-
-		rows, err := repo.Queries.ListAllApiTokens(ctx)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: list tokens: %v\n", err)
-			return 1
-		}
-		fmt.Println(
-			"PREFIX\tNAME\tUSER_EMAIL\tCREATED_AT\tLAST_USED_AT\tEXPIRES_AT\tREVOKED_AT",
-		)
-		for _, r := range rows {
-			fmt.Printf(
-				"%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				r.TokenPrefix,
-				r.Name,
-				r.Email,
-				fmtTime(r.CreatedAt),
-				fmtNullTime(r.LastUsedAt),
-				fmtNullTime(r.ExpiresAt),
-				fmtNullTime(r.RevokedAt),
-			)
-		}
-		return 0
+		return listTokensCommand(ctx, repo, fs.Args()[1:])
 
 	case "revoke":
 		if fs.NArg() < 2 {
@@ -1161,4 +1000,191 @@ func runTokens(args []string) int {
 		)
 		return 1
 	}
+}
+
+func createTokenCommand(
+	ctx context.Context,
+	repo *repository.Repository,
+	args []string,
+) int {
+	createCmd := flag.NewFlagSet("tokens create", flag.ExitOnError)
+	userEmail := createCmd.String("user", "", "user email")
+	name := createCmd.String("name", "", "token name")
+	scope := createCmd.String("scope", "", "global or scoped access")
+	role := createCmd.String(
+		"role",
+		"",
+		"viewer, deployer, maintainer, or admin ceiling",
+	)
+	var projectIDs []int64
+	createCmd.Func(
+		"project-id",
+		"selected project ID (repeatable)",
+		func(value string) error {
+			id, err := strconv.ParseInt(value, 10, 64)
+			if err != nil || id <= 0 {
+				return fmt.Errorf("invalid project ID")
+			}
+			projectIDs = append(projectIDs, id)
+			return nil
+		},
+	)
+	if err := createCmd.Parse(args); err != nil {
+		return 1
+	}
+	if *userEmail == "" {
+		fmt.Fprintln(os.Stderr, "error: --user is required")
+		return 1
+	}
+	if *name == "" {
+		fmt.Fprintln(os.Stderr, "error: --name is required")
+		return 1
+	}
+
+	user, err := repo.Queries.GetUserByEmail(ctx, *userEmail)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			fmt.Fprintf(
+				os.Stderr,
+				"error: user not found: %s\n",
+				*userEmail,
+			)
+			return 1
+		}
+		fmt.Fprintf(os.Stderr, "error: lookup user: %v\n", err)
+		return 1
+	}
+
+	grant, err := repo.ValidateTokenMint(ctx, user, repository.TokenScope{
+		Scope: *scope, Role: *role, ProjectIDs: projectIDs,
+	})
+	if err != nil {
+		fmt.Fprintln(
+			os.Stderr,
+			"error: select a valid scope, role, and accessible projects:",
+			err,
+		)
+		return 1
+	}
+	full, prefix, hash, err := auth.MintApiToken()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: mint token: %v\n", err)
+		return 1
+	}
+
+	tx, err := repo.DB.BeginTx(ctx, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: create token: %v\n", err)
+		return 1
+	}
+	defer tx.Rollback() //nolint:errcheck // Commit closes successful writes.
+	q := repo.Queries.WithTx(tx)
+	id := uuid.NewString()
+	if _, err := q.CreateApiToken(ctx, db.CreateApiTokenParams{
+		ID:          id,
+		UserID:      user.ID,
+		Name:        *name,
+		TokenPrefix: prefix,
+		TokenHash:   hash,
+		Scope:       grant.Scope,
+		ExpiresAt:   sql.NullInt64{Valid: false},
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "error: create token: %v\n", err)
+		return 1
+	}
+	if err := repository.SaveTokenScope(ctx, q, id, grant); err != nil {
+		fmt.Fprintf(os.Stderr, "error: save token permissions: %v\n", err)
+		return 1
+	}
+	if err := tx.Commit(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: commit token: %v\n", err)
+		return 1
+	}
+
+	fmt.Println(full)
+	fmt.Fprintln(
+		os.Stderr,
+		"warning: this is the only time the plaintext token is shown",
+	)
+	return 0
+}
+
+func listTokensCommand(
+	ctx context.Context,
+	repo *repository.Repository,
+	args []string,
+) int {
+	fmtTime := func(ts int64) string {
+		return time.Unix(ts, 0).Format(time.RFC3339)
+	}
+	fmtNullTime := func(n sql.NullInt64) string {
+		if !n.Valid {
+			return ""
+		}
+		return time.Unix(n.Int64, 0).Format(time.RFC3339)
+	}
+
+	listCmd := flag.NewFlagSet("tokens list", flag.ExitOnError)
+	userEmail := listCmd.String("user", "", "user email")
+	if err := listCmd.Parse(args); err != nil {
+		return 1
+	}
+
+	if *userEmail != "" {
+		user, err := repo.Queries.GetUserByEmail(ctx, *userEmail)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				fmt.Fprintf(
+					os.Stderr,
+					"error: user not found: %s\n",
+					*userEmail,
+				)
+				return 1
+			}
+			fmt.Fprintf(os.Stderr, "error: lookup user: %v\n", err)
+			return 1
+		}
+		rows, err := repo.Queries.ListApiTokensByUser(ctx, user.ID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: list tokens: %v\n", err)
+			return 1
+		}
+		fmt.Println(
+			"PREFIX\tNAME\tCREATED_AT\tLAST_USED_AT\tEXPIRES_AT\tREVOKED_AT",
+		)
+		for _, r := range rows {
+			fmt.Printf(
+				"%s\t%s\t%s\t%s\t%s\t%s\n",
+				r.TokenPrefix,
+				r.Name,
+				fmtTime(r.CreatedAt),
+				fmtNullTime(r.LastUsedAt),
+				fmtNullTime(r.ExpiresAt),
+				fmtNullTime(r.RevokedAt),
+			)
+		}
+		return 0
+	}
+
+	rows, err := repo.Queries.ListAllApiTokens(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: list tokens: %v\n", err)
+		return 1
+	}
+	fmt.Println(
+		"PREFIX\tNAME\tUSER_EMAIL\tCREATED_AT\tLAST_USED_AT\tEXPIRES_AT\tREVOKED_AT",
+	)
+	for _, r := range rows {
+		fmt.Printf(
+			"%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			r.TokenPrefix,
+			r.Name,
+			r.Email,
+			fmtTime(r.CreatedAt),
+			fmtNullTime(r.LastUsedAt),
+			fmtNullTime(r.ExpiresAt),
+			fmtNullTime(r.RevokedAt),
+		)
+	}
+	return 0
 }
