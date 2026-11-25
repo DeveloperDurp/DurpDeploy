@@ -152,35 +152,45 @@ func TestArtifactGateClaimsAcrossDatabases(t *testing.T) {
 		if err := first.PauseArtifactGate(t.Context(), id, 1); err != nil {
 			t.Fatal(err)
 		}
-		// When: two connections approve and subsequently claim the continuation.
-		var group sync.WaitGroup
-		results := make(chan error, 2)
-		for _, repo := range []*Repository{first, second} {
-			group.Go(
-				func() { results <- repo.ApproveArtifact(t.Context(), id, 0, 1, 1, checksum) },
-			)
-		}
-		group.Wait()
-		close(results)
-		accepted := 0
-		for err := range results {
-			if err == nil {
-				accepted++
-			} else if !errors.Is(err, ErrArtifactGate) {
-				t.Fatal(err)
-			}
-		}
-		if accepted != 1 {
-			t.Fatalf("approvals=%d", accepted)
-		}
-		_, gated, err := first.BeginArtifactGateRun(t.Context(), id)
-		if err != nil || !gated {
-			t.Fatalf("claim gated=%v err=%v", gated, err)
-		}
-		_, _, err = second.BeginArtifactGateRun(t.Context(), id)
-		// Then: exactly one approval and execution claim are accepted.
-		if !errors.Is(err, ErrArtifactGate) {
-			t.Fatalf("duplicate claim=%v", err)
-		}
+		verifyArtifactGateContinuationClaim(t, first, second, id, checksum)
 	})
+}
+
+func verifyArtifactGateContinuationClaim(
+	t *testing.T,
+	first, second *Repository,
+	id int64,
+	checksum string,
+) {
+	t.Helper()
+	// When: two connections approve and subsequently claim the continuation.
+	var group sync.WaitGroup
+	results := make(chan error, 2)
+	for _, repo := range []*Repository{first, second} {
+		group.Go(
+			func() { results <- repo.ApproveArtifact(t.Context(), id, 0, 1, 1, checksum) },
+		)
+	}
+	group.Wait()
+	close(results)
+	accepted := 0
+	for err := range results {
+		if err == nil {
+			accepted++
+		} else if !errors.Is(err, ErrArtifactGate) {
+			t.Fatal(err)
+		}
+	}
+	if accepted != 1 {
+		t.Fatalf("approvals=%d", accepted)
+	}
+	_, gated, err := first.BeginArtifactGateRun(t.Context(), id)
+	if err != nil || !gated {
+		t.Fatalf("claim gated=%v err=%v", gated, err)
+	}
+	_, _, err = second.BeginArtifactGateRun(t.Context(), id)
+	// Then: exactly one approval and execution claim are accepted.
+	if !errors.Is(err, ErrArtifactGate) {
+		t.Fatalf("duplicate claim=%v", err)
+	}
 }

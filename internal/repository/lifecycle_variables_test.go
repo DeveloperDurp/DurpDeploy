@@ -99,49 +99,13 @@ func TestLifecycleVariablesRunbookSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var captured []int64
-	for _, releaseID := range []int64{first.ReleaseID, second.ReleaseID} {
-		stored, err := repo.Queries.ListReleaseVariablesByRelease(
-			t.Context(),
-			releaseID,
-		)
-		if err != nil || len(stored) != 0 {
-			t.Fatal("lifecycle variables saved in release", err)
-		}
-		result, err := repo.CreateDeployment(
-			t.Context(),
-			db.CreateDeploymentParams{
-				ReleaseID: releaseID, EnvironmentID: env.ID, Status: "pending",
-			},
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		captured = append(captured, result.Deployment.ID)
-		snapshot, err := repo.Queries.GetDeploymentVariableSnapshot(
-			t.Context(),
-			result.Deployment.ID,
-		)
-		if err != nil || strings.Contains(snapshot.Value, "second-secret") {
-			t.Fatal("deployment snapshot not encrypted", err)
-		}
-		plain, err := repo.ListDeploymentVariables(
-			t.Context(),
-			result.Deployment.ID,
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		resolved, err := runner.ResolveReleaseVariables(plain, env.ID)
-		if err != nil || len(resolved) != 1 ||
-			resolved[0].Value != "second-secret" ||
-			!resolved[0].Secret {
-			t.Fatal(
-				"runbook execution did not resolve current shared value",
-				err,
-			)
-		}
-	}
+	captured := captureRunbookDeploymentSnapshots(
+		t,
+		repo,
+		env.ID,
+		first.ReleaseID,
+		second.ReleaseID,
+	)
 	input.Value.String = "third-secret"
 	if _, err := repo.SaveLifecycleVariable(t.Context(), input); err != nil {
 		t.Fatal(err)
@@ -170,4 +134,57 @@ func TestLifecycleVariablesRunbookSnapshots(t *testing.T) {
 	if _, err := repo.SaveLifecycleVariable(t.Context(), input); err == nil {
 		t.Fatal("removed stage accepted new scoped value")
 	}
+}
+
+func captureRunbookDeploymentSnapshots(
+	t *testing.T,
+	repo *repository.Repository,
+	environmentID int64,
+	releaseIDs ...int64,
+) []int64 {
+	t.Helper()
+	var captured []int64
+	for _, releaseID := range releaseIDs {
+		stored, err := repo.Queries.ListReleaseVariablesByRelease(
+			t.Context(),
+			releaseID,
+		)
+		if err != nil || len(stored) != 0 {
+			t.Fatal("lifecycle variables saved in release", err)
+		}
+		result, err := repo.CreateDeployment(
+			t.Context(),
+			db.CreateDeploymentParams{
+				ReleaseID: releaseID, EnvironmentID: environmentID, Status: "pending",
+			},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		captured = append(captured, result.Deployment.ID)
+		snapshot, err := repo.Queries.GetDeploymentVariableSnapshot(
+			t.Context(),
+			result.Deployment.ID,
+		)
+		if err != nil || strings.Contains(snapshot.Value, "second-secret") {
+			t.Fatal("deployment snapshot not encrypted", err)
+		}
+		plain, err := repo.ListDeploymentVariables(
+			t.Context(),
+			result.Deployment.ID,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resolved, err := runner.ResolveReleaseVariables(plain, environmentID)
+		if err != nil || len(resolved) != 1 ||
+			resolved[0].Value != "second-secret" ||
+			!resolved[0].Secret {
+			t.Fatal(
+				"runbook execution did not resolve current shared value",
+				err,
+			)
+		}
+	}
+	return captured
 }

@@ -118,30 +118,15 @@ func TestEnvironmentQueueFIFOApprovalCancellationAndRecovery(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		// When: another connection recovers the queue and completes its owner.
-		if err := restarted.ReconcileDeploymentQueues(ctx); err != nil {
-			t.Fatal(err)
-		}
-		finishQueueFixture(t, restarted, owner.ID, "succeeded")
-		// Then: approval retains creation order, without preempting the owner.
-		active, err := repo.Queries.GetDeploymentSlot(ctx, next.ID)
-		if err != nil || active != approval.ID {
-			t.Fatalf("active=%d, want %d: %v", active, approval.ID, err)
-		}
-		state, err = repo.Queries.GetDeploymentQueueState(ctx,
-			db.GetDeploymentQueueStateParams{DeploymentID: next.ID})
-		if err != nil || state.QueuePosition != 1 {
-			t.Fatalf("position=%d, want 1: %v", state.QueuePosition, err)
-		}
-		finishQueueFixture(t, restarted, approval.ID, "failed")
-		active, err = repo.Queries.GetDeploymentSlot(ctx, next.ID)
-		if err != nil || active != next.ID {
-			t.Fatalf("active=%d, want %d: %v", active, next.ID, err)
-		}
-		d, err := repo.Queries.GetDeployment(ctx, cancelled.ID)
-		if err != nil || d.Status != "cancelled" {
-			t.Fatalf("cancelled status=%s: %v", d.Status, err)
-		}
+		verifyEnvironmentQueueRecovery(
+			t,
+			repo,
+			restarted,
+			owner.ID,
+			approval.ID,
+			next.ID,
+			cancelled.ID,
+		)
 	})
 }
 
@@ -218,4 +203,37 @@ func TestEnvironmentQueueAuditFailureDoesNotUndoState(t *testing.T) {
 			t.Fatalf("next=%+v error=%v", persisted, err)
 		}
 	})
+}
+
+func verifyEnvironmentQueueRecovery(
+	t *testing.T,
+	repo, restarted *Repository,
+	ownerID, approvalID, nextID, cancelledID int64,
+) {
+	t.Helper()
+	ctx := t.Context()
+	// When: another connection recovers the queue and completes its owner.
+	if err := restarted.ReconcileDeploymentQueues(ctx); err != nil {
+		t.Fatal(err)
+	}
+	finishQueueFixture(t, restarted, ownerID, "succeeded")
+	// Then: approval retains creation order, without preempting the owner.
+	active, err := repo.Queries.GetDeploymentSlot(ctx, nextID)
+	if err != nil || active != approvalID {
+		t.Fatalf("active=%d, want %d: %v", active, approvalID, err)
+	}
+	state, err := repo.Queries.GetDeploymentQueueState(ctx,
+		db.GetDeploymentQueueStateParams{DeploymentID: nextID})
+	if err != nil || state.QueuePosition != 1 {
+		t.Fatalf("position=%d, want 1: %v", state.QueuePosition, err)
+	}
+	finishQueueFixture(t, restarted, approvalID, "failed")
+	active, err = repo.Queries.GetDeploymentSlot(ctx, nextID)
+	if err != nil || active != nextID {
+		t.Fatalf("active=%d, want %d: %v", active, nextID, err)
+	}
+	d, err := repo.Queries.GetDeployment(ctx, cancelledID)
+	if err != nil || d.Status != "cancelled" {
+		t.Fatalf("cancelled status=%s: %v", d.Status, err)
+	}
 }
