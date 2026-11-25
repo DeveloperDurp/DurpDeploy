@@ -3,6 +3,7 @@ package agentserver_test
 import (
 	"encoding/json"
 	"fmt"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -79,45 +80,15 @@ func TestAgentFleetDrainPausesRunnerTimeoutE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 	statusPath := fmt.Sprintf("/api/v1/deployments/%d/status", deployment.ID)
-	assertWaiting := func(want bool) {
-		t.Helper()
-		var status struct {
-			WaitingForAgents bool `json:"waiting_for_agents"`
-		}
-		if err := json.Unmarshal(
-			fleetRequest(t, srv, "GET", statusPath, "admin", "", 200),
-			&status,
-		); err != nil {
-			t.Fatal(err)
-		}
-		if status.WaitingForAgents != want {
-			t.Fatalf(
-				"waiting_for_agents=%v want=%v",
-				status.WaitingForAgents,
-				want,
-			)
-		}
-	}
-	waitQueued := func() {
-		t.Helper()
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) {
-			if fleetAgentState(t, srv).Agent.Queued == 1 {
-				return
-			}
-			time.Sleep(25 * time.Millisecond)
-		}
-		t.Fatal("runner did not queue its remote step")
-	}
 	for step := range 2 {
-		waitQueued()
+		waitFleetRunnerQueued(t, srv)
 		// When: maintenance lasts beyond the configured execution timeout.
 		time.Sleep(1500 * time.Millisecond)
 		if state := fleetAgentState(t, srv); state.Agent.Queued != 1 ||
 			state.Agent.AdministrativeStatus != "drained" {
 			t.Fatalf("maintenance consumed step %d timeout: %+v", step, state)
 		}
-		assertWaiting(true)
+		verifyFleetRunnerWaiting(t, srv, statusPath, true)
 		fleetRequest(t, srv, "POST", base+"/resume", "admin", "", 204)
 		poll := decodePollResponse(
 			t,
@@ -143,7 +114,7 @@ func TestAgentFleetDrainPausesRunnerTimeoutE2E(t *testing.T) {
 		if state := fleetAgentState(t, srv); state.Agent.AdministrativeStatus != "draining" {
 			t.Fatalf("issued step %d state=%+v", step, state)
 		}
-		assertWaiting(false)
+		verifyFleetRunnerWaiting(t, srv, statusPath, false)
 		input := stageRequest(
 			t,
 			f,
@@ -179,20 +150,65 @@ func TestAgentFleetDrainPausesRunnerTimeoutE2E(t *testing.T) {
 		}
 	}
 	// Then: both steps complete successfully through the public contracts.
-	path := fmt.Sprintf("/api/v1/deployments/%d/status", deployment.ID)
+	waitFleetRunnerSucceeded(t, srv, statusPath)
+}
+
+func verifyFleetRunnerWaiting(
+	t *testing.T,
+	srv *httptest.Server,
+	statusPath string,
+	want bool,
+) {
+	t.Helper()
+	var status struct {
+		WaitingForAgents bool `json:"waiting_for_agents"`
+	}
+	if err := json.Unmarshal(
+		fleetRequest(t, srv, "GET", statusPath, "admin", "", 200),
+		&status,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if status.WaitingForAgents != want {
+		t.Fatalf(
+			"waiting_for_agents=%v want=%v",
+			status.WaitingForAgents,
+			want,
+		)
+	}
+}
+
+func waitFleetRunnerQueued(t *testing.T, srv *httptest.Server) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if fleetAgentState(t, srv).Agent.Queued == 1 {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatal("runner did not queue its remote step")
+}
+
+func waitFleetRunnerSucceeded(
+	t *testing.T,
+	srv *httptest.Server,
+	statusPath string,
+) {
+	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		var status struct {
 			Status string `json:"status"`
 		}
 		if err := json.Unmarshal(
-			fleetRequest(t, srv, "GET", path, "admin", "", 200),
+			fleetRequest(t, srv, "GET", statusPath, "admin", "", 200),
 			&status,
 		); err != nil {
 			t.Fatal(err)
 		}
 		if status.Status == "succeeded" {
-			assertWaiting(false)
+			verifyFleetRunnerWaiting(t, srv, statusPath, false)
 			return
 		}
 		if status.Status == "failed" {

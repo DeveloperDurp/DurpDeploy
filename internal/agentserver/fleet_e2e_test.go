@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -116,6 +117,11 @@ func TestAgentFleetDrainE2E(t *testing.T) {
 	if int64(resumed.DeploymentID) != second {
 		t.Fatalf("resumed deployment=%d want=%d", resumed.DeploymentID, second)
 	}
+	verifyFleetDrainResumeAudit(t, srv)
+}
+
+func verifyFleetDrainResumeAudit(t *testing.T, srv *httptest.Server) {
+	t.Helper()
 	var audits struct {
 		Items []struct {
 			Action string `json:"action"`

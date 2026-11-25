@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/http/httptest"
 	"reflect"
 	"sync/atomic"
 	"testing"
@@ -90,6 +91,28 @@ func TestAgentFleetListMatchesDetailsE2E(t *testing.T) {
 	}
 	items := readList()
 	reads := counter.reads.Load()
+	verifyFleetListDetails(t, srv, items)
+	for i := range 40 {
+		if _, err := f.repo.DB.Exec(`INSERT INTO agents(id,name,endpoint)
+			VALUES(?,?,'https://fixture')`, fmt.Sprint(i), fmt.Sprint(i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	counter.reads.Store(0)
+	if expanded := readList(); len(expanded) != 42 ||
+		counter.reads.Load() != reads {
+		t.Fatalf("fleet grew queries: items=%d reads=%d previous=%d",
+			len(expanded), counter.reads.Load(), reads)
+	}
+	t.Logf("fleet list uses %d reads for both 2 and 42 agents", reads)
+}
+
+func verifyFleetListDetails(
+	t *testing.T,
+	srv *httptest.Server,
+	items []map[string]any,
+) {
+	t.Helper()
 	for _, item := range items {
 		if item["server_version"] != buildinfo.Current().String() {
 			t.Fatalf("fleet server build differs from CLI: %+v", item)
@@ -122,17 +145,4 @@ func TestAgentFleetListMatchesDetailsE2E(t *testing.T) {
 			t.Fatalf("history omitted from populated agent: %+v", item)
 		}
 	}
-	for i := range 40 {
-		if _, err := f.repo.DB.Exec(`INSERT INTO agents(id,name,endpoint)
-			VALUES(?,?,'https://fixture')`, fmt.Sprint(i), fmt.Sprint(i)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	counter.reads.Store(0)
-	if expanded := readList(); len(expanded) != 42 ||
-		counter.reads.Load() != reads {
-		t.Fatalf("fleet grew queries: items=%d reads=%d previous=%d",
-			len(expanded), counter.reads.Load(), reads)
-	}
-	t.Logf("fleet list uses %d reads for both 2 and 42 agents", reads)
 }
