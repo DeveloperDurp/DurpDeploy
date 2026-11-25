@@ -68,7 +68,51 @@ func resolveIdentity(
 				return fmt.Errorf("get identity user: %w", err)
 			}
 		case errors.Is(err, sql.ErrNoRows):
-			userID, found, findErr := findUserIDByEmail(
+			if err := linkIdentityUser(ctx, queries, identity, &user); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("get OIDC identity: %w", err)
+		}
+
+		return synchronizeIdentityUser(ctx, queries, identity, user, &resolved)
+	}); err != nil {
+		return db.User{}, fmt.Errorf("resolve OIDC identity: %w", err)
+	}
+	return resolved, nil
+}
+
+func linkIdentityUser(
+	ctx context.Context,
+	queries *db.Queries,
+	identity ClaimIdentity,
+	linkedUser *db.User,
+) error {
+	var user db.User
+	var err error
+	userID, found, findErr := findUserIDByEmail(
+		ctx,
+		queries,
+		identity.Email,
+	)
+	if findErr != nil {
+		return findErr
+	}
+	if found {
+		user, err = queries.GetUserByID(ctx, userID)
+		if err != nil {
+			return fmt.Errorf("get matched email user: %w", err)
+		}
+	} else {
+		user, err = queries.CreateUser(ctx, db.CreateUserParams{
+			Email: identity.Email, PasswordHash: "", Name: identity.Name,
+			Role: string(identity.Role),
+		})
+		if err != nil {
+			if !isUniqueConstraint(err) {
+				return fmt.Errorf("create JIT user: %w", err)
+			}
+			userID, found, findErr = findUserIDByEmail(
 				ctx,
 				queries,
 				identity.Email,
@@ -76,114 +120,95 @@ func resolveIdentity(
 			if findErr != nil {
 				return findErr
 			}
-			if found {
-				user, err = queries.GetUserByID(ctx, userID)
-				if err != nil {
-					return fmt.Errorf("get matched email user: %w", err)
-				}
-			} else {
-				user, err = queries.CreateUser(ctx, db.CreateUserParams{
-					Email: identity.Email, PasswordHash: "", Name: identity.Name,
-					Role: string(identity.Role),
-				})
-				if err != nil {
-					if !isUniqueConstraint(err) {
-						return fmt.Errorf("create JIT user: %w", err)
-					}
-					userID, found, findErr = findUserIDByEmail(
-						ctx,
-						queries,
-						identity.Email,
-					)
-					if findErr != nil {
-						return findErr
-					}
-					if !found {
-						return fmt.Errorf("create JIT user: %w", err)
-					}
-					user, findErr = queries.GetUserByID(ctx, userID)
-					if findErr != nil {
-						return fmt.Errorf("get raced JIT user: %w", findErr)
-					}
-				}
+			if !found {
+				return fmt.Errorf("create JIT user: %w", err)
 			}
-
-			_, err = queries.CreateOIDCIdentity(
-				ctx,
-				db.CreateOIDCIdentityParams{
-					Issuer: identity.Issuer, Subject: identity.Subject, UserID: user.ID,
-				},
-			)
-			if err != nil {
-				if !isUniqueConstraint(err) {
-					return fmt.Errorf("create OIDC identity: %w", err)
-				}
-				existing, readErr := queries.GetOIDCIdentity(
-					ctx,
-					db.GetOIDCIdentityParams{
-						Issuer: identity.Issuer, Subject: identity.Subject,
-					},
-				)
-				switch {
-				case readErr == nil && existing.UserID == user.ID:
-				case readErr == nil:
-					return ErrIdentityConflict
-				case errors.Is(readErr, sql.ErrNoRows):
-					return ErrIdentityConflict
-				default:
-					return fmt.Errorf("reread OIDC identity: %w", readErr)
-				}
-			}
-		default:
-			return fmt.Errorf("get OIDC identity: %w", err)
-		}
-
-		matchedUserID, found, err := findUserIDByEmail(
-			ctx,
-			queries,
-			identity.Email,
-		)
-		if err != nil {
-			return err
-		}
-		if found && matchedUserID != user.ID {
-			return ErrIdentityConflict
-		}
-
-		roleChanged := user.Role != string(identity.Role)
-		resolved, err = queries.UpdateOIDCUser(ctx, db.UpdateOIDCUserParams{
-			Email: identity.Email, Name: identity.Name, Role: string(identity.Role),
-			ID: user.ID, ExpectedRole: user.Role,
-		})
-		if errors.Is(err, sql.ErrNoRows) {
-			return errIdentityRetry
-		}
-		if err != nil {
-			if isUniqueConstraint(err) {
-				racedUserID, racedFound, findErr := findUserIDByEmail(
-					ctx,
-					queries,
-					identity.Email,
-				)
-				if findErr != nil {
-					return findErr
-				}
-				if racedFound && racedUserID != user.ID {
-					return ErrIdentityConflict
-				}
-			}
-			return fmt.Errorf("synchronize OIDC user claims: %w", err)
-		}
-		if roleChanged {
-			if err := auth.InvalidateBrowserAuthInTx(ctx, queries, user.ID); err != nil {
-				return fmt.Errorf("invalidate browser authentication: %w", err)
+			user, findErr = queries.GetUserByID(ctx, userID)
+			if findErr != nil {
+				return fmt.Errorf("get raced JIT user: %w", findErr)
 			}
 		}
-		return nil
-	}); err != nil {
-		return db.User{}, fmt.Errorf("resolve OIDC identity: %w", err)
 	}
-	return resolved, nil
+
+	_, err = queries.CreateOIDCIdentity(
+		ctx,
+		db.CreateOIDCIdentityParams{
+			Issuer: identity.Issuer, Subject: identity.Subject, UserID: user.ID,
+		},
+	)
+	if err != nil {
+		if !isUniqueConstraint(err) {
+			return fmt.Errorf("create OIDC identity: %w", err)
+		}
+		existing, readErr := queries.GetOIDCIdentity(
+			ctx,
+			db.GetOIDCIdentityParams{
+				Issuer: identity.Issuer, Subject: identity.Subject,
+			},
+		)
+		switch {
+		case readErr == nil && existing.UserID == user.ID:
+		case readErr == nil:
+			return ErrIdentityConflict
+		case errors.Is(readErr, sql.ErrNoRows):
+			return ErrIdentityConflict
+		default:
+			return fmt.Errorf("reread OIDC identity: %w", readErr)
+		}
+	}
+	*linkedUser = user
+	return nil
+}
+
+func synchronizeIdentityUser(
+	ctx context.Context,
+	queries *db.Queries,
+	identity ClaimIdentity,
+	user db.User,
+	resolved *db.User,
+) error {
+	matchedUserID, found, err := findUserIDByEmail(
+		ctx,
+		queries,
+		identity.Email,
+	)
+	if err != nil {
+		return err
+	}
+	if found && matchedUserID != user.ID {
+		return ErrIdentityConflict
+	}
+
+	roleChanged := user.Role != string(identity.Role)
+	*resolved, err = queries.UpdateOIDCUser(ctx, db.UpdateOIDCUserParams{
+		Email: identity.Email, Name: identity.Name, Role: string(identity.Role),
+		ID: user.ID, ExpectedRole: user.Role,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return errIdentityRetry
+	}
+	if err != nil {
+		if isUniqueConstraint(err) {
+			racedUserID, racedFound, findErr := findUserIDByEmail(
+				ctx,
+				queries,
+				identity.Email,
+			)
+			if findErr != nil {
+				return findErr
+			}
+			if racedFound && racedUserID != user.ID {
+				return ErrIdentityConflict
+			}
+		}
+		return fmt.Errorf("synchronize OIDC user claims: %w", err)
+	}
+	if roleChanged {
+		if err := auth.InvalidateBrowserAuthInTx(ctx, queries, user.ID); err != nil {
+			return fmt.Errorf("invalidate browser authentication: %w", err)
+		}
+	}
+	return nil
 }
 
 func findUserIDByEmail(
