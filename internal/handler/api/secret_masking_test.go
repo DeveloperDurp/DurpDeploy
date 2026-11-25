@@ -121,34 +121,7 @@ func TestVariable_SecretValuesNeverReturned(t *testing.T) {
 		t.Fatalf("non-secret value missing: %s", rec.Body.String())
 	}
 
-	var secretID, plainID int64
-	rec = maskingRequest(t, r, http.MethodGet, base, token, "")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("list: %d %s", rec.Code, rec.Body.String())
-	}
-	if strings.Contains(rec.Body.String(), "super-secret") {
-		t.Fatalf("list leaked secret: %s", rec.Body.String())
-	}
-	items := decodeListBody(t, rec.Body.Bytes())
-	for _, item := range items {
-		id, _ := item["id"].(float64)
-		name, _ := item["name"].(string)
-		if name == "S" {
-			secretID = int64(id)
-			if item["value"] != "" {
-				t.Fatalf("list secret value = %v, want empty", item["value"])
-			}
-		}
-		if name == "N" {
-			plainID = int64(id)
-			if item["value"] != "plain-value" {
-				t.Fatalf("list plain value = %v", item["value"])
-			}
-		}
-	}
-	if secretID == 0 || plainID == 0 {
-		t.Fatalf("seeded variables missing from list: %s", rec.Body.String())
-	}
+	secretID := verifyMaskedVariableList(t, r, base, token)
 
 	// Single-record get follows the same policy.
 	rec = maskingRequest(t, r, http.MethodGet,
@@ -197,6 +170,44 @@ func TestVariable_SecretValuesNeverReturned(t *testing.T) {
 	if v.Value.String != "rotated-secret" {
 		t.Fatalf("stored value = %q, want rotated-secret", v.Value.String)
 	}
+}
+
+func verifyMaskedVariableList(
+	t *testing.T,
+	r http.Handler,
+	base, token string,
+) int64 {
+	t.Helper()
+	var secretID, plainID int64
+	rec := maskingRequest(t, r, http.MethodGet, base, token, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list: %d %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "super-secret") {
+		t.Fatalf("list leaked secret: %s", rec.Body.String())
+	}
+	items := decodeListBody(t, rec.Body.Bytes())
+	for _, item := range items {
+		id, _ := item["id"].(float64)
+		name, _ := item["name"].(string)
+		if name == "S" {
+			secretID = int64(id)
+			if item["value"] != "" {
+				t.Fatalf("list secret value = %v, want empty", item["value"])
+			}
+		}
+		if name == "N" {
+			plainID = int64(id)
+			if item["value"] != "plain-value" {
+				t.Fatalf("list plain value = %v", item["value"])
+			}
+		}
+	}
+	if secretID == 0 || plainID == 0 {
+		t.Fatalf("seeded variables missing from list: %s", rec.Body.String())
+	}
+
+	return secretID
 }
 
 func TestVariable_SecretMaskedByRole(t *testing.T) {
@@ -336,34 +347,39 @@ func TestReleaseVariables_SecretValuesMasked(t *testing.T) {
 		t.Fatalf("decode release: %v", err)
 	}
 	for _, rv := range body.Variables {
-		if rv.Name == "REL_SECRET" {
-			if rv.Value != "" {
-				t.Fatalf("REL_SECRET snapshot value = %q, want \"\"", rv.Value)
-			}
+		verifyReleaseVariableSnapshotValue(t, rv.Name, rv.Value)
+	}
+}
+
+func verifyReleaseVariableSnapshotValue(t *testing.T, name, value string) {
+	t.Helper()
+	if name == "REL_SECRET" {
+		if value != "" {
+			t.Fatalf("REL_SECRET snapshot value = %q, want \"\"", value)
 		}
-		if rv.Name == "REL_SECRET_EMPTY" {
-			if rv.Value != "" {
-				t.Fatalf(
-					"REL_SECRET_EMPTY snapshot value = %q, want \"\"",
-					rv.Value,
-				)
-			}
+	}
+	if name == "REL_SECRET_EMPTY" {
+		if value != "" {
+			t.Fatalf(
+				"REL_SECRET_EMPTY snapshot value = %q, want \"\"",
+				value,
+			)
 		}
-		if rv.Name == "REL_PLAIN" {
-			if rv.Value != "release-plain" {
-				t.Fatalf(
-					"REL_PLAIN snapshot value = %q, want release-plain",
-					rv.Value,
-				)
-			}
+	}
+	if name == "REL_PLAIN" {
+		if value != "release-plain" {
+			t.Fatalf(
+				"REL_PLAIN snapshot value = %q, want release-plain",
+				value,
+			)
 		}
-		if rv.Name == "REL_PLAIN_EMPTY" {
-			if rv.Value != "" {
-				t.Fatalf(
-					"REL_PLAIN_EMPTY snapshot value = %q, want \"\"",
-					rv.Value,
-				)
-			}
+	}
+	if name == "REL_PLAIN_EMPTY" {
+		if value != "" {
+			t.Fatalf(
+				"REL_PLAIN_EMPTY snapshot value = %q, want \"\"",
+				value,
+			)
 		}
 	}
 }

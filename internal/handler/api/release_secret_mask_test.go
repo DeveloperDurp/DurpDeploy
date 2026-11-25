@@ -142,77 +142,102 @@ func TestRelease_SecretMaskAcrossRoles(t *testing.T) {
 	for name, token := range tokens {
 		name, token := name, token
 		t.Run(name+" read is masked", func(t *testing.T) {
-			rec := tstReleaseGet(
-				t, r, tstReleasePath(p.ID, release.ID), token,
+			verifyReleaseMaskForRole(
+				t,
+				r,
+				tstReleasePath(p.ID, release.ID),
+				token,
+				secretValue,
+				openValue,
 			)
-			if rec.Code != http.StatusOK {
-				t.Fatalf(
-					"expected 200, got %d: %s", rec.Code, rec.Body,
-				)
-			}
-			s := rec.Body.String()
-			if strings.Contains(s, secretValue) {
-				t.Fatalf("release response leaked secret: %s", s)
-			}
-			var body map[string]any
-			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-				t.Fatalf("decode release: %v", err)
-			}
-			vars, ok := body["variables"].([]any)
-			if !ok || len(vars) != 2 {
-				t.Fatalf("bad variables: %v", body["variables"])
-			}
-			seen := map[string]bool{}
-			for _, item := range vars {
-				vv, ok := item.(map[string]any)
-				if !ok {
-					t.Fatalf("bad variable type: %T", item)
-				}
-				vname, _ := vv["name"].(string)
-				seen[vname] = true
-				val, valOK := vv["value"].(string)
-				if !valOK {
-					t.Fatalf(
-						"snapshot value is not a JSON string: %T",
-						vv["value"],
-					)
-				}
-				flag, flagOK := vv["secret"].(float64)
-				if !flagOK {
-					t.Fatalf(
-						"secret flag missing or mistyped: %v",
-						vv["secret"],
-					)
-				}
-				switch vname {
-				case "rel_secret":
-					if val != "" {
-						t.Fatalf(
-							"secret snapshot not masked: %q", val,
-						)
-					}
-					if flag != 1 {
-						t.Fatal("secret flag lost")
-					}
-				case "rel_open":
-					if val != openValue {
-						t.Fatalf(
-							"non-secret snapshot changed: %q", val,
-						)
-					}
-					if flag != 0 {
-						t.Fatal("open flag changed")
-					}
-				default:
-					t.Fatalf("unexpected snapshot name: %q", vname)
-				}
-			}
-			if !seen["rel_secret"] || !seen["rel_open"] {
-				t.Fatalf(
-					"seeded variables missing: %v", seen,
-				)
-			}
 		})
+	}
+}
+
+func verifyReleaseMaskForRole(
+	t *testing.T,
+	r *chi.Mux,
+	path, token, secretValue, openValue string,
+) {
+	t.Helper()
+	rec := tstReleaseGet(
+		t, r, path, token,
+	)
+	if rec.Code != http.StatusOK {
+		t.Fatalf(
+			"expected 200, got %d: %s", rec.Code, rec.Body,
+		)
+	}
+	s := rec.Body.String()
+	if strings.Contains(s, secretValue) {
+		t.Fatalf("release response leaked secret: %s", s)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode release: %v", err)
+	}
+	vars, ok := body["variables"].([]any)
+	if !ok || len(vars) != 2 {
+		t.Fatalf("bad variables: %v", body["variables"])
+	}
+	seen := map[string]bool{}
+	for _, item := range vars {
+		vv, ok := item.(map[string]any)
+		if !ok {
+			t.Fatalf("bad variable type: %T", item)
+		}
+		vname, _ := vv["name"].(string)
+		seen[vname] = true
+		verifyReleaseSnapshotField(t, vv, vname, openValue)
+	}
+	if !seen["rel_secret"] || !seen["rel_open"] {
+		t.Fatalf(
+			"seeded variables missing: %v", seen,
+		)
+	}
+}
+
+func verifyReleaseSnapshotField(
+	t *testing.T,
+	vv map[string]any,
+	vname, openValue string,
+) {
+	t.Helper()
+	val, valOK := vv["value"].(string)
+	if !valOK {
+		t.Fatalf(
+			"snapshot value is not a JSON string: %T",
+			vv["value"],
+		)
+	}
+	flag, flagOK := vv["secret"].(float64)
+	if !flagOK {
+		t.Fatalf(
+			"secret flag missing or mistyped: %v",
+			vv["secret"],
+		)
+	}
+	switch vname {
+	case "rel_secret":
+		if val != "" {
+			t.Fatalf(
+				"secret snapshot not masked: %q", val,
+			)
+		}
+		if flag != 1 {
+			t.Fatal("secret flag lost")
+		}
+	case "rel_open":
+		if val != openValue {
+			t.Fatalf(
+				"non-secret snapshot changed: %q", val,
+			)
+		}
+		if flag != 0 {
+			t.Fatal("open flag changed")
+		}
+	default:
+		t.Fatalf("unexpected snapshot name: %q", vname)
 	}
 }
 
@@ -274,22 +299,22 @@ func TestRelease_SecretOnlySnapshotHasNoValue(t *testing.T) {
 		switch name {
 		case "only_secret":
 			onlySecreted = true
-			flag, flagOK := vv["secret"].(float64)
-			if !flagOK {
-				t.Fatal("secret flag missing or mistyped")
-			}
-			if flag != 1 {
-				t.Fatal("secret flag lost")
-			}
+			verifyEmptyReleaseSnapshotFlag(
+				t,
+				vv,
+				1,
+				"secret flag missing or mistyped",
+				"secret flag lost",
+			)
 		case "only_open":
 			onlyOpened = true
-			flag, flagOK := vv["secret"].(float64)
-			if !flagOK {
-				t.Fatal("open secret flag missing or mistyped")
-			}
-			if flag != 0 {
-				t.Fatal("open flag changed")
-			}
+			verifyEmptyReleaseSnapshotFlag(
+				t,
+				vv,
+				0,
+				"open secret flag missing or mistyped",
+				"open flag changed",
+			)
 		default:
 			t.Fatalf("unexpected snapshot name: %q", name)
 		}
@@ -299,6 +324,22 @@ func TestRelease_SecretOnlySnapshotHasNoValue(t *testing.T) {
 			"seeded snapshots missing or duplicated: open=%t"+
 				" secret=%t", onlyOpened, onlySecreted,
 		)
+	}
+}
+
+func verifyEmptyReleaseSnapshotFlag(
+	t *testing.T,
+	vv map[string]any,
+	expected float64,
+	missing, mismatch string,
+) {
+	t.Helper()
+	flag, flagOK := vv["secret"].(float64)
+	if !flagOK {
+		t.Fatal(missing)
+	}
+	if flag != expected {
+		t.Fatal(mismatch)
 	}
 }
 
