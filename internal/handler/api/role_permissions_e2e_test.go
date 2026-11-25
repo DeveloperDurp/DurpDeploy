@@ -87,107 +87,171 @@ func TestPermissionRolesAPIProjectTokenMatrixE2E(t *testing.T) {
 	target := seedAPIUser(t, f.h.repo, "role-target@example.test", "viewer")
 	for _, ownerRole := range roles.All() {
 		owner := seedAPIUser(t, f.h.repo, ownerRole+"@roles.test", ownerRole)
-		for _, memberRole := range roles.All() {
-			if err := f.h.repo.Queries.AddProjectMember(t.Context(),
-				db.AddProjectMemberParams{ProjectID: p.ID,
-					UserID: owner.ID, Role: memberRole}); err != nil {
-				t.Fatal(err)
-			}
-			for _, ceiling := range append([]string{""}, roles.All()...) {
-				for _, scope := range []string{"global", "scoped"} {
-					if scope == "scoped" && ceiling == "" {
-						continue
-					}
-					name := ownerRole + "/" + memberRole + "/" + scope + "/" + ceiling
-					t.Run(name, func(t *testing.T) {
-						row, token := seedAPIToken(t, f.h.repo, owner.ID)
-						credentials := permissionCredentials{token: token}
-						grant := repository.TokenScope{
-							Scope: scope,
-							Role:  ceiling,
-						}
-						if scope == "scoped" {
-							grant.ProjectIDs = []int64{p.ID}
-						}
-						if _, err := f.h.repo.ReplaceTokenScope(t.Context(),
-							row, grant); err != nil {
-							t.Fatal(err)
-						}
-						base := fmt.Sprintf("/api/v1/projects/%d", p.ID)
-						f.request(t, "GET", base, "", credentials, false, 200)
-						want := 403
-						if ownerRole == "admin" && scope == "global" {
-							want = 200
-						}
-						f.request(t, "GET", fmt.Sprintf("/api/v1/projects/%d",
-							foreign.ID), "", credentials, false, want)
-						author := (ownerRole == "maintainer" || ownerRole == "admin") &&
-							(ownerRole == "admin" || memberRole == "maintainer" || memberRole == "admin") &&
-							(ceiling == "" || ceiling == "maintainer" || ceiling == "admin")
-						want = 403
-						if author {
-							want = 201
-						}
-						data := f.request(t, "POST", base+"/variables",
-							`{"name":"ROLE_MATRIX","value":"original"}`,
-							credentials, false, want)
-						if author {
-							var variable struct {
-								ID int64 `json:"id"`
-							}
-							if err := json.Unmarshal(data, &variable); err != nil {
-								t.Fatal(err)
-							}
-							path := fmt.Sprintf(
-								"%s/variables/%d",
-								base,
-								variable.ID,
-							)
-							f.request(t, "PUT", path,
-								`{"name":"ROLE_MATRIX","value":"updated"}`,
-								credentials, false, 200)
-							f.request(
-								t,
-								"DELETE",
-								path,
-								"",
-								credentials,
-								false,
-								204,
-							)
-						}
-						manage := author &&
-							(ceiling == "" || ceiling == "admin") &&
-							(ownerRole == "admin" || memberRole == "admin")
-						want = 403
-						if manage {
-							want = 201
-						}
-						f.request(t, "POST", base+"/members", fmt.Sprintf(
-							`{"user_id":%d,"role":"viewer"}`, target.ID),
-							credentials, false, want)
-						if ceiling != "" {
-							for _, method := range []string{"GET", "POST", "PATCH", "DELETE"} {
-								path := "/api/v1/tokens"
-								if method == "PATCH" || method == "DELETE" {
-									path += "/" + row
-								}
-								f.request(
-									t,
-									method,
-									path,
-									`{}`,
-									credentials,
-									false,
-									403,
-								)
-							}
-						}
-					})
+		verifyPermissionRolesForOwner(
+			t,
+			f,
+			p.ID,
+			foreign.ID,
+			target.ID,
+			owner.ID,
+			ownerRole,
+		)
+	}
+}
+
+type permissionTokenRoleCase struct {
+	owner, member, scope, ceiling string
+}
+
+func verifyPermissionRolesForOwner(
+	t *testing.T,
+	f permissionFixture,
+	projectID, foreignProjectID, targetUserID, ownerID int64,
+	ownerRole string,
+) {
+	t.Helper()
+	for _, memberRole := range roles.All() {
+		if err := f.h.repo.Queries.AddProjectMember(t.Context(),
+			db.AddProjectMemberParams{ProjectID: projectID,
+				UserID: ownerID, Role: memberRole}); err != nil {
+			t.Fatal(err)
+		}
+		for _, ceiling := range append([]string{""}, roles.All()...) {
+			for _, scope := range []string{"global", "scoped"} {
+				if scope == "scoped" && ceiling == "" {
+					continue
 				}
+				name := ownerRole + "/" + memberRole + "/" + scope + "/" + ceiling
+				t.Run(name, func(t *testing.T) {
+					roleCase := permissionTokenRoleCase{
+						owner: ownerRole, member: memberRole, scope: scope, ceiling: ceiling,
+					}
+					verifyPermissionTokenRoleCase(
+						t,
+						f,
+						projectID,
+						foreignProjectID,
+						targetUserID,
+						ownerID,
+						roleCase,
+					)
+				})
 			}
 		}
 	}
+}
+
+func verifyPermissionTokenRoleCase(
+	t *testing.T,
+	f permissionFixture,
+	projectID, foreignProjectID, targetUserID, ownerID int64,
+	roleCase permissionTokenRoleCase,
+) {
+	t.Helper()
+	scope, ceiling := roleCase.scope, roleCase.ceiling
+	row, token := seedAPIToken(t, f.h.repo, ownerID)
+	credentials := permissionCredentials{token: token}
+	grant := repository.TokenScope{
+		Scope: scope,
+		Role:  ceiling,
+	}
+	if scope == "scoped" {
+		grant.ProjectIDs = []int64{projectID}
+	}
+	if _, err := f.h.repo.ReplaceTokenScope(t.Context(),
+		row, grant); err != nil {
+		t.Fatal(err)
+	}
+	base := fmt.Sprintf("/api/v1/projects/%d", projectID)
+	f.request(t, "GET", base, "", credentials, false, 200)
+	want := 403
+	if roleCase.owner == "admin" && scope == "global" {
+		want = 200
+	}
+	f.request(t, "GET", fmt.Sprintf("/api/v1/projects/%d",
+		foreignProjectID), "", credentials, false, want)
+	verifyPermissionTokenRoleWrites(
+		t,
+		f,
+		base,
+		targetUserID,
+		credentials,
+		roleCase,
+	)
+	if ceiling != "" {
+		for _, method := range []string{"GET", "POST", "PATCH", "DELETE"} {
+			path := "/api/v1/tokens"
+			if method == "PATCH" || method == "DELETE" {
+				path += "/" + row
+			}
+			f.request(
+				t,
+				method,
+				path,
+				`{}`,
+				credentials,
+				false,
+				403,
+			)
+		}
+	}
+}
+
+func verifyPermissionTokenRoleWrites(
+	t *testing.T,
+	f permissionFixture,
+	base string,
+	targetUserID int64,
+	credentials permissionCredentials,
+	roleCase permissionTokenRoleCase,
+) {
+	t.Helper()
+	ownerRole, memberRole, ceiling := roleCase.owner, roleCase.member, roleCase.ceiling
+	author := (ownerRole == "maintainer" || ownerRole == "admin") &&
+		(ownerRole == "admin" || memberRole == "maintainer" || memberRole == "admin") &&
+		(ceiling == "" || ceiling == "maintainer" || ceiling == "admin")
+	want := 403
+	if author {
+		want = 201
+	}
+	data := f.request(t, "POST", base+"/variables",
+		`{"name":"ROLE_MATRIX","value":"original"}`,
+		credentials, false, want)
+	if author {
+		var variable struct {
+			ID int64 `json:"id"`
+		}
+		if err := json.Unmarshal(data, &variable); err != nil {
+			t.Fatal(err)
+		}
+		path := fmt.Sprintf(
+			"%s/variables/%d",
+			base,
+			variable.ID,
+		)
+		f.request(t, "PUT", path,
+			`{"name":"ROLE_MATRIX","value":"updated"}`,
+			credentials, false, 200)
+		f.request(
+			t,
+			"DELETE",
+			path,
+			"",
+			credentials,
+			false,
+			204,
+		)
+	}
+	manage := author &&
+		(ceiling == "" || ceiling == "admin") &&
+		(ownerRole == "admin" || memberRole == "admin")
+	want = 403
+	if manage {
+		want = 201
+	}
+	f.request(t, "POST", base+"/members", fmt.Sprintf(
+		`{"user_id":%d,"role":"viewer"}`, targetUserID),
+		credentials, false, want)
 }
 
 func TestPermissionRolesForgedBrowserAndAPIWritesE2E(t *testing.T) {
@@ -229,32 +293,11 @@ func TestPermissionRolesForgedBrowserAndAPIWritesE2E(t *testing.T) {
 		} {
 			f.request(t, action.method, "/api/v1"+action.path, `{}`,
 				permissionCredentials{token: token}, false, 403)
-			webMethod, webPath := action.method, action.path
-			switch {
-			case strings.Contains(webPath, "/runbook-executions/"):
-				webPath = strings.Replace(
-					webPath,
-					"/runbook-executions/",
-					"/runbooks/executions/",
-					1,
-				)
-			case webPath == base+"/runbooks/1/executions":
-				webPath = base + "/runbooks/1/execute"
-			case webPath == base+"/runbooks/1":
-				webMethod = "POST"
-				if action.method == "PUT" {
-					webPath += "/save"
-				} else {
-					webPath += "/delete"
-				}
-			case webPath == base+"/package-repository":
-				webMethod = "POST"
-				if action.method == "DELETE" {
-					webPath += "/delete"
-				}
-			case webPath == base+"/notifications":
-				webMethod = "POST"
-			}
+			webMethod, webPath := permissionDeniedWebRoute(
+				base,
+				action.method,
+				action.path,
+			)
 			for _, hx := range []bool{false, true} {
 				want := 403
 				if hx {
@@ -279,4 +322,34 @@ func TestPermissionRolesForgedBrowserAndAPIWritesE2E(t *testing.T) {
 			t.Fatalf("denied writes changed %s: %d rows", table, count)
 		}
 	}
+}
+
+func permissionDeniedWebRoute(base, method, path string) (string, string) {
+	webMethod, webPath := method, path
+	switch {
+	case strings.Contains(webPath, "/runbook-executions/"):
+		webPath = strings.Replace(
+			webPath,
+			"/runbook-executions/",
+			"/runbooks/executions/",
+			1,
+		)
+	case webPath == base+"/runbooks/1/executions":
+		webPath = base + "/runbooks/1/execute"
+	case webPath == base+"/runbooks/1":
+		webMethod = "POST"
+		if method == "PUT" {
+			webPath += "/save"
+		} else {
+			webPath += "/delete"
+		}
+	case webPath == base+"/package-repository":
+		webMethod = "POST"
+		if method == "DELETE" {
+			webPath += "/delete"
+		}
+	case webPath == base+"/notifications":
+		webMethod = "POST"
+	}
+	return webMethod, webPath
 }

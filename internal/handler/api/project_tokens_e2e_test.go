@@ -64,148 +64,193 @@ func TestProjectTokensRolesAPIE2E(t *testing.T) {
 			)
 			f.token = token.ID
 			defer func() { f.token = owner }()
-			var listed struct {
-				Items []struct {
-					ID int64 `json:"id"`
-				} `json:"items"`
-				Total int `json:"total"`
-			}
-			if err := json.Unmarshal(f.api(
+			verifyProjectTokenLists(t, f, projects)
+			verifyProjectTokenDenials(
 				t,
-				"GET",
-				"/api/v1/projects?limit=1&offset=1",
-				nil,
-				200,
-			), &listed); err != nil {
-				t.Fatal(err)
-			}
-			if listed.Total != 2 || len(listed.Items) != 1 ||
-				listed.Items[0].ID == projects[2].ID {
-				t.Fatal("project pagination or count escaped token selection")
-			}
-			var deploymentsPage struct {
-				Items []db.Deployment `json:"items"`
-				Total int             `json:"total"`
-			}
-			if err := json.Unmarshal(f.api(t, "GET", "/api/v1/deployments",
-				nil, 200), &deploymentsPage); err != nil {
-				t.Fatal(err)
-			}
-			if deploymentsPage.Total != 2 || len(deploymentsPage.Items) != 2 {
-				t.Fatal("deployment rows or totals escaped token selection")
-			}
-			var activity []struct {
-				Counts map[string]int `json:"counts"`
-			}
-			if err := json.Unmarshal(
-				f.api(t, "GET", "/api/v1/deployments/activity",
-					nil, 200),
-				&activity,
-			); err != nil {
-				t.Fatal(err)
-			}
-			var count int
-			for _, day := range activity {
-				count += day.Counts["succeeded"]
-			}
-			if count != 2 {
-				t.Fatalf("activity count = %d, want 2", count)
-			}
-			for _, project := range projects[:2] {
-				f.api(
-					t,
-					"GET",
-					fmt.Sprintf("/api/v1/projects/%d", project.ID),
-					nil,
-					200,
-				)
-			}
-			for _, suffix := range []string{"", "/steps", "/variables",
-				"/variables/inherited", "/releases", "/runbooks",
-				"/runbook-executions", "/runbook-executions/999/logs/stream",
-				"/schedules", "/members", "/notifications", "/package-repository"} {
-				f.api(t, "GET", fmt.Sprintf("/api/v1/projects/%d%s",
-					projects[2].ID, suffix), nil, 403)
-			}
-			for _, suffix := range []string{"", "/status", "/staging",
-				"/logs", "/logs/page", "/logs/1", "/logs/stream", "/logs.txt",
-				"/events", "/artifact-gates", "/artifact-gates/0/review",
-				"/artifact-gates/0/artifact", "/verification"} {
-				f.api(t, "GET", fmt.Sprintf("/api/v1/deployments/%d%s",
-					deployments[2].ID, suffix), nil, 403)
-			}
-			f.api(t, "GET", fmt.Sprintf("/api/v1/projects/%d/releases/%d",
-				projects[0].ID, releases[2].ID), nil, 404)
-			for _, path := range []string{"/admin/stats", "/admin/users",
-				"/admin/agents", "/admin/audit", "/admin/database-security",
-				"/admin/notifications", "/tokens", "/templates"} {
-				f.api(t, "GET", "/api/v1"+path, nil, 403)
-			}
-			for _, method := range []string{"POST", "PATCH", "DELETE"} {
-				path := "/api/v1/tokens"
-				if method != "POST" {
-					path += "/" + token.TokenID
-				}
-				f.api(t, method, path, map[string]any{"name": "escape",
-					"scope": "global"}, 403)
-			}
-			f.api(
-				t,
-				"POST",
-				"/api/v1/projects",
-				map[string]string{"name": "escape"},
-				403,
+				f,
+				projects,
+				deployments,
+				releases,
+				token.TokenID,
 			)
-			writeStatus := 201
-			if role == "viewer" || role == "deployer" {
-				writeStatus = 403
-			}
-			f.api(
+			verifyProjectTokenRoleWrites(
 				t,
-				"POST",
-				fmt.Sprintf("/api/v1/projects/%d/steps", projects[0].ID),
-				map[string]string{
-					"name":            "token-" + role,
-					"script_body":     "echo scoped",
-					"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
-				},
-				writeStatus,
+				f,
+				role,
+				projects[0].ID,
+				deployments[0].ID,
+				member.ID,
 			)
-			memberStatus := 403
-			if role == "admin" {
-				memberStatus = 201
-			}
-			f.api(
-				t,
-				"POST",
-				fmt.Sprintf("/api/v1/projects/%d/members", projects[0].ID),
-				map[string]any{
-					"user_id": member.ID,
-					"role":    "deployer",
-				},
-				memberStatus,
-			)
-			if role != "admin" {
-				f.api(t, "POST", fmt.Sprintf("/api/v1/deployments/%d/approve",
-					deployments[0].ID), nil, 403)
-				f.api(
-					t,
-					"POST",
-					fmt.Sprintf(
-						"/api/v1/deployments/%d/artifact-gates/0/approve",
-						deployments[0].ID,
-					),
-					nil,
-					403,
-				)
-			}
-			if role == "viewer" {
-				for _, action := range []string{"cancel", "retry", "redeploy", "rollback"} {
-					f.api(t, "POST", fmt.Sprintf("/api/v1/deployments/%d/%s",
-						deployments[0].ID, action), nil, 403)
-				}
-			}
 		})
+	}
+}
+
+func verifyProjectTokenLists(
+	t *testing.T,
+	f *artifactE2E,
+	projects []db.Project,
+) {
+	t.Helper()
+	var listed struct {
+		Items []struct {
+			ID int64 `json:"id"`
+		} `json:"items"`
+		Total int `json:"total"`
+	}
+	if err := json.Unmarshal(f.api(
+		t,
+		"GET",
+		"/api/v1/projects?limit=1&offset=1",
+		nil,
+		200,
+	), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if listed.Total != 2 || len(listed.Items) != 1 ||
+		listed.Items[0].ID == projects[2].ID {
+		t.Fatal("project pagination or count escaped token selection")
+	}
+	var deploymentsPage struct {
+		Items []db.Deployment `json:"items"`
+		Total int             `json:"total"`
+	}
+	if err := json.Unmarshal(f.api(t, "GET", "/api/v1/deployments",
+		nil, 200), &deploymentsPage); err != nil {
+		t.Fatal(err)
+	}
+	if deploymentsPage.Total != 2 || len(deploymentsPage.Items) != 2 {
+		t.Fatal("deployment rows or totals escaped token selection")
+	}
+	var activity []struct {
+		Counts map[string]int `json:"counts"`
+	}
+	if err := json.Unmarshal(
+		f.api(t, "GET", "/api/v1/deployments/activity",
+			nil, 200),
+		&activity,
+	); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	for _, day := range activity {
+		count += day.Counts["succeeded"]
+	}
+	if count != 2 {
+		t.Fatalf("activity count = %d, want 2", count)
+	}
+	for _, project := range projects[:2] {
+		f.api(
+			t,
+			"GET",
+			fmt.Sprintf("/api/v1/projects/%d", project.ID),
+			nil,
+			200,
+		)
+	}
+}
+
+func verifyProjectTokenDenials(
+	t *testing.T,
+	f *artifactE2E,
+	projects []db.Project,
+	deployments []db.Deployment,
+	releases []db.Release,
+	tokenID string,
+) {
+	t.Helper()
+	for _, suffix := range []string{"", "/steps", "/variables",
+		"/variables/inherited", "/releases", "/runbooks",
+		"/runbook-executions", "/runbook-executions/999/logs/stream",
+		"/schedules", "/members", "/notifications", "/package-repository"} {
+		f.api(t, "GET", fmt.Sprintf("/api/v1/projects/%d%s",
+			projects[2].ID, suffix), nil, 403)
+	}
+	for _, suffix := range []string{"", "/status", "/staging",
+		"/logs", "/logs/page", "/logs/1", "/logs/stream", "/logs.txt",
+		"/events", "/artifact-gates", "/artifact-gates/0/review",
+		"/artifact-gates/0/artifact", "/verification"} {
+		f.api(t, "GET", fmt.Sprintf("/api/v1/deployments/%d%s",
+			deployments[2].ID, suffix), nil, 403)
+	}
+	f.api(t, "GET", fmt.Sprintf("/api/v1/projects/%d/releases/%d",
+		projects[0].ID, releases[2].ID), nil, 404)
+	for _, path := range []string{"/admin/stats", "/admin/users",
+		"/admin/agents", "/admin/audit", "/admin/database-security",
+		"/admin/notifications", "/tokens", "/templates"} {
+		f.api(t, "GET", "/api/v1"+path, nil, 403)
+	}
+	for _, method := range []string{"POST", "PATCH", "DELETE"} {
+		path := "/api/v1/tokens"
+		if method != "POST" {
+			path += "/" + tokenID
+		}
+		f.api(t, method, path, map[string]any{"name": "escape",
+			"scope": "global"}, 403)
+	}
+	f.api(
+		t,
+		"POST",
+		"/api/v1/projects",
+		map[string]string{"name": "escape"},
+		403,
+	)
+}
+
+func verifyProjectTokenRoleWrites(
+	t *testing.T,
+	f *artifactE2E,
+	role string,
+	projectID, deploymentID, memberID int64,
+) {
+	t.Helper()
+	writeStatus := 201
+	if role == "viewer" || role == "deployer" {
+		writeStatus = 403
+	}
+	f.api(
+		t,
+		"POST",
+		fmt.Sprintf("/api/v1/projects/%d/steps", projectID),
+		map[string]string{
+			"name":            "token-" + role,
+			"script_body":     "echo scoped",
+			"container_image": "harbor.durp.info/dockerhub/library/bash:5.2",
+		},
+		writeStatus,
+	)
+	memberStatus := 403
+	if role == "admin" {
+		memberStatus = 201
+	}
+	f.api(
+		t,
+		"POST",
+		fmt.Sprintf("/api/v1/projects/%d/members", projectID),
+		map[string]any{
+			"user_id": memberID,
+			"role":    "deployer",
+		},
+		memberStatus,
+	)
+	if role != "admin" {
+		f.api(t, "POST", fmt.Sprintf("/api/v1/deployments/%d/approve",
+			deploymentID), nil, 403)
+		f.api(
+			t,
+			"POST",
+			fmt.Sprintf(
+				"/api/v1/deployments/%d/artifact-gates/0/approve",
+				deploymentID,
+			),
+			nil,
+			403,
+		)
+	}
+	if role == "viewer" {
+		for _, action := range []string{"cancel", "retry", "redeploy", "rollback"} {
+			f.api(t, "POST", fmt.Sprintf("/api/v1/deployments/%d/%s",
+				deploymentID, action), nil, 403)
+		}
 	}
 }
 

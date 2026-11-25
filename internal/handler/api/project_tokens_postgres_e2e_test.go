@@ -3,6 +3,7 @@
 package api_test
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http/httptest"
@@ -82,23 +83,7 @@ FOR EACH ROW EXECUTE FUNCTION scope_retry_conflict();`)
 		"SELECT last_value FROM scope_retry_attempt").Scan(&attempts); err != nil || attempts != 2 {
 		t.Fatalf("serialization retry attempts=%d error=%v", attempts, err)
 	}
-	var details string
-	if err := conn.QueryRowContext(t.Context(),
-		"SELECT details FROM audit_log WHERE action = 'update_api_token_scope'",
-	).Scan(&details); err != nil {
-		t.Fatal(err)
-	}
-	var change struct {
-		Previous repository.TokenScope `json:"previous_scope"`
-	}
-	if err := json.Unmarshal([]byte(details), &change); err != nil {
-		t.Fatal(err)
-	}
-	if change.Previous.Role != "viewer" ||
-		len(change.Previous.ProjectIDs) != 1 ||
-		change.Previous.ProjectIDs[0] != first.ID {
-		t.Fatal("serialization retry lost the committed previous grants")
-	}
+	verifyProjectTokenPreviousGrant(t, conn, first.ID)
 	for _, failure := range []struct {
 		code  string
 		tries int
@@ -137,4 +122,29 @@ $$ LANGUAGE plpgsql;`, failure.code))
 	f.token = token.ID
 	f.api(t, "GET", fmt.Sprintf("/api/v1/projects/%d", first.ID), nil, 403)
 	f.api(t, "GET", fmt.Sprintf("/api/v1/projects/%d", second.ID), nil, 200)
+}
+
+func verifyProjectTokenPreviousGrant(
+	t *testing.T,
+	conn *sql.DB,
+	projectID int64,
+) {
+	t.Helper()
+	var details string
+	if err := conn.QueryRowContext(t.Context(),
+		"SELECT details FROM audit_log WHERE action = 'update_api_token_scope'",
+	).Scan(&details); err != nil {
+		t.Fatal(err)
+	}
+	var change struct {
+		Previous repository.TokenScope `json:"previous_scope"`
+	}
+	if err := json.Unmarshal([]byte(details), &change); err != nil {
+		t.Fatal(err)
+	}
+	if change.Previous.Role != "viewer" ||
+		len(change.Previous.ProjectIDs) != 1 ||
+		change.Previous.ProjectIDs[0] != projectID {
+		t.Fatal("serialization retry lost the committed previous grants")
+	}
 }
