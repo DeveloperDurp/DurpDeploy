@@ -324,126 +324,12 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	timeoutStr := strings.TrimSpace(r.FormValue("timeout_seconds"))
-	var timeoutSeconds int64
-	if timeoutStr != "" {
-		t, err := strconv.ParseInt(timeoutStr, 10, 64)
-		if err != nil || t < 0 {
-			step := db.Step{
-				ProjectID:       projectID,
-				Name:            name,
-				ScriptBody:      script,
-				TimeoutSeconds:  timeoutSeconds,
-				ExecutionTarget: r.FormValue("execution_target"),
-			}
-			writeStepFormError(
-				w, r,
-				step, projectID, true, labels, agentLabel,
-				"Timeout must be a non-negative integer",
-			)
-			return
-		}
-		timeoutSeconds = t
-	}
-
-	maxRetriesStr := strings.TrimSpace(r.FormValue("max_retries"))
-	var maxRetries int64
-	if maxRetriesStr != "" {
-		m, err := strconv.ParseInt(maxRetriesStr, 10, 64)
-		if err != nil || m < 0 {
-			step := db.Step{
-				ProjectID:       projectID,
-				Name:            name,
-				ScriptBody:      script,
-				TimeoutSeconds:  timeoutSeconds,
-				MaxRetries:      maxRetries,
-				ExecutionTarget: r.FormValue("execution_target"),
-			}
-			writeStepFormError(
-				w, r,
-				step, projectID, true, labels, agentLabel,
-				"Max retries must be a non-negative integer",
-			)
-			return
-		}
-		maxRetries = m
-	}
-	containerImage, variableNames, containerErr := parseStepContainerConfig(
-		r,
-		target,
-	)
-	if a, _ := formAnsible(r); a != nil && containerErr == "" {
-		if err := h.repo.ValidateAnsibleReferences(r.Context(), projectID, a); err != nil {
-			containerErr = err.Error()
-		}
-	}
-	if err := agentexecution.ValidateLimitsWithPolicy(timeoutSeconds, maxRetries, h.repo.ResourceLimits().Execution); err != nil {
-		containerErr = err.Error()
-	}
-	if containerErr != "" {
-		step := db.Step{
-			ProjectID:            projectID,
-			Name:                 name,
-			ScriptBody:           script,
-			TimeoutSeconds:       timeoutSeconds,
-			MaxRetries:           maxRetries,
-			ExecutionTarget:      r.FormValue("execution_target"),
-			ContainerImage:       containerImage,
-			AgentExecutionMode:   r.FormValue("agent_execution_mode"),
-			NetworkMode:          r.FormValue("network_mode"),
-			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
-			ApprovalReviewPath:   r.FormValue("approval_review_path"),
-			ApprovalReviewFormat: r.FormValue("approval_review_format"),
-			VariableNames:        marshalStepVariableNames(variableNames),
-		}
-		writeStepFormError(
-			w, r, step, projectID, true, labels, agentLabel, containerErr,
-		)
-		return
-	}
-
-	if name == "" {
-		step := db.Step{
-			ProjectID:            projectID,
-			Name:                 name,
-			ScriptBody:           script,
-			TimeoutSeconds:       timeoutSeconds,
-			MaxRetries:           maxRetries,
-			ExecutionTarget:      r.FormValue("execution_target"),
-			ContainerImage:       containerImage,
-			AgentExecutionMode:   r.FormValue("agent_execution_mode"),
-			NetworkMode:          r.FormValue("network_mode"),
-			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
-			ApprovalReviewPath:   r.FormValue("approval_review_path"),
-			ApprovalReviewFormat: r.FormValue("approval_review_format"),
-			VariableNames:        marshalStepVariableNames(variableNames),
-		}
-		writeStepFormError(
-			w, r, step, projectID, true, labels, agentLabel,
-			"Name is required",
-		)
-		return
-	}
-	if placementErr != nil {
-		step := db.Step{
-			ProjectID:            projectID,
-			Name:                 name,
-			ScriptBody:           script,
-			TimeoutSeconds:       timeoutSeconds,
-			MaxRetries:           maxRetries,
-			ExecutionTarget:      r.FormValue("execution_target"),
-			ContainerImage:       containerImage,
-			AgentExecutionMode:   r.FormValue("agent_execution_mode"),
-			NetworkMode:          r.FormValue("network_mode"),
-			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
-			ApprovalReviewPath:   r.FormValue("approval_review_path"),
-			ApprovalReviewFormat: r.FormValue("approval_review_format"),
-			VariableNames:        marshalStepVariableNames(variableNames),
-		}
-		writeStepFormError(
-			w, r, step, projectID, true, labels, agentLabel,
-			placementErr.Error(),
-		)
+	formStep, variableNames, formError := h.prepareStepForm(r, db.Step{
+		ProjectID: projectID, Name: name, ScriptBody: script,
+		ExecutionTarget: r.FormValue("execution_target"),
+	}, target, placementErr)
+	if formError != "" {
+		writeStepFormError(w, r, formStep, true, labels, agentLabel, formError)
 		return
 	}
 
@@ -463,7 +349,8 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 
 	fields := formStepFields(r)
 	fields.Interpreter, fields.SortOrder = selectedInterpreter, sortOrder
-	fields.TimeoutSeconds, fields.MaxRetries = timeoutSeconds, maxRetries
+	fields.TimeoutSeconds = formStep.TimeoutSeconds
+	fields.MaxRetries = formStep.MaxRetries
 	params := fields.CreateStepParams(
 		projectID,
 		marshalStepVariableNames(variableNames),
@@ -495,6 +382,72 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *StepHandler) prepareStepForm(
+	r *http.Request,
+	step db.Step,
+	target string,
+	placementErr error,
+) (db.Step, []string, string) {
+	step, message := parseStepFormLimits(r, step)
+	if message != "" {
+		return step, nil, message
+	}
+
+	image, names, message := parseStepContainerConfig(r, target)
+	if a, _ := formAnsible(r); a != nil && message == "" {
+		if err := h.repo.ValidateAnsibleReferences(r.Context(), step.ProjectID, a); err != nil {
+			message = err.Error()
+		}
+	}
+	if err := agentexecution.ValidateLimitsWithPolicy(
+		step.TimeoutSeconds, step.MaxRetries, h.repo.ResourceLimits().Execution,
+	); err != nil {
+		message = err.Error()
+	}
+	if message == "" {
+		switch {
+		case step.Name == "":
+			message = "Name is required"
+		case placementErr != nil:
+			message = placementErr.Error()
+		default:
+			return step, names, ""
+		}
+	}
+
+	step.ContainerImage = image
+	step.AgentExecutionMode = r.FormValue("agent_execution_mode")
+	step.NetworkMode = r.FormValue("network_mode")
+	step.ApprovalArtifactPath = r.FormValue("approval_artifact_path")
+	step.ApprovalReviewPath = r.FormValue("approval_review_path")
+	step.ApprovalReviewFormat = r.FormValue("approval_review_format")
+	step.VariableNames = marshalStepVariableNames(names)
+	return step, names, message
+}
+
+func parseStepFormLimits(r *http.Request, step db.Step) (db.Step, string) {
+	timeout, ok := parseStepFormLimit(r.FormValue("timeout_seconds"))
+	if !ok {
+		return step, "Timeout must be a non-negative integer"
+	}
+	step.TimeoutSeconds = timeout
+	retries, ok := parseStepFormLimit(r.FormValue("max_retries"))
+	if !ok {
+		return step, "Max retries must be a non-negative integer"
+	}
+	step.MaxRetries = retries
+	return step, ""
+}
+
+func parseStepFormLimit(raw string) (int64, bool) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return 0, true
+	}
+	limit, err := strconv.ParseInt(value, 10, 64)
+	return limit, err == nil && limit >= 0
+}
+
 // writeStepFormError centralizes the StepForm/StepEditRow re-render path
 // for HTMX vs. full-page 422 responses. Both branches render the same
 // form so the displayed input values match what the user submitted.
@@ -502,7 +455,6 @@ func writeStepFormError(
 	w http.ResponseWriter,
 	r *http.Request,
 	step db.Step,
-	projectID int64,
 	isNew bool,
 	labels []string,
 	agentLabel, errorMsg string,
@@ -522,7 +474,7 @@ func writeStepFormError(
 		w.Header().Set("HX-Reswap", "innerHTML")
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		if err := components.StepForm(
-			step, projectID, isNew, labels, agentLabel, errorMsg,
+			step, step.ProjectID, isNew, labels, agentLabel, errorMsg,
 		).Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -545,10 +497,10 @@ func writeStepFormError(
 			w,
 			r,
 			components.StepForm(
-				step, projectID, isNew, labels, agentLabel, errorMsg,
+				step, step.ProjectID, isNew, labels, agentLabel, errorMsg,
 			),
 			components.StepForm(
-				step, projectID, isNew, labels, agentLabel, errorMsg,
+				step, step.ProjectID, isNew, labels, agentLabel, errorMsg,
 			),
 		)
 		return
@@ -557,10 +509,10 @@ func writeStepFormError(
 		w,
 		r,
 		components.StepEditRow(
-			step, projectID, labels, agentLabel, errorMsg,
+			step, step.ProjectID, labels, agentLabel, errorMsg,
 		),
 		components.StepEditRow(
-			step, projectID, labels, agentLabel, errorMsg,
+			step, step.ProjectID, labels, agentLabel, errorMsg,
 		),
 	)
 }
@@ -648,7 +600,6 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 			w,
 			r,
 			existing,
-			projectID,
 			false,
 			nil,
 			"",
@@ -674,146 +625,25 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		step := existing
 		step.Name, step.ScriptBody = name, script
 		writeStepFormError(
-			w, r, step, projectID, false, labels, agentLabel, err.Error(),
+			w, r, step, false, labels, agentLabel, err.Error(),
 		)
 		return
 	}
 	sortOrder, _ := strconv.ParseInt(r.FormValue("sort_order"), 10, 64)
 
-	timeoutStr := strings.TrimSpace(r.FormValue("timeout_seconds"))
-	var timeoutSeconds int64
-	if timeoutStr != "" {
-		t, err := strconv.ParseInt(timeoutStr, 10, 64)
-		if err != nil || t < 0 {
-			step := db.Step{
-				ID:              stepID,
-				ProjectID:       projectID,
-				Name:            name,
-				ScriptBody:      script,
-				SortOrder:       sortOrder,
-				TimeoutSeconds:  timeoutSeconds,
-				ExecutionTarget: r.FormValue("execution_target"),
-			}
-			writeStepFormError(
-				w, r, step, projectID, false, labels, agentLabel,
-				"Timeout must be a non-negative integer",
-			)
-			return
-		}
-		timeoutSeconds = t
-	}
-
-	maxRetriesStr := strings.TrimSpace(r.FormValue("max_retries"))
-	var maxRetries int64
-	if maxRetriesStr != "" {
-		m, err := strconv.ParseInt(maxRetriesStr, 10, 64)
-		if err != nil || m < 0 {
-			step := db.Step{
-				ID:              stepID,
-				ProjectID:       projectID,
-				Name:            name,
-				ScriptBody:      script,
-				SortOrder:       sortOrder,
-				TimeoutSeconds:  timeoutSeconds,
-				MaxRetries:      maxRetries,
-				ExecutionTarget: r.FormValue("execution_target"),
-			}
-			writeStepFormError(
-				w, r, step, projectID, false, labels, agentLabel,
-				"Max retries must be a non-negative integer",
-			)
-			return
-		}
-		maxRetries = m
-	}
-	containerImage, variableNames, containerErr := parseStepContainerConfig(
-		r,
-		target,
-	)
-	if a, _ := formAnsible(r); a != nil && containerErr == "" {
-		if err := h.repo.ValidateAnsibleReferences(r.Context(), projectID, a); err != nil {
-			containerErr = err.Error()
-		}
-	}
-	if err := agentexecution.ValidateLimitsWithPolicy(timeoutSeconds, maxRetries, h.repo.ResourceLimits().Execution); err != nil {
-		containerErr = err.Error()
-	}
-	if containerErr != "" {
-		step := db.Step{
-			ID:                   stepID,
-			ProjectID:            projectID,
-			Name:                 name,
-			ScriptBody:           script,
-			SortOrder:            sortOrder,
-			TimeoutSeconds:       timeoutSeconds,
-			MaxRetries:           maxRetries,
-			ExecutionTarget:      r.FormValue("execution_target"),
-			ContainerImage:       containerImage,
-			AgentExecutionMode:   r.FormValue("agent_execution_mode"),
-			NetworkMode:          r.FormValue("network_mode"),
-			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
-			ApprovalReviewPath:   r.FormValue("approval_review_path"),
-			ApprovalReviewFormat: r.FormValue("approval_review_format"),
-			VariableNames:        marshalStepVariableNames(variableNames),
-		}
-		writeStepFormError(
-			w, r, step, projectID, false, labels, agentLabel, containerErr,
-		)
-		return
-	}
-
-	if name == "" {
-		step := db.Step{
-			ID:                   stepID,
-			ProjectID:            projectID,
-			Name:                 name,
-			ScriptBody:           script,
-			SortOrder:            sortOrder,
-			TimeoutSeconds:       timeoutSeconds,
-			MaxRetries:           maxRetries,
-			ExecutionTarget:      r.FormValue("execution_target"),
-			ContainerImage:       containerImage,
-			AgentExecutionMode:   r.FormValue("agent_execution_mode"),
-			NetworkMode:          r.FormValue("network_mode"),
-			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
-			ApprovalReviewPath:   r.FormValue("approval_review_path"),
-			ApprovalReviewFormat: r.FormValue("approval_review_format"),
-			VariableNames:        marshalStepVariableNames(variableNames),
-		}
-		writeStepFormError(
-			w, r, step, projectID, false, labels, agentLabel,
-			"Name is required",
-		)
-		return
-	}
-	if placementErr != nil {
-		step := db.Step{
-			ID:                   stepID,
-			ProjectID:            projectID,
-			Name:                 name,
-			ScriptBody:           script,
-			SortOrder:            sortOrder,
-			TimeoutSeconds:       timeoutSeconds,
-			MaxRetries:           maxRetries,
-			ExecutionTarget:      r.FormValue("execution_target"),
-			ContainerImage:       containerImage,
-			AgentExecutionMode:   r.FormValue("agent_execution_mode"),
-			NetworkMode:          r.FormValue("network_mode"),
-			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
-			ApprovalReviewPath:   r.FormValue("approval_review_path"),
-			ApprovalReviewFormat: r.FormValue("approval_review_format"),
-			VariableNames:        marshalStepVariableNames(variableNames),
-		}
-		writeStepFormError(
-			w, r, step, projectID, false, labels, agentLabel,
-			placementErr.Error(),
-		)
+	formStep, variableNames, formError := h.prepareStepForm(r, db.Step{
+		ID: stepID, ProjectID: projectID, Name: name, ScriptBody: script, SortOrder: sortOrder,
+		ExecutionTarget: r.FormValue("execution_target"),
+	}, target, placementErr)
+	if formError != "" {
+		writeStepFormError(w, r, formStep, false, labels, agentLabel, formError)
 		return
 	}
 
 	fields := formStepFields(r)
 	fields.Interpreter, fields.SortOrder = selectedInterpreter, sortOrder
-	fields.TimeoutSeconds, fields.MaxRetries = timeoutSeconds, maxRetries
+	fields.TimeoutSeconds = formStep.TimeoutSeconds
+	fields.MaxRetries = formStep.MaxRetries
 	params := fields.UpdateStepParams(
 		stepID,
 		marshalStepVariableNames(variableNames),
@@ -931,8 +761,7 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	oldOrder := target.SortOrder
-	if oldOrder == newOrder {
+	if target.SortOrder == newOrder {
 		if err := components.StepList(steps, projectID).Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -948,86 +777,9 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 		repository.LogRollbackError(tx.Rollback())
 	}()
 
-	qtx := h.repo.Queries.WithTx(tx)
-
-	if newOrder < oldOrder {
-		for _, s := range steps {
-			if s.ID == stepID {
-				continue
-			}
-			if s.SortOrder >= newOrder && s.SortOrder < oldOrder {
-				p := db.UpdateStepParams{
-					ID:   s.ID,
-					Name: s.Name,
-					Kind: s.Kind, AnsibleJson: s.AnsibleJson,
-					ScriptBody:           s.ScriptBody,
-					SortOrder:            s.SortOrder + 1,
-					TimeoutSeconds:       s.TimeoutSeconds,
-					MaxRetries:           s.MaxRetries,
-					Interpreter:          s.Interpreter,
-					ContainerImage:       s.ContainerImage,
-					AgentExecutionMode:   s.AgentExecutionMode,
-					NetworkMode:          s.NetworkMode,
-					ApprovalArtifactPath: s.ApprovalArtifactPath,
-					ApprovalReviewPath:   s.ApprovalReviewPath,
-					ApprovalReviewFormat: s.ApprovalReviewFormat,
-					VariableNames:        s.VariableNames,
-				}
-				if _, err := qtx.UpdateStep(r.Context(), p); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-			}
-		}
-	} else {
-		for _, s := range steps {
-			if s.ID == stepID {
-				continue
-			}
-			if s.SortOrder > oldOrder && s.SortOrder <= newOrder {
-				p := db.UpdateStepParams{
-					ID:   s.ID,
-					Name: s.Name,
-					Kind: s.Kind, AnsibleJson: s.AnsibleJson,
-					ScriptBody:           s.ScriptBody,
-					SortOrder:            s.SortOrder - 1,
-					TimeoutSeconds:       s.TimeoutSeconds,
-					MaxRetries:           s.MaxRetries,
-					Interpreter:          s.Interpreter,
-					ContainerImage:       s.ContainerImage,
-					AgentExecutionMode:   s.AgentExecutionMode,
-					NetworkMode:          s.NetworkMode,
-					ApprovalArtifactPath: s.ApprovalArtifactPath,
-					ApprovalReviewPath:   s.ApprovalReviewPath,
-					ApprovalReviewFormat: s.ApprovalReviewFormat,
-					VariableNames:        s.VariableNames,
-				}
-				if _, err := qtx.UpdateStep(r.Context(), p); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-			}
-		}
-	}
-
-	_, err = qtx.UpdateStep(r.Context(), db.UpdateStepParams{
-		ID:   target.ID,
-		Name: target.Name,
-		Kind: target.Kind, AnsibleJson: target.AnsibleJson,
-		ScriptBody:           target.ScriptBody,
-		SortOrder:            newOrder,
-		TimeoutSeconds:       target.TimeoutSeconds,
-		MaxRetries:           target.MaxRetries,
-		Interpreter:          target.Interpreter,
-		ContainerImage:       target.ContainerImage,
-		AgentExecutionMode:   target.AgentExecutionMode,
-		NetworkMode:          target.NetworkMode,
-		ApprovalArtifactPath: target.ApprovalArtifactPath,
-		ApprovalReviewPath:   target.ApprovalReviewPath,
-		ApprovalReviewFormat: target.ApprovalReviewFormat,
-		VariableNames:        target.VariableNames,
-	})
-	if err != nil {
+	if err := reorderStepRows(
+		r.Context(), h.repo.Queries.WithTx(tx), steps, target, newOrder,
+	); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1046,4 +798,58 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 	if err := components.StepList(steps, projectID).Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func reorderStepRows(
+	ctx context.Context,
+	q *db.Queries,
+	steps []db.Step,
+	target db.Step,
+	newOrder int64,
+) error {
+	oldOrder := target.SortOrder
+	for _, step := range steps {
+		if step.ID == target.ID {
+			continue
+		}
+		order := step.SortOrder
+		switch {
+		case newOrder < oldOrder && order >= newOrder && order < oldOrder:
+			order++
+		case newOrder > oldOrder && order > oldOrder && order <= newOrder:
+			order--
+		default:
+			continue
+		}
+		if err := updateStepOrder(ctx, q, step, order); err != nil {
+			return err
+		}
+	}
+	return updateStepOrder(ctx, q, target, newOrder)
+}
+
+func updateStepOrder(
+	ctx context.Context,
+	q *db.Queries,
+	step db.Step,
+	newOrder int64,
+) error {
+	_, err := q.UpdateStep(ctx, db.UpdateStepParams{
+		ID:   step.ID,
+		Name: step.Name,
+		Kind: step.Kind, AnsibleJson: step.AnsibleJson,
+		ScriptBody:           step.ScriptBody,
+		SortOrder:            newOrder,
+		TimeoutSeconds:       step.TimeoutSeconds,
+		MaxRetries:           step.MaxRetries,
+		Interpreter:          step.Interpreter,
+		ContainerImage:       step.ContainerImage,
+		AgentExecutionMode:   step.AgentExecutionMode,
+		NetworkMode:          step.NetworkMode,
+		ApprovalArtifactPath: step.ApprovalArtifactPath,
+		ApprovalReviewPath:   step.ApprovalReviewPath,
+		ApprovalReviewFormat: step.ApprovalReviewFormat,
+		VariableNames:        step.VariableNames,
+	})
+	return err
 }
