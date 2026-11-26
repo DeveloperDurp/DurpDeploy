@@ -40,70 +40,7 @@ func TestStaticAssetCachingHTTP(t *testing.T) {
 	}
 	for _, name := range []string{"css/tailwind.min.css", "js/app.bundle.js"} {
 		t.Run(name, func(t *testing.T) {
-			// When a client fetches the versioned asset.
-			path := static.URL(name)
-			response, err := http.Get(s.URL + path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			body, err := io.ReadAll(response.Body)
-			response.Body.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
-			// Then its identity follows its content and it is safe to cache.
-			parsed, err := url.Parse(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			hash := fmt.Sprintf("%x", sha256.Sum256(body))
-			if response.StatusCode != 200 || parsed.Query().Get("v") != hash ||
-				response.Header.Get(
-					"Cache-Control",
-				) != "public, max-age=31536000, immutable" ||
-				response.Header.Get("ETag") != `"`+hash+`"` {
-				t.Fatalf(
-					"asset status=%d headers=%v",
-					response.StatusCode,
-					response.Header,
-				)
-			}
-			request, err := http.NewRequest("GET", s.URL+path, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			request.Header.Set("If-None-Match", response.Header.Get("ETag"))
-			conditional, err := http.DefaultClient.Do(request)
-			if err != nil {
-				t.Fatal(err)
-			}
-			conditional.Body.Close()
-			if conditional.StatusCode != 304 {
-				t.Fatalf("conditional=%d", conditional.StatusCode)
-			}
-			for _, test := range []struct {
-				path   string
-				status int
-				cache  string
-			}{
-				{"/static/" + name, 200, "no-cache"},
-				{"/static/" + name + "?v=old-build", 404, "no-store"},
-			} {
-				response, err := http.Get(s.URL + test.path)
-				if err != nil {
-					t.Fatal(err)
-				}
-				response.Body.Close()
-				if response.StatusCode != test.status ||
-					response.Header.Get("Cache-Control") != test.cache {
-					t.Fatalf(
-						"%s status=%d cache=%s",
-						test.path,
-						response.StatusCode,
-						response.Header.Get("Cache-Control"),
-					)
-				}
-			}
+			assertStaticAssetCaching(t, s.URL, name)
 		})
 	}
 	response, err := http.Get(s.URL + "/login")
@@ -113,5 +50,73 @@ func TestStaticAssetCachingHTTP(t *testing.T) {
 	defer response.Body.Close()
 	if strings.Contains(response.Header.Get("Cache-Control"), "immutable") {
 		t.Fatal("HTML inherited asset caching")
+	}
+}
+
+func assertStaticAssetCaching(t *testing.T, serverURL, name string) {
+	t.Helper()
+	// When a client fetches the versioned asset.
+	path := static.URL(name)
+	response, err := http.Get(serverURL + path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(response.Body)
+	response.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Then its identity follows its content and it is safe to cache.
+	parsed, err := url.Parse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := fmt.Sprintf("%x", sha256.Sum256(body))
+	if response.StatusCode != 200 || parsed.Query().Get("v") != hash ||
+		response.Header.Get(
+			"Cache-Control",
+		) != "public, max-age=31536000, immutable" ||
+		response.Header.Get("ETag") != `"`+hash+`"` {
+		t.Fatalf(
+			"asset status=%d headers=%v",
+			response.StatusCode,
+			response.Header,
+		)
+	}
+	request, err := http.NewRequest("GET", serverURL+path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("If-None-Match", response.Header.Get("ETag"))
+	conditional, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conditional.Body.Close()
+	if conditional.StatusCode != 304 {
+		t.Fatalf("conditional=%d", conditional.StatusCode)
+	}
+	for _, test := range []struct {
+		path   string
+		status int
+		cache  string
+	}{
+		{"/static/" + name, 200, "no-cache"},
+		{"/static/" + name + "?v=old-build", 404, "no-store"},
+	} {
+		response, err := http.Get(serverURL + test.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != test.status ||
+			response.Header.Get("Cache-Control") != test.cache {
+			t.Fatalf(
+				"%s status=%d cache=%s",
+				test.path,
+				response.StatusCode,
+				response.Header.Get("Cache-Control"),
+			)
+		}
 	}
 }
