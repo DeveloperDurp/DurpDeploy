@@ -94,7 +94,9 @@ func (h *AuthHandler) SecurityRecoveryRegeneratePost(
 		h.repo,
 		auth.BrowserSessionIssue{
 			UserID: user.ID,
-			Audit:  func(db.Session) {},
+			Audit: func(db.Session) {
+				// Request middleware audits successful recovery-code regeneration.
+			},
 		},
 	)
 	if err != nil {
