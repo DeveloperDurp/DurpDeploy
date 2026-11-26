@@ -92,71 +92,9 @@ func TestMobileBrowserReadability(t *testing.T) {
 			if err := json.Unmarshal(contents, &report); err != nil {
 				t.Fatalf("parse %s measurements: %v", role, err)
 			}
-			if !report.Cleanup.ProfileRemoved ||
-				!report.Cleanup.ProcessExited ||
-				!report.Cleanup.BrowserDisconnected ||
-				!report.Cleanup.ProfileProcessesExited ||
-				!report.Cleanup.ProcessGroupsExited {
-				t.Fatalf(
-					"incomplete %s cleanup receipt: %+v",
-					role,
-					report.Cleanup,
-				)
-			}
-			if os.Getenv("MOBILE_FORCE_CONTEXT_CLOSE_ONCE") == "1" &&
-				report.Attempts != 2 {
-				t.Fatalf(
-					"%s browser attempts = %d, want 2",
-					role,
-					report.Attempts,
-				)
-			}
+			assertMobileReadabilityCleanup(t, role, report)
 			for _, measurement := range report.Measurements {
-				if measurement.InteractionFailure != nil {
-					t.Fatalf(
-						"%s %s interaction failed: %s",
-						role,
-						measurement.Target,
-						*measurement.InteractionFailure,
-					)
-				}
-				if len(measurement.Violations) > 0 {
-					t.Fatalf(
-						"%s %s %dpx violations: %v",
-						role,
-						measurement.Target,
-						measurement.Viewport.Width,
-						measurement.Violations,
-					)
-				}
-				if measurement.Viewport.Width == 375 &&
-					measurement.Viewport.Layout != "mobile" {
-					t.Fatalf(
-						"%s %s 375px layout = %q, want mobile",
-						role,
-						measurement.Target,
-						measurement.Viewport.Layout,
-					)
-				}
-				if (measurement.Viewport.Width == 768 ||
-					measurement.Viewport.Width == 1280) &&
-					measurement.Viewport.Layout != "native" {
-					t.Fatalf(
-						"%s %s %dpx layout = %q, want native",
-						role,
-						measurement.Target,
-						measurement.Viewport.Width,
-						measurement.Viewport.Layout,
-					)
-				}
-				if measurement.Target == "variables" &&
-					(measurement.SecretMask == nil ||
-						!measurement.SecretMask.HTMLAbsent ||
-						!measurement.SecretMask.TextAbsent ||
-						!measurement.SecretMask.MaskVisible ||
-						!measurement.ScreenshotSentinelAbsent) {
-					t.Fatalf("incomplete %s variable secret receipt", role)
-				}
+				assertMobileReadabilityMeasurement(t, role, measurement)
 			}
 			reports[role] = report
 		})
@@ -179,6 +117,86 @@ func TestMobileBrowserReadability(t *testing.T) {
 
 	// Then
 	viewerWriteIsRejected(t, fixtures)
+}
+
+func assertMobileReadabilityCleanup(
+	t *testing.T,
+	role string,
+	report mobileBrowserReport,
+) {
+	t.Helper()
+	if !report.Cleanup.ProfileRemoved ||
+		!report.Cleanup.ProcessExited ||
+		!report.Cleanup.BrowserDisconnected ||
+		!report.Cleanup.ProfileProcessesExited ||
+		!report.Cleanup.ProcessGroupsExited {
+		t.Fatalf(
+			"incomplete %s cleanup receipt: %+v",
+			role,
+			report.Cleanup,
+		)
+	}
+	if os.Getenv("MOBILE_FORCE_CONTEXT_CLOSE_ONCE") == "1" &&
+		report.Attempts != 2 {
+		t.Fatalf(
+			"%s browser attempts = %d, want 2",
+			role,
+			report.Attempts,
+		)
+	}
+}
+
+func assertMobileReadabilityMeasurement(
+	t *testing.T,
+	role string,
+	measurement mobileBrowserMeasurement,
+) {
+	t.Helper()
+	if measurement.InteractionFailure != nil {
+		t.Fatalf(
+			"%s %s interaction failed: %s",
+			role,
+			measurement.Target,
+			*measurement.InteractionFailure,
+		)
+	}
+	if len(measurement.Violations) > 0 {
+		t.Fatalf(
+			"%s %s %dpx violations: %v",
+			role,
+			measurement.Target,
+			measurement.Viewport.Width,
+			measurement.Violations,
+		)
+	}
+	if measurement.Viewport.Width == 375 &&
+		measurement.Viewport.Layout != "mobile" {
+		t.Fatalf(
+			"%s %s 375px layout = %q, want mobile",
+			role,
+			measurement.Target,
+			measurement.Viewport.Layout,
+		)
+	}
+	if (measurement.Viewport.Width == 768 ||
+		measurement.Viewport.Width == 1280) &&
+		measurement.Viewport.Layout != "native" {
+		t.Fatalf(
+			"%s %s %dpx layout = %q, want native",
+			role,
+			measurement.Target,
+			measurement.Viewport.Width,
+			measurement.Viewport.Layout,
+		)
+	}
+	if measurement.Target == "variables" &&
+		(measurement.SecretMask == nil ||
+			!measurement.SecretMask.HTMLAbsent ||
+			!measurement.SecretMask.TextAbsent ||
+			!measurement.SecretMask.MaskVisible ||
+			!measurement.ScreenshotSentinelAbsent) {
+		t.Fatalf("incomplete %s variable secret receipt", role)
+	}
 }
 
 func requireMobileBrowserPrerequisites(t *testing.T, root string) {

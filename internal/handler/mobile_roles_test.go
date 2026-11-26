@@ -131,36 +131,51 @@ func TestMobile_RenderedHTML_renders_writer_controls_when_authorized(
 					// When
 					body := fixture.getHTML(t, session.session, page.path)
 
-					// Then
-					if page.name == "lifecycle stages" &&
-						session.name == "maintainer" {
-						if strings.Contains(
-							body,
-							"data-lifecycle-stage-action=",
-						) ||
-							strings.Contains(body, `name="environment_id"`) {
-							t.Error(
-								"maintainer received lifecycle stage controls",
-							)
-						}
-						requireHTMLPattern(
-							t,
-							body,
-							`data-mobile-lifecycle-stage="`,
-						)
-						return
-					}
-					for _, marker := range page.markers {
-						requireHTMLPattern(t, body, marker)
-					}
-					if page.name == "steps" &&
-						strings.Contains(body, `data-step-action="delete"`) {
-						t.Error(
-							"step list includes Delete outside the edit modal",
-						)
-					}
+					assertMobileWriterControls(
+						t,
+						body,
+						page.name,
+						session.name,
+						page.markers,
+					)
 				})
 			}
 		})
+	}
+}
+
+func assertMobileWriterControls(
+	t *testing.T,
+	body, page, role string,
+	markers []string,
+) {
+	t.Helper()
+	// Then
+	if page == "lifecycle stages" &&
+		role == "maintainer" {
+		if strings.Contains(
+			body,
+			"data-lifecycle-stage-action=",
+		) ||
+			strings.Contains(body, `name="environment_id"`) {
+			t.Error(
+				"maintainer received lifecycle stage controls",
+			)
+		}
+		requireHTMLPattern(
+			t,
+			body,
+			`data-mobile-lifecycle-stage="`,
+		)
+		return
+	}
+	for _, marker := range markers {
+		requireHTMLPattern(t, body, marker)
+	}
+	if page == "steps" &&
+		strings.Contains(body, `data-step-action="delete"`) {
+		t.Error(
+			"step list includes Delete outside the edit modal",
+		)
 	}
 }

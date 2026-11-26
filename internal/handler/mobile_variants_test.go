@@ -354,36 +354,7 @@ func TestSteps_RenderedHTML_uses_named_Alpine_state_when_authenticated(
 		requireHTMLPattern(t, pageBody, pattern)
 	}
 
-	for _, body := range []string{newBody, editBody} {
-		for _, pattern := range []string{
-			`x-data="stepEditor"`,
-			`x-ref="textarea"`,
-			`x-on:input="input"`,
-			`x-on:scroll="scroll"`,
-			`x-on:click="fullscreen"`,
-			`x-ref="modal"`,
-			`x-ref="modalTextarea"`,
-			`x-text="lineNumbers"`,
-			`x-model="script"`,
-			`\$dispatch\('step-form-cancel'\)`,
-		} {
-			requireHTMLPattern(t, body, pattern)
-		}
-		for _, forbidden := range []string{
-			"hx-on:",
-			"onclick=",
-			".innerHTML",
-			"fetch('/api/lint'",
-			`x-data="{`,
-		} {
-			if strings.Contains(body, forbidden) {
-				t.Errorf(
-					"step editor contains forbidden inline behavior %q",
-					forbidden,
-				)
-			}
-		}
-	}
+	assertNamedMobileStepEditorForms(t, newBody, editBody)
 
 	for _, pattern := range []string{
 		fmt.Sprintf(`hx-post="/projects/%d/steps"`, projectID),
@@ -417,6 +388,40 @@ func TestSteps_RenderedHTML_uses_named_Alpine_state_when_authenticated(
 			if strings.Contains(body, forbidden) {
 				t.Errorf(
 					"step host contains forbidden inline behavior %q",
+					forbidden,
+				)
+			}
+		}
+	}
+}
+
+func assertNamedMobileStepEditorForms(t *testing.T, newBody, editBody string) {
+	t.Helper()
+	for _, body := range []string{newBody, editBody} {
+		for _, pattern := range []string{
+			`x-data="stepEditor"`,
+			`x-ref="textarea"`,
+			`x-on:input="input"`,
+			`x-on:scroll="scroll"`,
+			`x-on:click="fullscreen"`,
+			`x-ref="modal"`,
+			`x-ref="modalTextarea"`,
+			`x-text="lineNumbers"`,
+			`x-model="script"`,
+			`\$dispatch\('step-form-cancel'\)`,
+		} {
+			requireHTMLPattern(t, body, pattern)
+		}
+		for _, forbidden := range []string{
+			"hx-on:",
+			"onclick=",
+			".innerHTML",
+			"fetch('/api/lint'",
+			`x-data="{`,
+		} {
+			if strings.Contains(body, forbidden) {
+				t.Errorf(
+					"step editor contains forbidden inline behavior %q",
 					forbidden,
 				)
 			}

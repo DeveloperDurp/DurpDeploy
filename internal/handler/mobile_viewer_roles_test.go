@@ -109,12 +109,17 @@ func TestMobile_RenderedHTML_hides_write_controls_and_secret_values_when_viewer(
 			fmt.Sprintf("/projects/%d/variables", fixture.project.ID),
 		)
 
-		// Then
-		if strings.Contains(body, mobileStructuralSecret) {
-			t.Error("secret value appears in rendered variables")
-		}
-		if !strings.Contains(body, "••••••••") {
-			t.Error("secret mask is absent from rendered variables")
-		}
+		assertMobileMaskedVariables(t, body)
+	}
+}
+
+func assertMobileMaskedVariables(t *testing.T, body string) {
+	t.Helper()
+	// Then
+	if strings.Contains(body, mobileStructuralSecret) {
+		t.Error("secret value appears in rendered variables")
+	}
+	if !strings.Contains(body, "••••••••") {
+		t.Error("secret mask is absent from rendered variables")
 	}
 }
