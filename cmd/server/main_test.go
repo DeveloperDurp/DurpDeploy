@@ -875,18 +875,7 @@ func TestRecoverPendingDeploymentsCancelsActiveRemoteStepBeforeFailure(
 		len(runs[0].ClaimTokenHash) != 32 {
 		t.Fatalf("recovered remote runs=%+v error=%v", runs, err)
 	}
-	for _, run := range runs {
-		var recoveryCancelled int64
-		if err := conn.QueryRowContext(ctx, `SELECT recovery_cancelled
-			FROM remote_step_runs WHERE deployment_id=? AND step_index=?
-			AND agent_id=?`, run.DeploymentID, run.StepIndex, run.AgentID).
-			Scan(&recoveryCancelled); err != nil {
-			t.Fatal(err)
-		}
-		if recoveryCancelled != 1 {
-			t.Fatalf("recovery cancellation marker=%d", recoveryCancelled)
-		}
-	}
+	assertRemoteStepRecoveryMarkers(t, conn, runs)
 	deployment, err := repo.Queries.GetDeployment(ctx, 1)
 	if err != nil || deployment.Status != "running" ||
 		deployment.FinishedAt.Valid {
@@ -946,6 +935,27 @@ func TestRecoverPendingDeploymentsCancelsActiveRemoteStepBeforeFailure(
 			deployment,
 			err,
 		)
+	}
+}
+
+func assertRemoteStepRecoveryMarkers(
+	t *testing.T,
+	conn *sql.DB,
+	runs []db.RemoteStepRun,
+) {
+	t.Helper()
+	ctx := t.Context()
+	for _, run := range runs {
+		var recoveryCancelled int64
+		if err := conn.QueryRowContext(ctx, `SELECT recovery_cancelled
+			FROM remote_step_runs WHERE deployment_id=? AND step_index=?
+			AND agent_id=?`, run.DeploymentID, run.StepIndex, run.AgentID).
+			Scan(&recoveryCancelled); err != nil {
+			t.Fatal(err)
+		}
+		if recoveryCancelled != 1 {
+			t.Fatalf("recovery cancellation marker=%d", recoveryCancelled)
+		}
 	}
 }
 
