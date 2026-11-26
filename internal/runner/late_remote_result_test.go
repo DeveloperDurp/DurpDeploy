@@ -67,42 +67,12 @@ func TestLiveRunnerLateSuccessPreservesMaintenanceFailure(t *testing.T) {
 	hash := sha256.Sum256([]byte("late-claim"))
 	err = repo.WithDeploymentTx(t.Context(), created.Deployment.ID,
 		func(ctx context.Context, q *db.Queries) error {
-			now := sql.NullInt64{Int64: 100, Valid: true}
-			rows, err := q.ClaimRemoteStepRun(ctx, db.ClaimRemoteStepRunParams{
-				DeploymentID: created.Deployment.ID, AgentID: "a", ClaimTokenHash: hash[:],
-				Ciphertext: sql.NullString{String: "payload", Valid: true},
-				Now:        now, ClaimExpiresAt: sql.NullInt64{Int64: 200, Valid: true},
-			})
-			if err != nil || rows != 1 {
-				return fmt.Errorf("claim rows=%d error=%v", rows, err)
-			}
-			rows, err = q.StartRemoteStepRun(ctx, db.StartRemoteStepRunParams{
-				DeploymentID: created.Deployment.ID, AgentID: "a", ClaimTokenHash: hash[:], Now: now,
-			})
-			if err != nil || rows != 1 {
-				return fmt.Errorf("start rows=%d error=%v", rows, err)
-			}
-			rows, err = q.LoseStaleRemoteStepRuns(
+			return persistMaintenanceBeforeLateSuccess(
 				ctx,
-				db.LoseStaleRemoteStepRunsParams{
-					Now: now, StaleBefore: now,
-				},
+				q,
+				created.Deployment.ID,
+				hash[:],
 			)
-			if err != nil || rows != 1 {
-				return fmt.Errorf("lose rows=%d error=%v", rows, err)
-			}
-			rows, err = q.FailDeploymentsWithTerminalRemoteStepRuns(ctx, now)
-			if err != nil || rows != 1 {
-				return fmt.Errorf("maintenance rows=%d error=%v", rows, err)
-			}
-			rows, err = q.FinishRemoteStepRun(ctx, db.FinishRemoteStepRunParams{
-				DeploymentID: created.Deployment.ID, AgentID: "a", ClaimTokenHash: hash[:],
-				Now: now, State: "succeeded",
-			})
-			if err != nil || rows != 1 {
-				return fmt.Errorf("late outcome rows=%d error=%v", rows, err)
-			}
-			return nil
 		})
 	if err != nil {
 		t.Fatal(err)
@@ -135,4 +105,48 @@ func TestLiveRunnerLateSuccessPreservesMaintenanceFailure(t *testing.T) {
 			t.Fatal("late result emitted a successful deployment event")
 		}
 	}
+}
+
+func persistMaintenanceBeforeLateSuccess(
+	ctx context.Context,
+	q *db.Queries,
+	deploymentID int64,
+	claimHash []byte,
+) error {
+	now := sql.NullInt64{Int64: 100, Valid: true}
+	rows, err := q.ClaimRemoteStepRun(ctx, db.ClaimRemoteStepRunParams{
+		DeploymentID: deploymentID, AgentID: "a", ClaimTokenHash: claimHash,
+		Ciphertext: sql.NullString{String: "payload", Valid: true},
+		Now:        now, ClaimExpiresAt: sql.NullInt64{Int64: 200, Valid: true},
+	})
+	if err != nil || rows != 1 {
+		return fmt.Errorf("claim rows=%d error=%v", rows, err)
+	}
+	rows, err = q.StartRemoteStepRun(ctx, db.StartRemoteStepRunParams{
+		DeploymentID: deploymentID, AgentID: "a", ClaimTokenHash: claimHash, Now: now,
+	})
+	if err != nil || rows != 1 {
+		return fmt.Errorf("start rows=%d error=%v", rows, err)
+	}
+	rows, err = q.LoseStaleRemoteStepRuns(
+		ctx,
+		db.LoseStaleRemoteStepRunsParams{
+			Now: now, StaleBefore: now,
+		},
+	)
+	if err != nil || rows != 1 {
+		return fmt.Errorf("lose rows=%d error=%v", rows, err)
+	}
+	rows, err = q.FailDeploymentsWithTerminalRemoteStepRuns(ctx, now)
+	if err != nil || rows != 1 {
+		return fmt.Errorf("maintenance rows=%d error=%v", rows, err)
+	}
+	rows, err = q.FinishRemoteStepRun(ctx, db.FinishRemoteStepRunParams{
+		DeploymentID: deploymentID, AgentID: "a", ClaimTokenHash: claimHash,
+		Now: now, State: "succeeded",
+	})
+	if err != nil || rows != 1 {
+		return fmt.Errorf("late outcome rows=%d error=%v", rows, err)
+	}
+	return nil
 }

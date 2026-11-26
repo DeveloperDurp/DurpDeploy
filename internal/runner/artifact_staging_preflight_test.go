@@ -60,15 +60,24 @@ FROM package_repositories WHERE name='package'`,
 					err,
 				)
 			}
-			if scenario == "verification" && !errors.Is(err, r.localErr) {
-				t.Fatalf("local verification was omitted: %v", err)
-			}
-			if scenario == "steps-query-failed" {
-				var queryError *sqlite.Error
-				if !errors.As(err, &queryError) {
-					t.Fatalf("frozen step failure was lost: %v", err)
-				}
-			}
+			assertFrozenStagingPreflightError(t, scenario, err, r.localErr)
 		})
+	}
+}
+
+func assertFrozenStagingPreflightError(
+	t *testing.T,
+	scenario string,
+	err, localErr error,
+) {
+	t.Helper()
+	if scenario == "verification" && !errors.Is(err, localErr) {
+		t.Fatalf("local verification was omitted: %v", err)
+	}
+	if scenario == "steps-query-failed" {
+		var queryError *sqlite.Error
+		if !errors.As(err, &queryError) {
+			t.Fatalf("frozen step failure was lost: %v", err)
+		}
 	}
 }
