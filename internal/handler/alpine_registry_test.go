@@ -19,14 +19,7 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 	source := readComplianceRegistry(t, filepath.Join("..", ".."))
 	bundle := string(bundleBytes)
 
-	contracts := []struct {
-		name        string
-		constructor string
-		members     []string
-		methods     []string
-		events      []string
-		cleanup     []string
-	}{
+	contracts := []alpineRegistryContract{
 		{
 			name:        "deploymentForm",
 			constructor: `\(\{ releaseID, environmentID \}\)`,
@@ -93,78 +86,7 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 	// When / Then
 	for _, contract := range contracts {
 		t.Run(contract.name, func(t *testing.T) {
-			factoryPattern := regexp.MustCompile(
-				`(?ms)Alpine\.data\('` + contract.name + `'\s*,\s*` +
-					contract.constructor + `\s*=>\s*\(\{.*?^\}\)\);`,
-			)
-			factory := factoryPattern.FindString(source)
-			if contract.name == "variablesPage" {
-				if !strings.Contains(source,
-					"import { createVariablesPage } from './variables.js'",
-				) || !strings.Contains(
-					source,
-					"Alpine.data('variablesPage', () => createVariablesPage(focusFormField))",
-				) {
-					t.Fatal(
-						"variablesPage module is not wired into the registry",
-					)
-				}
-				module, err := os.ReadFile(filepath.Join(
-					"..", "..", "static", "js", "variables.js",
-				))
-				if err != nil {
-					t.Fatal(err)
-				}
-				factory = strings.ReplaceAll(string(module), "\n\t\t", "\n\t")
-			}
-			if factory == "" {
-				t.Fatalf(
-					"registry does not define %s with constructor %s",
-					contract.name,
-					contract.constructor,
-				)
-			}
-			for _, member := range contract.members {
-				memberPattern := regexp.MustCompile(
-					`(?m)^\t(?:get )?` + member + `(?:\(|:)`,
-				)
-				if !memberPattern.MatchString(factory) {
-					t.Errorf("%s does not expose %s", contract.name, member)
-				}
-			}
-			methodPattern := regexp.MustCompile(
-				`(?m)^\t([A-Za-z][A-Za-z0-9]*)\([^\n]*\) \{`,
-			)
-			matches := methodPattern.FindAllStringSubmatch(factory, -1)
-			methods := make([]string, 0, len(matches))
-			for _, match := range matches {
-				methods = append(methods, match[1])
-			}
-			if !slices.Equal(methods, contract.methods) {
-				t.Errorf(
-					"%s methods = %v, want exactly %v",
-					contract.name,
-					methods,
-					contract.methods,
-				)
-			}
-			for _, event := range contract.events {
-				if !strings.Contains(factory, `'`+event+`'`) {
-					t.Errorf("%s does not own event %q", contract.name, event)
-				}
-			}
-			for _, cleanup := range contract.cleanup {
-				if !strings.Contains(factory, cleanup) {
-					t.Errorf(
-						"%s destroy contract lacks %q",
-						contract.name,
-						cleanup,
-					)
-				}
-			}
-			if !strings.Contains(bundle, contract.name) {
-				t.Errorf("generated bundle is stale: missing %s", contract.name)
-			}
+			assertAlpineRegistryContract(t, source, bundle, contract)
 		})
 	}
 
@@ -188,6 +110,23 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 		strings.Contains(bundle, "fullAlertClass called") {
 		t.Error("production app source must not contain debug console logging")
 	}
+	assertAlpineRegistryOrder(t, source)
+
+	hostPattern := regexp.MustCompile(
+		`(?ms)Alpine\.data\('stepFormHost'.*?^\}\)\);`,
+	)
+	host := hostPattern.FindString(source)
+	destroyEditor := strings.Index(host, "Alpine.destroyTree(child)")
+	removeForm := strings.LastIndex(host, "replaceChildren()")
+	if destroyEditor < 0 || removeForm < 0 || destroyEditor > removeForm {
+		t.Error(
+			"stepFormHost must synchronously destroy editors before removing the form",
+		)
+	}
+}
+
+func assertAlpineRegistryOrder(t *testing.T, source string) {
+	t.Helper()
 	registryOrder := []string{
 		"toast", "navbar", "deploymentForm",
 		"stepFormHost", "stepEditor", "variablesPage", "deploymentStream",
@@ -207,16 +146,103 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 	if strings.LastIndex(source, "Alpine.start()") <= previous {
 		t.Error("Alpine.start() must follow all registry definitions")
 	}
+}
 
-	hostPattern := regexp.MustCompile(
-		`(?ms)Alpine\.data\('stepFormHost'.*?^\}\)\);`,
+type alpineRegistryContract struct {
+	name        string
+	constructor string
+	members     []string
+	methods     []string
+	events      []string
+	cleanup     []string
+}
+
+func assertAlpineRegistryContract(
+	t *testing.T,
+	source, bundle string,
+	contract alpineRegistryContract,
+) {
+	t.Helper()
+	factory := readAlpineComponentFactory(t, source, contract)
+	for _, member := range contract.members {
+		memberPattern := regexp.MustCompile(
+			`(?m)^\t(?:get )?` + member + `(?:\(|:)`,
+		)
+		if !memberPattern.MatchString(factory) {
+			t.Errorf("%s does not expose %s", contract.name, member)
+		}
+	}
+	methodPattern := regexp.MustCompile(
+		`(?m)^\t([A-Za-z][A-Za-z0-9]*)\([^\n]*\) \{`,
 	)
-	host := hostPattern.FindString(source)
-	destroyEditor := strings.Index(host, "Alpine.destroyTree(child)")
-	removeForm := strings.LastIndex(host, "replaceChildren()")
-	if destroyEditor < 0 || removeForm < 0 || destroyEditor > removeForm {
-		t.Error(
-			"stepFormHost must synchronously destroy editors before removing the form",
+	matches := methodPattern.FindAllStringSubmatch(factory, -1)
+	methods := make([]string, 0, len(matches))
+	for _, match := range matches {
+		methods = append(methods, match[1])
+	}
+	if !slices.Equal(methods, contract.methods) {
+		t.Errorf(
+			"%s methods = %v, want exactly %v",
+			contract.name,
+			methods,
+			contract.methods,
 		)
 	}
+	for _, event := range contract.events {
+		if !strings.Contains(factory, `'`+event+`'`) {
+			t.Errorf("%s does not own event %q", contract.name, event)
+		}
+	}
+	for _, cleanup := range contract.cleanup {
+		if !strings.Contains(factory, cleanup) {
+			t.Errorf(
+				"%s destroy contract lacks %q",
+				contract.name,
+				cleanup,
+			)
+		}
+	}
+	if !strings.Contains(bundle, contract.name) {
+		t.Errorf("generated bundle is stale: missing %s", contract.name)
+	}
+}
+
+func readAlpineComponentFactory(
+	t *testing.T,
+	source string,
+	contract alpineRegistryContract,
+) string {
+	t.Helper()
+	factoryPattern := regexp.MustCompile(
+		`(?ms)Alpine\.data\('` + contract.name + `'\s*,\s*` +
+			contract.constructor + `\s*=>\s*\(\{.*?^\}\)\);`,
+	)
+	factory := factoryPattern.FindString(source)
+	if contract.name == "variablesPage" {
+		if !strings.Contains(source,
+			"import { createVariablesPage } from './variables.js'",
+		) || !strings.Contains(
+			source,
+			"Alpine.data('variablesPage', () => createVariablesPage(focusFormField))",
+		) {
+			t.Fatal(
+				"variablesPage module is not wired into the registry",
+			)
+		}
+		module, err := os.ReadFile(filepath.Join(
+			"..", "..", "static", "js", "variables.js",
+		))
+		if err != nil {
+			t.Fatal(err)
+		}
+		factory = strings.ReplaceAll(string(module), "\n\t\t", "\n\t")
+	}
+	if factory == "" {
+		t.Fatalf(
+			"registry does not define %s with constructor %s",
+			contract.name,
+			contract.constructor,
+		)
+	}
+	return factory
 }

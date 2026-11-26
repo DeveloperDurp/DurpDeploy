@@ -90,65 +90,11 @@ func TestAlpineCompliancePolicy(t *testing.T) {
 	})
 
 	t.Run("production templates comply", func(t *testing.T) {
-		matches, err := filepath.Glob(
-			filepath.Join(repositoryRoot, "views", "*", "*.templ"),
-		)
-		if err != nil {
-			t.Fatalf("glob production templates: %v", err)
-		}
-		for _, path := range matches {
-			content, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("read %s: %v", path, err)
-			}
-			relative, err := filepath.Rel(repositoryRoot, path)
-			if err != nil {
-				t.Fatalf("resolve %s: %v", path, err)
-			}
-			for _, violation := range alpinePolicyViolations(relative, string(content)) {
-				t.Errorf("%s: %s", relative, violation)
-			}
-		}
+		assertAlpineProductionTemplates(t, repositoryRoot)
 	})
 
 	t.Run("registry and generated assets comply", func(t *testing.T) {
-		app := readComplianceRegistry(t, repositoryRoot)
-		order := []string{
-			"toast", "navbar", "deploymentForm",
-			"stepFormHost", "stepEditor", "variablesPage", "deploymentStream",
-		}
-		previous := strings.Index(app, "window.htmx = htmx")
-		for _, name := range order {
-			marker := "Alpine.data('" + name + "'"
-			position := strings.Index(app, marker)
-			if strings.Count(app, marker) != 1 || position <= previous {
-				t.Errorf("Alpine registry order/count is invalid at %s", name)
-			}
-			previous = position
-		}
-		if strings.Count(app, "Alpine.start()") != 1 ||
-			strings.LastIndex(app, "Alpine.start()") <= previous {
-			t.Error("Alpine.start() must occur once after all registrations")
-		}
-		if regexp.MustCompile(`console\.(?:log|debug|info)\s*\(`).
-			MatchString(app) {
-			t.Error("production app contains console logging")
-		}
-		if _, err := os.Stat(
-			filepath.Join(repositoryRoot, "static/js/alpine.bundle.js"),
-		); !os.IsNotExist(
-			err,
-		) {
-			t.Errorf(
-				"orphan Alpine bundle exists or cannot be checked: %v",
-				err,
-			)
-		}
-		assertContains(
-			t,
-			readComplianceFile(t, repositoryRoot, "static/css/input.css"),
-			`[x-cloak] { display: none !important; }`,
-		)
+		assertAlpineRegistryAssets(t, repositoryRoot)
 	})
 
 	t.Run("target and swap ledger is preserved", func(t *testing.T) {
@@ -225,6 +171,70 @@ func TestAlpineCompliancePolicy(t *testing.T) {
 			}
 		}
 	})
+}
+
+func assertAlpineProductionTemplates(t *testing.T, repositoryRoot string) {
+	t.Helper()
+	matches, err := filepath.Glob(
+		filepath.Join(repositoryRoot, "views", "*", "*.templ"),
+	)
+	if err != nil {
+		t.Fatalf("glob production templates: %v", err)
+	}
+	for _, path := range matches {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		relative, err := filepath.Rel(repositoryRoot, path)
+		if err != nil {
+			t.Fatalf("resolve %s: %v", path, err)
+		}
+		for _, violation := range alpinePolicyViolations(relative, string(content)) {
+			t.Errorf("%s: %s", relative, violation)
+		}
+	}
+}
+
+func assertAlpineRegistryAssets(t *testing.T, repositoryRoot string) {
+	t.Helper()
+	app := readComplianceRegistry(t, repositoryRoot)
+	order := []string{
+		"toast", "navbar", "deploymentForm",
+		"stepFormHost", "stepEditor", "variablesPage", "deploymentStream",
+	}
+	previous := strings.Index(app, "window.htmx = htmx")
+	for _, name := range order {
+		marker := "Alpine.data('" + name + "'"
+		position := strings.Index(app, marker)
+		if strings.Count(app, marker) != 1 || position <= previous {
+			t.Errorf("Alpine registry order/count is invalid at %s", name)
+		}
+		previous = position
+	}
+	if strings.Count(app, "Alpine.start()") != 1 ||
+		strings.LastIndex(app, "Alpine.start()") <= previous {
+		t.Error("Alpine.start() must occur once after all registrations")
+	}
+	if regexp.MustCompile(`console\.(?:log|debug|info)\s*\(`).
+		MatchString(app) {
+		t.Error("production app contains console logging")
+	}
+	if _, err := os.Stat(
+		filepath.Join(repositoryRoot, "static/js/alpine.bundle.js"),
+	); !os.IsNotExist(
+		err,
+	) {
+		t.Errorf(
+			"orphan Alpine bundle exists or cannot be checked: %v",
+			err,
+		)
+	}
+	assertContains(
+		t,
+		readComplianceFile(t, repositoryRoot, "static/css/input.css"),
+		`[x-cloak] { display: none !important; }`,
+	)
 }
 
 func containsViolation(violations []string, want string) bool {
