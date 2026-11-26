@@ -21,81 +21,109 @@ func TestProductionClientEnforcesRedirectBoundary(t *testing.T) {
 		{"redirect-loop", false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			// Given: real TLS endpoints and the production transport and dialer.
-			var leaked, badCredential atomic.Bool
-			destination, _ := artifactTLSServer(
-				t,
-				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					leaked.Store(true)
-					w.WriteHeader(http.StatusNoContent)
-				}),
-			)
-			data := zipFixture(t, "package.txt", 0644)
-			var requests atomic.Int32
-			server, client := artifactTLSServer(
-				t,
-				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					requests.Add(1)
-					if r.Header.Get(
-						"Authorization",
-					) != "Bearer test-credential" {
-						badCredential.Store(true)
-					}
-					if r.URL.Path == "/final.zip" {
-						if _, err := w.Write(data); err != nil {
-							t.Error(err)
-						}
-						return
-					}
-					target := "/final.zip"
-					switch test.name {
-					case "cross-origin":
-						target = destination.URL + "/final.zip"
-					case "redirect-loop":
-						target = "/1.zip"
-					}
-					http.Redirect(w, r, target, http.StatusFound)
-				}),
-			)
-			client.HTTP.Transport.(*http.Transport).TLSClientConfig.RootCAs.AddCert(
-				destination.Certificate(),
-			)
-			if test.name == "cross-origin" {
-				probe, err := client.HTTP.Get(destination.URL)
-				if err != nil {
-					t.Fatalf(
-						"trusted redirect destination is unreachable: %v",
-						err,
-					)
-				}
-				probe.Body.Close()
-				leaked.Store(false)
-			}
-			// When: fetching through the redirect.
-			download, err := client.Fetch(t.Context(), Repository{
-				URLTemplate: server.URL + "/{version}.zip",
-				AuthType:    "bearer",
-				Credential:  "test-credential",
-			}, Pin{URL: server.URL + "/1.zip"})
-			if download.Path != "" {
-				defer testutil.Remove(t, download.Path)
-			}
-			// Then: only bounded same-origin HTTPS redirects receive credentials.
-			if test.allowed {
-				if err != nil || download.Size != int64(len(data)) ||
-					requests.Load() != 2 {
-					t.Fatalf("same-origin fetch failed: %v", err)
-				}
-			} else if !errors.Is(err, ErrFetch) {
-				t.Fatalf("unsafe redirect accepted: %v", err)
-			}
-			if leaked.Load() || badCredential.Load() {
-				t.Fatal("redirect credential boundary was violated")
-			}
-			if test.name == "redirect-loop" && requests.Load() != 5 {
-				t.Fatalf("redirect limit was not enforced: %d", requests.Load())
-			}
+			testProductionRedirectBoundary(t, test.name, test.allowed)
 		})
+	}
+}
+
+func testProductionRedirectBoundary(
+	t *testing.T,
+	scenario string,
+	allowed bool,
+) {
+	t.Helper()
+	// Given: real TLS endpoints and the production transport and dialer.
+	var leaked, badCredential atomic.Bool
+	destination, _ := artifactTLSServer(
+		t,
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			leaked.Store(true)
+			w.WriteHeader(http.StatusNoContent)
+		}),
+	)
+	data := zipFixture(t, "package.txt", 0644)
+	var requests atomic.Int32
+	server, client := artifactTLSServer(
+		t,
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requests.Add(1)
+			if r.Header.Get(
+				"Authorization",
+			) != "Bearer test-credential" {
+				badCredential.Store(true)
+			}
+			if r.URL.Path == "/final.zip" {
+				if _, err := w.Write(data); err != nil {
+					t.Error(err)
+				}
+				return
+			}
+			target := "/final.zip"
+			switch scenario {
+			case "cross-origin":
+				target = destination.URL + "/final.zip"
+			case "redirect-loop":
+				target = "/1.zip"
+			}
+			http.Redirect(w, r, target, http.StatusFound)
+		}),
+	)
+	client.HTTP.Transport.(*http.Transport).TLSClientConfig.RootCAs.AddCert(
+		destination.Certificate(),
+	)
+	if scenario == "cross-origin" {
+		probe, err := client.HTTP.Get(destination.URL)
+		if err != nil {
+			t.Fatalf(
+				"trusted redirect destination is unreachable: %v",
+				err,
+			)
+		}
+		probe.Body.Close()
+		leaked.Store(false)
+	}
+	// When: fetching through the redirect.
+	download, err := client.Fetch(t.Context(), Repository{
+		URLTemplate: server.URL + "/{version}.zip",
+		AuthType:    "bearer",
+		Credential:  "test-credential",
+	}, Pin{URL: server.URL + "/1.zip"})
+	if download.Path != "" {
+		defer testutil.Remove(t, download.Path)
+	}
+	// Then: only bounded same-origin HTTPS redirects receive credentials.
+	assertRedirectFetchResult(
+		t,
+		allowed,
+		download,
+		err,
+		int64(len(data)),
+		&requests,
+	)
+	if leaked.Load() || badCredential.Load() {
+		t.Fatal("redirect credential boundary was violated")
+	}
+	if scenario == "redirect-loop" && requests.Load() != 5 {
+		t.Fatalf("redirect limit was not enforced: %d", requests.Load())
+	}
+}
+
+func assertRedirectFetchResult(
+	t *testing.T,
+	allowed bool,
+	download Download,
+	err error,
+	wantSize int64,
+	requests *atomic.Int32,
+) {
+	t.Helper()
+	if allowed {
+		if err != nil || download.Size != wantSize ||
+			requests.Load() != 2 {
+			t.Fatalf("same-origin fetch failed: %v", err)
+		}
+	} else if !errors.Is(err, ErrFetch) {
+		t.Fatalf("unsafe redirect accepted: %v", err)
 	}
 }
 
