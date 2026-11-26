@@ -176,12 +176,7 @@ func TestLoadConfigEnabled(t *testing.T) {
 			config, err := LoadConfig()
 			// Then: only a complete trusted configuration enables OIDC.
 			if tt.wantErr {
-				if err == nil {
-					t.Fatal("LoadConfig() error = nil, want error")
-				}
-				if strings.Contains(err.Error(), testClientSecret) {
-					t.Fatal("LoadConfig() error exposes client secret")
-				}
+				assertOIDCConfigErrorRedactsSecret(t, err)
 				return
 			}
 			if err != nil {
@@ -308,4 +303,14 @@ func equalConfig(got, want Config) bool {
 		got.DeployerGroup == want.DeployerGroup &&
 		got.ViewerGroup == want.ViewerGroup &&
 		got.AllowUnverifiedEmail == want.AllowUnverifiedEmail
+}
+
+func assertOIDCConfigErrorRedactsSecret(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("LoadConfig() error = nil, want error")
+	}
+	if strings.Contains(err.Error(), testClientSecret) {
+		t.Fatal("LoadConfig() error exposes client secret")
+	}
 }

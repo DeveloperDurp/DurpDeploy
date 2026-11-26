@@ -242,27 +242,13 @@ func TestParseClaims(t *testing.T) {
 			)
 
 			if tt.wantReason != "" {
-				var claimErr *ClaimError
-				if !errors.As(err, &claimErr) {
-					t.Fatalf("expected ClaimError, got %v", err)
-				}
-				if claimErr.Field != tt.wantField ||
-					claimErr.Reason != tt.wantReason {
-					t.Fatalf(
-						"got ClaimError{%q, %q}, want {%q, %q}",
-						claimErr.Field,
-						claimErr.Reason,
-						tt.wantField,
-						tt.wantReason,
-					)
-				}
-				if strings.Contains(err.Error(), tt.claims) ||
-					strings.Contains(
-						err.Error(),
-						"ignore previous instructions",
-					) {
-					t.Fatalf("error exposed claim content: %q", err)
-				}
+				assertRejectedClaimDocument(
+					t,
+					err,
+					tt.wantField,
+					tt.wantReason,
+					tt.claims,
+				)
 				return
 			}
 			if err != nil {
@@ -272,5 +258,36 @@ func TestParseClaims(t *testing.T) {
 				t.Fatalf("ParseClaims() = %#v, want %#v", got, tt.want)
 			}
 		})
+	}
+}
+
+func assertRejectedClaimDocument(
+	t *testing.T,
+	err error,
+	wantField string,
+	wantReason ClaimErrorReason,
+	claims string,
+) {
+	t.Helper()
+	var claimErr *ClaimError
+	if !errors.As(err, &claimErr) {
+		t.Fatalf("expected ClaimError, got %v", err)
+	}
+	if claimErr.Field != wantField ||
+		claimErr.Reason != wantReason {
+		t.Fatalf(
+			"got ClaimError{%q, %q}, want {%q, %q}",
+			claimErr.Field,
+			claimErr.Reason,
+			wantField,
+			wantReason,
+		)
+	}
+	if strings.Contains(err.Error(), claims) ||
+		strings.Contains(
+			err.Error(),
+			"ignore previous instructions",
+		) {
+		t.Fatalf("error exposed claim content: %q", err)
 	}
 }

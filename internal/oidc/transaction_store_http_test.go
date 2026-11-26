@@ -59,24 +59,7 @@ func TestTransactionStore_LatestTabWinsAndOldCallbackFails(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	// When
-	latestClient := clientWithCookieJar(t, server)
-	for _, path := range []string{
-		"/login/oidc/start/first",
-		"/login/oidc/start/latest",
-		"/login/oidc/callback/latest",
-	} {
-		if status := getStatus(
-			t,
-			latestClient,
-			server.URL+path,
-		); status != http.StatusOK {
-			t.Fatalf(
-				"latest callback status = %d, want %d",
-				status,
-				http.StatusOK,
-			)
-		}
-	}
+	assertLatestOIDCCallbackSucceeds(t, server)
 	oldClient := clientWithCookieJar(t, server)
 	for _, path := range []string{
 		"/login/oidc/start/first",
@@ -139,4 +122,26 @@ func getStatus(t *testing.T, client *http.Client, rawURL string) int {
 		t.Fatalf("close response body: %v", err)
 	}
 	return response.StatusCode
+}
+
+func assertLatestOIDCCallbackSucceeds(t *testing.T, server *httptest.Server) {
+	t.Helper()
+	latestClient := clientWithCookieJar(t, server)
+	for _, path := range []string{
+		"/login/oidc/start/first",
+		"/login/oidc/start/latest",
+		"/login/oidc/callback/latest",
+	} {
+		if status := getStatus(
+			t,
+			latestClient,
+			server.URL+path,
+		); status != http.StatusOK {
+			t.Fatalf(
+				"latest callback status = %d, want %d",
+				status,
+				http.StatusOK,
+			)
+		}
+	}
 }

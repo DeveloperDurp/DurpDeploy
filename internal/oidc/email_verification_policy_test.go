@@ -83,12 +83,7 @@ func TestLoadConfigEmailVerificationPolicy(t *testing.T) {
 
 			// Then: only exact lowercase values configure the policy.
 			if tt.wantErr {
-				if !errors.Is(err, ErrInvalidConfig) {
-					t.Fatalf(
-						"LoadConfig() error = %v, want ErrInvalidConfig",
-						err,
-					)
-				}
+				assertInvalidEmailVerificationConfig(t, err)
 				return
 			}
 			if err != nil {
@@ -202,20 +197,12 @@ func TestParseClaimsEmailVerificationPolicy(t *testing.T) {
 
 			// Then: opt-out still accepts only literal boolean claims.
 			if tt.wantReason != "" {
-				var claimErr *ClaimError
-				if !errors.As(err, &claimErr) {
-					t.Fatalf("ParseClaims() error = %v, want ClaimError", err)
-				}
-				if claimErr.Field != tt.wantField ||
-					claimErr.Reason != tt.wantReason {
-					t.Fatalf(
-						"ClaimError = {%q, %q}, want {%q, %q}",
-						claimErr.Field,
-						claimErr.Reason,
-						tt.wantField,
-						tt.wantReason,
-					)
-				}
+				assertEmailVerificationClaimError(
+					t,
+					err,
+					tt.wantField,
+					tt.wantReason,
+				)
 				return
 			}
 			if err != nil {
@@ -225,5 +212,38 @@ func TestParseClaimsEmailVerificationPolicy(t *testing.T) {
 				t.Fatalf("ParseClaims() = %#v, want %#v", identity, tt.want)
 			}
 		})
+	}
+}
+
+func assertInvalidEmailVerificationConfig(t *testing.T, err error) {
+	t.Helper()
+	if !errors.Is(err, ErrInvalidConfig) {
+		t.Fatalf(
+			"LoadConfig() error = %v, want ErrInvalidConfig",
+			err,
+		)
+	}
+}
+
+func assertEmailVerificationClaimError(
+	t *testing.T,
+	err error,
+	wantField string,
+	wantReason ClaimErrorReason,
+) {
+	t.Helper()
+	var claimErr *ClaimError
+	if !errors.As(err, &claimErr) {
+		t.Fatalf("ParseClaims() error = %v, want ClaimError", err)
+	}
+	if claimErr.Field != wantField ||
+		claimErr.Reason != wantReason {
+		t.Fatalf(
+			"ClaimError = {%q, %q}, want {%q, %q}",
+			claimErr.Field,
+			claimErr.Reason,
+			wantField,
+			wantReason,
+		)
 	}
 }

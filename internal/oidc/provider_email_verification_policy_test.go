@@ -55,25 +55,34 @@ func TestProviderEmailVerificationPolicy(t *testing.T) {
 			}
 
 			// Then
-			if tt.wantReason == "" {
-				if err != nil {
-					t.Fatalf("claim parsing error = %v", err)
-				}
-				return
-			}
-			var claimErr *ClaimError
-			if !errors.As(err, &claimErr) {
-				t.Fatalf("claim parsing error = %v, want ClaimError", err)
-			}
-			if claimErr.Field != "email_verified" ||
-				claimErr.Reason != tt.wantReason {
-				t.Fatalf(
-					"ClaimError = {%q, %q}, want {email_verified, %q}",
-					claimErr.Field,
-					claimErr.Reason,
-					tt.wantReason,
-				)
-			}
+			assertProviderEmailVerificationResult(t, err, tt.wantReason)
 		})
+	}
+}
+
+func assertProviderEmailVerificationResult(
+	t *testing.T,
+	err error,
+	wantReason ClaimErrorReason,
+) {
+	t.Helper()
+	if wantReason == "" {
+		if err != nil {
+			t.Fatalf("claim parsing error = %v", err)
+		}
+		return
+	}
+	var claimErr *ClaimError
+	if !errors.As(err, &claimErr) {
+		t.Fatalf("claim parsing error = %v, want ClaimError", err)
+	}
+	if claimErr.Field != "email_verified" ||
+		claimErr.Reason != wantReason {
+		t.Fatalf(
+			"ClaimError = {%q, %q}, want {email_verified, %q}",
+			claimErr.Field,
+			claimErr.Reason,
+			wantReason,
+		)
 	}
 }
