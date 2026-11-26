@@ -64,69 +64,7 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 	if err := agentstate.NewStore(f.identityDir).Save(state); err != nil {
 		t.Fatal(err)
 	}
-	name := fmt.Sprintf("issue99-agent-%s-%d", runtime, os.Getpid())
-	clientArgs := []string{"--host=" + socket.String()}
-	if runtime == "podman" {
-		clientArgs = []string{"--remote", "--url=" + socket.String()}
-	}
-	args := append(
-		clientArgs,
-		"run",
-		"--detach",
-		"--name="+name,
-		"--network=host",
-		"--read-only",
-		"--cap-drop=ALL",
-		"--security-opt=no-new-privileges",
-		"--security-opt=label=disable",
-		fmt.Sprintf("--user=%d:%d", os.Getuid(), os.Getgid()),
-		"--tmpfs=/tmp:size=64m,mode=1777",
-		"--volume="+f.identityDir+":/var/lib/durpdeploy-agent",
-		"--volume="+socket.Path+":/run/durpdeploy/runtime.sock:ro",
-		"--env=DURPDEPLOY_AGENT_CONTAINER_ENABLED=true",
-		"--env=DURPDEPLOY_AGENT_CONTAINER_RUNTIME="+runtime,
-		"--env=DURPDEPLOY_AGENT_CONTAINER_SOCKET=unix:///run/durpdeploy/runtime.sock",
-	)
-	if runtime == "podman" {
-		args = append(args, "--userns=keep-id")
-	}
-	info, err := os.Stat(socket.Path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
-		args = append(args, fmt.Sprintf("--group-add=%d", stat.Gid))
-	}
-	args = append(args, image)
-	if output, err := exec.Command(runtime, args...).
-		CombinedOutput(); err != nil {
-		t.Fatalf("start agent: %v: %s", err, output)
-	}
-	t.Cleanup(func() {
-		if t.Failed() {
-			output, _ := exec.Command(runtime, append(clientArgs, "logs", name)...).
-				CombinedOutput()
-			t.Logf("agent: %s", output)
-		}
-		if output, err := exec.Command(runtime, append(clientArgs, "rm", "--force", "--volumes", name)...).
-			CombinedOutput(); err != nil {
-			t.Errorf("remove agent: %v: %s", err, output)
-		}
-	})
-	deadline := time.Now().Add(time.Minute)
-	for {
-		agent, err := f.repo.Queries.GetAgent(t.Context(), "test-agent")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if agent.AgentProtocol.String == "agent/3" {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("agent did not report v3 readiness")
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	startAgentContainerAndWait(t, f, runtime, image, socket)
 	user, err := f.repo.Queries.CreateUser(t.Context(), db.CreateUserParams{
 		Email:        "container@test.local",
 		Name:         "Container E2E",
@@ -287,51 +225,7 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	deadline = time.Now().Add(4 * time.Minute)
-	for {
-		var result struct{ Status string }
-		if err := json.Unmarshal(
-			request(
-				"GET",
-				fmt.Sprintf("/deployments/%d", deployment.ID),
-				nil,
-				200,
-			),
-			&result,
-		); err != nil {
-			t.Fatal(err)
-		}
-		if result.Status == "succeeded" {
-			break
-		}
-		if result.Status == "failed" ||
-			result.Status == "cleanup_unconfirmed" ||
-			time.Now().After(deadline) {
-			logs := request(
-				"GET",
-				fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID),
-				nil,
-				200,
-			)
-			t.Fatalf(
-				"container deployment status=%s logs=%s",
-				result.Status,
-				logs,
-			)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	logs := request(
-		"GET",
-		fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID),
-		nil,
-		200,
-	)
-	for _, marker := range []string{"bash-ok", "python-ok", "pwsh-ok", "all-ok"} {
-		if !strings.Contains(string(logs), marker) {
-			t.Fatalf("missing %s in deployment logs", marker)
-		}
-	}
+	assertAgentContainerDeploymentLogs(t, request, deployment.ID)
 	// A later edit cannot change the release/deployment's execution mode.
 	request(
 		"PUT",
@@ -350,5 +244,130 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 	if err != nil || len(snapshots) != 4 ||
 		snapshots[0].AgentExecutionMode != "container" {
 		t.Fatalf("snapshots=%+v error=%v", snapshots, err)
+	}
+}
+
+func startAgentContainerAndWait(
+	t *testing.T,
+	f agentFixture,
+	runtime, image string,
+	socket *url.URL,
+) {
+	t.Helper()
+	name := fmt.Sprintf("issue99-agent-%s-%d", runtime, os.Getpid())
+	clientArgs := []string{"--host=" + socket.String()}
+	if runtime == "podman" {
+		clientArgs = []string{"--remote", "--url=" + socket.String()}
+	}
+	args := append(
+		clientArgs,
+		"run",
+		"--detach",
+		"--name="+name,
+		"--network=host",
+		"--read-only",
+		"--cap-drop=ALL",
+		"--security-opt=no-new-privileges",
+		"--security-opt=label=disable",
+		fmt.Sprintf("--user=%d:%d", os.Getuid(), os.Getgid()),
+		"--tmpfs=/tmp:size=64m,mode=1777",
+		"--volume="+f.identityDir+":/var/lib/durpdeploy-agent",
+		"--volume="+socket.Path+":/run/durpdeploy/runtime.sock:ro",
+		"--env=DURPDEPLOY_AGENT_CONTAINER_ENABLED=true",
+		"--env=DURPDEPLOY_AGENT_CONTAINER_RUNTIME="+runtime,
+		"--env=DURPDEPLOY_AGENT_CONTAINER_SOCKET=unix:///run/durpdeploy/runtime.sock",
+	)
+	if runtime == "podman" {
+		args = append(args, "--userns=keep-id")
+	}
+	info, err := os.Stat(socket.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+		args = append(args, fmt.Sprintf("--group-add=%d", stat.Gid))
+	}
+	args = append(args, image)
+	if output, err := exec.Command(runtime, args...).
+		CombinedOutput(); err != nil {
+		t.Fatalf("start agent: %v: %s", err, output)
+	}
+	t.Cleanup(func() {
+		if t.Failed() {
+			output, _ := exec.Command(runtime, append(clientArgs, "logs", name)...).
+				CombinedOutput()
+			t.Logf("agent: %s", output)
+		}
+		if output, err := exec.Command(runtime, append(clientArgs, "rm", "--force", "--volumes", name)...).
+			CombinedOutput(); err != nil {
+			t.Errorf("remove agent: %v: %s", err, output)
+		}
+	})
+	deadline := time.Now().Add(time.Minute)
+	for {
+		agent, err := f.repo.Queries.GetAgent(t.Context(), "test-agent")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if agent.AgentProtocol.String == "agent/3" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("agent did not report v3 readiness")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func assertAgentContainerDeploymentLogs(
+	t *testing.T,
+	request func(method, path string, body any, status int) []byte,
+	deploymentID int64,
+) {
+	t.Helper()
+	deadline := time.Now().Add(4 * time.Minute)
+	for {
+		var result struct{ Status string }
+		if err := json.Unmarshal(
+			request(
+				"GET",
+				fmt.Sprintf("/deployments/%d", deploymentID),
+				nil,
+				200,
+			),
+			&result,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if result.Status == "succeeded" {
+			break
+		}
+		if result.Status == "failed" ||
+			result.Status == "cleanup_unconfirmed" ||
+			time.Now().After(deadline) {
+			logs := request(
+				"GET",
+				fmt.Sprintf("/deployments/%d/logs.txt", deploymentID),
+				nil,
+				200,
+			)
+			t.Fatalf(
+				"container deployment status=%s logs=%s",
+				result.Status,
+				logs,
+			)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	logs := request(
+		"GET",
+		fmt.Sprintf("/deployments/%d/logs.txt", deploymentID),
+		nil,
+		200,
+	)
+	for _, marker := range []string{"bash-ok", "python-ok", "pwsh-ok", "all-ok"} {
+		if !strings.Contains(string(logs), marker) {
+			t.Fatalf("missing %s in deployment logs", marker)
+		}
 	}
 }

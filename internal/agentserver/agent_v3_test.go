@@ -104,41 +104,7 @@ func TestAgentV3CleanupBlocksQueueUntilReadyPoll(t *testing.T) {
 					1,
 				),
 			), 409)
-			// An agent downgrade cannot assert container reconciliation.
-			recordFixturePoll(
-				t,
-				f,
-				agentproto.PollRequest{
-					ProtocolEnvelope: agentproto.ProtocolEnvelope{
-						Protocol: agentproto.AgentV1,
-					},
-				},
-			)
-			assertDeploymentStatus(t, f, next.ID, "queued")
-			var ready agentproto.PollRequest
-			if err := json.Unmarshal([]byte(containerPollBody), &ready); err != nil {
-				t.Fatal(err)
-			}
-			recordFixturePoll(t, f, ready)
-			if cancelFirst {
-				assertDeploymentStatus(t, f, next.ID, "queued")
-				blocked, err := f.repo.Queries.HasUnconfirmedContainerCleanup(
-					t.Context(),
-					id,
-				)
-				if err != nil || blocked != 1 {
-					t.Fatalf("local cleanup block=%v error=%v", blocked, err)
-				}
-				if _, err := f.repo.Queries.ConfirmContainerCleanup(t.Context(), db.ConfirmContainerCleanupParams{
-					Now: validInt(103), Namespace: validString("local-test"),
-				}); err != nil {
-					t.Fatal(err)
-				}
-				if err := f.repo.ReconcileDeploymentQueues(t.Context()); err != nil {
-					t.Fatal(err)
-				}
-			}
-			assertDeploymentStatus(t, f, next.ID, "pending")
+			confirmAgentV3Cleanup(t, f, id, next.ID, cancelFirst)
 			assertDeploymentStatus(t, f, id, "cleanup_unconfirmed")
 			runs, err := f.repo.Queries.ListRemoteStepRuns(
 				t.Context(),
@@ -160,6 +126,50 @@ func TestAgentV3CleanupBlocksQueueUntilReadyPoll(t *testing.T) {
 			)
 		})
 	}
+}
+
+func confirmAgentV3Cleanup(
+	t *testing.T,
+	f agentFixture,
+	id, nextID int64,
+	cancelFirst bool,
+) {
+	t.Helper()
+	// An agent downgrade cannot assert container reconciliation.
+	recordFixturePoll(
+		t,
+		f,
+		agentproto.PollRequest{
+			ProtocolEnvelope: agentproto.ProtocolEnvelope{
+				Protocol: agentproto.AgentV1,
+			},
+		},
+	)
+	assertDeploymentStatus(t, f, nextID, "queued")
+	var ready agentproto.PollRequest
+	if err := json.Unmarshal([]byte(containerPollBody), &ready); err != nil {
+		t.Fatal(err)
+	}
+	recordFixturePoll(t, f, ready)
+	if cancelFirst {
+		assertDeploymentStatus(t, f, nextID, "queued")
+		blocked, err := f.repo.Queries.HasUnconfirmedContainerCleanup(
+			t.Context(),
+			id,
+		)
+		if err != nil || blocked != 1 {
+			t.Fatalf("local cleanup block=%v error=%v", blocked, err)
+		}
+		if _, err := f.repo.Queries.ConfirmContainerCleanup(t.Context(), db.ConfirmContainerCleanupParams{
+			Now: validInt(103), Namespace: validString("local-test"),
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.repo.ReconcileDeploymentQueues(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	assertDeploymentStatus(t, f, nextID, "pending")
 }
 
 func recordFixturePoll(
