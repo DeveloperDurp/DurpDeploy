@@ -70,35 +70,47 @@ func TestLoginRateLimitMiddleware(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			handler := requestmeta.Middleware("192.0.2.0/24")(
 				test.middleware(
-					http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-						w.WriteHeader(http.StatusNoContent)
-					}),
+					http.HandlerFunc(
+						func(w http.ResponseWriter, _ *http.Request) {
+							w.WriteHeader(http.StatusNoContent)
+						},
+					),
 				),
 			)
-			request.Header.Set("X-Forwarded-For", "203.0.113.9")
-			for range test.limit {
-				response := httptest.NewRecorder()
-				handler.ServeHTTP(response, request)
-				if response.Code != http.StatusNoContent {
-					t.Fatalf("allowed status = %d", response.Code)
-				}
-			}
-			response := httptest.NewRecorder()
-			handler.ServeHTTP(response, request)
-			if response.Code != http.StatusTooManyRequests {
-				t.Fatalf("limited status = %d", response.Code)
-			}
-			if got := response.Header().Get("Retry-After"); got != "900" {
-				t.Fatalf("Retry-After = %q", got)
-			}
-
-			request.Header.Set("X-Forwarded-For", "203.0.113.10")
-			response = httptest.NewRecorder()
-			handler.ServeHTTP(response, request)
-			if response.Code != http.StatusNoContent {
-				t.Fatalf("independent client status = %d", response.Code)
-			}
+			assertLoginMiddlewareLimit(t, handler, request, test.limit)
 		})
+	}
+}
+
+func assertLoginMiddlewareLimit(
+	t *testing.T,
+	handler http.Handler,
+	request *http.Request,
+	limit int,
+) {
+	t.Helper()
+	request.Header.Set("X-Forwarded-For", "203.0.113.9")
+	for range limit {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusNoContent {
+			t.Fatalf("allowed status = %d", response.Code)
+		}
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusTooManyRequests {
+		t.Fatalf("limited status = %d", response.Code)
+	}
+	if got := response.Header().Get("Retry-After"); got != "900" {
+		t.Fatalf("Retry-After = %q", got)
+	}
+
+	request.Header.Set("X-Forwarded-For", "203.0.113.10")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("independent client status = %d", response.Code)
 	}
 }
 

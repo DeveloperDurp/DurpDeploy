@@ -201,36 +201,7 @@ func TestLogin_TOTPRejectsInvalidCSRFExpiredAndThrottledChallenges(
 		},
 		{
 			name: "throttle blocks sixth failure",
-			run: func(t *testing.T, h *authHarness, _ string, pending pendingLogin, userID int64) {
-				for attempt := 0; attempt < 6; attempt++ {
-					response, err := pending.client.PostForm(
-						h.server+"/login/mfa/totp",
-						url.Values{
-							"code":       {"000000"},
-							"csrf_token": {pending.csrf},
-						},
-					)
-					if err != nil {
-						t.Fatalf("post invalid TOTP %d: %v", attempt, err)
-					}
-					response.Body.Close()
-					want := http.StatusUnprocessableEntity
-					if attempt == 5 {
-						want = http.StatusTooManyRequests
-					}
-					if response.StatusCode != want {
-						t.Fatalf(
-							"attempt %d status = %d, want %d",
-							attempt,
-							response.StatusCode,
-							want,
-						)
-					}
-				}
-				if sessionCount(t, h, userID) != 0 {
-					t.Fatal("throttled TOTP created a final session")
-				}
-			},
+			run:  assertLoginTOTPThrottle,
 		},
 	}
 
@@ -246,6 +217,44 @@ func TestLogin_TOTPRejectsInvalidCSRFExpiredAndThrottledChallenges(
 			// When
 			test.run(t, h, code, pending, user.ID)
 		})
+	}
+}
+
+func assertLoginTOTPThrottle(
+	t *testing.T,
+	h *authHarness,
+	_ string,
+	pending pendingLogin,
+	userID int64,
+) {
+	t.Helper()
+	for attempt := 0; attempt < 6; attempt++ {
+		response, err := pending.client.PostForm(
+			h.server+"/login/mfa/totp",
+			url.Values{
+				"code":       {"000000"},
+				"csrf_token": {pending.csrf},
+			},
+		)
+		if err != nil {
+			t.Fatalf("post invalid TOTP %d: %v", attempt, err)
+		}
+		response.Body.Close()
+		want := http.StatusUnprocessableEntity
+		if attempt == 5 {
+			want = http.StatusTooManyRequests
+		}
+		if response.StatusCode != want {
+			t.Fatalf(
+				"attempt %d status = %d, want %d",
+				attempt,
+				response.StatusCode,
+				want,
+			)
+		}
+	}
+	if sessionCount(t, h, userID) != 0 {
+		t.Fatal("throttled TOTP created a final session")
 	}
 }
 

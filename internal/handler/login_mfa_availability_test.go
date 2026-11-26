@@ -136,25 +136,41 @@ func TestLogin_MFAAvailabilityRendersOnlyConfiguredMethods(t *testing.T) {
 			}
 			markup := string(body)
 
-			// Then
-			if response.StatusCode != http.StatusOK {
-				t.Fatalf(
-					"status = %d, want %d",
-					response.StatusCode,
-					http.StatusOK,
-				)
-			}
-			for _, method := range test.want {
-				if !strings.Contains(markup, method) {
-					t.Errorf("MFA page omitted available %q", method)
-				}
-			}
-			for _, method := range test.absent {
-				if strings.Contains(markup, method) {
-					t.Errorf("MFA page rendered unavailable %q", method)
-				}
-			}
+			assertLoginMFAMethodMarkup(
+				t,
+				response.StatusCode,
+				markup,
+				test.want,
+				test.absent,
+			)
 		})
+	}
+}
+
+func assertLoginMFAMethodMarkup(
+	t *testing.T,
+	status int,
+	markup string,
+	want, absent []string,
+) {
+	t.Helper()
+	// Then
+	if status != http.StatusOK {
+		t.Fatalf(
+			"status = %d, want %d",
+			status,
+			http.StatusOK,
+		)
+	}
+	for _, method := range want {
+		if !strings.Contains(markup, method) {
+			t.Errorf("MFA page omitted available %q", method)
+		}
+	}
+	for _, method := range absent {
+		if strings.Contains(markup, method) {
+			t.Errorf("MFA page rendered unavailable %q", method)
+		}
 	}
 }
 
