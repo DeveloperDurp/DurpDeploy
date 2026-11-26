@@ -82,6 +82,15 @@ func TestBuildMetadataCountsSourceCommits(t *testing.T) {
 		!strings.HasSuffix(dirty["software_version"], ".dirty") {
 		t.Fatalf("modified tag checkout = %v", dirty)
 	}
+	assertBuildMetadataRejectsInvalidTags(t, script, directory)
+	assertBuildMetadataFallbacks(t, script, directory)
+}
+
+func assertBuildMetadataRejectsInvalidTags(
+	t *testing.T,
+	script, directory string,
+) {
+	t.Helper()
 	for _, invalid := range []string{
 		"v01.2.3", "v1.2.3-01", "v1.2.3+", "v1.2.3\nversion=bad",
 	} {
@@ -94,6 +103,10 @@ func TestBuildMetadataCountsSourceCommits(t *testing.T) {
 			t.Fatalf("accepted invalid tag %q: %s", invalid, data)
 		}
 	}
+}
+
+func assertBuildMetadataFallbacks(t *testing.T, script, directory string) {
+	t.Helper()
 	shallow := filepath.Join(t.TempDir(), "shallow")
 	clone := exec.Command("git", "clone", "-q", "--depth=1",
 		"file://"+directory, shallow)

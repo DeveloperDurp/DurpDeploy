@@ -69,6 +69,38 @@ func (j job) allowsFailure() bool {
 
 func pipeline(t *testing.T) map[string]job {
 	t.Helper()
+	jobs := loadPipelineJobs(t)
+	resolved := map[string]job{}
+	resolving := map[string]bool{}
+	var resolve func(string) job
+	resolve = func(name string) job {
+		if current, ok := resolved[name]; ok {
+			return current
+		}
+		if resolving[name] {
+			t.Fatalf("cyclic job inheritance at %s", name)
+		}
+		current, ok := jobs[name]
+		if !ok {
+			t.Fatalf("missing job %s", name)
+		}
+		resolving[name] = true
+		if current.Extends == "" {
+			resolved[name] = current
+			return current
+		}
+		current = inheritJobFields(current, resolve(current.Extends))
+		resolved[name] = current
+		return current
+	}
+	for name := range jobs {
+		resolve(name)
+	}
+	return resolved
+}
+
+func loadPipelineJobs(t *testing.T) map[string]job {
+	t.Helper()
 	paths := []string{"../../.gitlab-ci.yml"}
 	includes, err := filepath.Glob("../../.gitlab/ci/*.yml")
 	if err != nil {
@@ -98,54 +130,32 @@ func pipeline(t *testing.T) map[string]job {
 			jobs[name] = current
 		}
 	}
-	resolved := map[string]job{}
-	resolving := map[string]bool{}
-	var resolve func(string) job
-	resolve = func(name string) job {
-		if current, ok := resolved[name]; ok {
-			return current
-		}
-		if resolving[name] {
-			t.Fatalf("cyclic job inheritance at %s", name)
-		}
-		current, ok := jobs[name]
-		if !ok {
-			t.Fatalf("missing job %s", name)
-		}
-		resolving[name] = true
-		if current.Extends == "" {
-			resolved[name] = current
-			return current
-		}
-		parent := resolve(current.Extends)
-		if current.Rules == nil {
-			current.Rules = parent.Rules
-		}
-		if current.AllowFailure.Kind == 0 {
-			current.AllowFailure = parent.AllowFailure
-		}
-		if current.Needs == nil {
-			current.Needs = parent.Needs
-		}
-		if current.Cache.Kind == 0 {
-			current.Cache = parent.Cache
-		}
-		if current.Interruptible == nil {
-			current.Interruptible = parent.Interruptible
-		}
-		if current.ResourceGroup == "" {
-			current.ResourceGroup = parent.ResourceGroup
-		}
-		if current.Environment.Name == "" {
-			current.Environment = parent.Environment
-		}
-		resolved[name] = current
-		return current
+	return jobs
+}
+
+func inheritJobFields(current, parent job) job {
+	if current.Rules == nil {
+		current.Rules = parent.Rules
 	}
-	for name := range jobs {
-		resolve(name)
+	if current.AllowFailure.Kind == 0 {
+		current.AllowFailure = parent.AllowFailure
 	}
-	return resolved
+	if current.Needs == nil {
+		current.Needs = parent.Needs
+	}
+	if current.Cache.Kind == 0 {
+		current.Cache = parent.Cache
+	}
+	if current.Interruptible == nil {
+		current.Interruptible = parent.Interruptible
+	}
+	if current.ResourceGroup == "" {
+		current.ResourceGroup = parent.ResourceGroup
+	}
+	if current.Environment.Name == "" {
+		current.Environment = parent.Environment
+	}
+	return current
 }
 
 func TestPublishersRequireSameCommitSecurityAndScannedImages(t *testing.T) {
