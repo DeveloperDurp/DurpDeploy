@@ -46,47 +46,56 @@ func TestServerStateRotationRejectsPlaintextAndRollsBack(t *testing.T) {
 			t.Run(
 				store.name+map[bool]string{false: "/corrupt", true: "/plaintext"}[plaintext],
 				func(t *testing.T) {
-					f := newServerStateKeyFixture(t)
-					earlier := seedVariableRotationSnapshot(
-						t,
-						f.repo,
-						f.rotation.oldBox,
-					)
-					value := "corrupt-ciphertext"
-					if plaintext {
-						var err error
-						value, err = f.rotation.oldBox.Encrypt("encrypted-only")
-						if err != nil {
-							t.Fatal(err)
-						}
-						// Keep earlier encrypted-only stores empty so the selected store rejects.
-						if _, err := f.repo.DB.ExecContext(
-							t.Context(),
-							"DELETE FROM deployment_variable_snapshots",
-						); err != nil {
-							t.Fatal(err)
-						}
-					}
-					store.seed(t, f, value)
-					if err := f.rotate(t, plaintext); err == nil {
-						t.Fatal("unsafe rotation succeeded")
-					}
-					if store.ciphertext(t, f) != value {
-						t.Fatal("failed rotation changed state")
-					}
-					if !plaintext {
-						after, err := f.repo.Queries.GetDeploymentVariableSnapshot(
-							t.Context(),
-							earlier.DeploymentID,
-						)
-						if err != nil || after != earlier {
-							t.Fatal(
-								"failed rotation changed earlier snapshot",
-								err,
-							)
-						}
-					}
+					assertServerStateRotationRejected(t, store, plaintext)
 				},
+			)
+		}
+	}
+}
+
+func assertServerStateRotationRejected(
+	t *testing.T,
+	store serverStateStore,
+	plaintext bool,
+) {
+	t.Helper()
+	f := newServerStateKeyFixture(t)
+	earlier := seedVariableRotationSnapshot(
+		t,
+		f.repo,
+		f.rotation.oldBox,
+	)
+	value := "corrupt-ciphertext"
+	if plaintext {
+		var err error
+		value, err = f.rotation.oldBox.Encrypt("encrypted-only")
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Keep earlier encrypted-only stores empty so the selected store rejects.
+		if _, err := f.repo.DB.ExecContext(
+			t.Context(),
+			"DELETE FROM deployment_variable_snapshots",
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	store.seed(t, f, value)
+	if err := f.rotate(t, plaintext); err == nil {
+		t.Fatal("unsafe rotation succeeded")
+	}
+	if store.ciphertext(t, f) != value {
+		t.Fatal("failed rotation changed state")
+	}
+	if !plaintext {
+		after, err := f.repo.Queries.GetDeploymentVariableSnapshot(
+			t.Context(),
+			earlier.DeploymentID,
+		)
+		if err != nil || after != earlier {
+			t.Fatal(
+				"failed rotation changed earlier snapshot",
+				err,
 			)
 		}
 	}

@@ -93,55 +93,73 @@ func TestServerStateKeyRotationBackendParity(t *testing.T) {
 				before[i] = rotationMetadata(t, f.repo.DB, store.metadata)
 				ciphertext[i] = store.ciphertext(t, f)
 			}
-			// The last store must roll back all earlier ciphertext updates.
-			if _, err := f.repo.DB.ExecContext(
-				t.Context(),
-				"UPDATE remote_step_runs SET log_buffer_ciphertext = ?",
-				"invalid",
-			); err != nil {
-				t.Fatal(err)
-			}
-			if err := f.rotate(t, false); err == nil {
-				t.Fatal("corrupt backend rotation succeeded")
-			}
-			for i, store := range serverStateStores[:len(serverStateStores)-1] {
-				if store.ciphertext(t, f) != ciphertext[i] {
-					t.Fatalf("%s changed after rollback", store.name)
-				}
-			}
-			if _, err := f.repo.DB.ExecContext(
-				t.Context(),
-				"UPDATE remote_step_runs SET log_buffer_ciphertext = ?",
-				ciphertext[len(ciphertext)-1],
-			); err != nil {
-				t.Fatal(err)
-			}
+			assertCorruptBackendRotationRollsBack(t, f, ciphertext)
 			if err := f.rotate(t, true); err == nil {
 				t.Fatal("backend plaintext rotation accepted encrypted state")
 			}
 			if err := f.rotate(t, false); err != nil {
 				t.Fatal(err)
 			}
-			for i, store := range serverStateStores {
-				value := store.ciphertext(t, f)
-				plain, err := f.rotation.newBox.Decrypt(value)
-				if err != nil || plain != store.name {
-					t.Fatalf("%s new-key recovery failed: %v", store.name, err)
-				}
-				if _, err := f.rotation.oldBox.Decrypt(value); err == nil {
-					t.Fatalf("%s old key still decrypts", store.name)
-				}
-				if after := rotationMetadata(
-					t,
-					f.repo.DB,
-					store.metadata,
-				); !reflect.DeepEqual(
-					before[i],
-					after,
-				) {
-					t.Fatalf("%s metadata changed", store.name)
-				}
-			}
+			assertBackendStateRotation(t, f, before)
 		})
+	}
+}
+
+func assertCorruptBackendRotationRollsBack(
+	t *testing.T,
+	f serverStateKeyFixture,
+	ciphertext []string,
+) {
+	t.Helper()
+	// The last store must roll back all earlier ciphertext updates.
+	if _, err := f.repo.DB.ExecContext(
+		t.Context(),
+		"UPDATE remote_step_runs SET log_buffer_ciphertext = ?",
+		"invalid",
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.rotate(t, false); err == nil {
+		t.Fatal("corrupt backend rotation succeeded")
+	}
+	for i, store := range serverStateStores[:len(serverStateStores)-1] {
+		if store.ciphertext(t, f) != ciphertext[i] {
+			t.Fatalf("%s changed after rollback", store.name)
+		}
+	}
+	if _, err := f.repo.DB.ExecContext(
+		t.Context(),
+		"UPDATE remote_step_runs SET log_buffer_ciphertext = ?",
+		ciphertext[len(ciphertext)-1],
+	); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertBackendStateRotation(
+	t *testing.T,
+	f serverStateKeyFixture,
+	before [][]any,
+) {
+	t.Helper()
+	for i, store := range serverStateStores {
+		value := store.ciphertext(t, f)
+		plain, err := f.rotation.newBox.Decrypt(value)
+		if err != nil || plain != store.name {
+			t.Fatalf("%s new-key recovery failed: %v", store.name, err)
+		}
+		if _, err := f.rotation.oldBox.Decrypt(value); err == nil {
+			t.Fatalf("%s old key still decrypts", store.name)
+		}
+		if after := rotationMetadata(
+			t,
+			f.repo.DB,
+			store.metadata,
+		); !reflect.DeepEqual(
+			before[i],
+			after,
+		) {
+			t.Fatalf("%s metadata changed", store.name)
+		}
 	}
 }
