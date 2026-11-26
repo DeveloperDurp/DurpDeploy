@@ -83,30 +83,48 @@ func TestRemoteLogAndTerminalRevocationAcrossDatabases(t *testing.T) {
 								)*100+caseIndex*10+orderIndex+1,
 							),
 						)
-						if test.prepare != nil {
-							if err := test.prepare(
-								primary,
-								identity,
-							); err != nil {
-								t.Fatal(err)
-							}
-						}
-						if revocationFirst {
-							revokeRemoteAgent(t, primary, identity.AgentID)
-							if err := test.run(secondary, identity); !errors.Is(
-								err, repository.ErrRemoteLifecycleConflict,
-							) {
-								t.Fatalf("revocation-first error=%v", err)
-							}
-							return
-						}
-						if err := test.run(secondary, identity); err != nil {
-							t.Fatal(err)
-						}
-						revokeRemoteAgent(t, primary, identity.AgentID)
+						assertRemoteLifecycleRevocationOrder(
+							t,
+							primary,
+							secondary,
+							test,
+							identity,
+							revocationFirst,
+						)
 					})
 				}
 			}
 		})
 	}
+}
+
+func assertRemoteLifecycleRevocationOrder(
+	t *testing.T,
+	primary, secondary *repository.Repository,
+	test remoteLifecycleCase,
+	identity repository.RemoteLifecycleClaim,
+	revocationFirst bool,
+) {
+	t.Helper()
+	if test.prepare != nil {
+		if err := test.prepare(
+			primary,
+			identity,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if revocationFirst {
+		revokeRemoteAgent(t, primary, identity.AgentID)
+		if err := test.run(secondary, identity); !errors.Is(
+			err, repository.ErrRemoteLifecycleConflict,
+		) {
+			t.Fatalf("revocation-first error=%v", err)
+		}
+		return
+	}
+	if err := test.run(secondary, identity); err != nil {
+		t.Fatal(err)
+	}
+	revokeRemoteAgent(t, primary, identity.AgentID)
 }

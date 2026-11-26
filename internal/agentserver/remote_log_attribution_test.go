@@ -47,38 +47,48 @@ func TestRemoteOutputAttributesMultilineCredentialTail(t *testing.T) {
 				t.Fatalf("result status=%d", response.StatusCode)
 			}
 
-			// Then: saved and broadcast output bind one escaped event to this agent.
-			logs, err := f.repo.Queries.ListDeploymentLogsByDeployment(
-				t.Context(),
-				id,
-			)
-			if err != nil || len(logs) != 2 {
-				t.Fatalf("logs=%+v error=%v", logs, err)
-			}
-			var output string
-			for _, log := range logs {
-				if strings.HasPrefix(log.Line, "Execution location:") {
-					output = log.Line
-				}
-			}
-			lines := strings.Split(output, "\n")
-			if len(lines) != 1 ||
-				!strings.Contains(output, `spoof\r\nlast token=`) {
-				t.Fatalf("rendered lines=%q", output)
-			}
-			for _, line := range lines {
-				if !strings.HasSuffix(line, ` agent_id="test-agent"`) {
-					t.Fatalf("trusted attribution missing: %q", output)
-				}
-			}
-			select {
-			case line := <-stream:
-				if line != output {
-					t.Fatalf("stream=%q saved=%q", line, output)
-				}
-			default:
-				t.Fatal("attributed output was not broadcast")
-			}
+			assertAttributedRemoteOutput(t, f, id, stream)
 		})
+	}
+}
+
+func assertAttributedRemoteOutput(
+	t *testing.T,
+	f agentFixture,
+	id int64,
+	stream <-chan string,
+) {
+	t.Helper()
+	// Then: saved and broadcast output bind one escaped event to this agent.
+	logs, err := f.repo.Queries.ListDeploymentLogsByDeployment(
+		t.Context(),
+		id,
+	)
+	if err != nil || len(logs) != 2 {
+		t.Fatalf("logs=%+v error=%v", logs, err)
+	}
+	var output string
+	for _, log := range logs {
+		if strings.HasPrefix(log.Line, "Execution location:") {
+			output = log.Line
+		}
+	}
+	lines := strings.Split(output, "\n")
+	if len(lines) != 1 ||
+		!strings.Contains(output, `spoof\r\nlast token=`) {
+		t.Fatalf("rendered lines=%q", output)
+	}
+	for _, line := range lines {
+		if !strings.HasSuffix(line, ` agent_id="test-agent"`) {
+			t.Fatalf("trusted attribution missing: %q", output)
+		}
+	}
+	select {
+	case line := <-stream:
+		if line != output {
+			t.Fatalf("stream=%q saved=%q", line, output)
+		}
+	default:
+		t.Fatal("attributed output was not broadcast")
 	}
 }
