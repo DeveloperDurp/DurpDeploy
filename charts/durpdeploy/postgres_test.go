@@ -109,37 +109,9 @@ func TestPostgresConnectionFields(t *testing.T) {
 				"  database: '" + database + "'\n"
 			// When: Helm renders the connection consumed by the installed driver.
 			resources := renderChart(t, values)
-			var dsn string
-			var reference secretReference
-			passwordRendered := false
-			for _, resource := range resources {
-				if resource.Kind == "Secret" &&
-					resource.StringData["password"] != "" {
-					passwordRendered = true
-					if resource.StringData["password"] != password {
-						t.Fatal("rendered password changed")
-					}
-				}
-				if resource.Kind != "Deployment" {
-					continue
-				}
-				passwordIndex, dsnIndex := -1, -1
-				for i, env := range resource.Spec.Template.Spec.Containers[0].Env {
-					switch env.Name {
-					case "PGPASSWORD":
-						reference = env.ValueFrom.SecretKeyRef
-						passwordIndex = i
-					case "DURPDEPLOY_DB":
-						dsn = env.Value
-						dsnIndex = i
-					}
-				}
-				if passwordIndex < 0 || passwordIndex >= dsnIndex {
-					t.Fatal(
-						"password must be available before database configuration",
-					)
-				}
-			}
+			dsn, reference, passwordRendered := readRenderedPostgresFields(
+				t, resources, password,
+			)
 			// Then: the configured fields and raw password survive without interpolation.
 			if passwordRendered != (fixture.name == "literal") {
 				t.Fatal("password Secret rendering did not match its source")
@@ -147,23 +119,77 @@ func TestPostgresConnectionFields(t *testing.T) {
 			if reference != (secretReference{fixture.secret, "password"}) {
 				t.Fatal("wrong password Secret reference")
 			}
-			if strings.Contains(dsn, "$(") || strings.Contains(dsn, password) {
-				t.Fatal(
-					"DSN contains environment interpolation or a raw password",
-				)
-			}
-			config, err := pgx.ParseConfig(dsn)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if config.User != username || config.Database != database ||
-				config.Host != "::1" || config.Port != 5433 ||
-				config.Password != password || config.TLSConfig != nil {
-				t.Fatal(
-					"driver did not preserve the configured connection fields",
-				)
-			}
+			assertPostgresConnectionConfig(t, dsn, username, database, password)
 		})
+	}
+}
+
+func readRenderedPostgresFields(
+	t *testing.T,
+	resources []chartResource,
+	password string,
+) (string, secretReference, bool) {
+	t.Helper()
+	var dsn string
+	var reference secretReference
+	passwordRendered := false
+	for _, resource := range resources {
+		if resource.Kind == "Secret" && resource.StringData["password"] != "" {
+			passwordRendered = true
+			if resource.StringData["password"] != password {
+				t.Fatal("rendered password changed")
+			}
+		}
+		if resource.Kind != "Deployment" {
+			continue
+		}
+		dsn, reference = readPostgresDeploymentFields(
+			t, resource.Spec.Template.Spec.Containers[0].Env,
+		)
+	}
+	return dsn, reference, passwordRendered
+}
+
+func readPostgresDeploymentFields(
+	t *testing.T,
+	envs []environment,
+) (string, secretReference) {
+	t.Helper()
+	var dsn string
+	var reference secretReference
+	passwordIndex, dsnIndex := -1, -1
+	for i, env := range envs {
+		switch env.Name {
+		case "PGPASSWORD":
+			reference = env.ValueFrom.SecretKeyRef
+			passwordIndex = i
+		case "DURPDEPLOY_DB":
+			dsn = env.Value
+			dsnIndex = i
+		}
+	}
+	if passwordIndex < 0 || passwordIndex >= dsnIndex {
+		t.Fatal("password must be available before database configuration")
+	}
+	return dsn, reference
+}
+
+func assertPostgresConnectionConfig(
+	t *testing.T,
+	dsn, username, database, password string,
+) {
+	t.Helper()
+	if strings.Contains(dsn, "$(") || strings.Contains(dsn, password) {
+		t.Fatal("DSN contains environment interpolation or a raw password")
+	}
+	config, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.User != username || config.Database != database ||
+		config.Host != "::1" || config.Port != 5433 ||
+		config.Password != password || config.TLSConfig != nil {
+		t.Fatal("driver did not preserve the configured connection fields")
 	}
 }
 

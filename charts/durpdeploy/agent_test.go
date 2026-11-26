@@ -15,39 +15,67 @@ func TestAgentListenerPorts(t *testing.T) {
 			"0.0.0.0:24443", "https://agents.example.test:25443", 24443},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
-			var service, container, address, endpoint bool
+			var checks agentListenerChecks
 			for _, resource := range renderChart(t, fixture.values) {
-				if resource.Kind == "Service" {
-					for _, port := range resource.Spec.Ports {
-						if port.Name == "agent" {
-							service = port.Port == fixture.port &&
-								port.TargetPort == "agent"
-						}
-					}
-				}
-				if resource.Kind != "Deployment" {
-					continue
-				}
-				for _, item := range resource.Spec.Template.Spec.Containers {
-					for _, port := range item.Ports {
-						if port.Name == "agent" {
-							container = port.Port == fixture.port
-						}
-					}
-					for _, env := range item.Env {
-						switch env.Name {
-						case "DURPDEPLOY_AGENT_LISTEN_ADDR":
-							address = env.Value == fixture.address
-						case "DURPDEPLOY_AGENT_PUBLIC_URL":
-							endpoint = env.Value == fixture.endpoint
-						}
-					}
+				switch resource.Kind {
+				case "Service":
+					checks.checkService(resource, fixture.port)
+				case "Deployment":
+					checks.checkDeployment(
+						resource,
+						fixture.port,
+						fixture.address,
+						fixture.endpoint,
+					)
 				}
 			}
-			if !service || !container || !address || !endpoint {
-				t.Fatalf("service=%v container=%v address=%v endpoint=%v",
-					service, container, address, endpoint)
+			if !checks.service || !checks.container || !checks.address ||
+				!checks.endpoint {
+				t.Fatalf(
+					"service=%v container=%v address=%v endpoint=%v",
+					checks.service,
+					checks.container,
+					checks.address,
+					checks.endpoint,
+				)
 			}
 		})
+	}
+}
+
+type agentListenerChecks struct {
+	service, container, address, endpoint bool
+}
+
+func (checks *agentListenerChecks) checkService(
+	resource chartResource,
+	wantPort int,
+) {
+	for _, port := range resource.Spec.Ports {
+		if port.Name == "agent" {
+			checks.service = port.Port == wantPort && port.TargetPort == "agent"
+		}
+	}
+}
+
+func (checks *agentListenerChecks) checkDeployment(
+	resource chartResource,
+	wantPort int,
+	wantAddress, wantEndpoint string,
+) {
+	for _, item := range resource.Spec.Template.Spec.Containers {
+		for _, port := range item.Ports {
+			if port.Name == "agent" {
+				checks.container = port.Port == wantPort
+			}
+		}
+		for _, env := range item.Env {
+			switch env.Name {
+			case "DURPDEPLOY_AGENT_LISTEN_ADDR":
+				checks.address = env.Value == wantAddress
+			case "DURPDEPLOY_AGENT_PUBLIC_URL":
+				checks.endpoint = env.Value == wantEndpoint
+			}
+		}
 	}
 }
