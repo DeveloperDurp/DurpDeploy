@@ -90,23 +90,7 @@ func TestRunbookWeb_CreateAndExecuteMultiStep(t *testing.T) {
 		t.Fatalf("execute status=%d location=%s body=%s", response.StatusCode,
 			response.Header.Get("Location"), body)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	var status string
-	for time.Now().Before(deadline) {
-		row, err := h.repo.Queries.GetRunbookExecution(context.Background(),
-			db.GetRunbookExecutionParams{ID: 1, ProjectID: project.ID})
-		if err != nil {
-			t.Fatal(err)
-		}
-		status = row.Status
-		if status == "succeeded" || status == "failed" {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if status != "succeeded" {
-		t.Fatalf("status=%s", status)
-	}
+	waitForWebRunbookSuccess(t, h, project.ID, 1)
 	fragment, err := h.authedClient().Get(
 		h.server.URL + base + "/executions/1/status")
 	if err != nil {
@@ -140,6 +124,31 @@ func TestRunbookWeb_CreateAndExecuteMultiStep(t *testing.T) {
 	if !strings.Contains(string(body), `x-data="backNavigation"`) ||
 		!strings.Contains(string(body), `>Back</a>`) {
 		t.Fatal("execution page missing the standard Back button")
+	}
+}
+
+func waitForWebRunbookSuccess(
+	t *testing.T,
+	h *testHarness,
+	projectID, executionID int64,
+) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	var status string
+	for time.Now().Before(deadline) {
+		row, err := h.repo.Queries.GetRunbookExecution(context.Background(),
+			db.GetRunbookExecutionParams{ID: executionID, ProjectID: projectID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		status = row.Status
+		if status == "succeeded" || status == "failed" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if status != "succeeded" {
+		t.Fatalf("status=%s", status)
 	}
 }
 

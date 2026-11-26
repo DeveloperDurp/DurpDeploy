@@ -379,18 +379,7 @@ func TestStepTemplate_VersioningShadowHistory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list versions: %v", err)
 	}
-	if len(versions) != 1 {
-		t.Fatalf(
-			"after create: expected 1 version, got %d",
-			len(versions),
-		)
-	}
-	if versions[0].VersionNumber != 1 {
-		t.Fatalf("v1 number: got %d", versions[0].VersionNumber)
-	}
-	if versions[0].ScriptBody != "echo 1" {
-		t.Fatalf("v1 script: got %q", versions[0].ScriptBody)
-	}
+	assertInitialStepTemplateVersion(t, versions)
 
 	// 2. Update to "echo 2": expect 2 versions, newest first.
 	if code := h.updateTemplate(
@@ -440,6 +429,55 @@ func TestStepTemplate_VersioningShadowHistory(t *testing.T) {
 
 	// 4. GET /templates/{id}/history.
 	code, body := h.getHistory(id)
+	assertStepTemplateHistoryPage(t, code, body)
+
+	// 5. Delete the template; CASCADE should drop versions. History -> 404.
+	if code := h.deleteTemplate(id); code != http.StatusSeeOther {
+		t.Fatalf("delete T1: expected 303, got %d", code)
+	}
+	if remaining, err := h.repo.Queries.ListStepTemplateVersions(
+		ctx,
+		id,
+	); err != nil {
+		t.Fatalf("list versions after delete: %v", err)
+	} else if len(
+		remaining,
+	) != 0 {
+		t.Fatalf(
+			"CASCADE failed: expected 0 versions after delete, got %d",
+			len(remaining),
+		)
+	}
+	if code, body := h.getHistory(id); code != http.StatusNotFound {
+		t.Errorf(
+			"GET history after delete: expected 404, got %d (body=%q)",
+			code,
+			body,
+		)
+	}
+}
+
+func assertInitialStepTemplateVersion(
+	t *testing.T,
+	versions []db.StepTemplateVersion,
+) {
+	t.Helper()
+	if len(versions) != 1 {
+		t.Fatalf(
+			"after create: expected 1 version, got %d",
+			len(versions),
+		)
+	}
+	if versions[0].VersionNumber != 1 {
+		t.Fatalf("v1 number: got %d", versions[0].VersionNumber)
+	}
+	if versions[0].ScriptBody != "echo 1" {
+		t.Fatalf("v1 script: got %q", versions[0].ScriptBody)
+	}
+}
+
+func assertStepTemplateHistoryPage(t *testing.T, code int, body string) {
+	t.Helper()
 	if code != http.StatusOK {
 		t.Fatalf("GET history: expected 200, got %d (body=%q)", code, body)
 	}
@@ -475,29 +513,4 @@ func TestStepTemplate_VersioningShadowHistory(t *testing.T) {
 		body,
 		`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">T1</h1>\s*<div class="flex gap-2 ml-auto">\s*`+back,
 	)
-
-	// 5. Delete the template; CASCADE should drop versions. History -> 404.
-	if code := h.deleteTemplate(id); code != http.StatusSeeOther {
-		t.Fatalf("delete T1: expected 303, got %d", code)
-	}
-	if remaining, err := h.repo.Queries.ListStepTemplateVersions(
-		ctx,
-		id,
-	); err != nil {
-		t.Fatalf("list versions after delete: %v", err)
-	} else if len(
-		remaining,
-	) != 0 {
-		t.Fatalf(
-			"CASCADE failed: expected 0 versions after delete, got %d",
-			len(remaining),
-		)
-	}
-	if code, body := h.getHistory(id); code != http.StatusNotFound {
-		t.Errorf(
-			"GET history after delete: expected 404, got %d (body=%q)",
-			code,
-			body,
-		)
-	}
 }

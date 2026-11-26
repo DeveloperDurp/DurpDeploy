@@ -869,6 +869,24 @@ func TestProject_UpdateNotifications(t *testing.T) {
 	}
 
 	notifPage := h.getProjectNotificationsPage(proj.ID)
+	assertProjectNotificationsPage(t, notifPage)
+
+	detailPage := h.getProjectPage(proj.ID)
+	if !strings.Contains(
+		detailPage,
+		fmt.Sprintf(`href="/projects/%d/notifications"`, proj.ID),
+	) {
+		t.Errorf("project detail page should link to the notifications page")
+	}
+	if strings.Contains(detailPage, "https://hooks.slack.example/abc") {
+		t.Errorf(
+			"project detail page should no longer show notification settings inline",
+		)
+	}
+}
+
+func assertProjectNotificationsPage(t *testing.T, notifPage string) {
+	t.Helper()
 	if strings.Contains(notifPage, "https://hooks.slack.example/abc") {
 		t.Errorf("notifications page disclosed the saved webhook URL")
 	}
@@ -891,19 +909,6 @@ func TestProject_UpdateNotifications(t *testing.T) {
 				section,
 			)
 		}
-	}
-
-	detailPage := h.getProjectPage(proj.ID)
-	if !strings.Contains(
-		detailPage,
-		fmt.Sprintf(`href="/projects/%d/notifications"`, proj.ID),
-	) {
-		t.Errorf("project detail page should link to the notifications page")
-	}
-	if strings.Contains(detailPage, "https://hooks.slack.example/abc") {
-		t.Errorf(
-			"project detail page should no longer show notification settings inline",
-		)
 	}
 }
 
