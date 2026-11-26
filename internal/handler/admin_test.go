@@ -456,28 +456,38 @@ func TestGlobalNotificationSettings_RendersBackForBothPageBranches(
 			if resp.StatusCode != http.StatusOK {
 				t.Fatalf("status = %d, want 200", resp.StatusCode)
 			}
-			const back = `<a href="/admin/notifications" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`
-			if strings.Count(string(body), back) != 1 {
-				t.Fatalf("back control = %q, want exactly one %q", body, back)
-			}
-			if tc.wantSave {
-				requireHTMLPattern(
-					t,
-					string(body),
-					`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Notification Settings</h1>\s*<div class="flex gap-2">\s*<button type="submit" class="btn btn-primary btn-sm">Save</button>\s*`+back,
-				)
-			} else {
-				requireHTMLPattern(
-					t,
-					string(body),
-					`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Notification Settings</h1>\s*<div class="flex gap-2">\s*`+back,
-				)
-			}
-			hasSave := strings.Contains(string(body), `>Save</button>`)
-			if hasSave != tc.wantSave {
-				t.Errorf("Save rendered = %t, want %t", hasSave, tc.wantSave)
-			}
+			assertGlobalNotificationSettingsHeader(t, body, tc.wantSave)
 		})
+	}
+}
+
+func assertGlobalNotificationSettingsHeader(
+	t *testing.T,
+	body []byte,
+	wantSave bool,
+) {
+	t.Helper()
+
+	const back = `<a href="/admin/notifications" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`
+	if strings.Count(string(body), back) != 1 {
+		t.Fatalf("back control = %q, want exactly one %q", body, back)
+	}
+	if wantSave {
+		requireHTMLPattern(
+			t,
+			string(body),
+			`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Notification Settings</h1>\s*<div class="flex gap-2">\s*<button type="submit" class="btn btn-primary btn-sm">Save</button>\s*`+back,
+		)
+	} else {
+		requireHTMLPattern(
+			t,
+			string(body),
+			`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Notification Settings</h1>\s*<div class="flex gap-2">\s*`+back,
+		)
+	}
+	hasSave := strings.Contains(string(body), `>Save</button>`)
+	if hasSave != wantSave {
+		t.Errorf("Save rendered = %t, want %t", hasSave, wantSave)
 	}
 }
 
