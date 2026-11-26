@@ -111,20 +111,9 @@ func TestWebAuthnConfig(t *testing.T) {
 					tt.wantEnable,
 				)
 			}
-			if config.WebAuthn.Origin != tt.wantOrigin {
-				t.Errorf(
-					"WebAuthn.Origin = %q, want %q",
-					config.WebAuthn.Origin,
-					tt.wantOrigin,
-				)
-			}
-			if config.WebAuthn.RPID != tt.wantRPID {
-				t.Errorf(
-					"WebAuthn.RPID = %q, want %q",
-					config.WebAuthn.RPID,
-					tt.wantRPID,
-				)
-			}
+			assertWebAuthnRelyingParty(
+				t, config.WebAuthn, tt.wantOrigin, tt.wantRPID,
+			)
 			if config.CookieSecure != tt.wantSecure {
 				t.Errorf(
 					"CookieSecure = %t, want %t",
@@ -133,6 +122,28 @@ func TestWebAuthnConfig(t *testing.T) {
 				)
 			}
 		})
+	}
+}
+
+func assertWebAuthnRelyingParty(
+	t *testing.T,
+	config WebAuthnConfig,
+	wantOrigin, wantRPID string,
+) {
+	t.Helper()
+	if config.Origin != wantOrigin {
+		t.Errorf(
+			"WebAuthn.Origin = %q, want %q",
+			config.Origin,
+			wantOrigin,
+		)
+	}
+	if config.RPID != wantRPID {
+		t.Errorf(
+			"WebAuthn.RPID = %q, want %q",
+			config.RPID,
+			wantRPID,
+		)
 	}
 }
 
