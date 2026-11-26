@@ -178,25 +178,7 @@ func TestWriteBlockMiddleware_ViewerBlocked(t *testing.T) {
 			auth.WriteBlockMiddleware()(next).ServeHTTP(rec, req)
 
 			if tc.block {
-				if called {
-					t.Fatal(
-						"next handler should not be called for viewer write",
-					)
-				}
-				if rec.Code != http.StatusForbidden {
-					t.Fatalf(
-						"status = %d, want %d",
-						rec.Code,
-						http.StatusForbidden,
-					)
-				}
-				body, _ := io.ReadAll(rec.Body)
-				if !strings.Contains(
-					string(body),
-					"viewers cannot perform write operations",
-				) {
-					t.Fatalf("body = %q, want viewer block message", body)
-				}
+				assertViewerWriteBlocked(t, rec, called)
 			} else {
 				if !called {
 					t.Fatal("next handler should be called for viewer read")
@@ -224,6 +206,33 @@ func TestWriteBlockMiddleware_ViewerBlocked(t *testing.T) {
 				t.Fatal("next handler should be called for admin write")
 			}
 		})
+	}
+}
+
+func assertViewerWriteBlocked(
+	t *testing.T,
+	rec *httptest.ResponseRecorder,
+	called bool,
+) {
+	t.Helper()
+	if called {
+		t.Fatal(
+			"next handler should not be called for viewer write",
+		)
+	}
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf(
+			"status = %d, want %d",
+			rec.Code,
+			http.StatusForbidden,
+		)
+	}
+	body, _ := io.ReadAll(rec.Body)
+	if !strings.Contains(
+		string(body),
+		"viewers cannot perform write operations",
+	) {
+		t.Fatalf("body = %q, want viewer block message", body)
 	}
 }
 

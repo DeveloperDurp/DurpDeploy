@@ -52,31 +52,7 @@ func TestRunTokensCreatePermissionLevels(t *testing.T) {
 						t.Fatalf("exit=%d", code)
 					}
 				})
-				rows, err := q.ListApiTokensByUser(t.Context(), 1)
-				if err != nil {
-					t.Fatal(err)
-				}
-				found := false
-				for _, row := range rows {
-					if row.Name != scope+role {
-						continue
-					}
-					found = true
-					if row.Scope != scope || row.TokenRole != role {
-						t.Fatal("CLI lost permission ceiling")
-					}
-					ids, err := q.ListApiTokenProjectIDs(t.Context(), row.ID)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if scope == "scoped" &&
-						(len(ids) != 1 || ids[0] != project.ID) {
-						t.Fatal("CLI lost project selection")
-					}
-				}
-				if !found {
-					t.Fatal("CLI did not persist token")
-				}
+				assertCLITokenPermissions(t, q, scope, role, project.ID)
 			})
 		}
 	}
@@ -88,5 +64,36 @@ func TestRunTokensCreatePermissionLevels(t *testing.T) {
 			"--scope", grant.Scope, "--role", grant.Role}) == 0 {
 			t.Fatal("invalid grant accepted")
 		}
+	}
+}
+
+func assertCLITokenPermissions(
+	t *testing.T, q *db.Queries, scope, role string, projectID int64,
+) {
+	t.Helper()
+	rows, err := q.ListApiTokensByUser(t.Context(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, row := range rows {
+		if row.Name != scope+role {
+			continue
+		}
+		found = true
+		if row.Scope != scope || row.TokenRole != role {
+			t.Fatal("CLI lost permission ceiling")
+		}
+		ids, err := q.ListApiTokenProjectIDs(t.Context(), row.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if scope == "scoped" &&
+			(len(ids) != 1 || ids[0] != projectID) {
+			t.Fatal("CLI lost project selection")
+		}
+	}
+	if !found {
+		t.Fatal("CLI did not persist token")
 	}
 }

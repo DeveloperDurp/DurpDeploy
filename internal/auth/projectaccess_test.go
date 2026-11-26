@@ -49,25 +49,40 @@ func TestDeploymentAccessErrorFormats(t *testing.T) {
 				// When: deployment access is checked.
 				router.ServeHTTP(rec, req)
 
-				// Then: API errors are JSON; web errors remain plain text.
-				if rec.Code != test.status {
-					t.Fatalf("status=%d, want=%d", rec.Code, test.status)
-				}
-				if prefix != "" {
-					var envelope map[string]string
-					if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
-						t.Fatal(err)
-					}
-					if envelope["error"] == "" || !strings.HasPrefix(
-						rec.Header().Get("Content-Type"), "application/json") {
-						t.Fatal("missing JSON error response")
-					}
-				} else if !strings.HasPrefix(rec.Header().Get("Content-Type"),
-					"text/plain") || rec.Body.Len() == 0 {
-					t.Fatal("web error response changed")
-				}
+				assertDeploymentAccessErrorResponse(
+					t,
+					rec,
+					prefix != "",
+					test.status,
+				)
 			})
 		}
+	}
+}
+
+func assertDeploymentAccessErrorResponse(
+	t *testing.T,
+	rec *httptest.ResponseRecorder,
+	api bool,
+	wantStatus int,
+) {
+	t.Helper()
+	// Then: API errors are JSON; web errors remain plain text.
+	if rec.Code != wantStatus {
+		t.Fatalf("status=%d, want=%d", rec.Code, wantStatus)
+	}
+	if api {
+		var envelope map[string]string
+		if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+			t.Fatal(err)
+		}
+		if envelope["error"] == "" || !strings.HasPrefix(
+			rec.Header().Get("Content-Type"), "application/json") {
+			t.Fatal("missing JSON error response")
+		}
+	} else if !strings.HasPrefix(rec.Header().Get("Content-Type"),
+		"text/plain") || rec.Body.Len() == 0 {
+		t.Fatal("web error response changed")
 	}
 }
 
