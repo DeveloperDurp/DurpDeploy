@@ -42,24 +42,7 @@ func TestReleaseDeleteModalShowsActiveStateAndDeletesAfterCompletion(
 	}
 	listPath := fmt.Sprintf("/projects/%d/releases", project.ID)
 	path := fmt.Sprintf("%s/%d", listPath, release.ID)
-	for _, page := range []string{listPath, path} {
-		response, err := h.authedClient().Get(h.server.URL + page)
-		if err != nil {
-			t.Fatal(err)
-		}
-		body, err := io.ReadAll(response.Body)
-		response.Body.Close()
-		if err != nil || response.StatusCode != http.StatusOK {
-			t.Fatalf("GET %s: status=%d err=%v", page, response.StatusCode, err)
-		}
-		if !strings.Contains(
-			string(body),
-			"active or unconfirmed deployment",
-		) ||
-			strings.Contains(string(body), "hx-delete=\""+path+"\"") {
-			t.Fatalf("GET %s: active modal is not blocked", page)
-		}
-	}
+	assertReleaseDeleteModalBlocked(t, h, listPath, path)
 	req, err := http.NewRequest(http.MethodDelete, h.server.URL+path, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -125,6 +108,32 @@ func TestReleaseDeleteModalShowsActiveStateAndDeletesAfterCompletion(
 		result.Body.Close()
 		if result.StatusCode != http.StatusBadRequest {
 			t.Fatalf("DELETE %s: status=%d", badPath, result.StatusCode)
+		}
+	}
+}
+
+func assertReleaseDeleteModalBlocked(
+	t *testing.T,
+	h *testHarness,
+	listPath, path string,
+) {
+	t.Helper()
+	for _, page := range []string{listPath, path} {
+		response, err := h.authedClient().Get(h.server.URL + page)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(response.Body)
+		response.Body.Close()
+		if err != nil || response.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s: status=%d err=%v", page, response.StatusCode, err)
+		}
+		if !strings.Contains(
+			string(body),
+			"active or unconfirmed deployment",
+		) ||
+			strings.Contains(string(body), "hx-delete=\""+path+"\"") {
+			t.Fatalf("GET %s: active modal is not blocked", page)
 		}
 	}
 }

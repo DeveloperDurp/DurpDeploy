@@ -1377,20 +1377,6 @@ func TestNewDeploymentPage_ReleaseAwareGateState(t *testing.T) {
 	buf = new(bytes.Buffer)
 	testutil.ReadFrom(t, buf, resp.Body)
 	page = buf.String()
-	for i := 0; i < len(page); i++ {
-		if i+8 <= len(page) && page[i:i+8] == `value="1"` {
-			start := i - 30
-			if start < 0 {
-				start = 0
-			}
-			end := i + 50
-			if end > len(page) {
-				end = len(page)
-			}
-			t.Logf("value=\"1\" at offset %d: %q", i, page[start:end])
-		}
-	}
-
 	// Scope the assertion to the env select so the release dropdown's
 	// matching value=1 doesn't trip us.
 	envSelect := envSelectFromPage(page)
