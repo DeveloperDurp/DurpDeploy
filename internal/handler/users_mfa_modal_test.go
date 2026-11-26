@@ -50,38 +50,7 @@ func TestUsers_MFAResetConfirmation_whenListingAnotherUser(t *testing.T) {
 	// Then the reset form opens an accessible confirmation dialog.
 	actionPath := fmt.Sprintf("/admin/users/%d/mfa-reset", target.user.ID)
 	action := fmt.Sprintf(`action="%s"`, actionPath)
-	dialogID := fmt.Sprintf("mfa-reset-dialog-%d", target.user.ID)
-	if !strings.Contains(
-		body,
-		`data-mfa-reset-dialog="`+dialogID+`"`,
-	) {
-		t.Fatalf("body missing dialog trigger %q: %s", dialogID, body)
-	}
-	if !strings.Contains(body, `<dialog id="`+dialogID+`"`) ||
-		!strings.Contains(
-			body,
-			`aria-labelledby="`+
-				fmt.Sprintf("mfa-reset-title-%d", target.user.ID)+`"`,
-		) || !strings.Contains(
-		body,
-		`aria-describedby="`+
-			fmt.Sprintf("mfa-reset-description-%d", target.user.ID)+`"`,
-	) {
-		t.Fatalf("body missing accessible reset dialog: %s", body)
-	}
-	if !strings.Contains(body, target.user.Email) {
-		t.Fatalf(
-			"body missing reset target name %q: %s",
-			target.user.Email,
-			body,
-		)
-	}
-	if !strings.Contains(body, `method="dialog"`) ||
-		!strings.Contains(body, `>Cancel</button>`) ||
-		!strings.Contains(body, `data-mfa-reset-confirm>`) ||
-		!strings.Contains(body, `>Confirm reset</button>`) {
-		t.Fatalf("body missing explicit modal actions: %s", body)
-	}
+	assertMFAResetConfirmationDialog(t, body, target.user.ID, target.user.Email)
 	csrfField := fmt.Sprintf(
 		`name="csrf_token" value="%s"`,
 		admin.csrfToken,
@@ -125,5 +94,46 @@ func TestUsers_MFAResetConfirmation_whenListingAnotherUser(t *testing.T) {
 			resetResponse.StatusCode,
 			resetResponse.Header.Get("Location"),
 		)
+	}
+}
+
+func assertMFAResetConfirmationDialog(
+	t *testing.T,
+	body string,
+	userID int64,
+	email string,
+) {
+	t.Helper()
+	dialogID := fmt.Sprintf("mfa-reset-dialog-%d", userID)
+	if !strings.Contains(
+		body,
+		`data-mfa-reset-dialog="`+dialogID+`"`,
+	) {
+		t.Fatalf("body missing dialog trigger %q: %s", dialogID, body)
+	}
+	if !strings.Contains(body, `<dialog id="`+dialogID+`"`) ||
+		!strings.Contains(
+			body,
+			`aria-labelledby="`+
+				fmt.Sprintf("mfa-reset-title-%d", userID)+`"`,
+		) || !strings.Contains(
+		body,
+		`aria-describedby="`+
+			fmt.Sprintf("mfa-reset-description-%d", userID)+`"`,
+	) {
+		t.Fatalf("body missing accessible reset dialog: %s", body)
+	}
+	if !strings.Contains(body, email) {
+		t.Fatalf(
+			"body missing reset target name %q: %s",
+			email,
+			body,
+		)
+	}
+	if !strings.Contains(body, `method="dialog"`) ||
+		!strings.Contains(body, `>Cancel</button>`) ||
+		!strings.Contains(body, `data-mfa-reset-confirm>`) ||
+		!strings.Contains(body, `>Confirm reset</button>`) {
+		t.Fatalf("body missing explicit modal actions: %s", body)
 	}
 }

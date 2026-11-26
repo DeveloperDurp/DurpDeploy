@@ -130,15 +130,7 @@ func TestSecurityPage_renders_enrolled_factor_metadata(t *testing.T) {
 }
 
 func TestSecurityPage_renders_factor_specific_enrollment_actions(t *testing.T) {
-	tests := []struct {
-		name            string
-		totp            bool
-		passkey         bool
-		totpState       string
-		passState       string
-		totpDisabled    bool
-		passkeyDisabled bool
-	}{
+	tests := []securityEnrollmentCase{
 		{
 			name: "no configured factors",
 		},
@@ -197,57 +189,77 @@ func TestSecurityPage_renders_factor_specific_enrollment_actions(t *testing.T) {
 				t.Fatalf("read security page: %v", err)
 			}
 
-			// Then
-			if response.StatusCode != http.StatusOK {
-				t.Fatalf(
-					"security page status = %d, want 200",
-					response.StatusCode,
-				)
-			}
-			content := string(body)
-			for _, text := range []string{"Authenticator app", "Add passkey"} {
-				if !strings.Contains(content, text) {
-					t.Errorf("security page omitted enrollment card %q", text)
-				}
-			}
-			for _, state := range []string{test.totpState, test.passState} {
-				if state != "" && !strings.Contains(content, state) {
-					t.Errorf("security page omitted factor state %q", state)
-				}
-			}
-			totpLabel := "Set up authenticator"
-			if test.totp {
-				totpLabel = "Configured"
-			}
-			if got := strings.Contains(
-				enrollmentButton(
-					content,
-					"/settings/security/totp/begin",
-					totpLabel,
-				),
-				"disabled",
-			); got != test.totpDisabled {
-				t.Errorf(
-					"TOTP button disabled = %t, want %t",
-					got,
-					test.totpDisabled,
-				)
-			}
-			if got := strings.Contains(
-				enrollmentButton(
-					content,
-					"/settings/security/passkeys/begin",
-					"Add passkey",
-				),
-				"disabled",
-			); got != test.passkeyDisabled {
-				t.Errorf(
-					"passkey button disabled = %t, want %t",
-					got,
-					test.passkeyDisabled,
-				)
-			}
+			assertSecurityEnrollmentActions(t, response.StatusCode, body, test)
 		})
+	}
+}
+
+type securityEnrollmentCase struct {
+	name            string
+	totp            bool
+	passkey         bool
+	totpState       string
+	passState       string
+	totpDisabled    bool
+	passkeyDisabled bool
+}
+
+func assertSecurityEnrollmentActions(
+	t *testing.T,
+	status int,
+	body []byte,
+	test securityEnrollmentCase,
+) {
+	t.Helper()
+	// Then
+	if status != http.StatusOK {
+		t.Fatalf(
+			"security page status = %d, want 200",
+			status,
+		)
+	}
+	content := string(body)
+	for _, text := range []string{"Authenticator app", "Add passkey"} {
+		if !strings.Contains(content, text) {
+			t.Errorf("security page omitted enrollment card %q", text)
+		}
+	}
+	for _, state := range []string{test.totpState, test.passState} {
+		if state != "" && !strings.Contains(content, state) {
+			t.Errorf("security page omitted factor state %q", state)
+		}
+	}
+	totpLabel := "Set up authenticator"
+	if test.totp {
+		totpLabel = "Configured"
+	}
+	if got := strings.Contains(
+		enrollmentButton(
+			content,
+			"/settings/security/totp/begin",
+			totpLabel,
+		),
+		"disabled",
+	); got != test.totpDisabled {
+		t.Errorf(
+			"TOTP button disabled = %t, want %t",
+			got,
+			test.totpDisabled,
+		)
+	}
+	if got := strings.Contains(
+		enrollmentButton(
+			content,
+			"/settings/security/passkeys/begin",
+			"Add passkey",
+		),
+		"disabled",
+	); got != test.passkeyDisabled {
+		t.Errorf(
+			"passkey button disabled = %t, want %t",
+			got,
+			test.passkeyDisabled,
+		)
 	}
 }
 

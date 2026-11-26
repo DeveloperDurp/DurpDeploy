@@ -508,124 +508,134 @@ func TestLogout_RequiresCSRFToken(t *testing.T) {
 func TestLogout_AllRolesWithValidCSRF(t *testing.T) {
 	for _, role := range []string{"admin", "deployer", "viewer"} {
 		t.Run(role, func(t *testing.T) {
-			// Given
-			h := newAuthHarness(t)
-			session := seedSession(t, h.repo, h.server, role)
-			serverURL, err := url.Parse(h.server)
-			if err != nil {
-				t.Fatalf("parse server URL: %v", err)
-			}
-			var originalCookie *http.Cookie
-			for _, cookie := range session.client.Jar.Cookies(serverURL) {
-				if cookie.Name == "session" {
-					originalCookie = cookie
-					break
-				}
-			}
-			if originalCookie == nil {
-				t.Fatal("session cookie missing before logout")
-			}
-
-			// When
-			response, err := session.client.PostForm(
-				h.server+"/logout",
-				url.Values{
-					"csrf_token": {session.csrfToken},
-				},
-			)
-			if err != nil {
-				t.Fatalf("post /logout: %v", err)
-			}
-			defer response.Body.Close()
-
-			// Then
-			if response.StatusCode != http.StatusSeeOther {
-				t.Fatalf("status = %d, want 303", response.StatusCode)
-			}
-			if location := response.Header.Get("Location"); location != "/login" {
-				t.Fatalf("location = %q, want /login", location)
-			}
-			var deletionCookie *http.Cookie
-			for _, cookie := range response.Cookies() {
-				if cookie.Name == "session" {
-					deletionCookie = cookie
-					break
-				}
-			}
-			if deletionCookie == nil {
-				t.Fatal("session deletion cookie missing")
-				return
-			}
-			if deletionCookie.Value != "" {
-				t.Fatalf(
-					"session cookie value = %q, want empty",
-					deletionCookie.Value,
-				)
-			}
-			if deletionCookie.MaxAge >= 0 {
-				t.Fatalf(
-					"session cookie MaxAge = %d, want negative",
-					deletionCookie.MaxAge,
-				)
-			}
-			if deletionCookie.Path != "/" {
-				t.Fatalf(
-					"session cookie Path = %q, want /",
-					deletionCookie.Path,
-				)
-			}
-			if deletionCookie.Expires.IsZero() ||
-				!deletionCookie.Expires.Before(time.Now()) {
-				t.Fatalf("session cookie Expires = %v, want expired timestamp",
-					deletionCookie.Expires)
-			}
-			if _, err := h.repo.Queries.GetSession(
-				context.Background(),
-				db.GetSessionParams{ID: session.sessionToken, ExpiresAt: 0},
-			); err != sql.ErrNoRows {
-				t.Fatalf("session lookup error = %v, want sql.ErrNoRows", err)
-			}
-			entries, err := h.repo.Queries.ListAuditLogsFiltered(
-				context.Background(),
-				db.ListAuditLogsFilteredParams{
-					FUserID: sql.NullInt64{
-						Int64: session.user.ID,
-						Valid: true,
-					},
-					FAction: sql.NullString{
-						String: "logout",
-						Valid:  true,
-					},
-					PageLimit: 10,
-				},
-			)
-			if err != nil {
-				t.Fatalf("list logout audit entries: %v", err)
-			}
-			if len(entries) != 1 {
-				t.Fatalf("logout audit entries = %d, want 1", len(entries))
-			}
-
-			replayClient := newJar(t)
-			replayClient.Jar.SetCookies(
-				serverURL,
-				[]*http.Cookie{originalCookie},
-			)
-			replayResponse, err := replayClient.Get(h.server + "/")
-			if err != nil {
-				t.Fatalf("replay old cookie on /: %v", err)
-			}
-			defer replayResponse.Body.Close()
-			if replayResponse.StatusCode != http.StatusSeeOther {
-				t.Fatalf(
-					"replay status = %d, want 303",
-					replayResponse.StatusCode,
-				)
-			}
-			if location := replayResponse.Header.Get("Location"); location != "/login" {
-				t.Fatalf("replay location = %q, want /login", location)
-			}
+			testLogoutWithValidCSRF(t, role)
 		})
+	}
+}
+
+func testLogoutWithValidCSRF(t *testing.T, role string) {
+	t.Helper()
+	// Given
+	h := newAuthHarness(t)
+	session := seedSession(t, h.repo, h.server, role)
+	serverURL, err := url.Parse(h.server)
+	if err != nil {
+		t.Fatalf("parse server URL: %v", err)
+	}
+	var originalCookie *http.Cookie
+	for _, cookie := range session.client.Jar.Cookies(serverURL) {
+		if cookie.Name == "session" {
+			originalCookie = cookie
+			break
+		}
+	}
+	if originalCookie == nil {
+		t.Fatal("session cookie missing before logout")
+	}
+
+	// When
+	response, err := session.client.PostForm(
+		h.server+"/logout",
+		url.Values{
+			"csrf_token": {session.csrfToken},
+		},
+	)
+	if err != nil {
+		t.Fatalf("post /logout: %v", err)
+	}
+	defer response.Body.Close()
+
+	// Then
+	if response.StatusCode != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", response.StatusCode)
+	}
+	if location := response.Header.Get("Location"); location != "/login" {
+		t.Fatalf("location = %q, want /login", location)
+	}
+	assertLogoutDeletionCookie(t, response)
+	if _, err := h.repo.Queries.GetSession(
+		context.Background(),
+		db.GetSessionParams{ID: session.sessionToken, ExpiresAt: 0},
+	); err != sql.ErrNoRows {
+		t.Fatalf("session lookup error = %v, want sql.ErrNoRows", err)
+	}
+	entries, err := h.repo.Queries.ListAuditLogsFiltered(
+		context.Background(),
+		db.ListAuditLogsFilteredParams{
+			FUserID: sql.NullInt64{
+				Int64: session.user.ID,
+				Valid: true,
+			},
+			FAction: sql.NullString{
+				String: "logout",
+				Valid:  true,
+			},
+			PageLimit: 10,
+		},
+	)
+	if err != nil {
+		t.Fatalf("list logout audit entries: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("logout audit entries = %d, want 1", len(entries))
+	}
+
+	replayClient := newJar(t)
+	replayClient.Jar.SetCookies(
+		serverURL,
+		[]*http.Cookie{originalCookie},
+	)
+	replayResponse, err := replayClient.Get(h.server + "/")
+	if err != nil {
+		t.Fatalf("replay old cookie on /: %v", err)
+	}
+	defer replayResponse.Body.Close()
+	if replayResponse.StatusCode != http.StatusSeeOther {
+		t.Fatalf(
+			"replay status = %d, want 303",
+			replayResponse.StatusCode,
+		)
+	}
+	if location := replayResponse.Header.Get("Location"); location != "/login" {
+		t.Fatalf("replay location = %q, want /login", location)
+	}
+}
+
+func assertLogoutDeletionCookie(t *testing.T, response *http.Response) {
+	t.Helper()
+	var deletionCookie *http.Cookie
+	for _, cookie := range response.Cookies() {
+		if cookie.Name == "session" {
+			deletionCookie = cookie
+			break
+		}
+	}
+	if deletionCookie == nil {
+		t.Fatal("session deletion cookie missing")
+		return
+	}
+	if deletionCookie.Value != "" {
+		t.Fatalf(
+			"session cookie value = %q, want empty",
+			deletionCookie.Value,
+		)
+	}
+	if deletionCookie.MaxAge >= 0 {
+		t.Fatalf(
+			"session cookie MaxAge = %d, want negative",
+			deletionCookie.MaxAge,
+		)
+	}
+	if deletionCookie.Path != "/" {
+		t.Fatalf(
+			"session cookie Path = %q, want /",
+			deletionCookie.Path,
+		)
+	}
+	if deletionCookie.Expires.IsZero() ||
+		!deletionCookie.Expires.Before(time.Now()) {
+		t.Fatalf("session cookie Expires = %v, want expired timestamp",
+			deletionCookie.Expires)
 	}
 }
 
