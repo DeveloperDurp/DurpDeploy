@@ -20,28 +20,7 @@ func TestDeploymentStagingTransferPausesStepTimeoutAPIE2E(t *testing.T) {
 				t,
 				"",
 				func(next http.Handler) http.Handler {
-					return http.HandlerFunc(
-						func(w http.ResponseWriter, r *http.Request) {
-							if strings.HasSuffix(
-								r.URL.Path,
-								"/staging/"+scenario,
-							) {
-								pause := &stagingTransferPause{ctx: r.Context()}
-								if scenario == "download" {
-									w = &pausedStagingWriter{
-										ResponseWriter: w,
-										pause:          pause,
-									}
-								} else {
-									r.Body = &pausedStagingReader{
-										ReadCloser: r.Body,
-										pause:      pause,
-									}
-								}
-							}
-							next.ServeHTTP(w, r)
-						},
-					)
+					return pauseStagingTransfer(next, scenario)
 				},
 			)
 			var project, environment, release, deployment struct{ ID int64 }
@@ -101,6 +80,26 @@ func TestDeploymentStagingTransferPausesStepTimeoutAPIE2E(t *testing.T) {
 			s.assertTransferPurged(t, scenario, deployment.ID)
 		})
 	}
+}
+
+func pauseStagingTransfer(next http.Handler, scenario string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/staging/"+scenario) {
+			pause := &stagingTransferPause{ctx: r.Context()}
+			if scenario == "download" {
+				w = &pausedStagingWriter{
+					ResponseWriter: w,
+					pause:          pause,
+				}
+			} else {
+				r.Body = &pausedStagingReader{
+					ReadCloser: r.Body,
+					pause:      pause,
+				}
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 type stagingTransferPause struct {

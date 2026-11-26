@@ -60,36 +60,37 @@ func (s *stagingE2E) assertTransferPurged(
 	) != "[]" {
 		t.Fatalf("staging retained: %s", data)
 	}
+	var retained string
+	switch scenario {
+	case "renamed-root":
+		retained = "retained"
+	case "escaped-root-workspace":
+		retained = "retained-workspace"
+	}
 	movedRoots := 0
 	for _, directory := range s.directories {
 		entries, err := os.ReadDir(filepath.Join(directory, "staging"))
 		if err != nil || len(entries) != 0 {
 			t.Fatalf("staging directory retained: %v %v", entries, err)
 		}
-		if scenario == "renamed-root" ||
-			scenario == "escaped-root-workspace" {
-			retained := "retained"
-			if scenario == "escaped-root-workspace" {
-				retained = "retained-workspace"
-			}
-			entries, err := os.ReadDir(
-				filepath.Join(directory, retained),
-			)
-			if os.IsNotExist(err) {
-				continue
-			}
-			if err != nil || len(entries) != 0 {
-				t.Fatalf(
-					"renamed staging root retained files: %v %v",
-					entries,
-					err,
-				)
-			}
+		if retained != "" &&
+			assertEmptyMovedStagingRoot(t, filepath.Join(directory, retained)) {
 			movedRoots++
 		}
 	}
-	if (scenario == "renamed-root" || scenario == "escaped-root-workspace") &&
-		movedRoots == 0 {
+	if retained != "" && movedRoots == 0 {
 		t.Fatal("agents did not rename the staging root")
 	}
+}
+
+func assertEmptyMovedStagingRoot(t *testing.T, directory string) bool {
+	t.Helper()
+	entries, err := os.ReadDir(directory)
+	if os.IsNotExist(err) {
+		return false
+	}
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("renamed staging root retained files: %v %v", entries, err)
+	}
+	return true
 }

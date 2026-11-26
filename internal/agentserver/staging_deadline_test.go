@@ -75,24 +75,35 @@ func TestAgentStagingSurvivesListenerDeadlines(t *testing.T) {
 			}
 			request.Header.Set("X-DurpDeploy-Claim", identity.Token)
 
-			// When valid I/O takes longer than the listener's absolute deadline.
-			response, err = f.client.Do(request)
-
-			// Then the transfer and its final response remain valid.
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer response.Body.Close()
-			contents, err := io.ReadAll(response.Body)
-			if err != nil || response.StatusCode != want {
-				t.Fatalf("status=%d want=%d body=%q error=%v",
-					response.StatusCode, want, contents, err)
-			}
-			if action == "download" &&
-				!bytes.Contains(contents, []byte("staging-secret")) {
-				t.Fatal("download lost staging contents")
-			}
+			assertStagingDeadlineResponse(t, f.client, request, action, want)
 		})
+	}
+}
+
+func assertStagingDeadlineResponse(
+	t *testing.T,
+	client *http.Client,
+	request *http.Request,
+	action string,
+	want int,
+) {
+	t.Helper()
+	// When valid I/O takes longer than the listener's absolute deadline.
+	response, err := client.Do(request)
+
+	// Then the transfer and its final response remain valid.
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	contents, err := io.ReadAll(response.Body)
+	if err != nil || response.StatusCode != want {
+		t.Fatalf("status=%d want=%d body=%q error=%v",
+			response.StatusCode, want, contents, err)
+	}
+	if action == "download" &&
+		!bytes.Contains(contents, []byte("staging-secret")) {
+		t.Fatal("download lost staging contents")
 	}
 }
 
