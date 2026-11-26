@@ -28,71 +28,15 @@ func TestLegacyLaunchWeb_RejectsImagelessRelease(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			const steps = `[{"name":"old","script_body":"echo old","execution_target":"local"}]`
 			form := url.Values{"csrf_token": {h.csrfToken()}}
-			var path string
-			if strings.HasPrefix(action, "runbook") {
-				book, version, err := h.repo.SaveRunbook(t.Context(),
-					repository.RunbookSave{
-						ProjectID: project.ID,
-						Name:      "old runbook",
-						StepsJSON: steps,
-					})
-				if err != nil {
-					t.Fatal(err)
-				}
-				path = fmt.Sprintf("/projects/%d/runbooks/%d/execute",
-					project.ID, book.ID)
-				form.Set("environment_id", fmt.Sprint(environment.ID))
-				form.Set("version_id", fmt.Sprint(version.ID))
-				if action == "runbook retry" {
-					source, err := h.repo.Queries.CreateDeployment(t.Context(),
-						db.CreateDeploymentParams{
-							ReleaseID:     version.ReleaseID,
-							EnvironmentID: environment.ID,
-							Status:        "failed",
-						})
-					if err != nil {
-						t.Fatal(err)
-					}
-					execution, err := h.repo.Queries.CreateRunbookExecution(
-						t.Context(), db.CreateRunbookExecutionParams{
-							RunbookVersionID: version.ID,
-							DeploymentID:     source.ID,
-						})
-					if err != nil {
-						t.Fatal(err)
-					}
-					path = fmt.Sprintf(
-						"/projects/%d/runbooks/executions/%d/retry",
-						project.ID,
-						execution.ID,
-					)
-				}
-			} else {
-				release, err := h.repo.Queries.CreateRelease(t.Context(),
-					db.CreateReleaseParams{
-						ProjectID: project.ID, Version: "old", StepsJson: steps,
-					})
-				if err != nil {
-					t.Fatal(err)
-				}
-				path = fmt.Sprintf("/projects/%d/deploy", project.ID)
-				form.Set("release_id", fmt.Sprint(release.ID))
-				form.Set("environment_id", fmt.Sprint(environment.ID))
-				if action == "redeploy" {
-					source, err := h.repo.Queries.CreateDeployment(t.Context(),
-						db.CreateDeploymentParams{
-							ReleaseID:     release.ID,
-							EnvironmentID: environment.ID,
-							Status:        "failed",
-						})
-					if err != nil {
-						t.Fatal(err)
-					}
-					path = fmt.Sprintf("/deployments/%d/redeploy", source.ID)
-				}
-			}
+			path := prepareImagelessWebLaunch(
+				t,
+				h,
+				action,
+				project.ID,
+				environment.ID,
+				form,
+			)
 
 			response, err := h.authedClient().PostForm(h.server.URL+path, form)
 			if err != nil {
@@ -128,4 +72,79 @@ func TestLegacyLaunchWeb_RejectsImagelessRelease(t *testing.T) {
 			}
 		})
 	}
+}
+
+func prepareImagelessWebLaunch(
+	t *testing.T,
+	h *testHarness,
+	action string,
+	projectID, environmentID int64,
+	form url.Values,
+) string {
+	t.Helper()
+	const steps = `[{"name":"old","script_body":"echo old","execution_target":"local"}]`
+	var path string
+	if strings.HasPrefix(action, "runbook") {
+		book, version, err := h.repo.SaveRunbook(t.Context(),
+			repository.RunbookSave{
+				ProjectID: projectID,
+				Name:      "old runbook",
+				StepsJSON: steps,
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+		path = fmt.Sprintf("/projects/%d/runbooks/%d/execute",
+			projectID, book.ID)
+		form.Set("environment_id", fmt.Sprint(environmentID))
+		form.Set("version_id", fmt.Sprint(version.ID))
+		if action == "runbook retry" {
+			source, err := h.repo.Queries.CreateDeployment(t.Context(),
+				db.CreateDeploymentParams{
+					ReleaseID:     version.ReleaseID,
+					EnvironmentID: environmentID,
+					Status:        "failed",
+				})
+			if err != nil {
+				t.Fatal(err)
+			}
+			execution, err := h.repo.Queries.CreateRunbookExecution(
+				t.Context(), db.CreateRunbookExecutionParams{
+					RunbookVersionID: version.ID,
+					DeploymentID:     source.ID,
+				})
+			if err != nil {
+				t.Fatal(err)
+			}
+			path = fmt.Sprintf(
+				"/projects/%d/runbooks/executions/%d/retry",
+				projectID,
+				execution.ID,
+			)
+		}
+	} else {
+		release, err := h.repo.Queries.CreateRelease(t.Context(),
+			db.CreateReleaseParams{
+				ProjectID: projectID, Version: "old", StepsJson: steps,
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+		path = fmt.Sprintf("/projects/%d/deploy", projectID)
+		form.Set("release_id", fmt.Sprint(release.ID))
+		form.Set("environment_id", fmt.Sprint(environmentID))
+		if action == "redeploy" {
+			source, err := h.repo.Queries.CreateDeployment(t.Context(),
+				db.CreateDeploymentParams{
+					ReleaseID:     release.ID,
+					EnvironmentID: environmentID,
+					Status:        "failed",
+				})
+			if err != nil {
+				t.Fatal(err)
+			}
+			path = fmt.Sprintf("/deployments/%d/redeploy", source.ID)
+		}
+	}
+	return path
 }

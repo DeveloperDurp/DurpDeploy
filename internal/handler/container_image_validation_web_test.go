@@ -27,14 +27,12 @@ func TestContainerImageWeb_RejectsRunnerIncompatibleImages(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			stepBody := readBody(t, step)
-			step.Body.Close()
-			if step.StatusCode != http.StatusUnprocessableEntity {
-				t.Fatalf("step status=%d", step.StatusCode)
-			}
-			if !strings.Contains(stepBody, "Invalid container image") {
-				t.Fatalf("unexpected step validation error: %s", stepBody)
-			}
+			assertContainerImageWebRejection(
+				t,
+				step,
+				"step",
+				"Invalid container image",
+			)
 			book, err := h.authedClient().PostForm(
 				fmt.Sprintf("%s/projects/%d/runbooks", h.server.URL, project.ID),
 				url.Values{
@@ -48,14 +46,12 @@ func TestContainerImageWeb_RejectsRunnerIncompatibleImages(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			bookBody := readBody(t, book)
-			book.Body.Close()
-			if book.StatusCode != http.StatusUnprocessableEntity {
-				t.Fatalf("runbook status=%d", book.StatusCode)
-			}
-			if !strings.Contains(bookBody, "invalid container image") {
-				t.Fatalf("unexpected runbook validation error: %s", bookBody)
-			}
+			assertContainerImageWebRejection(
+				t,
+				book,
+				"runbook",
+				"invalid container image",
+			)
 			steps, err := h.repo.Queries.ListStepsByProject(
 				t.Context(),
 				project.ID,
@@ -70,5 +66,21 @@ func TestContainerImageWeb_RejectsRunnerIncompatibleImages(t *testing.T) {
 				t.Fatalf("releases=%d error=%v", releases, err)
 			}
 		})
+	}
+}
+
+func assertContainerImageWebRejection(
+	t *testing.T,
+	response *http.Response,
+	surface, message string,
+) {
+	t.Helper()
+	body := readBody(t, response)
+	response.Body.Close()
+	if response.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("%s status=%d", surface, response.StatusCode)
+	}
+	if !strings.Contains(body, message) {
+		t.Fatalf("unexpected %s validation error: %s", surface, body)
 	}
 }

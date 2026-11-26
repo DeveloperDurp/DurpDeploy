@@ -78,22 +78,32 @@ func TestWeb_RequestBodyPreservesViewerRejection(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if htmx {
-				if resp.StatusCode != 200 ||
-					!strings.Contains(
-						resp.Header.Get("HX-Trigger"),
-						"makeToast",
-					) {
-					t.Fatalf(
-						"viewer toast: status=%d trigger=%q",
-						resp.StatusCode,
-						resp.Header.Get("HX-Trigger"),
-					)
-				}
-			} else if resp.StatusCode != 403 || !bytes.Contains(data, []byte("Viewers cannot perform write operations")) {
-				t.Fatalf("viewer page: status=%d body=%s", resp.StatusCode, data)
-			}
+			assertViewerWebRejection(t, resp, data, htmx)
 		}
+	}
+}
+
+func assertViewerWebRejection(
+	t *testing.T,
+	resp *http.Response,
+	data []byte,
+	htmx bool,
+) {
+	t.Helper()
+	if htmx {
+		if resp.StatusCode != 200 ||
+			!strings.Contains(
+				resp.Header.Get("HX-Trigger"),
+				"makeToast",
+			) {
+			t.Fatalf(
+				"viewer toast: status=%d trigger=%q",
+				resp.StatusCode,
+				resp.Header.Get("HX-Trigger"),
+			)
+		}
+	} else if resp.StatusCode != 403 || !bytes.Contains(data, []byte("Viewers cannot perform write operations")) {
+		t.Fatalf("viewer page: status=%d body=%s", resp.StatusCode, data)
 	}
 }
 
