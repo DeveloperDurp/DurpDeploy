@@ -14,61 +14,66 @@ import (
 func TestRemoteStepStartLogsAgentIdentityOnce(t *testing.T) {
 	for _, mode := range []string{"host", "container"} {
 		t.Run(mode, func(t *testing.T) {
-			// Given: a claimed step on a named agent.
-			fixture := newAgentFixture(t)
-			poll := pollBody
-			if mode == "container" {
-				poll = containerPollBody
-			}
-			id, claim := claimedRemoteStepWithMode(t, fixture, mode, poll)
-			if _, err := fixture.repo.DB.ExecContext(t.Context(),
-				`UPDATE agents SET name = 'Production runner' WHERE id = 'test-agent'`,
-			); err != nil {
-				t.Fatal(err)
-			}
-			stream := fixture.broker.Subscribe(id)
-			t.Cleanup(func() { fixture.broker.Unsubscribe(id, stream) })
-			path := strings.ReplaceAll(
-				agentproto.StartPath,
-				"{id}",
-				fmt.Sprint(id),
-			)
-
-			// When: the agent retries its accepted start request.
-			for range 2 {
-				response := postAgent(t, fixture, path, claim)
-				if response.StatusCode != http.StatusNoContent {
-					t.Fatalf("start status=%d", response.StatusCode)
-				}
-			}
-
-			// Then: its identity is persisted and broadcast once in this step.
-			logs, err := fixture.repo.Queries.ListDeploymentLogsByDeployment(
-				t.Context(), id,
-			)
-			if err != nil || len(logs) != 1 {
-				t.Fatalf("start logs=%+v error=%v", logs, err)
-			}
-			log := logs[0]
-			if !strings.Contains(log.Line, `agent="Production runner"`) ||
-				!strings.Contains(log.Line, `id="test-agent"`) ||
-				!log.StepIndex.Valid || log.StepIndex.Int64 != 0 {
-				t.Fatalf("agent identity missing or in wrong step: %+v", log)
-			}
-			select {
-			case line := <-stream:
-				if line != log.Line {
-					t.Fatalf("streamed=%q saved=%q", line, log.Line)
-				}
-			default:
-				t.Fatal("agent identity was not broadcast")
-			}
-			select {
-			case line := <-stream:
-				t.Fatalf("duplicate start log: %q", line)
-			default:
-			}
+			verifyRemoteStepIdentityOnce(t, mode)
 		})
+	}
+}
+
+func verifyRemoteStepIdentityOnce(t *testing.T, mode string) {
+	t.Helper()
+	// Given: a claimed step on a named agent.
+	fixture := newAgentFixture(t)
+	poll := pollBody
+	if mode == "container" {
+		poll = containerPollBody
+	}
+	id, claim := claimedRemoteStepWithMode(t, fixture, mode, poll)
+	if _, err := fixture.repo.DB.ExecContext(t.Context(),
+		`UPDATE agents SET name = 'Production runner' WHERE id = 'test-agent'`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	stream := fixture.broker.Subscribe(id)
+	t.Cleanup(func() { fixture.broker.Unsubscribe(id, stream) })
+	path := strings.ReplaceAll(
+		agentproto.StartPath,
+		"{id}",
+		fmt.Sprint(id),
+	)
+
+	// When: the agent retries its accepted start request.
+	for range 2 {
+		response := postAgent(t, fixture, path, claim)
+		if response.StatusCode != http.StatusNoContent {
+			t.Fatalf("start status=%d", response.StatusCode)
+		}
+	}
+
+	// Then: its identity is persisted and broadcast once in this step.
+	logs, err := fixture.repo.Queries.ListDeploymentLogsByDeployment(
+		t.Context(), id,
+	)
+	if err != nil || len(logs) != 1 {
+		t.Fatalf("start logs=%+v error=%v", logs, err)
+	}
+	log := logs[0]
+	if !strings.Contains(log.Line, `agent="Production runner"`) ||
+		!strings.Contains(log.Line, `id="test-agent"`) ||
+		!log.StepIndex.Valid || log.StepIndex.Int64 != 0 {
+		t.Fatalf("agent identity missing or in wrong step: %+v", log)
+	}
+	select {
+	case line := <-stream:
+		if line != log.Line {
+			t.Fatalf("streamed=%q saved=%q", line, log.Line)
+		}
+	default:
+		t.Fatal("agent identity was not broadcast")
+	}
+	select {
+	case line := <-stream:
+		t.Fatalf("duplicate start log: %q", line)
+	default:
 	}
 }
 

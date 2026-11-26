@@ -86,6 +86,25 @@ func TestExecutionLocationAPIWebE2E(t *testing.T) {
 	path := fmt.Sprintf("/deployments/%d", deployment.ID)
 	var logs []db.DeploymentLog
 	decode(s.api(t, "GET", path+"/logs", nil, 200), &logs)
+	verifyExecutionLocationLogs(t, logs, host, image)
+	for _, suffix := range []string{"/logs.txt", "/logs/stream?format=structured", "/logs/stream?format=ndjson"} {
+		data := string(s.api(t, "GET", path+suffix, nil, 200))
+		if strings.Count(data, "Execution location:") != 6 ||
+			!strings.Contains(data, host) {
+			t.Fatalf("execution locations missing from %s: %s", suffix, data)
+		}
+		t.Logf("Public log surface: %s locations=%d", suffix,
+			strings.Count(data, "Execution location:"))
+	}
+	s.assertExecutionLocationWeb(t, deployment.ID, 6, 4)
+}
+
+func verifyExecutionLocationLogs(
+	t *testing.T,
+	logs []db.DeploymentLog,
+	host, image string,
+) {
+	t.Helper()
 	counts := map[int64]int{}
 	identities := map[int64]int{}
 	for _, log := range logs {
@@ -102,26 +121,7 @@ func TestExecutionLocationAPIWebE2E(t *testing.T) {
 		}
 		index := log.StepIndex.Int64
 		counts[index]++
-		if index != 0 && !strings.Contains(log.Line, `agent_id="`) {
-			t.Fatalf(
-				"location has no authenticated agent identity: %s",
-				log.Line,
-			)
-		}
-		mode := "mode=container"
-		expectedImage := image
-		if index == 0 {
-			expectedImage = "harbor.durp.info/dockerhub/library/bash:5.2"
-		}
-		if index == 1 {
-			mode = "mode=host/shell"
-		}
-		if !strings.Contains(log.Line, mode) ||
-			!strings.Contains(log.Line, `interpreter="bash"`) ||
-			(index != 1 && (!strings.Contains(log.Line, `container="durpdeploy-`) ||
-				!strings.Contains(log.Line, fmt.Sprintf("image=%q", expectedImage)))) {
-			t.Fatalf("incomplete execution location: %s", log.Line)
-		}
+		verifyExecutionLocationRuntime(t, log.Line, index, image)
 		t.Logf("Public log location: step=%d line=%s", index, log.Line)
 	}
 	for index, want := range []int{2, 1, 1, 2} {
@@ -137,14 +137,33 @@ func TestExecutionLocationAPIWebE2E(t *testing.T) {
 	if identities[1] != 1 || identities[2] != 1 || identities[3] != 2 {
 		t.Fatalf("agent identity counts=%v", identities)
 	}
-	for _, suffix := range []string{"/logs.txt", "/logs/stream?format=structured", "/logs/stream?format=ndjson"} {
-		data := string(s.api(t, "GET", path+suffix, nil, 200))
-		if strings.Count(data, "Execution location:") != 6 ||
-			!strings.Contains(data, host) {
-			t.Fatalf("execution locations missing from %s: %s", suffix, data)
-		}
-		t.Logf("Public log surface: %s locations=%d", suffix,
-			strings.Count(data, "Execution location:"))
+}
+
+func verifyExecutionLocationRuntime(
+	t *testing.T,
+	line string,
+	index int64,
+	image string,
+) {
+	t.Helper()
+	if index != 0 && !strings.Contains(line, `agent_id="`) {
+		t.Fatalf(
+			"location has no authenticated agent identity: %s",
+			line,
+		)
 	}
-	s.assertExecutionLocationWeb(t, deployment.ID, 6, 4)
+	mode := "mode=container"
+	expectedImage := image
+	if index == 0 {
+		expectedImage = "harbor.durp.info/dockerhub/library/bash:5.2"
+	}
+	if index == 1 {
+		mode = "mode=host/shell"
+	}
+	if !strings.Contains(line, mode) ||
+		!strings.Contains(line, `interpreter="bash"`) ||
+		(index != 1 && (!strings.Contains(line, `container="durpdeploy-`) ||
+			!strings.Contains(line, fmt.Sprintf("image=%q", expectedImage)))) {
+		t.Fatalf("incomplete execution location: %s", line)
+	}
 }
