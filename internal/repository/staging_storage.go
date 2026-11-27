@@ -1,11 +1,11 @@
 package repository
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -70,7 +70,6 @@ func (r *Repository) SaveStaging(
 	defer func() {
 		result = artifact.SpoolCleanupError(ctx, result, encrypted.Close())
 	}()
-	encoder := json.NewEncoder(encrypted)
 	buffer := make([]byte, gateChunkSize)
 	for index, remaining := int64(0), size; remaining > 0; index++ {
 		if err := ctx.Err(); err != nil {
@@ -89,7 +88,11 @@ func (r *Repository) SaveStaging(
 		if err != nil {
 			return err
 		}
-		if err := encoder.Encode(ciphertext); err != nil {
+		// Encryption produces Base64 without line breaks.
+		if _, err := encrypted.WriteString(ciphertext); err != nil {
+			return err
+		}
+		if _, err := encrypted.WriteString("\n"); err != nil {
 			return err
 		}
 		remaining -= int64(n)
@@ -147,12 +150,16 @@ func (r *Repository) publishStaging(
 	if _, err := encrypted.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
-	decoder := json.NewDecoder(encrypted)
+	reader := bufio.NewReaderSize(encrypted, 2*gateChunkSize)
 	for index, remaining := int64(0), size; remaining > 0; index++ {
-		var ciphertext string
-		if err := decoder.Decode(&ciphertext); err != nil {
-			return err
+		record, err := reader.ReadSlice('\n')
+		if err != nil {
+			return fmt.Errorf("read encrypted staging record: %w", err)
 		}
+		if len(record) == 1 {
+			return errors.New("empty encrypted staging record")
+		}
+		ciphertext := string(record[:len(record)-1])
 		if err := q.CreateStagingChunk(ctx, db.CreateStagingChunkParams{
 			DeploymentID: key.DeploymentID, StepIndex: key.StepIndex, Producer: key.Producer, ChunkIndex: index, Ciphertext: ciphertext,
 		}); err != nil {

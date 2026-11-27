@@ -51,7 +51,7 @@ func runStagingStorageParity(t *testing.T, r *repository.Repository) {
 	}
 	defer testutil.Close(t, file)
 	writer := tar.NewWriter(file)
-	content := strings.Repeat("encrypted-staging-content", 20000)
+	content := strings.Repeat("encrypted-staging-content", 50000)
 	if err := writer.WriteHeader(&tar.Header{Name: "nested/output", Size: int64(len(content)), Typeflag: tar.TypeReg, Mode: 0600}); err != nil {
 		t.Fatal(err)
 	}

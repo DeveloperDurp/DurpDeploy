@@ -2,7 +2,7 @@
 
 The scanner image uses Ubuntu 26.04.
 Its manifest digest is `sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c`.
-It installs Debian's `chromium-headless-shell` and `chromium-common` at version `156.0.8078.108-1~deb13u1`.
+It installs Debian's `chromium-headless-shell` and `chromium-common` at version `156.0.8078.114-1~deb13u1`.
 The packages come from the Debian Security repository.
 Renovate updates both package pins in the same merge request.
 The image retains package license notices under `/usr/share/doc`.
