@@ -17,24 +17,16 @@ func (r *Repository) CaptureProjectArtifact(
 	projectID int64,
 	version string,
 ) (*ArtifactSnapshot, error) {
-	selected, err := r.Queries.GetProjectArtifactRepository(ctx, projectID)
-	if errors.Is(err, sql.ErrNoRows) {
+	prepared, err := r.prepareProjectArtifactSource(ctx, projectID, version)
+	if !prepared.attached && errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	source, err := r.GetPackageRepository(ctx, selected.ID)
-	if err != nil {
-		return nil, err
-	}
-	url, err := PackageSource(source).URL(version)
-	if err != nil {
-		return nil, err
-	}
-	return &ArtifactSnapshot{Source: selected,
+	return &ArtifactSnapshot{Source: prepared.selected,
 		Row: db.CreateReleaseArtifactParams{
-			RepositoryID: selected.ID, Url: url, Version: version,
+			RepositoryID: prepared.selected.ID, Url: prepared.url, Version: version,
 			ResolutionKey: uuid.NewString(),
 		}}, nil
 }

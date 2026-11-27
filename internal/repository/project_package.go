@@ -163,22 +163,14 @@ func (r *Repository) TestProjectPackage(
 	projectID int64,
 	version string,
 ) (artifact.Pin, error) {
-	selected, err := r.Queries.GetProjectArtifactRepository(ctx, projectID)
-	if err != nil {
-		return artifact.Pin{}, err
-	}
-	source, err := r.GetPackageRepository(ctx, selected.ID)
-	if err != nil {
-		return artifact.Pin{}, err
-	}
-	url, err := PackageSource(source).URL(version)
+	prepared, err := r.prepareProjectArtifactSource(ctx, projectID, version)
 	if err != nil {
 		return artifact.Pin{}, err
 	}
 	download, err := r.ArtifactClient.Fetch(
 		ctx,
-		PackageSource(source),
-		artifact.Pin{URL: url, Version: version},
+		prepared.source,
+		artifact.Pin{URL: prepared.url, Version: version},
 	)
 	if err != nil {
 		return artifact.Pin{}, err
@@ -187,7 +179,7 @@ func (r *Repository) TestProjectPackage(
 		return artifact.Pin{}, err
 	}
 	return artifact.Pin{
-		URL:     url,
+		URL:     prepared.url,
 		Version: version,
 		SHA256:  download.SHA256,
 		Size:    download.Size,

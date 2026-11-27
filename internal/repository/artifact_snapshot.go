@@ -15,33 +15,57 @@ type ArtifactSnapshot struct {
 	Source db.PackageRepository
 }
 
+type projectArtifactSource struct {
+	selected db.PackageRepository
+	source   artifact.Repository
+	url      string
+	attached bool
+}
+
+func (r *Repository) prepareProjectArtifactSource(
+	ctx context.Context,
+	projectID int64,
+	version string,
+) (prepared projectArtifactSource, err error) {
+	prepared.selected, err = r.Queries.GetProjectArtifactRepository(
+		ctx,
+		projectID,
+	)
+	if err != nil {
+		return prepared, err
+	}
+	prepared.attached = true
+	source, err := r.GetPackageRepository(ctx, prepared.selected.ID)
+	if err != nil {
+		return prepared, err
+	}
+	prepared.source = PackageSource(source)
+	prepared.url, err = prepared.source.URL(version)
+	return prepared, err
+}
+
 func (r *Repository) ResolveProjectArtifact(
 	ctx context.Context,
 	projectID int64,
 	version string,
 ) (*ArtifactSnapshot, error) {
-	selected, err := r.Queries.GetProjectArtifactRepository(ctx, projectID)
-	if errors.Is(err, sql.ErrNoRows) {
+	prepared, err := r.prepareProjectArtifactSource(ctx, projectID, version)
+	if !prepared.attached && errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	source, err := r.GetPackageRepository(ctx, selected.ID)
-	if err != nil {
-		return nil, err
-	}
-	url, err := PackageSource(source).URL(version)
-	if err != nil {
-		return nil, err
-	}
 	download, err := r.ArtifactClient.Fetch(
 		ctx,
-		PackageSource(source),
-		artifact.Pin{URL: url, Version: version},
+		prepared.source,
+		artifact.Pin{URL: prepared.url, Version: version},
 	)
 	if errors.Is(err, artifact.ErrNotFound) {
-		return nil, &PackageMissingError{Version: version, Source: selected}
+		return nil, &PackageMissingError{
+			Version: version,
+			Source:  prepared.selected,
+		}
 	}
 	if err != nil {
 		return nil, err
@@ -50,10 +74,10 @@ func (r *Repository) ResolveProjectArtifact(
 		return nil, err
 	}
 	return &ArtifactSnapshot{
-		Source: selected,
+		Source: prepared.selected,
 		Row: db.CreateReleaseArtifactParams{
-			RepositoryID: selected.ID,
-			Url:          url,
+			RepositoryID: prepared.selected.ID,
+			Url:          prepared.url,
 			Version:      version,
 			Sha256:       download.SHA256,
 			Size:         download.Size,
