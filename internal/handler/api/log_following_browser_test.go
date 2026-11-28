@@ -5,15 +5,23 @@ package api_test
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
-	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
 	"github.com/google/uuid"
 )
+
+var logFollowingMarkers = [...]string{
+	"initial-549", "first-live-", "second-live-", "wrapped-tail-end",
+	"final-follow-marker",
+}
 
 func TestLogFollowingBrowserE2E(t *testing.T) {
 	base := strings.TrimRight(os.Getenv("DURPDEPLOY_LIVE_BASE"), "/")
@@ -98,7 +106,7 @@ echo final-follow-marker`,
 	}, 201, &saved)
 
 	f := logFollowingBrowserFixture{
-		b: b, base: base, api: api,
+		b: b, base: base, api: api, token: token,
 		projectID: project.ID, environmentID: environment.ID,
 		releaseID: release.ID, runbookID: saved.Runbook.ID,
 	}
@@ -114,6 +122,7 @@ type logFollowingBrowserFixture struct {
 	b             *packageBrowser
 	base          string
 	api           func(*testing.T, string, string, any, int, any)
+	token         string
 	projectID     int64
 	environmentID int64
 	releaseID     int64
@@ -125,31 +134,176 @@ func (f logFollowingBrowserFixture) logFailure(t *testing.T, logPath string) {
 	if !t.Failed() {
 		return
 	}
+	// Start all reads at failure, before a slow probe can skew the evidence.
+	var reads sync.WaitGroup
 	if logPath != "" {
-		var execution struct{ Status string }
-		f.api(t, "GET", strings.TrimSuffix(logPath, "/logs"),
-			nil, 200, &execution)
-		var logs []db.DeploymentLog
-		f.api(t, "GET", logPath, nil, 200, &logs)
-		t.Logf("API execution status=%s log count=%d",
-			execution.Status, len(logs))
-		// Deployment and runbook APIs return different log orders.
-		sort.Slice(logs, func(i, j int) bool {
-			return logs[i].ID > logs[j].ID
+		client := &http.Client{
+			Timeout: 5 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		reads.Go(func() {
+			var execution struct {
+				Status        string `json:"status"`
+				QueuePosition int64  `json:"queue_position"`
+			}
+			path := strings.TrimSuffix(logPath, "/logs")
+			if f.readLogDiagnostic(t, client, path, &execution) {
+				switch execution.Status {
+				case "pending", "queued", "running", "pending_approval",
+					"awaiting_artifact_approval", "publishing_artifact",
+					"succeeded", "failed", "cancelled", "cleanup_unconfirmed":
+				default:
+					execution.Status = "unknown"
+				}
+				t.Logf("API execution status=%s queue_position=%d",
+					execution.Status, execution.QueuePosition)
+			}
 		})
-		for _, log := range logs[:min(5, len(logs))] {
-			t.Logf("API log id=%d line=%q", log.ID,
-				log.Line[:min(len(log.Line), 160)])
+		reads.Go(func() { f.logPersistedMarkers(t, client, logPath) })
+	}
+	f.logBrowserState(t)
+	reads.Wait()
+}
+
+func (f logFollowingBrowserFixture) readLogDiagnostic(
+	t *testing.T, client *http.Client, path string, target any,
+) bool {
+	t.Helper()
+	// Cleanup runs after t.Context is canceled. Use the client timeout here.
+	req, err := http.NewRequest(http.MethodGet, f.base+path, nil)
+	if err != nil {
+		t.Logf("API diagnostic %s: invalid request", path)
+		return false
+	}
+	req.Header.Set("Authorization", "Bearer "+f.token)
+	response, err := client.Do(req)
+	if err != nil {
+		t.Logf("API diagnostic %s: request failed (timeout=%t)",
+			path, os.IsTimeout(err))
+		return false
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Logf("API diagnostic %s: HTTP %d", path, response.StatusCode)
+		return false
+	}
+	const maxBytes = 2 << 20
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxBytes+1))
+	if err != nil || len(body) > maxBytes {
+		t.Logf(
+			"API diagnostic %s: response unreadable or over byte limit",
+			path,
+		)
+		return false
+	}
+	if err := json.Unmarshal(body, target); err != nil {
+		t.Logf("API diagnostic %s: invalid response JSON", path)
+		return false
+	}
+	return true
+}
+
+func (f logFollowingBrowserFixture) logPersistedMarkers(
+	t *testing.T, client *http.Client, logPath string,
+) {
+	t.Helper()
+	markers := make(map[string]int64, len(logFollowingMarkers))
+	for _, marker := range logFollowingMarkers {
+		markers[marker] = 0
+	}
+	var before int64
+	complete := false
+	truncated := 0
+	// Two pages cover the default fixture. Allow one more for smaller pages.
+	for range 3 {
+		var page repository.LogPage
+		path := logPath + "/page"
+		if before != 0 {
+			path += fmt.Sprintf("?before=%d", before)
+		}
+		if !f.readLogDiagnostic(t, client, path, &page) {
+			break
+		}
+		if page.Items == nil {
+			t.Log("API log diagnostic: response missing items")
+			break
+		}
+		t.Logf("API log page before=%d next_before=%d last_id=%d rows=%d",
+			before, page.NextBefore, page.LastID, len(page.Items))
+		truncated += recordLogFollowingMarkers(page.Items, markers)
+		if page.NextBefore == 0 {
+			complete = true
+			break
+		}
+		before = page.NextBefore
+	}
+	t.Logf(
+		"API persisted marker row IDs (0=unseen, complete=%t, truncated=%d) %v",
+		complete,
+		truncated,
+		markers,
+	)
+}
+
+func recordLogFollowingMarkers(
+	rows []repository.LogPreview, markers map[string]int64,
+) int {
+	truncated := 0
+	for _, row := range rows {
+		if row.Truncated {
+			truncated++
+		}
+		for _, marker := range logFollowingMarkers {
+			if markers[marker] == 0 && strings.Contains(row.Line, marker) {
+				markers[marker] = row.ID
+			}
 		}
 	}
-	t.Logf("Follow diagnostics: %s", f.b.evaluate(t, `({
-following:window.followState?.followingLogs, hidden:document.hidden,
-pending:!!window.followState?.logUpdate, y:scrollY,
-rows:document.querySelectorAll('[data-log-id]').length,
-text:document.body.textContent.slice(-1000),
-last:window.lastLog?.()?.textContent,
-bottom:window.lastLog?.()?.getBoundingClientRect().bottom,
-button:document.querySelector('[data-follow-logs]')?.outerHTML})`))
+	return truncated
+}
+
+func (f logFollowingBrowserFixture) logBrowserState(t *testing.T) {
+	t.Helper()
+	var result struct {
+		Result struct {
+			Value json.RawMessage `json:"value"`
+		} `json:"result"`
+		Exception *struct{} `json:"exceptionDetails"`
+	}
+	expression := fmt.Sprintf(`(() => {
+ const root = document.querySelector('[x-bind="logFollowing"]');
+ const state = root && window.Alpine?.$data(root);
+ const surface = root ?? document;
+ const rows = [...surface.querySelectorAll('[data-log-id]')];
+ const rowID = value => /^\d{1,19}$/.test(value) ? String(value) : null;
+ const markers = %q.split(',');
+ const visibleEnd = rows.findLast(row => row.checkVisibility());
+ return {
+  hasLogRoot: !!root, hasFollowButton: !!surface.querySelector('[data-follow-logs]'),
+  historical: new URLSearchParams(location.search).has('before'),
+  following: !!state?.followingLogs, hidden: document.hidden,
+  pending: !!state?.logUpdate, lastID: rowID(state?.lastID),
+  eventSource: state?.source?.readyState ?? null,
+  openPanels: [...surface.querySelectorAll('details[data-step-index]')]
+    .slice(0, 2).map(panel => panel.open),
+  rows: rows.length, oldestRowID: rowID(rows[0]?.dataset.logId),
+  newestRowID: rowID(rows.at(-1)?.dataset.logId),
+  visibleEndBottom: visibleEnd?.getBoundingClientRect().bottom ?? null,
+  viewportHeight: innerHeight, y: scrollY,
+  markers: Object.fromEntries(markers.map(marker => [marker,
+    rowID(rows.find(row => row.textContent.includes(marker))?.dataset.logId)]))
+ };
+})()`, strings.Join(logFollowingMarkers[:], ","))
+	if err := f.b.wire.call("Runtime.evaluate", f.b.session, map[string]any{
+		"expression": expression, "returnByValue": true, "timeout": 5000,
+	}, &result); err != nil || result.Exception != nil ||
+		len(result.Result.Value) == 0 {
+		t.Log("Browser follow state unavailable")
+		return
+	}
+	t.Logf("Browser follow state: %s", result.Result.Value)
 }
 
 func (f logFollowingBrowserFixture) check(t *testing.T, kind string) {
@@ -157,24 +311,28 @@ func (f logFollowingBrowserFixture) check(t *testing.T, kind string) {
 	b, base, api := f.b, f.base, f.api
 	projectPath := fmt.Sprintf("/api/v1/projects/%d", f.projectID)
 	var webPath, logPath string
+	var deploymentID int64
 	t.Cleanup(func() { f.logFailure(t, logPath) })
 	body := map[string]int64{"environment_id": f.environmentID}
 	if kind == "deployment" {
 		body["release_id"] = f.releaseID
 		var deployment db.Deployment
 		api(t, "POST", projectPath+"/deployments", body, 201, &deployment)
+		deploymentID = deployment.ID
 		webPath = fmt.Sprintf("/deployments/%d", deployment.ID)
 		logPath = "/api/v1" + webPath + "/logs"
 	} else {
 		var execution db.RunbookExecution
 		api(t, "POST", fmt.Sprintf("%s/runbooks/%d/executions",
 			projectPath, f.runbookID), body, 201, &execution)
+		deploymentID = execution.DeploymentID
 		webPath = fmt.Sprintf("/projects/%d/runbooks/executions/%d",
 			f.projectID, execution.ID)
 		logPath = fmt.Sprintf("%s/runbook-executions/%d/logs",
 			projectPath, execution.ID)
 	}
 	t.Logf("%s log example: %s%s", kind, base, webPath)
+	t.Logf("Log fixture deployment_id=%d", deploymentID)
 	width := 1280
 	if kind == "runbook" {
 		width = 375
