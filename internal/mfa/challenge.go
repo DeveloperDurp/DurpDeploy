@@ -30,6 +30,34 @@ func (s *ChallengeService) Issue(
 	ctx context.Context,
 	issue ChallengeIssue,
 ) (PendingChallenge, error) {
+	var pending PendingChallenge
+	if err := s.repo.WithTx(ctx, func(queries *db.Queries) error {
+		var err error
+		pending, err = s.issueWith(ctx, queries, issue, true)
+		return err
+	}); err != nil {
+		return PendingChallenge{}, err
+	}
+	return pending, nil
+}
+
+// IssueWith creates a challenge in a caller-owned transaction. The caller
+// must authorize issuance under the user lock and use the result after commit.
+// The global expiry sweep stays outside that lock.
+func (s *ChallengeService) IssueWith(
+	ctx context.Context,
+	queries *db.Queries,
+	issue ChallengeIssue,
+) (PendingChallenge, error) {
+	return s.issueWith(ctx, queries, issue, false)
+}
+
+func (s *ChallengeService) issueWith(
+	ctx context.Context,
+	queries *db.Queries,
+	issue ChallengeIssue,
+	sweepExpired bool,
+) (PendingChallenge, error) {
 	if issue.UserID <= 0 || !issue.Purpose.valid() {
 		return PendingChallenge{}, ErrChallengeInvalid
 	}
@@ -48,26 +76,22 @@ func (s *ChallengeService) Issue(
 		)
 	}
 	now := s.clock().Unix()
-	err = s.repo.WithTx(ctx, func(queries *db.Queries) error {
+	if sweepExpired {
 		if err := cleanExpiredChallenges(ctx, queries, now); err != nil {
-			return err
+			return PendingChallenge{}, err
 		}
-		_, err := queries.CreateMFAChallenge(ctx, db.CreateMFAChallengeParams{
-			TokenHash:    challengeHash(token),
-			UserID:       issue.UserID,
-			SessionID:    challengeSession(issue.SessionID),
-			Purpose:      string(issue.Purpose),
-			CsrfHash:     challengeHash(csrf),
-			CeremonyJson: issue.CeremonyJSON,
-			ExpiresAt:    now + int64(challengeTTL/time.Second),
-		})
-		if err != nil {
-			return fmt.Errorf("create MFA challenge: %w", err)
-		}
-		return nil
+	}
+	_, err = queries.CreateMFAChallenge(ctx, db.CreateMFAChallengeParams{
+		TokenHash:    challengeHash(token),
+		UserID:       issue.UserID,
+		SessionID:    challengeSession(issue.SessionID),
+		Purpose:      string(issue.Purpose),
+		CsrfHash:     challengeHash(csrf),
+		CeremonyJson: issue.CeremonyJSON,
+		ExpiresAt:    now + int64(challengeTTL/time.Second),
 	})
 	if err != nil {
-		return PendingChallenge{}, err
+		return PendingChallenge{}, fmt.Errorf("create MFA challenge: %w", err)
 	}
 	return PendingChallenge{Token: token, CSRF: csrf}, nil
 }

@@ -151,6 +151,58 @@ func TestChallenge_IssueAcceptsPendingLoginPurpose(t *testing.T) {
 	}
 }
 
+func TestChallenge_IssueFailureRollsBackExpiredCleanup(t *testing.T) {
+	service, binding, _ := newChallengeServiceForTest(t)
+	expiredAt := service.clock().Add(challengeTTL)
+	service.clock = func() time.Time { return expiredAt }
+
+	pending, err := service.Issue(t.Context(), ChallengeIssue{
+		UserID: binding.UserID + 1, Purpose: ChallengePurposeLoginMFA,
+	})
+	if err == nil || pending.Token != "" || pending.CSRF != "" {
+		t.Fatalf(
+			"issue for missing user returned credentials or no error: %v",
+			err,
+		)
+	}
+	if _, err := service.repo.Queries.GetActiveMFAChallenge(
+		t.Context(), db.GetActiveMFAChallengeParams{
+			TokenHash: challengeHash(binding.Token),
+		},
+	); err != nil {
+		t.Fatalf("failed issue removed expired challenge: %v", err)
+	}
+}
+
+func TestChallenge_IssueWithRollsBackWithCaller(t *testing.T) {
+	service, binding, _ := newChallengeServiceForTest(t)
+	ctx := t.Context()
+	abort := errors.New("abort caller transaction")
+	var pending PendingChallenge
+	err := service.repo.WithTx(ctx, func(queries *db.Queries) error {
+		if err := lockMFAUser(ctx, queries, binding.UserID); err != nil {
+			return err
+		}
+		var err error
+		pending, err = service.IssueWith(ctx, queries, ChallengeIssue{
+			UserID: binding.UserID, Purpose: ChallengePurposeLoginMFA,
+		})
+		if err != nil {
+			return err
+		}
+		return abort
+	})
+	if !errors.Is(err, abort) || pending.Token == "" {
+		t.Fatalf("challenge did not reach the rollback boundary: %v", err)
+	}
+	if _, err := service.ResolveLogin(ctx, pending.Token, pending.CSRF); !errors.Is(
+		err,
+		ErrChallengeInvalid,
+	) {
+		t.Fatalf("rolled back challenge resolved: %v", err)
+	}
+}
+
 func TestChallenge_IssueStoresCeremonyDataServerSide(t *testing.T) {
 	// Given: a server-side ceremony payload at issue time.
 	ctx := context.Background()

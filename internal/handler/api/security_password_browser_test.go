@@ -5,7 +5,45 @@ package api_test
 import (
 	"fmt"
 	"testing"
+
+	"durpdeploy/internal/mfa"
+	"durpdeploy/internal/secret"
 )
+
+func TestSelfPasswordChangeMFAHandoffBrowserE2E(t *testing.T) {
+	f := newPermissionFixture(t)
+	user := seedAPIUser(t, f.h.repo, "password-mfa@example.test", "viewer")
+	box, err := secret.NewBox(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := mfa.NewFactorStore(mfa.FactorStoreConfig{
+		Repository: f.h.repo, Box: box,
+	})
+	if _, err := store.ActivateTOTP(
+		t.Context(), user.ID, "JBSWY3DPEHPK3PXP", 1,
+	); err != nil {
+		t.Fatal(err)
+	}
+	_, token := seedAPIToken(t, f.h.repo, user.ID)
+	submitSelfPasswordChange(t, f, "API", token, "", 0)
+
+	b := startPackageBrowser(t)
+	b.navigateBackTest(t, f.server.URL+"/login")
+	b.evaluate(t, fmt.Sprintf(`(() => {
+ const form=document.querySelector('form[action="/login"]');
+ form.elements.email.value=%q; form.elements.password.value='New-password-141';
+ form.requestSubmit(); return true;
+})()`, user.Email))
+	b.wait(t, `location.pathname === '/login/mfa' &&
+ document.querySelector('form[action="/login/mfa/totp"]') !== null`)
+	b.screenshot(t, "password-rotation-mfa-handoff")
+
+	b.call(t, "Page.navigate", map[string]string{
+		"url": f.server.URL + "/settings/security",
+	}, &struct{}{})
+	b.wait(t, `location.pathname === '/login'`)
+}
 
 func TestSelfPasswordChangeBrowserE2E(t *testing.T) {
 	f := newPermissionFixture(t)

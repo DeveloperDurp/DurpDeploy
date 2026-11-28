@@ -2,6 +2,7 @@ package handler
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/mfa"
 	"durpdeploy/internal/requestmeta"
 )
 
@@ -25,6 +27,60 @@ const (
 type finalSessionIssue struct {
 	UserID int64
 	Factor finalLoginFactor
+}
+
+func (h *AuthHandler) completePasswordLogin(
+	r *http.Request,
+	userID int64,
+	verifiedHash string,
+) (db.Session, mfa.PendingChallenge, error) {
+	ctx := r.Context()
+	issue := h.finalBrowserSessionIssue(r, finalSessionIssue{
+		UserID: userID, Factor: finalLoginPassword,
+	})
+	var session db.Session
+	var pending mfa.PendingChallenge
+	err := h.repo.WithTx(ctx, func(queries *db.Queries) error {
+		// Password and factor changes take this lock before revocation.
+		locked, err := queries.LockMFAUser(ctx, userID)
+		if err != nil {
+			return fmt.Errorf("lock password login user: %w", err)
+		}
+		if locked != 1 {
+			return auth.ErrPasswordChanged
+		}
+		user, err := queries.GetUserByID(ctx, userID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return auth.ErrPasswordChanged
+		}
+		if err != nil {
+			return err
+		}
+		if user.PasswordHash == "" || user.PasswordHash != verifiedHash {
+			return auth.ErrPasswordChanged
+		}
+		factors, err := queries.CountMFAFactors(ctx, userID)
+		if err != nil {
+			return err
+		}
+		if factors > 0 {
+			pending, err = h.challengeService().IssueWith(
+				ctx, queries, mfa.ChallengeIssue{
+					UserID: userID, Purpose: mfa.ChallengePurposeLoginMFA,
+				},
+			)
+			return err
+		}
+		session, err = auth.IssueBrowserSessionWith(ctx, queries, issue)
+		return err
+	})
+	if err != nil {
+		return db.Session{}, mfa.PendingChallenge{}, err
+	}
+	if session.ID != "" {
+		issue.Audit(session)
+	}
+	return session, pending, nil
 }
 
 func (h *AuthHandler) issueFinalBrowserSession(

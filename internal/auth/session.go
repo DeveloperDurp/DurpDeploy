@@ -116,10 +116,14 @@ func UpdatePassword(
 		return fmt.Errorf("hash password: %w", err)
 	}
 	if err := repo.WithTx(ctx, func(queries *db.Queries) error {
+		locked, err := queries.LockMFAUser(ctx, change.UserID)
+		if err != nil {
+			return fmt.Errorf("lock password change user: %w", err)
+		}
+		if locked != 1 {
+			return sql.ErrNoRows
+		}
 		if change.ExpectedHash != "" {
-			if _, err := queries.LockMFAUser(ctx, change.UserID); err != nil {
-				return err
-			}
 			user, err := queries.GetUserByID(ctx, change.UserID)
 			if err != nil {
 				return err

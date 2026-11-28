@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -187,36 +188,24 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 		h.renderInvalidLogin(w, r)
 		return
 	}
-	h.loginLimiter.reset(pairKey)
-	factors, err := h.repo.Queries.CountMFAFactors(r.Context(), user.ID)
+	session, pending, err := h.completePasswordLogin(r, user.ID, passwordHash)
+	if errors.Is(err, auth.ErrPasswordChanged) {
+		slog.Warn("password authentication failed", "ip", ip)
+		h.renderInvalidLogin(w, r)
+		return
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if factors > 0 {
-		setNoStore(w)
-		pending, err := h.challengeService().
-			Issue(r.Context(), mfa.ChallengeIssue{
-				UserID:  user.ID,
-				Purpose: mfa.ChallengePurposeLoginMFA,
-			})
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+	h.loginLimiter.reset(pairKey)
+	if pending.Token != "" {
 		h.setPendingMFACookies(w, pending)
 		http.Redirect(w, r, "/login/mfa", http.StatusSeeOther)
 		return
 	}
 
-	if err := h.issueFinalBrowserSession(w, r, finalSessionIssue{
-		UserID: user.ID,
-		Factor: finalLoginPassword,
-	}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
+	h.setFinalBrowserSessionCookie(w, session)
 	http.Redirect(w, r, h.takeLoginDestination(w, r), http.StatusSeeOther)
 }
 

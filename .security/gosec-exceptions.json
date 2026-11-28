@@ -254,8 +254,8 @@
   {
     "rule": "G124",
     "file": "internal/handler/login_session.go",
-    "line": "78",
-    "source_sha256": "eb5d1910aaf8d1952b0ce9535158722cf7b7aa5565dcb607dedf8710bb30a172",
+    "line": "134",
+    "source_sha256": "dc5cd01cd7c7c39cb0a96b25109551707d9d1d4b503c03deae351a0caac25305",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
@@ -290,8 +290,8 @@
   {
     "rule": "G124",
     "file": "internal/handler/auth.go",
-    "line": "261",
-    "source_sha256": "1b90dc276e30a0cabad10111b4ba5fa8ce534175657480d3286df12f2ea70bef",
+    "line": "250",
+    "source_sha256": "cf56db0d4b10a4ddee99eb8953d36822801c776cdd46b9d5dd6294f75616291a",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
@@ -596,8 +596,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/auth.go",
-    "line": "220",
-    "source_sha256": "1b90dc276e30a0cabad10111b4ba5fa8ce534175657480d3286df12f2ea70bef",
+    "line": "209",
+    "source_sha256": "cf56db0d4b10a4ddee99eb8953d36822801c776cdd46b9d5dd6294f75616291a",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Password login redirects only after session issuance through takeLoginDestination. This helper bounds and decodes the cookie, then SafeLoginDestination rejects external authorities, schemes, backslashes, controls, auth loops, and excessive lengths. Only local paths and queries survive. Evidence: internal/auth/login_destination_test.go; internal/handler/login_destination_test.go; API/browser login destination E2E tests."

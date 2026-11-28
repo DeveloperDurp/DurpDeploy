@@ -732,6 +732,19 @@ This check creates no schedules.
 21. Confirm that project-scoped tokens and tokens with permission ceilings receive `403`.
 22. Confirm that invalid credentials receive `422` and cannot change another account.
 
+### Password changes with MFA (#169)
+
+Use a disposable local-password account with an enrolled factor.
+
+1. Change the password through `POST /api/v1/users/me/password`.
+2. Open the login page in a fresh browser profile.
+3. Submit the old password and confirm that the login page rejects it.
+4. Submit the new password and confirm that the factor prompt opens.
+5. Open a protected page before completing MFA.
+6. Confirm that the login page opens.
+7. Sign in with the new password and complete the factor prompt.
+8. Confirm that the protected page opens.
+
 Run the focused API and browser regressions:
 
 ```sh

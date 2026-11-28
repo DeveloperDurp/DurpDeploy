@@ -153,3 +153,13 @@ func TestUpdatePasswordRejectsStaleHashAndRollsBack(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdatePasswordRejectsMissingUser(t *testing.T) {
+	repo := newSessionRepository(t)
+	err := auth.UpdatePassword(t.Context(), repo, auth.PasswordChange{
+		UserID: 1, Password: "new fixture password",
+	})
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("password update for missing user: %v", err)
+	}
+}
