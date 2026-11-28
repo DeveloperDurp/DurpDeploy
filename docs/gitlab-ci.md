@@ -362,6 +362,10 @@ The default setup removes an inherited Sonar token before build and test command
 It removes inherited publication credentials before commands outside the production environment.
 
 SonarCloud waits for its quality gate and fails the pipeline when the gate fails.
+The SonarCloud job requests 2 GiB of container memory and permits up to 6 GiB.
+The scanner uses a 2 GiB Java heap to leave memory for native allocations.
+Set the heap through `SONAR_SCANNER_JAVA_OPTS`.
+If analysis exhausts the heap, inspect the job log before changing its limits.
 Analysis keys use `gitlab-<merge-request-number>` to separate them from historical GitHub pull requests.
 Default-branch push analysis sets `sonar.branch.name` and omits all `sonar.pullrequest.*` parameters.
 Fork merge requests cannot select the SonarCloud job in the target project.

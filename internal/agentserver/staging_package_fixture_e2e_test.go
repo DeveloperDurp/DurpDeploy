@@ -8,12 +8,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"durpdeploy/internal/artifact"
+	"durpdeploy/internal/testutil"
 )
 
 type packageSourceConfig struct {
@@ -39,7 +39,7 @@ func (s *stagingE2E) packageSource(
 		t.Fatal(err)
 	}
 	var requests atomic.Int64
-	upstream := httptest.NewTLSServer(
+	upstream := testutil.PrivateHTTPSServer(t,
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Header.Get(
 				"Authorization",

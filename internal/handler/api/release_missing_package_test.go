@@ -14,6 +14,7 @@ import (
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/server"
+	"durpdeploy/internal/testutil"
 )
 
 func TestReleaseDefersMissingPackagePull(t *testing.T) {
@@ -22,7 +23,7 @@ func TestReleaseDefersMissingPackagePull(t *testing.T) {
 	_, token := seedAPIToken(t, h.repo, user.ID)
 	project := seedProject(t, h.repo)
 	var requests atomic.Int64
-	upstream := httptest.NewTLSServer(http.HandlerFunc(
+	upstream := testutil.PrivateHTTPSServer(t, http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			requests.Add(1)
 			http.NotFound(w, r)

@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"durpdeploy/internal/urlhost"
 )
 
 var (
@@ -44,12 +46,11 @@ func ValidateEndpointURL(raw string) error {
 	if u.Host == "" || u.User != nil {
 		return fmt.Errorf("URL must include a host and no userinfo")
 	}
-	host := u.Hostname()
-	if host == "" || strings.EqualFold(host, "localhost") ||
-		strings.HasSuffix(strings.ToLower(host), ".localhost") {
+	host, ip, err := urlhost.Parse(u.Hostname())
+	if err != nil || host == "host.containers.internal" {
 		return errBlockedNotificationHost
 	}
-	if ip := net.ParseIP(host); ip != nil && !isPublicIP(ip) {
+	if ip != nil && !isPublicIP(ip) {
 		return errBlockedNotificationHost
 	}
 	return nil

@@ -26,6 +26,19 @@ Enter a new value to replace it.
 Select **Clear credential** to remove it.
 Email recipients and Gotify server URLs remain readable.
 
+Use comma-separated bare email addresses for `notify_emails`.
+Empty entries are ignored.
+Control characters and invalid addresses return `422` without changing saved settings.
+This validation also applies when SMTP is disabled.
+The SMTP client rejects CR/LF recipients before sending message data.
+
+Notification URLs require HTTP or HTTPS and a public destination.
+Save-time checks reject local names, blocked IP literals, zone identifiers, and ambiguous numeric hosts.
+These checks also reject `host.containers.internal` and case or root-dot variants.
+Use canonical IP literals instead of integer, shortened, octal-looking, or hexadecimal forms.
+Save-time checks do not resolve DNS names.
+Delivery checks every resolved IP before dialing a checked address.
+
 API responses return empty credential fields and corresponding `*_configured` Boolean fields.
 Blank or omitted credential fields preserve stored values in `PUT` requests.
 Gotify tokens require an unchanged `gotify_url`.

@@ -3,6 +3,7 @@ package notify
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"net/textproto"
 	"strings"
@@ -22,6 +23,44 @@ func TestEmailNotifier_SkipsWhenSMTPNotConfigured(t *testing.T) {
 	}
 	if !skipped {
 		t.Fatal("expected skipped=true when SMTP host is not configured")
+	}
+}
+
+func TestEmailNotifierRejectsCRLFBeforeMessageData(t *testing.T) {
+	for _, recipient := range []string{
+		"a@example.com\r\nBcc: b@example.com", "a@example.com\n",
+	} {
+		t.Run(recipient, func(t *testing.T) {
+			cfg := smtpTestServer(t, func(conn *textproto.Conn) error {
+				if err := conn.PrintfLine("220 smtp.example.com"); err != nil {
+					return err
+				}
+				for _, exchange := range [][2]string{
+					{"EHLO localhost", "250 smtp.example.com"},
+					{"MAIL FROM:<durpdeploy@example.com>", "250 OK"},
+					{"RCPT TO:<valid@example.com>", "250 OK"},
+				} {
+					if err := smtpExchange(conn, exchange[0], exchange[1]); err != nil {
+						return err
+					}
+				}
+				line, err := conn.ReadLine()
+				if err != io.EOF {
+					return fmt.Errorf(
+						"expected close before invalid RCPT or DATA, got %q: %v",
+						line,
+						err,
+					)
+				}
+				return nil
+			})
+			_, err := NewEmailNotifier(cfg).Notify(t.Context(), events.Event{
+				NotifyEmails: []string{"valid@example.com", recipient},
+			})
+			if err == nil || !strings.Contains(err.Error(), "CR or LF") {
+				t.Fatalf("expected SMTP line rejection, got %v", err)
+			}
+		})
 	}
 }
 
@@ -52,6 +91,7 @@ func TestEmailNotifier_SendsMailWithConfiguredRecipients(t *testing.T) {
 			{"MAIL FROM:<durpdeploy@example.com>", "250 OK"},
 			{"RCPT TO:<a@example.com>", "250 OK"},
 			{"RCPT TO:<b@example.com>", "250 OK"},
+			{`RCPT TO:<"ops team"@example.com>`, "250 OK"},
 			{"DATA", "354 Send message"},
 		} {
 			if err := smtpExchange(conn, exchange[0], exchange[1]); err != nil {
@@ -73,8 +113,12 @@ func TestEmailNotifier_SendsMailWithConfiguredRecipients(t *testing.T) {
 
 	// When: the event is delivered.
 	skipped, err := n.Notify(context.Background(), events.Event{
-		Message:      "Deployment #1 succeeded",
-		NotifyEmails: []string{"a@example.com", "b@example.com"},
+		Message: "Deployment #1 succeeded",
+		NotifyEmails: []string{
+			"a@example.com",
+			"b@example.com",
+			`"ops team"@example.com`,
+		},
 	})
 	if err != (events.SMTPPlaintextWarning{}) {
 		t.Fatalf("plaintext delivery warning = %v", err)

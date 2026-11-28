@@ -9,22 +9,29 @@ import (
 	"durpdeploy/internal/notify"
 )
 
-// NotificationSettingsInput contains caller-normalized notification settings.
+// NotificationSettingsInput contains notification settings from a request.
 type NotificationSettingsInput struct {
-	SlackWebhookURL        string
-	NotifyEmails           string
-	GotifyURL              string
-	GotifyToken            string
-	DiscordWebhookURL      string
-	ClearSlackWebhookURL   bool
-	ClearGotifyToken       bool
-	ClearDiscordWebhookURL bool
+	SlackWebhookURL         string
+	NotifyEmails            string
+	GotifyURL               string
+	GotifyToken             string
+	DiscordWebhookURL       string
+	ClearSlackWebhookURL    bool
+	ClearGotifyToken        bool
+	ClearDiscordWebhookURL  bool
+	PreserveEmailWhitespace bool
 }
 
 // PrepareNotificationSettings validates endpoints after applying clear flags.
 func PrepareNotificationSettings(
 	input NotificationSettingsInput,
 ) (db.UpdateGlobalNotificationsParams, error) {
+	if err := notify.ValidateRecipients(input.NotifyEmails); err != nil {
+		return db.UpdateGlobalNotificationsParams{}, err
+	}
+	if !input.PreserveEmailWhitespace {
+		input.NotifyEmails = strings.TrimSpace(input.NotifyEmails)
+	}
 	slack := notify.CredentialValue(
 		input.SlackWebhookURL, input.ClearSlackWebhookURL,
 	)
@@ -73,9 +80,7 @@ func notificationClearFlag(r *http.Request, name string) int64 {
 func notificationFormInput(r *http.Request) NotificationSettingsInput {
 	return NotificationSettingsInput{
 		SlackWebhookURL: r.FormValue("slack_webhook_url"),
-		NotifyEmails: strings.TrimSpace(
-			r.FormValue("notify_emails"),
-		),
+		NotifyEmails:    r.FormValue("notify_emails"),
 		GotifyURL: strings.TrimSpace(
 			r.FormValue("gotify_url"),
 		),

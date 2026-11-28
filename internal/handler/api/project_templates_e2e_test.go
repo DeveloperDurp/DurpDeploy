@@ -420,6 +420,11 @@ func (f projectTemplateE2E) checkRejectedApplies(t *testing.T) {
 		{"credential", func(p *repository.ApplyProjectTemplate) {
 			p.PackageRepository = &repository.ProjectTemplatePackage{URLTemplate: f.input.PackageRepository.URLTemplate, AuthType: "bearer"}
 		}},
+		{"blocked package destination", func(p *repository.ApplyProjectTemplate) {
+			p.PackageRepository = &repository.ProjectTemplatePackage{
+				URLTemplate: "https://127.0.0.1/{version}.zip", AuthType: "noauth",
+			}
+		}},
 		{"unknown value", func(p *repository.ApplyProjectTemplate) { p.VariableValues = map[string]string{"unknown": "value"} }},
 		{"selector", func(p *repository.ApplyProjectTemplate) {
 			p.AgentSelectors = map[string][]string{"4": {"missing-template-label"}}

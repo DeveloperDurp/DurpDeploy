@@ -9,6 +9,7 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
     bash "$0" rollout-contracts-2
     ;;
   rollout-contracts-1)
+    bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^Test(NotificationDestinationValidation|PackageDestinationValidation)APIWebE2E$' ./internal/handler/api
     make agent-rollout-gate
     bash scripts/run_named_go_tests.sh --race --tags e2e --timeout 3m \
       --packages ./internal/handler/api \
@@ -83,7 +84,7 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
       '^TestScreenshotRenderingReadinessBrowserE2E$'
       '^Test(SwaggerInstance|ReleaseDeferredPackage|ReleaseRefreshConflictStaysOnPage|ReleaseCapture|ThemeStyles|PackageRepository|PackageRepositoryBack|BackNavigation|BackHistory|PageNavigation|PageNavigationExpiredSession|OIDCNavigation|FramingPolicy)BrowserE2E$'
       '^Test(DeploymentMobile|DeploymentListMobile|ResourceListMobile|HomeMobile|HomeRunningPoll|HomeChartTimer|SchedulePages|ScheduleTransitions|MainPagePattern)BrowserE2E$'
-      '^Test(LifecycleVariables|LifecycleLiveScope|LifecyclePageNavigation|LifecycleStageOrder|VariableScopesBeforeDeployment|NotificationCredentialForms|NotificationCardsViewer|NotificationValidationPreservesForm|SMTPPlaintextWarning)BrowserE2E$'
+      '^Test(LifecycleVariables|LifecycleLiveScope|LifecyclePageNavigation|LifecycleStageOrder|VariableScopesBeforeDeployment|NotificationCredentialForms|NotificationCardsViewer|NotificationValidationPreservesForm|NotificationRecipientValidation|SMTPPlaintextWarning)BrowserE2E$'
     )
     ;;
   browser-resources)

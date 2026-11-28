@@ -203,6 +203,14 @@ func (f projectTemplateBackendFixture) checkRejectedApplies(t *testing.T) {
 	) {
 		t.Fatalf("missing credential: %v", err)
 	}
+	bad.PackageRepository = &ProjectTemplatePackage{
+		URLTemplate: "https://127.0.0.1/{version}.zip",
+		AuthType:    "noauth",
+	}
+	if _, err := r.CreateProjectFromTemplate(t.Context(), actor, 1,
+		template.ID, bad); !errors.Is(err, ErrProjectTemplateInvalid) {
+		t.Fatalf("blocked package destination: %v", err)
+	}
 	after, err := r.Queries.CountProjects(t.Context())
 	if err != nil || before != after {
 		t.Fatalf(
@@ -240,21 +248,7 @@ func (f projectTemplateBackendFixture) checkCreatedProject(
 			copiedSnapshot.Steps,
 		)
 	}
-	values, err := r.ListVariablesByProject(t.Context(), created.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, v := range values {
-		if v.Name == "SECRET_VALUE" && v.IsCredential != 1 {
-			t.Fatal("credential classification was not copied")
-		}
-		if v.Secret != 0 && v.Value.String != "fresh-secret-value" {
-			t.Fatal("secret was not replaced")
-		}
-		if v.Secret == 0 && v.Value.String != "copied-default" {
-			t.Fatal("non-secret default was not copied")
-		}
-	}
+	f.checkCopiedVariables(t, created.ID)
 	member, err := r.Queries.GetProjectMember(
 		t.Context(),
 		db.GetProjectMemberParams{ProjectID: created.ID, UserID: actor.UserID},
@@ -270,6 +264,28 @@ func (f projectTemplateBackendFixture) checkCreatedProject(
 		t.Fatal("release history copied")
 	}
 	return created
+}
+
+func (f projectTemplateBackendFixture) checkCopiedVariables(
+	t *testing.T,
+	projectID int64,
+) {
+	t.Helper()
+	values, err := f.r.ListVariablesByProject(t.Context(), projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range values {
+		if v.Name == "SECRET_VALUE" && v.IsCredential != 1 {
+			t.Fatal("credential classification was not copied")
+		}
+		if v.Secret != 0 && v.Value.String != "fresh-secret-value" {
+			t.Fatal("secret was not replaced")
+		}
+		if v.Secret == 0 && v.Value.String != "copied-default" {
+			t.Fatal("non-secret default was not copied")
+		}
+	}
 }
 
 func (f projectTemplateBackendFixture) checkIndependence(

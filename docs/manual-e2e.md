@@ -1,5 +1,37 @@
 # Manual checks after `make e2e-test`
 
+## Notification and package destination validation (#193)
+
+Create a disposable project named `Notification validation 193`.
+Open its notification settings as a project administrator.
+Save `a@example.com, b@example.com` as email recipients.
+
+Submit `invalid` as a recipient.
+Repeat with `ops:a@example.com;` and `a@ example.com`.
+Expect `422`, an error toast, and unchanged saved settings.
+Repeat these steps on `/admin/notifications/settings` as a global administrator.
+
+Submit `http://2130706433/hook` as each notification URL.
+Repeat with `http://LOCALHOST./hook` and `http://host.containers.internal/hook`.
+Expect `422` and unchanged saved settings.
+Use the public API to submit escaped CR/LF or tab characters in `notify_emails`.
+Expect `422` without saving changes.
+Expect `400` for rejected notification URLs through the API.
+Email recipients and Gotify server URLs remain readable after saving.
+
+Open the project's package repository settings.
+Save `https://host.containers.internal/{version}.zip` with `noauth`.
+Expect a successful save without a connection attempt.
+Submit `https://127.0.0.1/{version}.zip` and `https://0x7f.0.0.1/{version}.zip`.
+Expect `422` through web forms and the public API.
+Confirm the previously saved package source remains unchanged.
+Retain the disposable project for manual review.
+Keep its stack outside the thread teardown registration.
+Keep deployment and runbook schedules disabled.
+
+Run `TestNotificationDestinationValidationAPIWebE2E` and `TestPackageDestinationValidationAPIWebE2E` with the `e2e` tag for the HTTP matrix.
+Run `TestNotificationRecipientValidationBrowserE2E` with `e2e,packagebrowser` for the recipient form checks.
+
 ## Project release availability
 
 1. Open a project with two lifecycle stages.

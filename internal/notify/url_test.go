@@ -18,12 +18,34 @@ func TestValidateEndpointURLBlocksLocalTargets(t *testing.T) {
 		"http://172.16.0.1/hook",
 		"http://192.168.1.1/hook",
 		"ftp://example.com/hook",
+		"http://127.0.0.1./hook",
+		"http://LOCALHOST./hook",
+		"http://service.localhost./hook",
+		"http://host.containers.internal/hook",
+		"http://HOST.CONTAINERS.INTERNAL./hook",
+		"http://2130706433/hook",
+		"http://0x7f.0.0.1/hook",
+		"http://0177.0.0.1/hook",
+		"http://[::ffff:127.0.0.1]/hook",
+		"http://[2001:4860:4860::8888%25eth0]/hook",
 	} {
 		t.Run(raw, func(t *testing.T) {
 			if err := notify.ValidateEndpointURL(raw); err == nil {
 				t.Fatal("expected URL to be rejected")
 			}
 		})
+	}
+}
+
+func TestValidateEndpointURLAcceptsSupportedDestinations(t *testing.T) {
+	for _, raw := range []string{
+		"", "https://example.com/hook", "https://EXAMPLE.COM./hook",
+		"https://8.8.8.8/hook", "https://[2001:4860:4860::8888]/hook",
+		"https://2130706433.example/hook", "https://0x7f.example/hook",
+	} {
+		if err := notify.ValidateEndpointURL(raw); err != nil {
+			t.Errorf("valid endpoint %q: %v", raw, err)
+		}
 	}
 }
 

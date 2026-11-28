@@ -346,7 +346,7 @@ func (r *Repository) copyTemplatePackage(
 		Username:    p.Username,
 		Credential:  p.Credential,
 	}
-	if err := source.Validate(); err != nil {
+	if err := source.ValidateForSave(); err != nil {
 		return templateInvalid(
 			"invalid package repository or missing credentials",
 		)

@@ -73,7 +73,7 @@ func validPackageRepositoryName(name string) bool {
 }
 
 func (r *Repository) validatePackageSource(source artifact.Repository) error {
-	if err := source.Validate(); err != nil {
+	if err := source.ValidateForSave(); err != nil {
 		return err
 	}
 	if source.Credential != "" && r.secrets == nil {

@@ -15,6 +15,7 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/testutil"
 )
 
 func TestDeferredPackageConcurrentPullsLockOneChecksum(t *testing.T) {
@@ -108,7 +109,7 @@ func deferredConcurrentPackageServer(t *testing.T, payloads [][]byte,
 	ready chan<- struct{}, releaseResponses chan struct{}) *httptest.Server {
 	t.Helper()
 	var requests atomic.Int64
-	upstream := httptest.NewTLSServer(http.HandlerFunc(
+	upstream := testutil.PrivateHTTPSServer(t, http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			index := requests.Add(1) - 1
 			ready <- struct{}{}

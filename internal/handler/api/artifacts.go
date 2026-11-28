@@ -99,6 +99,8 @@ func (h *ArtifactHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // swagger:route PUT /projects/{id}/package-repository artifacts savePackageRepository
 // Configure and activate the project repository. Replacing its source preserves existing pins.
+// Save rejects local names, blocked IP literals, numeric host encodings, and IPv6 zones.
+// Private HTTPS services remain supported. Save performs no DNS lookups.
 // A blank credential preserves the secret only when URL template, auth type, and username are unchanged.
 // Responses:
 // 413: body:RequestEntityTooLargeError

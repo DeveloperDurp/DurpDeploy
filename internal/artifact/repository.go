@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strings"
 
+	"durpdeploy/internal/urlhost"
+
 	agentartifact "github.com/DeveloperDurp/durpdeploy-agent/artifact"
 )
 
@@ -34,6 +36,27 @@ type Repository struct {
 	AuthType    string `json:"auth_type"`
 	Username    string `json:"username"`
 	Credential  string `json:"-"`
+}
+
+// ValidateForSave adds destination checks without rewriting source identities.
+// Runtime fetches retain their independent per-dial destination enforcement.
+func (r Repository) ValidateForSave() error {
+	if err := r.Validate(); err != nil {
+		return err
+	}
+	raw, err := r.URL("1.0")
+	if err != nil {
+		return err
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ErrInvalid
+	}
+	_, ip, err := urlhost.Parse(u.Hostname())
+	if err != nil || (ip != nil && !AllowedDestinationIP(ip)) {
+		return ErrInvalid
+	}
+	return nil
 }
 
 func (r Repository) Validate() error {

@@ -1359,6 +1359,15 @@ The server retains credentials for delivery.
 Existing write permissions still apply.
 Email recipients and Gotify server URLs remain readable.
 
+Use comma-separated bare email addresses for `notify_emails`.
+Empty entries are ignored.
+Control characters or invalid addresses return `422` without saving changes, even when SMTP is disabled.
+Notification URL validation errors return `400` through the API and `422` through web forms.
+Notification URLs reject local names, blocked IP literals, ambiguous numeric hosts, and IPv6 zone identifiers.
+They also reject `host.containers.internal`, including case and root-dot variants.
+Save-time host checks use no DNS lookups.
+Delivery retains its independent public-IP restrictions.
+
 Notification history omits provider error details that can contain credentials.
 If notification settings cannot be loaded, history records a generic failed status instead of `skipped`.
 Notification failures do not change deployment results.
@@ -1707,6 +1716,12 @@ strings, and cross-origin redirects are rejected. Private HTTPS destinations
 are allowed; loopback and link-local destinations are blocked. Configure normal
 system trust for a private repository's TLS certificate; TLS verification is
 never disabled.
+
+Repository save-time checks reject local names, blocked IP literals, ambiguous numeric hosts, and IPv6 zone identifiers.
+Use canonical IP literals instead of integer, shortened, octal-looking, or hexadecimal forms.
+These checks preserve private repositories, including `host.containers.internal`.
+Save-time checks use no DNS lookups and preserve the stored URL template text.
+Delivery retains its independent destination restrictions.
 
 Artifact versions cannot be dot segments (`.` or `..`) or contain path
 separators. ZIP paths must fit Linux staging filesystems: at most 255 bytes per

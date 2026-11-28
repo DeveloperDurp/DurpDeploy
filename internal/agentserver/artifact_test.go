@@ -9,13 +9,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/secret"
+	"durpdeploy/internal/testutil"
 )
 
 func seedAgentArtifact(
@@ -38,7 +38,7 @@ func seedAgentArtifact(
 		t.Fatal(err)
 	}
 	data := buffer.Bytes()
-	upstream := httptest.NewTLSServer(
+	upstream := testutil.PrivateHTTPSServer(t,
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Header.Get("Authorization") != "Bearer private-credential" {
 				w.WriteHeader(401)

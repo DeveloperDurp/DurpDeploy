@@ -50,6 +50,9 @@ func verifyNotificationValidationForScope(
 		{"unsupported scheme", "gotify_url", "ftp://example.com/gotify"},
 		{"Slack", "slack_webhook_url", "ftp://example.com/slack"},
 		{"Discord", "discord_webhook_url", "ftp://example.com/discord"},
+		{"numeric Gotify", "gotify_url", "http://2130706433/hook"},
+		{"root dot Slack", "slack_webhook_url", "http://LOCALHOST./hook"},
+		{"container alias", "discord_webhook_url", "http://host.containers.internal/hook"},
 	} {
 		t.Run(invalid.name, func(t *testing.T) {
 			b.evaluate(t, fmt.Sprintf(`(() => {
@@ -163,5 +166,58 @@ func clickNotificationSave(t *testing.T, b *packageBrowser) {
 			"type": event, "x": point.X, "y": point.Y,
 			"button": "left", "clickCount": 1,
 		}, &struct{}{})
+	}
+}
+
+func TestNotificationRecipientValidationBrowserE2E(t *testing.T) {
+	f := newArtifactE2E(t)
+	b := startPackageBrowser(t)
+	b.setBackTestSession(t, f.baseURL, f.session)
+	for _, scope := range []struct{ api, web string }{
+		{f.base() + "/notifications", fmt.Sprintf("/projects/%d/notifications", f.project.ID)},
+		{"/api/v1/admin/notifications/settings", "/admin/notifications/settings"},
+	} {
+		f.api(
+			t,
+			"PUT",
+			scope.api,
+			map[string]string{"notify_emails": "saved@example.com"},
+			200,
+		)
+		b.navigateBackTest(t, f.baseURL+scope.web)
+		for _, invalid := range []string{
+			"invalid", "ops:a@example.com;", "a@ example.com",
+		} {
+			b.evaluate(t, fmt.Sprintf(`(() => {
+			window.recipientStatus = 0;
+			const field = document.querySelector('[name=notify_emails]');
+			field.value = %q;
+			field.form.addEventListener('htmx:afterRequest', e => window.recipientStatus = e.detail.xhr.status);
+			return true;
+		})()`, invalid))
+			clickNotificationSave(t, b)
+			b.wait(
+				t,
+				fmt.Sprintf(
+					`window.recipientStatus === 422 && document.querySelector('[name=notify_emails]').value === %q`,
+					invalid,
+				),
+			)
+			if readSettings(t, f, scope.api)["notify_emails"] != "saved@example.com" {
+				t.Fatal("rejected recipient changed saved settings")
+			}
+		}
+		b.evaluate(
+			t,
+			`document.querySelector('[name=notify_emails]').value = 'a@example.com, b@example.com'; true`,
+		)
+		clickNotificationSave(t, b)
+		b.wait(
+			t,
+			`document.querySelector('[name=notify_emails]').getAttribute('value') === 'a@example.com, b@example.com'`,
+		)
+		if readSettings(t, f, scope.api)["notify_emails"] != "a@example.com, b@example.com" {
+			t.Fatal("valid recipients were not saved")
+		}
 	}
 }

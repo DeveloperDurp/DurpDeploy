@@ -2,13 +2,13 @@ package repository_test
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"testing"
 
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
+	"durpdeploy/internal/testutil"
 )
 
 func TestOldDeferredPullCannotReplaceRefreshedReleaseChecksum(t *testing.T) {
@@ -38,7 +38,7 @@ func TestOldDeferredPullCannotReplaceRefreshedReleaseChecksum(t *testing.T) {
 		t.Fatal(err)
 	}
 	payload := deferredZIP(t, "refreshed")
-	upstream := httptest.NewTLSServer(
+	upstream := testutil.PrivateHTTPSServer(t,
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			if _, err := w.Write(payload); err != nil {
 				t.Error(err)

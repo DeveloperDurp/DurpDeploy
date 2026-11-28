@@ -2,12 +2,14 @@ package api
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 
 	"durpdeploy/internal/db"
 	eventbus "durpdeploy/internal/events"
 	"durpdeploy/internal/handler"
+	"durpdeploy/internal/notify"
 	"durpdeploy/internal/repository"
 )
 
@@ -196,6 +198,8 @@ func newNotificationSettingsResponse(
 // An omitted or empty Gotify token is retained only for an unchanged Gotify URL.
 // Changing or removing the URL clears the token unless a replacement is supplied.
 // Explicit credential clear flags take precedence over replacements.
+// Recipients must be comma-separated bare addresses without control characters.
+// Invalid recipients return 422. Invalid notification URLs return 400.
 //
 //	Consumes:
 //	- application/json
@@ -211,6 +215,7 @@ func newNotificationSettingsResponse(
 //	  413: body:RequestEntityTooLargeError
 //	  200: body:GlobalNotification
 //	  400: body:BadRequestError
+//	  422: body:ValidationError
 //	  401: body:UnauthorizedError
 //	  403: body:ForbiddenError
 //	  500: body:ServerError
@@ -225,18 +230,23 @@ func (h *AdminHandler) UpdateNotificationSettings(
 
 	params, err := handler.PrepareNotificationSettings(
 		handler.NotificationSettingsInput{
-			SlackWebhookURL:        req.SlackWebhookURL,
-			NotifyEmails:           req.NotifyEmails,
-			GotifyURL:              trimSpace(req.GotifyURL),
-			GotifyToken:            req.GotifyToken,
-			DiscordWebhookURL:      req.DiscordWebhookURL,
-			ClearSlackWebhookURL:   req.ClearSlackWebhookURL,
-			ClearGotifyToken:       req.ClearGotifyToken,
-			ClearDiscordWebhookURL: req.ClearDiscordWebhookURL,
+			SlackWebhookURL:         req.SlackWebhookURL,
+			NotifyEmails:            req.NotifyEmails,
+			PreserveEmailWhitespace: true,
+			GotifyURL:               trimSpace(req.GotifyURL),
+			GotifyToken:             req.GotifyToken,
+			DiscordWebhookURL:       req.DiscordWebhookURL,
+			ClearSlackWebhookURL:    req.ClearSlackWebhookURL,
+			ClearGotifyToken:        req.ClearGotifyToken,
+			ClearDiscordWebhookURL:  req.ClearDiscordWebhookURL,
 		},
 	)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, err.Error())
+		status := http.StatusBadRequest
+		if errors.Is(err, notify.ErrInvalidRecipients) {
+			status = http.StatusUnprocessableEntity
+		}
+		RespondError(w, status, err.Error())
 		return
 	}
 

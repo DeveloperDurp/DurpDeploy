@@ -1223,7 +1223,7 @@
         ]
       },
       "put": {
-        "description": "An omitted or empty Gotify token is retained only for an unchanged Gotify URL.\nChanging or removing the URL clears the token unless a replacement is supplied.\nExplicit credential clear flags take precedence over replacements.",
+        "description": "An omitted or empty Gotify token is retained only for an unchanged Gotify URL.\nChanging or removing the URL clears the token unless a replacement is supplied.\nExplicit credential clear flags take precedence over replacements.\nRecipients must be comma-separated bare addresses without control characters.\nInvalid recipients return 422. Invalid notification URLs return 400.",
         "consumes": [
           "application/json"
         ],
@@ -1264,6 +1264,12 @@
             "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
             "schema": {
               "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
@@ -7582,7 +7588,7 @@
         ]
       },
       "put": {
-        "description": "An omitted or empty Gotify token is retained only for an unchanged Gotify URL.\nChanging or removing the URL clears the token unless a replacement is supplied.\nExplicit credential clear flags take precedence over replacements.",
+        "description": "Recipients must be comma-separated bare addresses without control characters.\nInvalid recipients return 422. Invalid notification URLs return 400.\nAn omitted or empty Gotify token is retained only for an unchanged Gotify URL.\nChanging or removing the URL clears the token unless a replacement is supplied.\nExplicit credential clear flags take precedence over replacements.",
         "consumes": [
           "application/json"
         ],
@@ -7643,6 +7649,12 @@
             "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
             "schema": {
               "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
@@ -7710,7 +7722,7 @@
         }
       },
       "put": {
-        "description": "A blank credential preserves the secret only when URL template, auth type, and username are unchanged.",
+        "description": "Save rejects local names, blocked IP literals, numeric host encodings, and IPv6 zones.\nPrivate HTTPS services remain supported. Save performs no DNS lookups.\nA blank credential preserves the secret only when URL template, auth type, and username are unchanged.",
         "tags": [
           "artifacts"
         ],

@@ -8,6 +8,7 @@ import (
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
+	"durpdeploy/internal/notify"
 	"durpdeploy/internal/repository"
 )
 
@@ -488,6 +489,8 @@ func (h *ProjectHandler) GetProjectNotifications(
 // swagger:route PUT /projects/{id}/notifications projects updateProjectNotifications
 //
 // Update project notification settings.
+// Recipients must be comma-separated bare addresses without control characters.
+// Invalid recipients return 422. Invalid notification URLs return 400.
 // An omitted or empty Gotify token is retained only for an unchanged Gotify URL.
 // Changing or removing the URL clears the token unless a replacement is supplied.
 // Explicit credential clear flags take precedence over replacements.
@@ -506,6 +509,7 @@ func (h *ProjectHandler) GetProjectNotifications(
 //	  413: body:RequestEntityTooLargeError
 //	  200: body:ProjectNotificationResponse
 //	  400: body:BadRequestError
+//	  422: body:ValidationError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
 //	  500: body:ServerError
@@ -527,7 +531,7 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 	params, err := handler.PrepareNotificationSettings(
 		handler.NotificationSettingsInput{
 			SlackWebhookURL:        req.SlackWebhookURL,
-			NotifyEmails:           trimSpace(req.NotifyEmails),
+			NotifyEmails:           req.NotifyEmails,
 			GotifyURL:              trimSpace(req.GotifyURL),
 			GotifyToken:            trimSpace(req.GotifyToken),
 			DiscordWebhookURL:      req.DiscordWebhookURL,
@@ -537,7 +541,11 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 		},
 	)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, err.Error())
+		status := http.StatusBadRequest
+		if errors.Is(err, notify.ErrInvalidRecipients) {
+			status = http.StatusUnprocessableEntity
+		}
+		RespondError(w, status, err.Error())
 		return
 	}
 

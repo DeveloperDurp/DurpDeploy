@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"durpdeploy/internal/artifact"
@@ -12,6 +11,7 @@ import (
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/secret"
+	"durpdeploy/internal/testutil"
 )
 
 type artifactFixture struct {
@@ -41,7 +41,7 @@ func newArtifactFixture(t *testing.T) artifactFixture {
 	if err := writer.Close(); err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewTLSServer(
+	server := testutil.PrivateHTTPSServer(t,
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Header.Get("Authorization") != "Bearer credential" {
 				w.WriteHeader(401)
